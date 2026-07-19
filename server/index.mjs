@@ -3,6 +3,8 @@ import { databasePath, getSystemStatus, uploadsDir } from './database.mjs'
 import { getJodooIntegrationStatus, recordJodooWebhook, verifyJodooWebhookToken } from './jodoo.mjs'
 import { commitImport, previewImport } from './importService.mjs'
 import { customerBranchDetail, customerBranches, dashboardSummary, dataQualitySummary, importBatches, importErrors, schedules } from './queryService.mjs'
+import { approveDay, createScheduleException, createStop, createTrip, deleteStop, driverToday, generateWeek, getDispatchDay, getDispatchWeek, promisedCheck, publishDay, reopenDay, updateStop, updateTrip } from './dispatchService.mjs'
+import { addTemporaryLocation, adoptTemporaryLocation, convertToExisting, createSpecialRequest, linkNewAccount, listSpecialRequests, listTemporaryLocations, scheduleSpecialRequest, searchCustomerBranches, updateSpecialRequest } from './specialRequestService.mjs'
 
 const port = Number(process.env.KCS_API_PORT || 8787)
 
@@ -27,7 +29,7 @@ const server = http.createServer(async (request, response) => {
   try {
     const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`)
     if (request.method === 'OPTIONS') {
-      response.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET,POST,PATCH,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Jodoo-Token' })
+      response.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Jodoo-Token' })
       return response.end()
     }
     if (request.method === 'GET' && url.pathname === '/api/health') return sendJson(response, 200, { status: 'ok', service: 'kcs-api' })
@@ -41,6 +43,35 @@ const server = http.createServer(async (request, response) => {
     }
     if (request.method === 'GET' && url.pathname === '/api/schedules') return sendJson(response, 200, schedules(Object.fromEntries(url.searchParams)))
     if (request.method === 'GET' && url.pathname === '/api/data-quality/summary') return sendJson(response, 200, dataQualitySummary())
+    if (request.method === 'GET' && url.pathname === '/api/dispatch/week') return sendJson(response, 200, getDispatchWeek(Object.fromEntries(url.searchParams)))
+    if (request.method === 'POST' && url.pathname === '/api/dispatch/generate-week') return sendJson(response, 200, generateWeek((await readJson(request)).payload))
+    if (request.method === 'GET' && url.pathname.startsWith('/api/dispatch/day/')) {
+      const item=getDispatchDay(decodeURIComponent(url.pathname.slice('/api/dispatch/day/'.length)))
+      return item?sendJson(response,200,item):sendJson(response,404,{error:'Dispatch day not found'})
+    }
+    if (request.method === 'POST' && /^\/api\/dispatch\/day\/[^/]+\/(approve|publish|reopen)$/.test(url.pathname)) {
+      const parts=url.pathname.split('/'),date=decodeURIComponent(parts[4]),action=parts[5],payload=(await readJson(request)).payload
+      return sendJson(response,200,action==='approve'?approveDay(date,payload):action==='publish'?publishDay(date,payload):reopenDay(date,payload))
+    }
+    if (request.method === 'GET' && url.pathname.startsWith('/api/dispatch/promised-check/')) return sendJson(response,200,promisedCheck(decodeURIComponent(url.pathname.slice('/api/dispatch/promised-check/'.length))))
+    if (request.method === 'GET' && url.pathname === '/api/driver/today') return sendJson(response,200,driverToday({driverId:url.searchParams.get('driverId')}))
+    if (request.method === 'POST' && url.pathname === '/api/dispatch/stops') return sendJson(response,201,createStop((await readJson(request)).payload))
+    if (request.method === 'POST' && url.pathname === '/api/dispatch/trips') return sendJson(response,201,createTrip((await readJson(request)).payload))
+    if (request.method === 'PATCH' && /^\/api\/dispatch\/stops\/\d+$/.test(url.pathname)) return sendJson(response,200,updateStop(Number(url.pathname.split('/').at(-1)),(await readJson(request)).payload))
+    if (request.method === 'DELETE' && /^\/api\/dispatch\/stops\/\d+$/.test(url.pathname)) return sendJson(response,200,deleteStop(Number(url.pathname.split('/').at(-1)),(await readJson(request)).payload))
+    if (request.method === 'PATCH' && /^\/api\/dispatch\/trips\/\d+$/.test(url.pathname)) return sendJson(response,200,updateTrip(Number(url.pathname.split('/').at(-1)),(await readJson(request)).payload))
+    if (request.method === 'POST' && url.pathname === '/api/schedule-exceptions') return sendJson(response,201,createScheduleException((await readJson(request)).payload))
+    if (request.method === 'GET' && url.pathname === '/api/special-requests/customer-search') return sendJson(response,200,{items:searchCustomerBranches(Object.fromEntries(url.searchParams))})
+    if (request.method === 'GET' && url.pathname === '/api/special-requests') return sendJson(response,200,{items:listSpecialRequests(Object.fromEntries(url.searchParams))})
+    if (request.method === 'POST' && url.pathname === '/api/special-requests') return sendJson(response,201,createSpecialRequest((await readJson(request)).payload))
+    if (request.method === 'PATCH' && /^\/api\/special-requests\/\d+$/.test(url.pathname)) return sendJson(response,200,updateSpecialRequest(Number(url.pathname.split('/').at(-1)),(await readJson(request)).payload))
+    if (request.method === 'POST' && /^\/api\/special-requests\/\d+\/(schedule|convert-to-existing|link-new-account)$/.test(url.pathname)) {
+      const parts=url.pathname.split('/'),id=Number(parts[3]),action=parts[4],payload=(await readJson(request)).payload
+      return sendJson(response,200,action==='schedule'?scheduleSpecialRequest(id,payload):action==='convert-to-existing'?convertToExisting(id,payload):linkNewAccount(id,payload))
+    }
+    if (request.method === 'POST' && url.pathname === '/api/temporary-locations') return sendJson(response,201,addTemporaryLocation((await readJson(request)).payload))
+    if (request.method === 'GET' && url.pathname === '/api/temporary-locations') return sendJson(response,200,{items:listTemporaryLocations(Object.fromEntries(url.searchParams))})
+    if (request.method === 'POST' && /^\/api\/temporary-locations\/\d+\/adopt$/.test(url.pathname)) return sendJson(response,200,adoptTemporaryLocation(Number(url.pathname.split('/')[3]),(await readJson(request)).payload))
     if (request.method === 'GET' && url.pathname === '/api/import-batches') return sendJson(response, 200, { items: importBatches() })
     if (request.method === 'GET' && /^\/api\/import-batches\/\d+\/errors$/.test(url.pathname)) return sendJson(response, 200, { items: importErrors(Number(url.pathname.split('/')[3])) })
     if (request.method === 'POST' && url.pathname === '/api/import/preview') return sendJson(response, 200, previewImport((await readJson(request)).payload))

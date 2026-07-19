@@ -1,6 +1,6 @@
 # KCS Dispatch System
 
-KCS 司机派送与回收作业系统。当前版本包含司机顺序流程、Jodoo Excel 正式导入、SQLite 客户/分店/排程/GPS 主档、资料质量页面，以及 Jodoo（简道云）连接的后台骨架。
+KCS 司机派送与回收作业系统。当前版本包含司机顺序流程、Jodoo Excel 正式导入、SQLite 客户/分店/排程/GPS 主档、资料质量页面、主管一周派车、临时收货请求，以及 Jodoo（简道云）连接的后台骨架。
 
 ## 运行环境
 
@@ -60,7 +60,46 @@ npm run preview   # 预览正式构建
 - `GET /api/import-batches`、`GET /api/import-batches/:id/errors`
 - `POST /api/import/preview`、`POST /api/import/commit`
 
-SQLite schema 目前为 v5。`branches` 保留现有架构，同时保存原始 CustomerID/AreaID，方便显示未匹配关联并保证重复导入幂等。Route Ready 规则集中在 `shared/importRules.js`：至少一条有效排程、有效经纬度，并且客户/分店状态不是 Paused、Closed 或 Ended；当前没有来源状态时视为 Active。
+SQLite schema 目前为 v6。`branches` 保留现有架构，同时保存原始 CustomerID/AreaID，方便显示未匹配关联并保证重复导入幂等。Route Ready 规则集中在 `shared/importRules.js`：至少一条有效排程、有效经纬度，并且客户/分店状态不是 Paused、Closed 或 Ended；当前没有来源状态时视为 Active。
+
+## 一周派车与每日发布
+
+1. 进入“一周派车”，选择今天、明天、后天或任意开始日期。
+2. 按“根据排程产生／更新草稿”。系统读取 `BranchSchedule`，幂等建立未来七天；`Call` 排程不会自动加入，两周一次排程会使用 Take Date/Next Take Date 作为周期锚点。
+3. 每日按 Area 初步分组，再为 Trip 选择车辆、司机、跟车员、出发和结束地点。Area 不绑定车辆或员工。
+4. 可把站点拖到其他日期、车辆或趟次，也可调整顺序并锁定客户顺序。
+5. 每天分别按“批准”或“批准并发布”。`GET /api/driver/today?driverId={id}` 只返回电脑当天、已发布且分配给该司机的路线。
+6. 已批准/已发布路线改变后会变成 `reapproval_required`。再次批准人与时间、版本，以及修改前后 JSON 会写入审批和变更记录。
+
+发布会阻挡缺车辆、缺司机、缺 OCC Price、缺 Payment Type，以及潜在新客户缺 CustomerID、BranchID、价格、付款方式、地址或 Location。未正确安排的客户承诺也会阻挡发布，只有这一项可以由主管填写例外原因确认；账号和营运资料缺失不能绕过。
+
+## 临时收货请求
+
+- 先按客户/分店名称、CustomerID、BranchID、电话、WhatsApp 或地址搜索，也可输入 GPS 查找 3km 内分店。
+- 找到现有 Branch 时建立 `Existing Customer Request`，带出价格、付款方式、GPS、Area 和排程，再加入指定日期草稿。
+- 找不到时建立 `Potential New Customer`。可先保存客户提供的临时 Location 并排进未来草稿；发布前必须在 Jodoo 建立正式账号、重新导入，再连接新账号。
+- 勾选 `Promised To Customer` 会进入红色客户承诺清单；发布前检查漏排、错误日期和账号资料。
+- 现场 GPS 通过 `POST /api/temporary-locations` 保存，不自动覆盖正式 GPS。主管按“采用为正式 GPS”后才更新 Branch；相距超过 500m 会警告。
+- 单次 Move/Cancel/Add Extra/Pause 存入 `schedule_exceptions`，不修改固定排程；永久改期才更新 `branch_schedules`。
+
+## Dispatch V1 数据表与 API
+
+新增 `weekly_dispatch_plans`、`dispatch_days`、`dispatch_trips`、`dispatch_approvals`、`dispatch_change_logs`、`special_collection_requests`、`schedule_exceptions` 和 `temporary_locations`；既有 `dispatch_stops` 以兼容方式扩展，没有删除旧表。
+
+- `GET /api/dispatch/week`、`POST /api/dispatch/generate-week`
+- `GET /api/dispatch/day/:date`
+- `POST /api/dispatch/day/:date/approve|publish|reopen`
+- `POST /api/dispatch/stops`、`PATCH|DELETE /api/dispatch/stops/:id`
+- `PATCH /api/dispatch/trips/:id`
+- `GET /api/dispatch/promised-check/:date`
+- `GET /api/driver/today?driverId=:id`
+- `GET|POST /api/special-requests`、`PATCH /api/special-requests/:id`
+- `GET /api/special-requests/customer-search`
+- `POST /api/special-requests/:id/schedule|convert-to-existing|link-new-account`
+- `POST /api/schedule-exceptions`
+- `GET|POST /api/temporary-locations`、`POST /api/temporary-locations/:id/adopt`
+
+V1 尚未包含 Google Maps 道路优化、实时车辆定位、奖金系统、Jodoo API 自动同步、完整登录/角色权限和资源请假/维修管理画面。当前司机资料隔离由 API 的日期、发布状态和 driverId 过滤实现；正式上线前必须接入登录身份，不能信任浏览器传入的 driverId。
 
 ## 项目结构
 

@@ -92,6 +92,28 @@ const upserts = {
   schedules: `INSERT INTO branch_schedules (jodoo_schedule_id,branch_id,source_branch_id,frequency,days_of_week,take_date,next_take_date,source_updated_at) VALUES (?,(SELECT id FROM branches WHERE jodoo_branch_id=?),?,?,?,?,?,?) ON CONFLICT(jodoo_schedule_id) DO UPDATE SET branch_id=excluded.branch_id,source_branch_id=excluded.source_branch_id,frequency=excluded.frequency,days_of_week=excluded.days_of_week,take_date=excluded.take_date,next_take_date=excluded.next_take_date,source_updated_at=excluded.source_updated_at,updated_at=CURRENT_TIMESTAMP`,
 }
 
+function invalidateApprovedDaysAfterImport(preview,database,batchId){
+  const affected=new Map()
+  const addDay=(day,row)=>{if(!affected.has(day.id))affected.set(day.id,{day,changes:[]});affected.get(day.id).changes.push({type:row.type,action:row.action,normalized:row.normalized})}
+  const future=database.prepare("SELECT * FROM dispatch_days WHERE dispatch_date>=date('now','localtime') AND status IN ('approved','published')").all()
+  for(const row of preview.rows){
+    if(!['new','update'].includes(row.action)||!['areas','customers','branches','schedules','locations'].includes(row.type))continue
+    let days=[]
+    if(row.type==='schedules'){
+      const wanted=String(row.normalized.daysOfWeek||'').split(/[,;/]/).map(x=>x.trim())
+      const names=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
+      days=future.filter(day=>wanted.includes(names[new Date(`${day.dispatch_date}T00:00:00`).getDay()]))
+    }else if(row.type==='customers')days=database.prepare(`SELECT DISTINCT dd.* FROM dispatch_days dd JOIN dispatch_trips dt ON dt.dispatch_day_id=dd.id JOIN dispatch_stops ds ON ds.dispatch_trip_id=dt.id JOIN branches b ON b.id=ds.branch_id JOIN customers c ON c.id=b.customer_id WHERE c.jodoo_customer_id=? AND dd.dispatch_date>=date('now','localtime') AND dd.status IN ('approved','published')`).all(row.normalized.customerId)
+    else if(row.type==='areas')days=database.prepare(`SELECT DISTINCT dd.* FROM dispatch_days dd JOIN dispatch_trips dt ON dt.dispatch_day_id=dd.id JOIN dispatch_stops ds ON ds.dispatch_trip_id=dt.id JOIN branches b ON b.id=ds.branch_id JOIN areas a ON a.id=b.area_id WHERE a.jodoo_area_id=? AND dd.dispatch_date>=date('now','localtime') AND dd.status IN ('approved','published')`).all(row.normalized.areaId)
+    else days=database.prepare(`SELECT DISTINCT dd.* FROM dispatch_days dd JOIN dispatch_trips dt ON dt.dispatch_day_id=dd.id JOIN dispatch_stops ds ON ds.dispatch_trip_id=dt.id JOIN branches b ON b.id=ds.branch_id WHERE b.jodoo_branch_id=? AND dd.dispatch_date>=date('now','localtime') AND dd.status IN ('approved','published')`).all(row.normalized.branchId)
+    days.forEach(day=>addDay(day,row))
+  }
+  for(const {day,changes} of affected.values()){
+    database.prepare("UPDATE dispatch_days SET status='reapproval_required',revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(day.id)
+    database.prepare(`INSERT INTO dispatch_change_logs(dispatch_day_id,actor,change_type,entity_type,entity_id,before_json,after_json,requires_reapproval) VALUES(?,'Jodoo Excel Import','master_data_import','import_batch',?,NULL,?,1)`).run(day.id,String(batchId),JSON.stringify(changes))
+  }
+}
+
 export function commitImport(batchId, database = db) {
   const preview = previews.get(batchId)
   if (!preview) throw new Error('导入预览已过期，请重新选择 Excel')
@@ -113,6 +135,7 @@ export function commitImport(batchId, database = db) {
       if (row.type === 'schedules') statements.schedules.run(n.scheduleId,n.branchId,n.branchId,n.frequency,n.daysOfWeek,n.takeDate,n.nextTakeDate,n.sourceUpdatedAt)
       if (row.type === 'locations') database.prepare(`UPDATE branches SET latitude=COALESCE(?,latitude),longitude=COALESCE(?,longitude),gps_status=COALESCE(NULLIF(?,''),gps_status),gps_verified_at=COALESCE(NULLIF(?,''),gps_verified_at),parking_note=COALESCE(NULLIF(?,''),parking_note),truck_access=COALESCE(NULLIF(?,''),truck_access),gps_remark=COALESCE(NULLIF(?,''),gps_remark),source_updated_at=COALESCE(NULLIF(?,''),source_updated_at),updated_at=CURRENT_TIMESTAMP WHERE jodoo_branch_id=?`).run(n.latitude,n.longitude,n.gpsStatus,n.gpsVerifiedAt,n.parkingNote,n.truckAccess,n.gpsRemark,n.sourceUpdatedAt,n.branchId)
     }
+    invalidateApprovedDaysAfterImport(preview,database,databaseBatchId)
     database.prepare(`UPDATE import_batches SET status='completed',summary_json=?,completed_at=CURRENT_TIMESTAMP WHERE id=?`).run(JSON.stringify(preview.summary), databaseBatchId)
     database.exec('COMMIT')
     previews.delete(batchId)

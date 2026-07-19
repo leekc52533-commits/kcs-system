@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 5
+export const SCHEMA_VERSION = 6
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -139,6 +139,11 @@ CREATE TABLE IF NOT EXISTS dispatch_stops (
   override_note TEXT,
   override_by INTEGER REFERENCES users(id),
   override_at TEXT,
+  dispatch_trip_id INTEGER REFERENCES dispatch_trips(id),
+  source_schedule_id INTEGER REFERENCES branch_schedules(id),
+  source_special_request_id INTEGER REFERENCES special_collection_requests(id),
+  estimated_weight_kg REAL,
+  sequence_locked INTEGER NOT NULL DEFAULT 0,
   UNIQUE(dispatch_id, stop_sequence)
 );
 
@@ -262,6 +267,129 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS weekly_dispatch_plans (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  week_start TEXT NOT NULL UNIQUE,
+  status TEXT NOT NULL DEFAULT 'draft',
+  generated_by TEXT,
+  generated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS dispatch_days (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  weekly_plan_id INTEGER NOT NULL REFERENCES weekly_dispatch_plans(id) ON DELETE CASCADE,
+  dispatch_date TEXT NOT NULL UNIQUE,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','pending_approval','approved','published','in_progress','completed','reapproval_required')),
+  revision INTEGER NOT NULL DEFAULT 1,
+  approved_revision INTEGER,
+  published_at TEXT,
+  published_by TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS dispatch_trips (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  dispatch_day_id INTEGER NOT NULL REFERENCES dispatch_days(id) ON DELETE CASCADE,
+  dispatch_id INTEGER NOT NULL UNIQUE REFERENCES dispatches(id) ON DELETE CASCADE,
+  trip_number INTEGER NOT NULL DEFAULT 1,
+  area_id INTEGER REFERENCES areas(id),
+  estimated_weight_kg REAL,
+  warning_count INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS dispatch_approvals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  dispatch_day_id INTEGER NOT NULL REFERENCES dispatch_days(id) ON DELETE CASCADE,
+  action TEXT NOT NULL CHECK (action IN ('approve','publish','reapprove','reopen')),
+  revision INTEGER NOT NULL,
+  actor TEXT NOT NULL,
+  reason TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS dispatch_change_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  dispatch_day_id INTEGER REFERENCES dispatch_days(id) ON DELETE CASCADE,
+  actor TEXT NOT NULL,
+  change_type TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT,
+  before_json TEXT,
+  after_json TEXT,
+  requires_reapproval INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS special_collection_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  request_type TEXT NOT NULL CHECK (request_type IN ('existing','potential_new')),
+  existing_branch_id INTEGER REFERENCES branches(id),
+  temporary_customer_name TEXT,
+  contact_person TEXT,
+  phone TEXT,
+  whatsapp TEXT,
+  address TEXT,
+  location_link TEXT,
+  temporary_latitude REAL,
+  temporary_longitude REAL,
+  location_source TEXT,
+  verification_status TEXT NOT NULL DEFAULT 'unverified',
+  requested_collection_date TEXT NOT NULL,
+  estimated_weight_kg REAL,
+  special_requirement TEXT,
+  created_by TEXT NOT NULL,
+  promised_to_customer INTEGER NOT NULL DEFAULT 0 CHECK (promised_to_customer IN (0,1)),
+  remark TEXT,
+  status TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new','awaiting_supervisor','awaiting_customer_account','scheduled','approved','published','completed','rejected','cancelled')),
+  account_status TEXT,
+  linked_customer_id TEXT,
+  linked_branch_id TEXT,
+  occ_price REAL,
+  payment_type TEXT,
+  scheduled_date TEXT,
+  vehicle_id INTEGER REFERENCES vehicles(id),
+  trip_number INTEGER,
+  completion_status TEXT,
+  approved_by TEXT,
+  approved_at TEXT,
+  dedupe_key TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS schedule_exceptions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  branch_id INTEGER REFERENCES branches(id),
+  schedule_id INTEGER REFERENCES branch_schedules(id),
+  exception_type TEXT NOT NULL CHECK (exception_type IN ('move_date','cancel_date','add_extra_collection','pause_once','resume','customer_request')),
+  original_date TEXT,
+  target_date TEXT,
+  permanent INTEGER NOT NULL DEFAULT 0 CHECK (permanent IN (0,1)),
+  reason TEXT,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS temporary_locations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  special_request_id INTEGER REFERENCES special_collection_requests(id) ON DELETE CASCADE,
+  branch_id INTEGER REFERENCES branches(id),
+  latitude REAL NOT NULL,
+  longitude REAL NOT NULL,
+  location_source TEXT NOT NULL,
+  location_link TEXT,
+  verification_status TEXT NOT NULL DEFAULT 'unverified',
+  distance_from_official_m REAL,
+  captured_by TEXT,
+  captured_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  adopted_by TEXT,
+  adopted_at TEXT
+);
+
 CREATE INDEX IF NOT EXISTS branches_customer_idx ON branches(customer_id);
 CREATE INDEX IF NOT EXISTS branches_area_idx ON branches(area_id);
 CREATE INDEX IF NOT EXISTS schedules_branch_idx ON branch_schedules(branch_id);
@@ -271,4 +399,8 @@ CREATE INDEX IF NOT EXISTS sync_status_idx ON jodoo_sync_events(status, received
 CREATE INDEX IF NOT EXISTS jodoo_outbox_pending_idx ON jodoo_outbox_jobs(status, next_attempt_at);
 CREATE INDEX IF NOT EXISTS import_errors_batch_idx ON import_errors(import_batch_id, severity);
 CREATE INDEX IF NOT EXISTS import_staged_batch_idx ON import_staged_rows(import_batch_id, file_type, action);
+CREATE INDEX IF NOT EXISTS dispatch_days_date_idx ON dispatch_days(dispatch_date, status);
+CREATE INDEX IF NOT EXISTS dispatch_trips_day_idx ON dispatch_trips(dispatch_day_id, trip_number);
+CREATE INDEX IF NOT EXISTS special_requests_date_idx ON special_collection_requests(requested_collection_date, status);
+CREATE INDEX IF NOT EXISTS schedule_exceptions_dates_idx ON schedule_exceptions(original_date, target_date);
 `

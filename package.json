@@ -12,7 +12,7 @@
     "server": "node server/index.mjs",
     "build": "vite build",
     "lint": "oxlint",
-    "test": "node --test",
+    "test": "node --test --test-concurrency=1",
     "preview": "vite preview"
   },
   "dependencies": {

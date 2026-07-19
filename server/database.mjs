@@ -22,6 +22,13 @@ function ensureColumn(table, column, definition) {
 }
 ensureColumn('branches', 'source_customer_id', 'TEXT')
 ensureColumn('branches', 'source_area_id', 'TEXT')
+ensureColumn('customers', 'phone', 'TEXT')
+ensureColumn('customers', 'whatsapp', 'TEXT')
+ensureColumn('dispatch_stops', 'dispatch_trip_id', 'INTEGER REFERENCES dispatch_trips(id)')
+ensureColumn('dispatch_stops', 'source_schedule_id', 'INTEGER REFERENCES branch_schedules(id)')
+ensureColumn('dispatch_stops', 'source_special_request_id', 'INTEGER REFERENCES special_collection_requests(id)')
+ensureColumn('dispatch_stops', 'estimated_weight_kg', 'REAL')
+ensureColumn('dispatch_stops', 'sequence_locked', 'INTEGER NOT NULL DEFAULT 0')
 
 const currentVersion = Number(db.prepare('SELECT COALESCE(MAX(version), 0) AS version FROM schema_meta').get().version)
 if (currentVersion === 0) {
@@ -50,10 +57,11 @@ if (currentVersion === 0) {
   if (currentVersion < 3) db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (3)').run()
   if (currentVersion < 4) db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (4)').run()
   if (currentVersion < 5) db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (5)').run()
+  if (currentVersion < 6) db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (6)').run()
 }
 
 export function getSystemStatus() {
-  const tableNames = ['users','customers','branches','branch_schedules','areas','employees','vehicles','operational_locations','dispatches','dispatch_stops','stop_documents','import_batches','import_errors','jodoo_sync_events','jodoo_outbox_jobs']
+  const tableNames = ['users','customers','branches','branch_schedules','areas','employees','vehicles','operational_locations','dispatches','dispatch_stops','dispatch_days','dispatch_trips','special_collection_requests','schedule_exceptions','stop_documents','import_batches','import_errors','jodoo_sync_events','jodoo_outbox_jobs']
   const counts = Object.fromEntries(tableNames.map((table) => [table, db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get().count]))
   return { database: 'connected', schemaVersion: SCHEMA_VERSION, counts }
 }
