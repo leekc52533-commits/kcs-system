@@ -1,0 +1,232 @@
+export const SCHEMA_VERSION = 3
+
+export const schemaSql = `
+CREATE TABLE IF NOT EXISTS schema_meta (
+  version INTEGER PRIMARY KEY,
+  applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  username TEXT NOT NULL UNIQUE,
+  display_name TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('owner','supervisor','dispatcher','driver','office')),
+  password_hash TEXT,
+  is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0,1)),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS areas (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  jodoo_area_id TEXT UNIQUE,
+  name TEXT NOT NULL,
+  schedule_text TEXT,
+  default_driver_name TEXT,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  source_updated_at TEXT,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS customers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  jodoo_customer_id TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  tin_number TEXT,
+  payment_type TEXT CHECK (payment_type IN ('Cash','Credit') OR payment_type IS NULL),
+  occ_price REAL,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  source_updated_at TEXT,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS branches (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  jodoo_branch_id TEXT NOT NULL UNIQUE,
+  customer_id INTEGER REFERENCES customers(id),
+  area_id INTEGER REFERENCES areas(id),
+  branch_name TEXT,
+  address TEXT,
+  latitude REAL CHECK (latitude BETWEEN -90 AND 90 OR latitude IS NULL),
+  longitude REAL CHECK (longitude BETWEEN -180 AND 180 OR longitude IS NULL),
+  gps_status TEXT,
+  gps_verified_at TEXT,
+  parking_note TEXT,
+  truck_access TEXT,
+  gps_remark TEXT,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  source_updated_at TEXT,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS branch_schedules (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  jodoo_schedule_id TEXT NOT NULL UNIQUE,
+  branch_id INTEGER REFERENCES branches(id),
+  source_branch_id TEXT NOT NULL,
+  frequency TEXT NOT NULL,
+  days_of_week TEXT,
+  take_date TEXT,
+  next_take_date TEXT,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  source_updated_at TEXT,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS operational_locations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  location_type TEXT NOT NULL CHECK (location_type IN ('depot','parking','employee_home','factory','temporary','other')),
+  address TEXT,
+  latitude REAL,
+  longitude REAL,
+  can_start INTEGER NOT NULL DEFAULT 0,
+  can_end INTEGER NOT NULL DEFAULT 0,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS employees (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_code TEXT UNIQUE,
+  name TEXT NOT NULL,
+  phone TEXT,
+  job_role TEXT,
+  home_location_id INTEGER REFERENCES operational_locations(id),
+  is_active INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS vehicles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  vehicle_code TEXT NOT NULL UNIQUE,
+  registration_number TEXT,
+  capacity_kg REAL,
+  default_start_location_id INTEGER REFERENCES operational_locations(id),
+  default_end_location_id INTEGER REFERENCES operational_locations(id),
+  status TEXT NOT NULL DEFAULT 'available' CHECK (status IN ('available','assigned','maintenance','inactive')),
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS dispatches (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  dispatch_date TEXT NOT NULL,
+  vehicle_id INTEGER REFERENCES vehicles(id),
+  driver_id INTEGER REFERENCES employees(id),
+  assistant_id INTEGER REFERENCES employees(id),
+  start_location_id INTEGER REFERENCES operational_locations(id),
+  end_location_id INTEGER REFERENCES operational_locations(id),
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','released','in_progress','completed','cancelled')),
+  created_by INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS dispatch_stops (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  dispatch_id INTEGER NOT NULL REFERENCES dispatches(id) ON DELETE CASCADE,
+  branch_id INTEGER NOT NULL REFERENCES branches(id),
+  stop_sequence INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'locked' CHECK (status IN ('locked','available','active','completed','overridden','cancelled')),
+  arrived_at TEXT,
+  completed_at TEXT,
+  collected_weight_kg REAL,
+  invoice_number TEXT,
+  payment_status TEXT,
+  override_reason TEXT,
+  override_note TEXT,
+  override_by INTEGER REFERENCES users(id),
+  override_at TEXT,
+  UNIQUE(dispatch_id, stop_sequence)
+);
+
+CREATE TABLE IF NOT EXISTS stop_step_records (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  dispatch_stop_id INTEGER NOT NULL REFERENCES dispatch_stops(id) ON DELETE CASCADE,
+  step_key TEXT NOT NULL,
+  completed_by INTEGER REFERENCES users(id),
+  completed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  payload_json TEXT,
+  UNIQUE(dispatch_stop_id, step_key)
+);
+
+CREATE TABLE IF NOT EXISTS stop_documents (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  dispatch_stop_id INTEGER NOT NULL REFERENCES dispatch_stops(id) ON DELETE CASCADE,
+  storage_key TEXT NOT NULL UNIQUE,
+  original_name TEXT NOT NULL,
+  content_type TEXT NOT NULL,
+  size_bytes INTEGER NOT NULL,
+  uploaded_by INTEGER REFERENCES users(id),
+  uploaded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  sync_status TEXT NOT NULL DEFAULT 'pending' CHECK (sync_status IN ('pending','synced','failed'))
+);
+
+CREATE TABLE IF NOT EXISTS import_batches (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source TEXT NOT NULL DEFAULT 'jodoo_excel',
+  status TEXT NOT NULL CHECK (status IN ('preview','approved','importing','completed','failed')),
+  file_manifest_json TEXT NOT NULL,
+  summary_json TEXT,
+  approved_by INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  completed_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS import_issues (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  import_batch_id INTEGER NOT NULL REFERENCES import_batches(id) ON DELETE CASCADE,
+  severity TEXT NOT NULL CHECK (severity IN ('warning','error')),
+  entity_type TEXT NOT NULL,
+  external_id TEXT,
+  message TEXT NOT NULL,
+  resolved_at TEXT,
+  resolved_by INTEGER REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS jodoo_sync_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id TEXT UNIQUE,
+  event_type TEXT NOT NULL,
+  form_id TEXT,
+  data_id TEXT,
+  payload_json TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'received' CHECK (status IN ('received','processed','ignored','failed')),
+  error_message TEXT,
+  received_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  processed_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS jodoo_outbox_jobs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  job_type TEXT NOT NULL CHECK (job_type IN ('upload_stop_photos','upload_no_collection','update_record')),
+  dispatch_stop_id INTEGER REFERENCES dispatch_stops(id) ON DELETE CASCADE,
+  jodoo_data_id TEXT,
+  payload_json TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','processing','succeeded','failed')),
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_error TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER REFERENCES users(id),
+  action TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT,
+  before_json TEXT,
+  after_json TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS branches_customer_idx ON branches(customer_id);
+CREATE INDEX IF NOT EXISTS branches_area_idx ON branches(area_id);
+CREATE INDEX IF NOT EXISTS schedules_branch_idx ON branch_schedules(branch_id);
+CREATE INDEX IF NOT EXISTS dispatches_date_idx ON dispatches(dispatch_date);
+CREATE INDEX IF NOT EXISTS stops_dispatch_idx ON dispatch_stops(dispatch_id, stop_sequence);
+CREATE INDEX IF NOT EXISTS sync_status_idx ON jodoo_sync_events(status, received_at);
+CREATE INDEX IF NOT EXISTS jodoo_outbox_pending_idx ON jodoo_outbox_jobs(status, next_attempt_at);
+`
