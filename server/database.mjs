@@ -16,6 +16,13 @@ export const db = new DatabaseSync(databasePath)
 db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;')
 db.exec(schemaSql)
 
+function ensureColumn(table, column, definition) {
+  const columns = new Set(db.prepare(`PRAGMA table_info(${table})`).all().map((item) => item.name))
+  if (!columns.has(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
+}
+ensureColumn('branches', 'source_customer_id', 'TEXT')
+ensureColumn('branches', 'source_area_id', 'TEXT')
+
 const currentVersion = Number(db.prepare('SELECT COALESCE(MAX(version), 0) AS version FROM schema_meta').get().version)
 if (currentVersion === 0) {
   db.prepare('INSERT INTO schema_meta (version) VALUES (?)').run(SCHEMA_VERSION)
@@ -41,10 +48,12 @@ if (currentVersion === 0) {
     PRAGMA foreign_keys = ON;
   `)
   if (currentVersion < 3) db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (3)').run()
+  if (currentVersion < 4) db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (4)').run()
+  if (currentVersion < 5) db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (5)').run()
 }
 
 export function getSystemStatus() {
-  const tableNames = ['users','customers','branches','branch_schedules','areas','employees','vehicles','operational_locations','dispatches','dispatch_stops','stop_documents','import_batches','jodoo_sync_events','jodoo_outbox_jobs']
+  const tableNames = ['users','customers','branches','branch_schedules','areas','employees','vehicles','operational_locations','dispatches','dispatch_stops','stop_documents','import_batches','import_errors','jodoo_sync_events','jodoo_outbox_jobs']
   const counts = Object.fromEntries(tableNames.map((table) => [table, db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get().count]))
   return { database: 'connected', schemaVersion: SCHEMA_VERSION, counts }
 }

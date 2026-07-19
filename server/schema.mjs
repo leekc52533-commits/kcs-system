@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 5
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -45,6 +45,8 @@ CREATE TABLE IF NOT EXISTS branches (
   jodoo_branch_id TEXT NOT NULL UNIQUE,
   customer_id INTEGER REFERENCES customers(id),
   area_id INTEGER REFERENCES areas(id),
+  source_customer_id TEXT,
+  source_area_id TEXT,
   branch_name TEXT,
   address TEXT,
   latitude REAL CHECK (latitude BETWEEN -90 AND 90 OR latitude IS NULL),
@@ -184,6 +186,44 @@ CREATE TABLE IF NOT EXISTS import_issues (
   resolved_by INTEGER REFERENCES users(id)
 );
 
+CREATE TABLE IF NOT EXISTS import_files (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  import_batch_id INTEGER NOT NULL REFERENCES import_batches(id) ON DELETE CASCADE,
+  file_name TEXT NOT NULL,
+  sheet_name TEXT,
+  file_type TEXT,
+  content_hash TEXT NOT NULL,
+  row_count INTEGER NOT NULL,
+  headers_json TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS import_staged_rows (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  import_batch_id INTEGER NOT NULL REFERENCES import_batches(id) ON DELETE CASCADE,
+  import_file_id INTEGER REFERENCES import_files(id) ON DELETE CASCADE,
+  file_type TEXT NOT NULL,
+  row_number INTEGER NOT NULL,
+  external_id TEXT,
+  action TEXT NOT NULL CHECK (action IN ('new','update','unchanged','error','unmatched')),
+  normalized_json TEXT NOT NULL,
+  source_json TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS import_errors (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  import_batch_id INTEGER NOT NULL REFERENCES import_batches(id) ON DELETE CASCADE,
+  import_file_id INTEGER REFERENCES import_files(id) ON DELETE CASCADE,
+  row_number INTEGER,
+  entity_type TEXT NOT NULL,
+  external_id TEXT,
+  severity TEXT NOT NULL CHECK (severity IN ('warning','error','fatal')),
+  error_code TEXT NOT NULL,
+  message TEXT NOT NULL,
+  source_json TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  resolved_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS jodoo_sync_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   event_id TEXT UNIQUE,
@@ -229,4 +269,6 @@ CREATE INDEX IF NOT EXISTS dispatches_date_idx ON dispatches(dispatch_date);
 CREATE INDEX IF NOT EXISTS stops_dispatch_idx ON dispatch_stops(dispatch_id, stop_sequence);
 CREATE INDEX IF NOT EXISTS sync_status_idx ON jodoo_sync_events(status, received_at);
 CREATE INDEX IF NOT EXISTS jodoo_outbox_pending_idx ON jodoo_outbox_jobs(status, next_attempt_at);
+CREATE INDEX IF NOT EXISTS import_errors_batch_idx ON import_errors(import_batch_id, severity);
+CREATE INDEX IF NOT EXISTS import_staged_batch_idx ON import_staged_rows(import_batch_id, file_type, action);
 `

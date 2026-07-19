@@ -1,6 +1,8 @@
 import http from 'node:http'
 import { databasePath, getSystemStatus, uploadsDir } from './database.mjs'
 import { getJodooIntegrationStatus, recordJodooWebhook, verifyJodooWebhookToken } from './jodoo.mjs'
+import { commitImport, previewImport } from './importService.mjs'
+import { customerBranchDetail, customerBranches, dashboardSummary, dataQualitySummary, importBatches, importErrors, schedules } from './queryService.mjs'
 
 const port = Number(process.env.KCS_API_PORT || 8787)
 
@@ -9,7 +11,7 @@ function sendJson(response, status, value) {
   response.end(JSON.stringify(value))
 }
 
-async function readJson(request, maxBytes = 1_000_000) {
+async function readJson(request, maxBytes = 15_000_000) {
   const chunks = []
   let total = 0
   for await (const chunk of request) {
@@ -31,6 +33,18 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'GET' && url.pathname === '/api/health') return sendJson(response, 200, { status: 'ok', service: 'kcs-api' })
     if (request.method === 'GET' && url.pathname === '/api/system/status') return sendJson(response, 200, { ...getSystemStatus(), integrations: { jodoo: getJodooIntegrationStatus() } })
     if (request.method === 'GET' && url.pathname === '/api/integrations/jodoo/status') return sendJson(response, 200, getJodooIntegrationStatus())
+    if (request.method === 'GET' && url.pathname === '/api/dashboard/summary') return sendJson(response, 200, dashboardSummary())
+    if (request.method === 'GET' && url.pathname === '/api/customer-branches') return sendJson(response, 200, customerBranches(Object.fromEntries(url.searchParams)))
+    if (request.method === 'GET' && url.pathname.startsWith('/api/customer-branches/')) {
+      const item = customerBranchDetail(decodeURIComponent(url.pathname.slice('/api/customer-branches/'.length)))
+      return item ? sendJson(response, 200, item) : sendJson(response, 404, { error: 'Branch not found' })
+    }
+    if (request.method === 'GET' && url.pathname === '/api/schedules') return sendJson(response, 200, schedules(Object.fromEntries(url.searchParams)))
+    if (request.method === 'GET' && url.pathname === '/api/data-quality/summary') return sendJson(response, 200, dataQualitySummary())
+    if (request.method === 'GET' && url.pathname === '/api/import-batches') return sendJson(response, 200, { items: importBatches() })
+    if (request.method === 'GET' && /^\/api\/import-batches\/\d+\/errors$/.test(url.pathname)) return sendJson(response, 200, { items: importErrors(Number(url.pathname.split('/')[3])) })
+    if (request.method === 'POST' && url.pathname === '/api/import/preview') return sendJson(response, 200, previewImport((await readJson(request)).payload))
+    if (request.method === 'POST' && url.pathname === '/api/import/commit') return sendJson(response, 200, commitImport((await readJson(request)).payload.batchId))
     if (request.method === 'POST' && url.pathname === '/api/integrations/jodoo/webhook') {
       const token = request.headers['x-jodoo-token'] || url.searchParams.get('token')
       if (!verifyJodooWebhookToken(token)) return sendJson(response, 401, { error: 'Invalid Jodoo webhook token' })

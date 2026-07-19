@@ -9,6 +9,9 @@ lerna-debug.log*
 
 node_modules
 data/
+uploads/
+01_Source_Data/
+tmp-xlsx-inspect/
 dist
 dist-ssr
 *.local
@@ -16,6 +19,8 @@ dist-ssr
 *.db
 *.db-shm
 *.db-wal
+*.sqlite
+*.sqlite3
 
 # Codex/local working files and uploaded attachments
 .agents/
