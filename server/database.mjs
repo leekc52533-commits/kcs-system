@@ -22,6 +22,7 @@ function ensureColumn(table, column, definition) {
 }
 ensureColumn('branches', 'source_customer_id', 'TEXT')
 ensureColumn('branches', 'source_area_id', 'TEXT')
+ensureColumn('branches', 'time_restriction', 'TEXT')
 ensureColumn('customers', 'phone', 'TEXT')
 ensureColumn('customers', 'whatsapp', 'TEXT')
 ensureColumn('dispatch_stops', 'dispatch_trip_id', 'INTEGER REFERENCES dispatch_trips(id)')
@@ -31,6 +32,11 @@ ensureColumn('dispatch_stops', 'estimated_weight_kg', 'REAL')
 ensureColumn('dispatch_stops', 'sequence_locked', 'INTEGER NOT NULL DEFAULT 0')
 ensureColumn('vehicles', 'is_temporary', 'INTEGER NOT NULL DEFAULT 0')
 ensureColumn('vehicles', 'temporary_date', 'TEXT')
+ensureColumn('vehicles', 'vehicle_name', 'TEXT')
+ensureColumn('vehicles', 'default_base_location_id', 'INTEGER REFERENCES operational_locations(id)')
+ensureColumn('employees', 'employment_status', "TEXT NOT NULL DEFAULT 'active'")
+ensureColumn('employees', 'default_base_location_id', 'INTEGER REFERENCES operational_locations(id)')
+ensureColumn('employees', 'default_area_id', 'INTEGER REFERENCES areas(id)')
 
 const currentVersion = Number(db.prepare('SELECT COALESCE(MAX(version), 0) AS version FROM schema_meta').get().version)
 if (currentVersion === 0) {
@@ -61,6 +67,7 @@ if (currentVersion === 0) {
   if (currentVersion < 5) db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (5)').run()
   if (currentVersion < 6) db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (6)').run()
   if (currentVersion < 7) db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (7)').run()
+  if (currentVersion < 8) db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (8)').run()
 }
 
 if (db.prepare('SELECT COUNT(*) count FROM vehicles').get().count === 0) {

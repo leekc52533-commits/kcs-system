@@ -102,7 +102,8 @@ export function generateDay(payload={},database=defaultDb){return generateRange(
 
 function stopRows(database, dayId) {
   return database.prepare(`SELECT ds.id,ds.stop_sequence stopSequence,ds.sequence_locked sequenceLocked,ds.estimated_weight_kg estimatedWeightKg,
-    ds.source_special_request_id specialRequestId,b.jodoo_branch_id branchId,b.branch_name branchName,c.name customerName,c.payment_type paymentType,c.occ_price occPrice,a.name area,
+    ds.source_special_request_id specialRequestId,b.jodoo_branch_id branchId,b.branch_name branchName,c.name customerName,c.payment_type paymentType,c.occ_price occPrice,
+    b.area_id areaId,a.name area,b.latitude,b.longitude,b.time_restriction timeRestriction,
     dt.id tripId,dt.trip_number tripNumber,d.vehicle_id vehicleId,v.vehicle_code vehicle,d.driver_id driverId,dr.name driver,d.assistant_id assistantId,asst.name assistant
     FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id JOIN dispatches d ON d.id=dt.dispatch_id
     JOIN branches b ON b.id=ds.branch_id LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas a ON a.id=b.area_id
@@ -120,25 +121,49 @@ function dayView(database, day) {
   const specials=database.prepare(`SELECT id,request_type requestType,temporary_customer_name customerName,requested_collection_date requestedDate,scheduled_date scheduledDate,
     status,promised_to_customer promisedToCustomer,estimated_weight_kg estimatedWeightKg,vehicle_id vehicleId,trip_number tripNumber,linked_customer_id customerId,linked_branch_id branchId,occ_price occPrice,payment_type paymentType,address,location_link locationLink,temporary_latitude latitude,temporary_longitude longitude
     FROM special_collection_requests WHERE scheduled_date=? AND status NOT IN ('rejected','cancelled')`).all(day.dispatch_date)
-  const vehicles=database.prepare(`SELECT id,vehicle_code vehicle,status,is_temporary isTemporary,temporary_date temporaryDate FROM vehicles WHERE status IN ('available','assigned') AND (is_temporary=0 OR temporary_date=?) ORDER BY is_temporary,vehicle_code`).all(day.dispatch_date)
+  const vehicles=database.prepare(`SELECT v.id,v.vehicle_code vehicle,v.vehicle_name vehicleName,v.registration_number registrationNumber,v.capacity_kg capacityKg,
+    v.status,v.is_temporary isTemporary,v.temporary_date temporaryDate,v.default_base_location_id defaultBaseLocationId,base.name defaultBase,
+    (SELECT GROUP_CONCAT(a.name,'|') FROM vehicle_preferred_areas vpa JOIN areas a ON a.id=vpa.area_id WHERE vpa.vehicle_id=v.id) preferredAreaNames
+    FROM vehicles v LEFT JOIN operational_locations base ON base.id=v.default_base_location_id
+    WHERE v.status IN ('available','assigned') AND (v.is_temporary=0 OR v.temporary_date=?) ORDER BY v.is_temporary,v.vehicle_code`).all(day.dispatch_date).map(item=>({...item,preferredAreas:item.preferredAreaNames?item.preferredAreaNames.split('|'):[]}))
   const availableIds=new Set(vehicles.map(item=>item.id)),assignedTrips=allTrips.filter(item=>item.vehicleId&&availableIds.has(item.vehicleId))
+  const assistantRows=database.prepare(`SELECT dva.vehicle_id vehicleId,e.id,e.employee_code employeeCode,e.name FROM dispatch_vehicle_assistants dva JOIN employees e ON e.id=dva.employee_id WHERE dva.dispatch_day_id=? ORDER BY e.name`).all(day.id)
   const vehicleBoards=vehicles.map(vehicle=>{
     const vehicleTrips=assignedTrips.filter(item=>item.vehicleId===vehicle.id),basis=vehicleTrips.find(item=>item.driverId||item.assistantId||item.startLocationId||item.endLocationId)||vehicleTrips[0]||{}
     const slots=[1,2,3].map(tripNumber=>{const trip=vehicleTrips.find(item=>item.tripNumber===tripNumber);return{tripNumber,tripId:trip?.id??null,stops:trip?stops.filter(stop=>stop.tripId===trip.id):[]}})
     const areas=[...new Set(slots.flatMap(slot=>slot.stops.map(stop=>stop.area).filter(Boolean)))]
-    return{...vehicle,driverId:basis.driverId??null,driver:basis.driver??null,assistantId:basis.assistantId??null,assistant:basis.assistant??null,startLocationId:basis.startLocationId??null,startLocation:basis.startLocation??null,endLocationId:basis.endLocationId??null,endLocation:basis.endLocation??null,areas,slots,customerCount:slots.reduce((sum,slot)=>sum+slot.stops.length,0)}
+    const assistants=assistantRows.filter(item=>item.vehicleId===vehicle.id)
+    if(!assistants.length&&basis.assistantId)assistants.push({id:basis.assistantId,name:basis.assistant,employeeCode:null,vehicleId:vehicle.id})
+    return{...vehicle,driverId:basis.driverId??null,driver:basis.driver??null,assistantIds:assistants.map(item=>item.id),assistants,startLocationId:basis.startLocationId??null,startLocation:basis.startLocation??null,endLocationId:basis.endLocationId??null,endLocation:basis.endLocation??null,areas,slots,customerCount:slots.reduce((sum,slot)=>sum+slot.stops.length,0)}
   })
   const unassignedStops=stops.filter(stop=>!stop.vehicleId||!availableIds.has(stop.vehicleId))
+  const unassignedGroups=[...new Map(unassignedStops.map(stop=>[stop.areaId??'unassigned',{areaId:stop.areaId??null,areaName:stop.area||'未分区'}])).values()].map(group=>{
+    const groupedStops=unassignedStops.filter(stop=>(stop.areaId??null)===group.areaId),weights=groupedStops.filter(stop=>stop.estimatedWeightKg!=null)
+    return{...group,customerCount:groupedStops.length,estimatedWeightKg:weights.reduce((sum,stop)=>sum+Number(stop.estimatedWeightKg),0),weightedCustomerCount:weights.length,
+      missingGpsCount:groupedStops.filter(stop=>!Number.isFinite(stop.latitude)||!Number.isFinite(stop.longitude)||stop.latitude===0||stop.longitude===0).length,
+      timeRestrictionCount:groupedStops.filter(stop=>Boolean(String(stop.timeRestriction||'').trim())).length,stops:groupedStops}
+  }).sort((a,b)=>a.areaName.localeCompare(b.areaName))
   const warningCount=unassignedStops.length+vehicleBoards.filter(board=>board.customerCount>0&&!board.driverId).length+specials.filter(x=>x.requestType==='potential_new'&&newCustomerMissing(x).length).length
-  return {...day,stops,trips:assignedTrips,vehicleBoards,unassignedStops,specialRequests:specials,warningCount,legacyUnassignedTripCount:allTrips.filter(item=>!item.vehicleId).length}
+  return {...day,stops,trips:assignedTrips,vehicleBoards,unassignedStops,unassignedGroups,specialRequests:specials,warningCount,legacyUnassignedTripCount:allTrips.filter(item=>!item.vehicleId).length}
 }
+
+const resourceOptions=(database)=>({
+  vehicles:database.prepare(`SELECT v.id,v.vehicle_code vehicleCode,v.vehicle_name vehicleName,v.registration_number registrationNumber,v.capacity_kg capacityKg,v.status,
+    v.is_temporary isTemporary,v.temporary_date temporaryDate,v.default_base_location_id defaultBaseLocationId,base.name defaultBase,
+    (SELECT GROUP_CONCAT(a.name,'|') FROM vehicle_preferred_areas vpa JOIN areas a ON a.id=vpa.area_id WHERE vpa.vehicle_id=v.id) preferredAreaNames
+    FROM vehicles v LEFT JOIN operational_locations base ON base.id=v.default_base_location_id ORDER BY v.is_temporary,v.vehicle_code`).all().map(item=>({...item,preferredAreas:item.preferredAreaNames?item.preferredAreaNames.split('|'):[]})),
+  employees:database.prepare(`SELECT e.id,e.employee_code employeeCode,e.name,e.job_role role,e.employment_status employmentStatus,e.is_active isActive,
+    e.default_base_location_id defaultBaseLocationId,base.name defaultBase,e.default_area_id defaultAreaId,a.name defaultArea
+    FROM employees e LEFT JOIN operational_locations base ON base.id=e.default_base_location_id LEFT JOIN areas a ON a.id=e.default_area_id ORDER BY e.name`).all(),
+  locations:database.prepare('SELECT id,name,can_start canStart,can_end canEnd FROM operational_locations WHERE is_active=1 ORDER BY name').all(),
+  areas:database.prepare('SELECT id,name FROM areas WHERE is_active=1 ORDER BY name').all()
+})
 
 export function getDispatchWeek({startDate=iso()}={},database=defaultDb){
   const start=iso(startDate),end=addDays(start,6)
   const days=database.prepare('SELECT * FROM dispatch_days WHERE dispatch_date BETWEEN ? AND ? ORDER BY dispatch_date').all(start,end).map(day=>dayView(database,day))
-  return {startDate:start,endDate:end,days,areas:database.prepare('SELECT id,name FROM areas WHERE is_active=1 ORDER BY name').all(),employees:database.prepare('SELECT id,name,job_role role FROM employees WHERE is_active=1 ORDER BY name').all(),locations:database.prepare('SELECT id,name,can_start canStart,can_end canEnd FROM operational_locations WHERE is_active=1 ORDER BY name').all()}
+  return {startDate:start,endDate:end,days,...resourceOptions(database)}
 }
-const resourceOptions=(database)=>({employees:database.prepare('SELECT id,name,job_role role FROM employees WHERE is_active=1 ORDER BY name').all(),locations:database.prepare('SELECT id,name,can_start canStart,can_end canEnd FROM operational_locations WHERE is_active=1 ORDER BY name').all()})
 export function getDispatchDay(date,database=defaultDb){const day=dayByDate(database,iso(date));return day?{...dayView(database,day),...resourceOptions(database)}:null}
 
 export function promisedCheck(date,database=defaultDb){
@@ -252,14 +277,46 @@ export function updateTrip(id,payload,database=defaultDb){const before=database.
 export function assignVehicleDay(date,vehicleId,payload,database=defaultDb){
   const day=dayByDate(database,iso(date));if(!day)throw new Error('Dispatch day not found')
   const before=database.prepare(`SELECT d.driver_id driverId,d.assistant_id assistantId,d.start_location_id startLocationId,d.end_location_id endLocationId FROM dispatch_trips dt JOIN dispatches d ON d.id=dt.dispatch_id WHERE dt.dispatch_day_id=? AND d.vehicle_id=? LIMIT 1`).get(day.id,vehicleId)||{}
+  before.assistantIds=database.prepare('SELECT employee_id id FROM dispatch_vehicle_assistants WHERE dispatch_day_id=? AND vehicle_id=? ORDER BY employee_id').all(day.id,vehicleId).map(item=>item.id)
+  if(payload.driverId){
+    const driver=database.prepare(`SELECT * FROM employees WHERE id=? AND is_active=1 AND employment_status='active' AND lower(job_role)='driver'`).get(payload.driverId)
+    if(!driver)throw new Error('所选员工不是可用 Driver')
+    const conflict=database.prepare(`SELECT v.vehicle_code vehicle FROM dispatch_trips dt JOIN dispatches d ON d.id=dt.dispatch_id JOIN vehicles v ON v.id=d.vehicle_id
+      WHERE dt.dispatch_day_id=? AND d.driver_id=? AND d.vehicle_id<>? LIMIT 1`).get(day.id,payload.driverId,vehicleId)
+    if(conflict)throw new Error(`该司机当天已分配给 ${conflict.vehicle}，请先解除原分配`)
+  }
+  const assistantIds=payload.assistantIds===undefined?null:[...new Set((payload.assistantIds||[]).map(Number).filter(Boolean))]
+  if(assistantIds)for(const employeeId of assistantIds){const employee=database.prepare(`SELECT id FROM employees WHERE id=? AND is_active=1 AND employment_status='active' AND lower(job_role) IN ('assistant','crew')`).get(employeeId);if(!employee)throw new Error('所选员工不是可用 Assistant/Crew')}
   database.exec('BEGIN IMMEDIATE')
-  try{for(let tripNumber=1;tripNumber<=3;tripNumber+=1){const trip=ensureVehicleTrip(database,day,Number(vehicleId),tripNumber);const dispatch=database.prepare('SELECT * FROM dispatches WHERE id=?').get(trip.dispatch_id);database.prepare(`UPDATE dispatches SET driver_id=?,assistant_id=?,start_location_id=?,end_location_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(payload.driverId===undefined?dispatch.driver_id:payload.driverId,payload.assistantId===undefined?dispatch.assistant_id:payload.assistantId,payload.startLocationId===undefined?dispatch.start_location_id:payload.startLocationId,payload.endLocationId===undefined?dispatch.end_location_id:payload.endLocationId,trip.dispatch_id)}invalidateDispatchDay(database,day.dispatch_date,'vehicle_assignment_updated','vehicle',vehicleId,before,payload,payload.changedBy);database.exec('COMMIT');return getDispatchDay(date,database)}catch(error){database.exec('ROLLBACK');throw error}
+  try{
+    if(assistantIds){database.prepare('DELETE FROM dispatch_vehicle_assistants WHERE dispatch_day_id=? AND vehicle_id=?').run(day.id,vehicleId);const insert=database.prepare('INSERT INTO dispatch_vehicle_assistants(dispatch_day_id,vehicle_id,employee_id) VALUES(?,?,?)');for(const employeeId of assistantIds)insert.run(day.id,vehicleId,employeeId)}
+    for(let tripNumber=1;tripNumber<=3;tripNumber+=1){const trip=ensureVehicleTrip(database,day,Number(vehicleId),tripNumber);const dispatch=database.prepare('SELECT * FROM dispatches WHERE id=?').get(trip.dispatch_id);database.prepare(`UPDATE dispatches SET driver_id=?,assistant_id=?,start_location_id=?,end_location_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(payload.driverId===undefined?dispatch.driver_id:payload.driverId,assistantIds===null?dispatch.assistant_id:(assistantIds[0]||null),payload.startLocationId===undefined?dispatch.start_location_id:payload.startLocationId,payload.endLocationId===undefined?dispatch.end_location_id:payload.endLocationId,trip.dispatch_id)}
+    invalidateDispatchDay(database,day.dispatch_date,'vehicle_assignment_updated','vehicle',vehicleId,before,{...payload,assistantIds},payload.changedBy);database.exec('COMMIT');return getDispatchDay(date,database)
+  }catch(error){database.exec('ROLLBACK');throw error}
+}
+
+export function assignAreaStops(date,payload,database=defaultDb){
+  const day=dayByDate(database,iso(date));if(!day)throw new Error('Dispatch day not found')
+  const stopIds=[...new Set((payload.stopIds||[]).map(Number).filter(Boolean))];if(!stopIds.length)throw new Error('Area 没有可分配客户')
+  const placeholders=stopIds.map(()=>'?').join(',')
+  const eligible=database.prepare(`SELECT ds.id FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id JOIN dispatches d ON d.id=dt.dispatch_id
+    LEFT JOIN vehicles v ON v.id=d.vehicle_id WHERE dt.dispatch_day_id=? AND ds.id IN (${placeholders}) AND (d.vehicle_id IS NULL OR v.status NOT IN ('available','assigned') OR (v.is_temporary=1 AND v.temporary_date<>?))`).all(day.id,...stopIds,day.dispatch_date)
+  if(eligible.length!==stopIds.length)throw new Error('Area 内有客户已被其他主管分配，请刷新后重试')
+  database.exec('BEGIN IMMEDIATE')
+  try{
+    const trip=ensureVehicleTrip(database,day,Number(payload.vehicleId),Math.min(3,Math.max(1,Number(payload.tripNumber||1))))
+    let sequence=database.prepare('SELECT COALESCE(MAX(stop_sequence),0) value FROM dispatch_stops WHERE dispatch_id=?').get(trip.dispatch_id).value
+    const move=database.prepare('UPDATE dispatch_stops SET dispatch_id=?,dispatch_trip_id=?,stop_sequence=? WHERE id=?')
+    for(const stopId of stopIds){sequence+=1;move.run(trip.dispatch_id,trip.id,sequence,stopId)}
+    invalidateDispatchDay(database,day.dispatch_date,'area_assigned','area',payload.areaId??'unassigned',null,{vehicleId:payload.vehicleId,tripNumber:payload.tripNumber||1,stopIds},payload.changedBy)
+    database.exec('COMMIT');return getDispatchDay(date,database)
+  }catch(error){database.exec('ROLLBACK');throw error}
 }
 
 export function driverToday({driverId,date=iso()}={},database=defaultDb){
   const day=dayByDate(database,iso(date));if(!day||day.status!=='published')return{date:iso(date),published:false,trips:[]}
   const trips=database.prepare(`SELECT dt.id,dt.trip_number tripNumber,d.vehicle_id vehicleId,v.vehicle_code vehicle,d.driver_id driverId FROM dispatch_trips dt JOIN dispatches d ON d.id=dt.dispatch_id LEFT JOIN vehicles v ON v.id=d.vehicle_id WHERE dt.dispatch_day_id=? AND d.driver_id=? AND EXISTS(SELECT 1 FROM dispatch_stops ds WHERE ds.dispatch_trip_id=dt.id)`).all(day.id,Number(driverId))
-  return{date:day.dispatch_date,published:true,trips:trips.map(t=>({...t,stops:database.prepare(`SELECT ds.id,ds.stop_sequence stopSequence,b.jodoo_branch_id branchId,b.branch_name branchName,c.name customerName,b.address,b.latitude,b.longitude,c.payment_type paymentType,c.occ_price occPrice FROM dispatch_stops ds JOIN branches b ON b.id=ds.branch_id LEFT JOIN customers c ON c.id=b.customer_id WHERE ds.dispatch_trip_id=? ORDER BY ds.stop_sequence`).all(t.id)}))}
+  return{date:day.dispatch_date,published:true,trips:trips.map(t=>({...t,assistants:database.prepare(`SELECT e.id,e.employee_code employeeCode,e.name FROM dispatch_vehicle_assistants dva JOIN employees e ON e.id=dva.employee_id WHERE dva.dispatch_day_id=? AND dva.vehicle_id=? ORDER BY e.name`).all(day.id,t.vehicleId),stops:database.prepare(`SELECT ds.id,ds.stop_sequence stopSequence,b.jodoo_branch_id branchId,b.branch_name branchName,c.name customerName,b.address,b.latitude,b.longitude,c.payment_type paymentType,c.occ_price occPrice FROM dispatch_stops ds JOIN branches b ON b.id=ds.branch_id LEFT JOIN customers c ON c.id=b.customer_id WHERE ds.dispatch_trip_id=? ORDER BY ds.stop_sequence`).all(t.id)}))}
 }
 
 export function createScheduleException(payload,database=defaultDb){

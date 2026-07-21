@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 7
+export const SCHEMA_VERSION = 8
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS branches (
   parking_note TEXT,
   truck_access TEXT,
   gps_remark TEXT,
+  time_restriction TEXT,
   is_active INTEGER NOT NULL DEFAULT 1,
   source_updated_at TEXT,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -95,6 +96,9 @@ CREATE TABLE IF NOT EXISTS employees (
   phone TEXT,
   job_role TEXT,
   home_location_id INTEGER REFERENCES operational_locations(id),
+  employment_status TEXT NOT NULL DEFAULT 'active' CHECK (employment_status IN ('active','on_leave','inactive')),
+  default_base_location_id INTEGER REFERENCES operational_locations(id),
+  default_area_id INTEGER REFERENCES areas(id),
   is_active INTEGER NOT NULL DEFAULT 1,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -102,8 +106,10 @@ CREATE TABLE IF NOT EXISTS employees (
 CREATE TABLE IF NOT EXISTS vehicles (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   vehicle_code TEXT NOT NULL UNIQUE,
+  vehicle_name TEXT,
   registration_number TEXT,
   capacity_kg REAL,
+  default_base_location_id INTEGER REFERENCES operational_locations(id),
   default_start_location_id INTEGER REFERENCES operational_locations(id),
   default_end_location_id INTEGER REFERENCES operational_locations(id),
   status TEXT NOT NULL DEFAULT 'available' CHECK (status IN ('available','assigned','maintenance','inactive')),
@@ -303,6 +309,20 @@ CREATE TABLE IF NOT EXISTS dispatch_trips (
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS vehicle_preferred_areas (
+  vehicle_id INTEGER NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+  area_id INTEGER NOT NULL REFERENCES areas(id) ON DELETE CASCADE,
+  PRIMARY KEY(vehicle_id, area_id)
+);
+
+CREATE TABLE IF NOT EXISTS dispatch_vehicle_assistants (
+  dispatch_day_id INTEGER NOT NULL REFERENCES dispatch_days(id) ON DELETE CASCADE,
+  vehicle_id INTEGER NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+  employee_id INTEGER NOT NULL REFERENCES employees(id),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY(dispatch_day_id, vehicle_id, employee_id)
+);
+
 CREATE TABLE IF NOT EXISTS dispatch_approvals (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   dispatch_day_id INTEGER NOT NULL REFERENCES dispatch_days(id) ON DELETE CASCADE,
@@ -403,6 +423,7 @@ CREATE INDEX IF NOT EXISTS import_errors_batch_idx ON import_errors(import_batch
 CREATE INDEX IF NOT EXISTS import_staged_batch_idx ON import_staged_rows(import_batch_id, file_type, action);
 CREATE INDEX IF NOT EXISTS dispatch_days_date_idx ON dispatch_days(dispatch_date, status);
 CREATE INDEX IF NOT EXISTS dispatch_trips_day_idx ON dispatch_trips(dispatch_day_id, trip_number);
+CREATE INDEX IF NOT EXISTS dispatch_vehicle_assistants_employee_idx ON dispatch_vehicle_assistants(employee_id, dispatch_day_id);
 CREATE INDEX IF NOT EXISTS special_requests_date_idx ON special_collection_requests(requested_collection_date, status);
 CREATE INDEX IF NOT EXISTS schedule_exceptions_dates_idx ON schedule_exceptions(original_date, target_date);
 `
