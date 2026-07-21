@@ -195,14 +195,21 @@ export function assignAreaZone(areaId, zoneGroupId, payload={}, database = defau
 
 export function moveAreasToZone(areaIds,zoneGroupId,payload={},database=defaultDb){
   const ids=[...new Set((areaIds||[]).map(Number).filter(Boolean))];if(!ids.length)throw new Error('At least one Area is required')
-  const zone=database.prepare('SELECT id FROM zone_groups WHERE id=? AND is_active=1').get(zoneGroupId);if(!zone)throw new Error('Zone Group not found or inactive')
+  const zone=database.prepare('SELECT id,name FROM zone_groups WHERE id=? AND is_active=1').get(zoneGroupId);if(!zone)throw new Error('Zone Group not found or inactive')
   const marks=ids.map(()=>'?').join(','),beforeRows=database.prepare(`SELECT * FROM areas WHERE id IN (${marks})`).all(...ids);if(beforeRows.length!==ids.length)throw new Error('One or more Areas were not found')
+  const reason=text(payload.reason)||'Zone Area Confirmation adjustment',actor=text(payload.changedBy)||'Supervisor',zoneName=database.prepare('SELECT name FROM zone_groups WHERE id=?')
   database.exec('BEGIN IMMEDIATE');try{
     database.prepare(`UPDATE areas SET confirmed_zone_group_id=COALESCE(confirmed_zone_group_id,zone_group_id),zone_group_id=?,zone_assignment_status='pending_confirmation',updated_at=CURRENT_TIMESTAMP WHERE id IN (${marks})`).run(zoneGroupId,...ids)
-    for(const before of beforeRows)auditArea(database,'area_zone_moved',before.id,before,{zoneGroupId:Number(zoneGroupId),confirmedZoneGroupId:before.confirmed_zone_group_id??before.zone_group_id,zoneAssignmentStatus:'pending_confirmation'},payload.changedBy)
+    for(const before of beforeRows)auditArea(database,'area_zone_moved',before.id,before,{areaId:before.jodoo_area_id,oldZoneId:before.zone_group_id,oldZone:zoneName.get(before.zone_group_id)?.name||null,newZoneId:Number(zoneGroupId),newZone:zone.name,confirmedZoneGroupId:before.confirmed_zone_group_id??before.zone_group_id,zoneAssignmentStatus:'pending_confirmation',reason,changedBy:actor},actor)
     database.exec('COMMIT')
   }catch(error){database.exec('ROLLBACK');throw error}
   const all=areaRows(database);return ids.map(id=>all.find(item=>item.id===id))
+}
+
+export function supervisorMoveAreasToZone(areaIds,zoneGroupId,payload={},database=defaultDb){
+  if(text(payload.actorRole).toLowerCase()!=='supervisor')throw new Error('Supervisor permission required')
+  if(!text(payload.reason))throw new Error('Movement reason is required')
+  return moveAreasToZone(areaIds,zoneGroupId,payload,database)
 }
 
 export function setAreasConfirmation(areaIds,confirmed,payload={},database=defaultDb){

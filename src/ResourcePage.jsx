@@ -6,13 +6,13 @@ import ZoneGroupManager from './ZoneGroupManager.jsx'
 const api=async(url,options={})=>{const response=await fetch(url,{headers:{'Content-Type':'application/json'},...options});const data=await response.json();if(!response.ok)throw new Error(data.error||'操作失败');return data}
 const selectedIds=(event)=>[...event.target.selectedOptions].map(option=>Number(option.value))
 
-export default function ResourcePage(){
+export default function ResourcePage({currentUser={name:'LSK',role:'supervisor'}}){
   const[data,setData]=useState(null),[tab,setTab]=useState('vehicles'),[error,setError]=useState(''),[message,setMessage]=useState(''),[vehicleDetailId,setVehicleDetailId]=useState(null)
   const[vehicle,setVehicle]=useState({vehicleCode:'',vehicleName:'',registrationNumber:'',capacityKg:'',defaultBaseLocationId:'',preferredAreaIds:[]})
   const[employee,setEmployee]=useState({name:'',employeeCode:'',phone:'',jobRole:'driver',employmentStatus:'active',defaultBaseLocationId:'',defaultAreaId:''})
   const[location,setLocation]=useState({name:'',locationType:'depot',address:'',canStart:true,canEnd:true})
   const load=useCallback(()=>api('/api/resources').then(setData).catch(item=>setError(item.message)),[]);useEffect(()=>{load()},[load])
-  const save=async(url,method,body)=>{setError('');setMessage('');try{await api(url,{method,body:JSON.stringify({...body,changedBy:'Supervisor'})});setMessage('主档已保存。相关已批准路线如受影响，会要求重新批准。');await load()}catch(item){setError(item.message)}}
+  const save=async(url,method,body)=>{setError('');setMessage('');try{await api(url,{method,body:JSON.stringify({...body,changedBy:currentUser.name,actorRole:currentUser.role})});setMessage(body.successMessage||'主档已保存。相关已批准路线如受影响，会要求重新批准。');await load();return true}catch(item){setError(item.message);return false}}
   const addVehicle=async(event)=>{event.preventDefault();await save('/api/vehicles','POST',{...vehicle,capacityKg:vehicle.capacityKg?Number(vehicle.capacityKg):null});setVehicle({vehicleCode:'',vehicleName:'',registrationNumber:'',capacityKg:'',defaultBaseLocationId:'',preferredAreaIds:[]})}
   const addEmployee=async(event)=>{event.preventDefault();await save('/api/employees','POST',employee);setEmployee({name:'',employeeCode:'',phone:'',jobRole:'driver',employmentStatus:'active',defaultBaseLocationId:'',defaultAreaId:''})}
   const addLocation=async(event)=>{event.preventDefault();await save('/api/locations','POST',location);setLocation({name:'',locationType:'depot',address:'',canStart:true,canEnd:true})}

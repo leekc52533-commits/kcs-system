@@ -102,6 +102,7 @@ SQLite schema 目前为 v13。`branches` 保留现有架构，同时保存原始
 - `dispatch_stops` 保存产生路线当时的 Zone Group 与 Area 名称快照。旧路线继续显示旧快照；调整归属后新产生的派车才读取最新 Zone。
 - Zone Area Confirmation 工作台默认只显示待确认 Area，可按名称、当前 Zone、GPS 状态筛选，并按客户数量排序。Zone 卡片显示 Area 确认进度、Branch、GPS 与固定排程统计；点击 Area 可查看分店、地址、正式 GPS、固定周期/星期、历史派车与已有收货重量，以及 GPS 足够时的相邻 Area。
 - Zone 卡片内的 Area 总数、已确认、待确认、Customer Branch、official GPS、缺 GPS 与已排客户数字均可点击，并在右侧只读 Drawer 查看明细。明细支持搜索、Area 筛选和排序；official GPS 可切换 Area 汇总或 Branch 明细。只有“待确认”明细提供确认归属按钮，其余统计明细不会修改资料。
+- Area 总数、已确认和待确认 Drawer 另提供 Supervisor 专用的 Area 多选、全选当前筛选结果、清除选择及批量移动。移动必须选择目标 Zone、填写原因并再次确认；移动后 Area 明确变为“归属已调整／待确认”，不会改动 BranchID、CustomerID、GPS、Schedule 或旧 Dispatch 快照。每个 Area 的旧/新 Zone、操作人、时间与原因都会保存到 `audit_logs`。
 - 单个或批量移动 Area 后仍为“待确认”，不会马上改变新路线使用的 Zone；主管必须另按“确认归属”才正式生效。可批量确认或撤销确认，所有移动、确认与撤销都会写入 `audit_logs`。这些操作不会修改 BranchID、CustomerID、GPS、固定 Schedule 或历史 Dispatch。
 
 发布会阻挡缺车辆、缺司机、缺 OCC Price、缺 Payment Type，以及潜在新客户缺 CustomerID、BranchID、价格、付款方式、地址或 Location。未正确安排的客户承诺也会阻挡发布，只有这一项可以由主管填写例外原因确认；账号和营运资料缺失不能绕过。
@@ -141,6 +142,7 @@ SQLite schema 目前为 v13。`branches` 保留现有架构，同时保存原始
 - `PATCH /api/areas/:id/zone-group`
 - `GET /api/areas/:id/zone-confirmation`
 - `POST /api/areas/bulk-zone-group`、`POST /api/areas/bulk-confirmation`
+- `POST /api/areas/bulk-zone-group` 的移动请求必须包含 Supervisor 角色、操作人及非空 `reason`；成功后返回更新后的 Area，并由前端刷新 Zone 统计。
 - `GET /api/zone-boundaries`、`POST /api/zone-groups/:id/boundaries`
 - `GET /api/gps-zone-recommendations`、`POST /api/gps-zone-recommendations/recalculate`
 - `POST /api/gps-zone-recommendations/:id/decision`
