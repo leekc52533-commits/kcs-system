@@ -5,7 +5,7 @@ import { commitImport, previewImport } from './importService.mjs'
 import { customerBranchDetail, customerBranches, dashboardSummary, dataQualitySummary, importBatches, importErrors, schedules } from './queryService.mjs'
 import { approveDay, assignAreaStops, assignVehicleDay, createScheduleException, createStop, createTrip, deleteStop, driverToday, generateDay, generateWeek, getDispatchDay, getDispatchWeek, promisedCheck, publishDay, reopenDay, transferVehicleDay, updateStop, updateTrip } from './dispatchService.mjs'
 import { addTemporaryLocation, adoptTemporaryLocation, convertToExisting, createSpecialRequest, linkNewAccount, listSpecialRequests, listTemporaryLocations, scheduleSpecialRequest, searchCustomerBranches, updateSpecialRequest } from './specialRequestService.mjs'
-import { assignAreaZone, createEmployee, createLocation, createTemporaryVehicle, createVehicle, createZoneGroup, getAreaConfirmationDetail, listResources, listZoneGroups, mergeZoneGroups, moveAreasToZone, setAreasConfirmation, setZoneActive, splitZoneGroup, updateEmployee, updateLocation, updateVehicle, updateZoneGroup } from './resourceService.mjs'
+import { assignAreaZone, createEmployee, createLocation, createTemporaryVehicle, createVehicle, createZoneGroup, getAreaConfirmationDetail, getZoneGroupMetricDetails, listResources, listZoneGroups, mergeZoneGroups, moveAreasToZone, setAreasConfirmation, setZoneActive, splitZoneGroup, updateEmployee, updateLocation, updateVehicle, updateZoneGroup } from './resourceService.mjs'
 import { addFuelRecord, addMaintenanceRecord, addTyreRecord, addUsageRecord, addVehicleDocument, getVehicleDetail, updateVehicleCompliance } from './vehicleService.mjs'
 import { bulkAcceptHighConfidence, decideRecommendation, ensureRecommendations, listRecommendations, listZoneBoundaries, recalculateRecommendations, saveZoneBoundary } from './gpsRecommendationService.mjs'
 
@@ -69,6 +69,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && /^\/api\/dispatch\/day\/[^/]+\/assign-area$/.test(url.pathname)) {const parts=url.pathname.split('/');return sendJson(response,200,assignAreaStops(decodeURIComponent(parts[4]),(await readJson(request)).payload))}
     if (request.method === 'GET' && url.pathname === '/api/resources') return sendJson(response,200,listResources())
     if (request.method === 'GET' && url.pathname === '/api/zone-groups') return sendJson(response,200,listZoneGroups())
+    if (request.method === 'GET' && /^\/api\/zone-groups\/\d+\/metric-details$/.test(url.pathname)) return sendJson(response,200,getZoneGroupMetricDetails(Number(url.pathname.split('/')[3]),Object.fromEntries(url.searchParams)))
     if (request.method === 'GET' && url.pathname === '/api/zone-boundaries') return sendJson(response,200,listZoneBoundaries({includeHistory:url.searchParams.get('history')==='true'}))
     if (request.method === 'POST' && /^\/api\/zone-groups\/\d+\/boundaries$/.test(url.pathname)) return sendJson(response,201,saveZoneBoundary(Number(url.pathname.split('/')[3]),(await readJson(request)).payload))
     if (request.method === 'GET' && url.pathname === '/api/gps-zone-recommendations') return sendJson(response,200,listRecommendations(Object.fromEntries(url.searchParams)))

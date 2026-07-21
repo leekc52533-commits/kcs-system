@@ -101,6 +101,7 @@ SQLite schema 目前为 v13。`branches` 保留现有架构，同时保存原始
 - 拆分只建立新 Zone 并移动主管勾选的 Area；合并会把来源 Zone 的 Area 移到目标 Zone，再停用来源 Zone，不会删除来源 Zone。上述操作不修改客户、BranchID、GPS、排程或路线历史。
 - `dispatch_stops` 保存产生路线当时的 Zone Group 与 Area 名称快照。旧路线继续显示旧快照；调整归属后新产生的派车才读取最新 Zone。
 - Zone Area Confirmation 工作台默认只显示待确认 Area，可按名称、当前 Zone、GPS 状态筛选，并按客户数量排序。Zone 卡片显示 Area 确认进度、Branch、GPS 与固定排程统计；点击 Area 可查看分店、地址、正式 GPS、固定周期/星期、历史派车与已有收货重量，以及 GPS 足够时的相邻 Area。
+- Zone 卡片内的 Area 总数、已确认、待确认、Customer Branch、official GPS、缺 GPS 与已排客户数字均可点击，并在右侧只读 Drawer 查看明细。明细支持搜索、Area 筛选和排序；official GPS 可切换 Area 汇总或 Branch 明细。只有“待确认”明细提供确认归属按钮，其余统计明细不会修改资料。
 - 单个或批量移动 Area 后仍为“待确认”，不会马上改变新路线使用的 Zone；主管必须另按“确认归属”才正式生效。可批量确认或撤销确认，所有移动、确认与撤销都会写入 `audit_logs`。这些操作不会修改 BranchID、CustomerID、GPS、固定 Schedule 或历史 Dispatch。
 
 发布会阻挡缺车辆、缺司机、缺 OCC Price、缺 Payment Type，以及潜在新客户缺 CustomerID、BranchID、价格、付款方式、地址或 Location。未正确安排的客户承诺也会阻挡发布，只有这一项可以由主管填写例外原因确认；账号和营运资料缺失不能绕过。
@@ -134,6 +135,7 @@ SQLite schema 目前为 v13。`branches` 保留现有架构，同时保存原始
 - `GET|POST /api/temporary-locations`、`POST /api/temporary-locations/:id/adopt`
 - `GET /api/resources`
 - `GET|POST /api/zone-groups`、`PATCH /api/zone-groups/:id`
+- `GET /api/zone-groups/:id/metric-details`（`metric=areas|confirmed|pending|official_gps|missing_gps|branches|scheduled`，支持 `view`、`search`、`areaId`、`sort`）
 - `POST /api/zone-groups/:id/deactivate|reactivate`
 - `POST /api/zone-groups/merge`、`POST /api/zone-groups/split`
 - `PATCH /api/areas/:id/zone-group`

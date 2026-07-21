@@ -60,7 +60,8 @@ const zoneStatsSql=`SELECT z.id,z.code,z.name,z.sort_order sortOrder,z.is_active
   (SELECT COUNT(*) FROM branches b JOIN areas a ON a.id=b.area_id WHERE a.zone_group_id=z.id AND b.latitude BETWEEN -90 AND 90 AND b.longitude BETWEEN -180 AND 180 AND NOT(b.latitude=0 AND b.longitude=0)) gpsBranchCount,
   ((SELECT COUNT(*) FROM branches b JOIN areas a ON a.id=b.area_id WHERE a.zone_group_id=z.id) -
    (SELECT COUNT(*) FROM branches b JOIN areas a ON a.id=b.area_id WHERE a.zone_group_id=z.id AND b.latitude BETWEEN -90 AND 90 AND b.longitude BETWEEN -180 AND 180 AND NOT(b.latitude=0 AND b.longitude=0))) missingGpsBranchCount,
-  (SELECT COUNT(DISTINCT b.customer_id) FROM branches b JOIN areas a ON a.id=b.area_id WHERE a.zone_group_id=z.id AND b.customer_id IS NOT NULL AND EXISTS(SELECT 1 FROM branch_schedules s WHERE s.branch_id=b.id AND s.is_active=1)) scheduledCustomerCount
+  (SELECT COUNT(DISTINCT b.id) FROM branches b JOIN areas a ON a.id=b.area_id WHERE a.zone_group_id=z.id AND EXISTS(SELECT 1 FROM branch_schedules s WHERE s.branch_id=b.id AND s.is_active=1)) scheduledCustomerCount,
+  (SELECT COUNT(DISTINCT b.id) FROM branches b JOIN areas a ON a.id=b.area_id WHERE a.zone_group_id=z.id AND EXISTS(SELECT 1 FROM branch_schedules s WHERE s.branch_id=b.id AND s.is_active=1)) scheduledBranchCount
   FROM zone_groups z`
 const zoneRow=(database,id)=>database.prepare(`${zoneStatsSql} WHERE z.id=?`).get(id)
 const zoneRows=database=>database.prepare(`${zoneStatsSql} ORDER BY z.sort_order,z.id`).all()
@@ -75,6 +76,52 @@ const auditArea=(database,action,id,before,after,changedBy)=>database.prepare(`I
 const affectedDates=(database,areaIds)=>{if(!areaIds.length)return[];const marks=areaIds.map(()=>'?').join(',');return database.prepare(`SELECT DISTINCT dd.dispatch_date FROM dispatch_days dd JOIN dispatch_trips dt ON dt.dispatch_day_id=dd.id JOIN dispatch_stops ds ON ds.dispatch_trip_id=dt.id JOIN branches b ON b.id=ds.branch_id WHERE b.area_id IN (${marks}) AND dd.dispatch_date>=date('now','localtime') AND dd.status IN ('approved','published')`).all(...areaIds).map(item=>item.dispatch_date)}
 
 export function listZoneGroups(database=defaultDb){return{items:zoneRows(database),areas:listResources(database).areas}}
+
+const officialGpsSql=alias=>`${alias}.latitude BETWEEN -90 AND 90 AND ${alias}.longitude BETWEEN -180 AND 180 AND NOT(${alias}.latitude=0 AND ${alias}.longitude=0)`
+const metricLabels={areas:'Area总数',confirmed:'已确认',pending:'待确认',official_gps:'有正式GPS',missing_gps:'缺GPS',branches:'Customer Branch',scheduled:'已排客户'}
+
+export function getZoneGroupMetricDetails(id,options={},database=defaultDb){
+  const zone=zoneRow(database,Number(id));if(!zone)throw new Error('Zone Group not found')
+  const metric=metricLabels[options.metric]?options.metric:'areas',view=metric==='official_gps'&&options.view==='branch'?'branch':'area'
+  let items
+  if(['areas','confirmed','pending'].includes(metric)||(metric==='official_gps'&&view==='area')){
+    items=database.prepare(`SELECT a.id,a.jodoo_area_id areaId,a.name areaName,a.zone_assignment_status zoneAssignmentStatus,
+      current.name currentZone,formal.name formalZone,
+      COUNT(DISTINCT b.id) branchCount,
+      SUM(CASE WHEN ${officialGpsSql('b')} THEN 1 ELSE 0 END) officialGpsCount,
+      COUNT(DISTINCT b.id)-SUM(CASE WHEN ${officialGpsSql('b')} THEN 1 ELSE 0 END) missingGpsCount
+      FROM areas a JOIN zone_groups current ON current.id=a.zone_group_id
+      LEFT JOIN zone_groups formal ON formal.id=COALESCE(a.confirmed_zone_group_id,a.zone_group_id)
+      LEFT JOIN branches b ON b.area_id=a.id
+      WHERE a.zone_group_id=? GROUP BY a.id ORDER BY a.name`).all(zone.id).map(item=>({...item,officialGpsCount:Number(item.officialGpsCount||0),missingGpsCount:Number(item.missingGpsCount||0)}))
+    if(metric==='confirmed')items=items.filter(item=>item.zoneAssignmentStatus==='confirmed')
+    if(metric==='pending')items=items.filter(item=>item.zoneAssignmentStatus!=='confirmed')
+    if(metric==='official_gps')items=items.filter(item=>item.officialGpsCount>0)
+  }else{
+    const rows=database.prepare(`SELECT b.id,b.jodoo_branch_id branchId,b.branch_name branchName,b.latitude,b.longitude,b.gps_status gpsStatus,
+      c.jodoo_customer_id customerId,c.name customerName,a.id areaId,a.name areaName,
+      EXISTS(SELECT 1 FROM temporary_locations t WHERE t.branch_id=b.id) hasTemporaryGps,
+      s.jodoo_schedule_id scheduleId,s.frequency,s.days_of_week assignedWeekdays
+      FROM branches b JOIN areas a ON a.id=b.area_id LEFT JOIN customers c ON c.id=b.customer_id
+      LEFT JOIN branch_schedules s ON s.branch_id=b.id AND s.is_active=1
+      WHERE a.zone_group_id=? ORDER BY a.name,c.name,b.branch_name,s.jodoo_schedule_id`).all(zone.id)
+    const grouped=new Map()
+    for(const row of rows){
+      if(!grouped.has(row.id))grouped.set(row.id,{id:row.id,branchId:row.branchId,branchName:row.branchName,customerId:row.customerId,customerName:row.customerName,areaId:row.areaId,areaName:row.areaName,latitude:row.latitude,longitude:row.longitude,gpsStatus:row.gpsStatus,hasOfficialGps:Boolean(Number.isFinite(row.latitude)&&Number.isFinite(row.longitude)&&row.latitude>=-90&&row.latitude<=90&&row.longitude>=-180&&row.longitude<=180&&!(row.latitude===0&&row.longitude===0)),hasTemporaryGps:Boolean(row.hasTemporaryGps),schedules:[]})
+      if(row.scheduleId)grouped.get(row.id).schedules.push({scheduleId:row.scheduleId,frequency:row.frequency,assignedWeekdays:row.assignedWeekdays})
+    }
+    items=[...grouped.values()]
+    if(metric==='official_gps')items=items.filter(item=>item.hasOfficialGps)
+    if(metric==='missing_gps')items=items.filter(item=>!item.hasOfficialGps)
+    if(metric==='scheduled')items=items.filter(item=>item.schedules.length>0)
+  }
+  const total=items.length,search=text(options.search).toLowerCase(),areaId=Number(options.areaId)||null
+  if(search)items=items.filter(item=>`${item.areaName||''} ${item.areaId||''} ${item.customerName||''} ${item.customerId||''} ${item.branchName||''} ${item.branchId||''}`.toLowerCase().includes(search))
+  if(areaId)items=items.filter(item=>(item.branchId?item.areaId:item.id)===areaId)
+  const sort=options.sort||'name'
+  items.sort((a,b)=>sort==='branches_desc'?(b.branchCount||0)-(a.branchCount||0):sort==='gps_desc'?(b.officialGpsCount||0)-(a.officialGpsCount||0):sort==='branch_id'?text(a.branchId).localeCompare(text(b.branchId)):sort==='customer'?text(a.customerName).localeCompare(text(b.customerName)):text(a.areaName||a.branchName).localeCompare(text(b.areaName||b.branchName)))
+  return{zone:{id:zone.id,name:zone.name},metric,label:metricLabels[metric],view,total,filteredCount:items.length,areas:areaRows(database).filter(area=>area.zoneGroupId===zone.id).map(area=>({id:area.id,name:area.name})),items}
+}
 
 const toRadians=value=>value*Math.PI/180
 const distanceKm=(a,b)=>{const earth=6371,dLat=toRadians(b.latitude-a.latitude),dLon=toRadians(b.longitude-a.longitude),value=Math.sin(dLat/2)**2+Math.cos(toRadians(a.latitude))*Math.cos(toRadians(b.latitude))*Math.sin(dLon/2)**2;return earth*2*Math.atan2(Math.sqrt(value),Math.sqrt(1-value))}
