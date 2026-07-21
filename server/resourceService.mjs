@@ -11,17 +11,26 @@ function replacePreferredAreas(database, vehicleId, areaIds) {
   for (const areaId of areaIds) if (Number(areaId)) insert.run(vehicleId, Number(areaId))
 }
 
+function replacePreferredZones(database,vehicleId,zoneGroupIds){
+  if(!Array.isArray(zoneGroupIds))return
+  database.prepare('DELETE FROM vehicle_preferred_zones WHERE vehicle_id=?').run(vehicleId)
+  const insert=database.prepare('INSERT OR IGNORE INTO vehicle_preferred_zones(vehicle_id,zone_group_id) VALUES(?,?)')
+  for(const zoneId of zoneGroupIds)if(Number(zoneId))insert.run(vehicleId,Number(zoneId))
+}
+
 function vehicleRows(database) {
   return database.prepare(`SELECT v.id,v.vehicle_code vehicleCode,v.vehicle_name vehicleName,v.registration_number registrationNumber,
-    v.capacity_kg capacityKg,v.status,v.is_temporary isTemporary,v.temporary_date temporaryDate,
+    v.capacity_kg capacityKg,v.operational_status status,v.official_sequence officialSequence,v.is_common isCommon,v.brand,v.model,v.vehicle_type vehicleType,v.is_temporary isTemporary,v.temporary_date temporaryDate,
     v.default_base_location_id defaultBaseLocationId,base.name defaultBase,
     GROUP_CONCAT(a.id) preferredAreaIds,GROUP_CONCAT(a.name,'|') preferredAreaNames
     FROM vehicles v LEFT JOIN operational_locations base ON base.id=v.default_base_location_id
     LEFT JOIN vehicle_preferred_areas vpa ON vpa.vehicle_id=v.id LEFT JOIN areas a ON a.id=vpa.area_id
-    GROUP BY v.id ORDER BY v.is_temporary,v.vehicle_code`).all().map((item) => ({
+    GROUP BY v.id ORDER BY v.operational_status='sold',COALESCE(v.official_sequence,999),v.vehicle_code`).all().map((item) => ({
       ...item,
       preferredAreaIds: item.preferredAreaIds ? item.preferredAreaIds.split(',').map(Number) : [],
-      preferredAreas: item.preferredAreaNames ? item.preferredAreaNames.split('|') : []
+      preferredAreas: item.preferredAreaNames ? item.preferredAreaNames.split('|') : [],
+      preferredZoneIds:database.prepare('SELECT zone_group_id id FROM vehicle_preferred_zones WHERE vehicle_id=? ORDER BY zone_group_id').all(item.id).map(row=>row.id),
+      preferredZones:database.prepare('SELECT z.name FROM vehicle_preferred_zones vpz JOIN zone_groups z ON z.id=vpz.zone_group_id WHERE vpz.vehicle_id=? ORDER BY z.sort_order').all(item.id).map(row=>row.name)
     }))
 }
 
@@ -66,9 +75,12 @@ export function createVehicle(payload, database = defaultDb) {
   if (!text(payload.vehicleCode)) throw new Error('Vehicle Number is required')
   database.exec('BEGIN IMMEDIATE')
   try {
-    const result = database.prepare(`INSERT INTO vehicles(vehicle_code,vehicle_name,registration_number,capacity_kg,default_base_location_id,status,is_temporary,temporary_date)
-      VALUES(?,?,?,?,?,?,?,?)`).run(text(payload.vehicleCode), text(payload.vehicleName) || null, text(payload.registrationNumber) || null, payload.capacityKg ?? null, idOrNull(payload.defaultBaseLocationId), payload.status || 'available', payload.isTemporary ? 1 : 0, payload.temporaryDate || null)
+    const operationalStatus=payload.status||'available';if(!['available','active','maintenance','inactive','sold'].includes(operationalStatus))throw new Error('Invalid vehicle status')
+    const legacyStatus=['available','active'].includes(operationalStatus)?'available':operationalStatus==='maintenance'?'maintenance':'inactive'
+    const result = database.prepare(`INSERT INTO vehicles(vehicle_code,vehicle_name,registration_number,capacity_kg,default_base_location_id,status,operational_status,is_temporary,temporary_date,brand,model,manufacture_year,registration_date,vehicle_type,chassis_number,engine_number,gross_vehicle_weight_kg,unladen_weight_kg,remark,is_common)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(text(payload.vehicleCode),text(payload.vehicleName)||null,text(payload.registrationNumber)||null,payload.capacityKg??null,idOrNull(payload.defaultBaseLocationId),legacyStatus,operationalStatus,payload.isTemporary?1:0,payload.temporaryDate||null,text(payload.brand)||null,text(payload.model)||null,payload.manufactureYear||null,payload.registrationDate||null,text(payload.vehicleType)||null,text(payload.chassisNumber)||null,text(payload.engineNumber)||null,payload.grossVehicleWeightKg??null,payload.unladenWeightKg??null,text(payload.remark)||null,payload.isCommon?1:0)
     replacePreferredAreas(database, result.lastInsertRowid, payload.preferredAreaIds || [])
+    replacePreferredZones(database,result.lastInsertRowid,payload.preferredZoneIds||[])
     database.exec('COMMIT')
     return vehicleRows(database).find((item) => item.id === Number(result.lastInsertRowid))
   } catch (error) { database.exec('ROLLBACK'); throw error }
@@ -77,7 +89,7 @@ export function createVehicle(payload, database = defaultDb) {
 export function createTemporaryVehicle(payload, database = defaultDb) {
   if (!payload.date) throw new Error('Temporary vehicle date is required')
   const count = database.prepare('SELECT COUNT(*) count FROM vehicles WHERE is_temporary=1 AND temporary_date=?').get(payload.date).count + 1
-  return createVehicle({ vehicleCode: payload.vehicleCode || `Temporary Lorry ${count} (${payload.date})`, vehicleName: payload.vehicleName || '临时车辆', status: 'assigned', isTemporary: true, temporaryDate: payload.date }, database)
+  return createVehicle({ vehicleCode: payload.vehicleCode || `Temporary Lorry ${count} (${payload.date})`, vehicleName: payload.vehicleName || '临时车辆', status: 'available', isTemporary: true, temporaryDate: payload.date }, database)
 }
 
 export function updateVehicle(id, payload, database = defaultDb) {
@@ -85,14 +97,20 @@ export function updateVehicle(id, payload, database = defaultDb) {
   if (!before) throw new Error('Vehicle not found')
   database.exec('BEGIN IMMEDIATE')
   try {
-    database.prepare(`UPDATE vehicles SET vehicle_code=?,vehicle_name=?,registration_number=?,capacity_kg=?,default_base_location_id=?,status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(
+    const currentStatus=before.operational_status||before.status,nextStatus=payload.status??currentStatus
+    if(!['available','active','maintenance','inactive','sold'].includes(nextStatus))throw new Error('Invalid vehicle status')
+    const nextLegacy=['available','active'].includes(nextStatus)?'available':nextStatus==='maintenance'?'maintenance':'inactive'
+    database.prepare(`UPDATE vehicles SET vehicle_code=?,vehicle_name=?,registration_number=?,capacity_kg=?,default_base_location_id=?,status=?,operational_status=?,brand=?,model=?,manufacture_year=?,registration_date=?,vehicle_type=?,chassis_number=?,engine_number=?,gross_vehicle_weight_kg=?,unladen_weight_kg=?,remark=?,is_common=?,sold_at=CASE WHEN ?='sold' THEN COALESCE(sold_at,CURRENT_TIMESTAMP) ELSE sold_at END,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(
       text(payload.vehicleCode ?? before.vehicle_code), payload.vehicleName === undefined ? before.vehicle_name : text(payload.vehicleName) || null,
       payload.registrationNumber === undefined ? before.registration_number : text(payload.registrationNumber) || null,
-      payload.capacityKg === undefined ? before.capacity_kg : payload.capacityKg, payload.defaultBaseLocationId === undefined ? before.default_base_location_id : idOrNull(payload.defaultBaseLocationId), payload.status ?? before.status, id)
+      payload.capacityKg===undefined?before.capacity_kg:payload.capacityKg,payload.defaultBaseLocationId===undefined?before.default_base_location_id:idOrNull(payload.defaultBaseLocationId),nextLegacy,nextStatus,
+      payload.brand===undefined?before.brand:text(payload.brand)||null,payload.model===undefined?before.model:text(payload.model)||null,payload.manufactureYear===undefined?before.manufacture_year:payload.manufactureYear||null,payload.registrationDate===undefined?before.registration_date:payload.registrationDate||null,payload.vehicleType===undefined?before.vehicle_type:text(payload.vehicleType)||null,payload.chassisNumber===undefined?before.chassis_number:text(payload.chassisNumber)||null,payload.engineNumber===undefined?before.engine_number:text(payload.engineNumber)||null,payload.grossVehicleWeightKg===undefined?before.gross_vehicle_weight_kg:payload.grossVehicleWeightKg,payload.unladenWeightKg===undefined?before.unladen_weight_kg:payload.unladenWeightKg,payload.remark===undefined?before.remark:text(payload.remark)||null,payload.isCommon===undefined?before.is_common:Number(Boolean(payload.isCommon)),nextStatus,id)
     replacePreferredAreas(database, id, payload.preferredAreaIds)
-    if (payload.status && payload.status !== before.status) {
+    replacePreferredZones(database,id,payload.preferredZoneIds)
+    if (nextStatus !== currentStatus) {
+      database.prepare('INSERT INTO vehicle_status_history(vehicle_id,previous_status,new_status,reason,changed_by) VALUES(?,?,?,?,?)').run(id,currentStatus,nextStatus,text(payload.statusReason)||null,text(payload.changedBy)||'Supervisor')
       const dates = database.prepare(`SELECT DISTINCT dd.dispatch_date FROM dispatch_days dd JOIN dispatch_trips dt ON dt.dispatch_day_id=dd.id JOIN dispatches d ON d.id=dt.dispatch_id WHERE d.vehicle_id=? AND dd.dispatch_date>=date('now','localtime')`).all(id)
-      for (const item of dates) invalidateDispatchDay(database, item.dispatch_date, 'vehicle_status_changed', 'vehicle', id, before, payload, payload.changedBy)
+      for (const item of dates) invalidateDispatchDay(database,item.dispatch_date,'vehicle_status_changed','vehicle',id,before,{...payload,status:nextStatus},payload.changedBy)
     }
     database.exec('COMMIT')
     return vehicleRows(database).find((item) => item.id === Number(id))

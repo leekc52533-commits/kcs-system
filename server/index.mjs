@@ -3,9 +3,10 @@ import { databasePath, getSystemStatus, uploadsDir } from './database.mjs'
 import { getJodooIntegrationStatus, recordJodooWebhook, verifyJodooWebhookToken } from './jodoo.mjs'
 import { commitImport, previewImport } from './importService.mjs'
 import { customerBranchDetail, customerBranches, dashboardSummary, dataQualitySummary, importBatches, importErrors, schedules } from './queryService.mjs'
-import { approveDay, assignAreaStops, assignVehicleDay, createScheduleException, createStop, createTrip, deleteStop, driverToday, generateDay, generateWeek, getDispatchDay, getDispatchWeek, promisedCheck, publishDay, reopenDay, updateStop, updateTrip } from './dispatchService.mjs'
+import { approveDay, assignAreaStops, assignVehicleDay, createScheduleException, createStop, createTrip, deleteStop, driverToday, generateDay, generateWeek, getDispatchDay, getDispatchWeek, promisedCheck, publishDay, reopenDay, transferVehicleDay, updateStop, updateTrip } from './dispatchService.mjs'
 import { addTemporaryLocation, adoptTemporaryLocation, convertToExisting, createSpecialRequest, linkNewAccount, listSpecialRequests, listTemporaryLocations, scheduleSpecialRequest, searchCustomerBranches, updateSpecialRequest } from './specialRequestService.mjs'
 import { assignAreaZone, createEmployee, createLocation, createTemporaryVehicle, createVehicle, listResources, updateEmployee, updateLocation, updateVehicle, updateZoneGroup } from './resourceService.mjs'
+import { addFuelRecord, addMaintenanceRecord, addTyreRecord, addUsageRecord, addVehicleDocument, getVehicleDetail, updateVehicleCompliance } from './vehicleService.mjs'
 
 const port = Number(process.env.KCS_API_PORT || 8787)
 
@@ -63,13 +64,16 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'DELETE' && /^\/api\/dispatch\/stops\/\d+$/.test(url.pathname)) return sendJson(response,200,deleteStop(Number(url.pathname.split('/').at(-1)),(await readJson(request)).payload))
     if (request.method === 'PATCH' && /^\/api\/dispatch\/trips\/\d+$/.test(url.pathname)) return sendJson(response,200,updateTrip(Number(url.pathname.split('/').at(-1)),(await readJson(request)).payload))
     if (request.method === 'PATCH' && /^\/api\/dispatch\/day\/[^/]+\/vehicle\/\d+$/.test(url.pathname)) {const parts=url.pathname.split('/');return sendJson(response,200,assignVehicleDay(decodeURIComponent(parts[4]),Number(parts[6]),(await readJson(request)).payload))}
+    if (request.method === 'POST' && /^\/api\/dispatch\/day\/[^/]+\/vehicle\/\d+\/transfer$/.test(url.pathname)) {const parts=url.pathname.split('/');return sendJson(response,200,transferVehicleDay(decodeURIComponent(parts[4]),Number(parts[6]),(await readJson(request)).payload))}
     if (request.method === 'POST' && /^\/api\/dispatch\/day\/[^/]+\/assign-area$/.test(url.pathname)) {const parts=url.pathname.split('/');return sendJson(response,200,assignAreaStops(decodeURIComponent(parts[4]),(await readJson(request)).payload))}
     if (request.method === 'GET' && url.pathname === '/api/resources') return sendJson(response,200,listResources())
     if (request.method === 'PATCH' && /^\/api\/zone-groups\/\d+$/.test(url.pathname)) return sendJson(response,200,updateZoneGroup(Number(url.pathname.split('/').at(-1)),(await readJson(request)).payload))
     if (request.method === 'PATCH' && /^\/api\/areas\/\d+\/zone-group$/.test(url.pathname)) {const parts=url.pathname.split('/'),payload=(await readJson(request)).payload;return sendJson(response,200,assignAreaZone(Number(parts[3]),Number(payload.zoneGroupId),payload))}
     if (request.method === 'POST' && url.pathname === '/api/vehicles') return sendJson(response,201,createVehicle((await readJson(request)).payload))
     if (request.method === 'POST' && url.pathname === '/api/vehicles/temporary') return sendJson(response,201,createTemporaryVehicle((await readJson(request)).payload))
+    if (request.method === 'GET' && /^\/api\/vehicles\/\d+$/.test(url.pathname)) return sendJson(response,200,getVehicleDetail(Number(url.pathname.split('/').at(-1))))
     if (request.method === 'PATCH' && /^\/api\/vehicles\/\d+$/.test(url.pathname)) return sendJson(response,200,updateVehicle(Number(url.pathname.split('/').at(-1)),(await readJson(request)).payload))
+    if (request.method === 'POST' && /^\/api\/vehicles\/\d+\/(compliance|maintenance|fuel|tyres|documents|usage)$/.test(url.pathname)) {const parts=url.pathname.split('/'),id=Number(parts[3]),type=parts[4],payload=(await readJson(request)).payload;const handlers={compliance:updateVehicleCompliance,maintenance:addMaintenanceRecord,fuel:addFuelRecord,tyres:addTyreRecord,documents:addVehicleDocument,usage:addUsageRecord};return sendJson(response,type==='compliance'?200:201,handlers[type](id,payload))}
     if (request.method === 'POST' && url.pathname === '/api/employees') return sendJson(response,201,createEmployee((await readJson(request)).payload))
     if (request.method === 'PATCH' && /^\/api\/employees\/\d+$/.test(url.pathname)) return sendJson(response,200,updateEmployee(Number(url.pathname.split('/').at(-1)),(await readJson(request)).payload))
     if (request.method === 'POST' && url.pathname === '/api/locations') return sendJson(response,201,createLocation((await readJson(request)).payload))

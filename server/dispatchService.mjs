@@ -57,7 +57,7 @@ function ensureUnassignedTrip(database,day){
 function ensureVehicleTrip(database,day,vehicleId,tripNumber){
   const found=database.prepare(`SELECT dt.* FROM dispatch_trips dt JOIN dispatches d ON d.id=dt.dispatch_id WHERE dt.dispatch_day_id=? AND d.vehicle_id=? AND dt.trip_number=?`).get(day.id,vehicleId,tripNumber)
   if(found)return found
-  const vehicle=database.prepare("SELECT * FROM vehicles WHERE id=? AND status IN ('available','assigned') AND (is_temporary=0 OR temporary_date=?)").get(vehicleId,day.dispatch_date)
+  const vehicle=database.prepare("SELECT * FROM vehicles WHERE id=? AND operational_status IN ('available','active') AND status IN ('available','assigned') AND (is_temporary=0 OR temporary_date=?)").get(vehicleId,day.dispatch_date)
   if(!vehicle)throw new Error('Vehicle is not available for this date')
   const dispatch=database.prepare("INSERT INTO dispatches(dispatch_date,vehicle_id,status) VALUES(?,?,'draft')").run(day.dispatch_date,vehicleId)
   const result=database.prepare('INSERT INTO dispatch_trips(dispatch_day_id,dispatch_id,trip_number,area_id) VALUES(?,?,?,NULL)').run(day.id,dispatch.lastInsertRowid,tripNumber)
@@ -122,13 +122,14 @@ function dayView(database, day) {
     status,promised_to_customer promisedToCustomer,estimated_weight_kg estimatedWeightKg,vehicle_id vehicleId,trip_number tripNumber,linked_customer_id customerId,linked_branch_id branchId,occ_price occPrice,payment_type paymentType,address,location_link locationLink,temporary_latitude latitude,temporary_longitude longitude
     FROM special_collection_requests WHERE scheduled_date=? AND status NOT IN ('rejected','cancelled')`).all(day.dispatch_date)
   const vehicles=database.prepare(`SELECT v.id,v.vehicle_code vehicle,v.vehicle_name vehicleName,v.registration_number registrationNumber,v.capacity_kg capacityKg,
-    v.status,v.is_temporary isTemporary,v.temporary_date temporaryDate,v.default_base_location_id defaultBaseLocationId,base.name defaultBase,
+    v.operational_status status,v.is_common isCommon,v.is_temporary isTemporary,v.temporary_date temporaryDate,v.default_base_location_id defaultBaseLocationId,base.name defaultBase,
     (SELECT GROUP_CONCAT(a.name,'|') FROM vehicle_preferred_areas vpa JOIN areas a ON a.id=vpa.area_id WHERE vpa.vehicle_id=v.id) preferredAreaNames
     FROM vehicles v LEFT JOIN operational_locations base ON base.id=v.default_base_location_id
-    WHERE v.status IN ('available','assigned') AND (v.is_temporary=0 OR v.temporary_date=?) ORDER BY v.is_temporary,v.vehicle_code`).all(day.dispatch_date).map(item=>({...item,preferredAreas:item.preferredAreaNames?item.preferredAreaNames.split('|'):[]}))
+    WHERE v.operational_status IN ('available','active') AND v.status IN ('available','assigned') AND (v.is_temporary=0 OR v.temporary_date=?) ORDER BY v.is_temporary,COALESCE(v.official_sequence,999),v.vehicle_code`).all(day.dispatch_date).map(item=>({...item,preferredAreas:item.preferredAreaNames?item.preferredAreaNames.split('|'):[]}))
   const availableIds=new Set(vehicles.map(item=>item.id)),assignedTrips=allTrips.filter(item=>item.vehicleId&&availableIds.has(item.vehicleId))
   const assistantRows=database.prepare(`SELECT dva.vehicle_id vehicleId,e.id,e.employee_code employeeCode,e.name FROM dispatch_vehicle_assistants dva JOIN employees e ON e.id=dva.employee_id WHERE dva.dispatch_day_id=? ORDER BY e.name`).all(day.id)
-  const vehicleBoards=vehicles.map(vehicle=>{
+  const boardVehicles=vehicles.filter(vehicle=>vehicle.isCommon||assignedTrips.some(item=>item.vehicleId===vehicle.id))
+  const vehicleBoards=boardVehicles.map(vehicle=>{
     const vehicleTrips=assignedTrips.filter(item=>item.vehicleId===vehicle.id),basis=vehicleTrips.find(item=>item.driverId||item.assistantId||item.startLocationId||item.endLocationId)||vehicleTrips[0]||{}
     const slots=[1,2,3].map(tripNumber=>{const trip=vehicleTrips.find(item=>item.tripNumber===tripNumber);return{tripNumber,tripId:trip?.id??null,stops:trip?stops.filter(stop=>stop.tripId===trip.id):[]}})
     const areas=[...new Set(slots.flatMap(slot=>slot.stops.map(stop=>stop.area).filter(Boolean)))]
@@ -153,10 +154,10 @@ function dayView(database, day) {
 }
 
 const resourceOptions=(database)=>({
-  vehicles:database.prepare(`SELECT v.id,v.vehicle_code vehicleCode,v.vehicle_name vehicleName,v.registration_number registrationNumber,v.capacity_kg capacityKg,v.status,
+  vehicles:database.prepare(`SELECT v.id,v.vehicle_code vehicleCode,v.vehicle_name vehicleName,v.registration_number registrationNumber,v.capacity_kg capacityKg,v.operational_status status,v.is_common isCommon,
     v.is_temporary isTemporary,v.temporary_date temporaryDate,v.default_base_location_id defaultBaseLocationId,base.name defaultBase,
     (SELECT GROUP_CONCAT(a.name,'|') FROM vehicle_preferred_areas vpa JOIN areas a ON a.id=vpa.area_id WHERE vpa.vehicle_id=v.id) preferredAreaNames
-    FROM vehicles v LEFT JOIN operational_locations base ON base.id=v.default_base_location_id ORDER BY v.is_temporary,v.vehicle_code`).all().map(item=>({...item,preferredAreas:item.preferredAreaNames?item.preferredAreaNames.split('|'):[]})),
+    FROM vehicles v LEFT JOIN operational_locations base ON base.id=v.default_base_location_id ORDER BY v.operational_status='sold',v.is_temporary,COALESCE(v.official_sequence,999),v.vehicle_code`).all().map(item=>({...item,preferredAreas:item.preferredAreaNames?item.preferredAreaNames.split('|'):[]})),
   employees:database.prepare(`SELECT e.id,e.employee_code employeeCode,e.name,e.job_role role,e.employment_status employmentStatus,e.is_active isActive,
     e.default_base_location_id defaultBaseLocationId,base.name defaultBase,e.default_area_id defaultAreaId,a.name defaultArea
     FROM employees e LEFT JOIN operational_locations base ON base.id=e.default_base_location_id LEFT JOIN areas a ON a.id=e.default_area_id ORDER BY e.name`).all(),
@@ -301,12 +302,42 @@ export function assignVehicleDay(date,vehicleId,payload,database=defaultDb){
   }catch(error){database.exec('ROLLBACK');throw error}
 }
 
+export function transferVehicleDay(date,sourceVehicleId,payload,database=defaultDb){
+  const day=dayByDate(database,iso(date));if(!day)throw new Error('Dispatch day not found')
+  const targetId=Number(payload.targetVehicleId);if(!targetId||targetId===Number(sourceVehicleId))throw new Error('Please select a different target vehicle')
+  const source=database.prepare('SELECT * FROM vehicles WHERE id=?').get(sourceVehicleId),target=database.prepare("SELECT * FROM vehicles WHERE id=? AND operational_status IN ('available','active')").get(targetId)
+  if(!source||!target)throw new Error('Source or target vehicle is unavailable')
+  const sourceTrips=database.prepare(`SELECT dt.*,d.driver_id,d.assistant_id,d.start_location_id,d.end_location_id FROM dispatch_trips dt JOIN dispatches d ON d.id=dt.dispatch_id WHERE dt.dispatch_day_id=? AND d.vehicle_id=? ORDER BY dt.trip_number,dt.id`).all(day.id,sourceVehicleId)
+  if(!sourceTrips.length)throw new Error('Source vehicle has no route to transfer')
+  const before={sourceVehicleId:Number(sourceVehicleId),targetVehicleId:targetId,tripIds:sourceTrips.map(item=>item.id),driverId:sourceTrips.find(item=>item.driver_id)?.driver_id??null}
+  database.exec('BEGIN IMMEDIATE')
+  try{
+    for(const sourceTrip of sourceTrips){
+      const targetTrip=ensureVehicleTrip(database,day,targetId,sourceTrip.trip_number)
+      let sequence=database.prepare('SELECT COALESCE(MAX(stop_sequence),0) value FROM dispatch_stops WHERE dispatch_id=?').get(targetTrip.dispatch_id).value
+      const stops=database.prepare('SELECT id FROM dispatch_stops WHERE dispatch_trip_id=? ORDER BY stop_sequence').all(sourceTrip.id)
+      for(const stop of stops){sequence+=1;database.prepare('UPDATE dispatch_stops SET dispatch_id=?,dispatch_trip_id=?,stop_sequence=? WHERE id=?').run(targetTrip.dispatch_id,targetTrip.id,sequence,stop.id)}
+      if(payload.transferDriver!==false)database.prepare(`UPDATE dispatches SET driver_id=COALESCE(?,driver_id),assistant_id=COALESCE(?,assistant_id),start_location_id=COALESCE(?,start_location_id),end_location_id=COALESCE(?,end_location_id),updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(sourceTrip.driver_id,sourceTrip.assistant_id,sourceTrip.start_location_id,sourceTrip.end_location_id,targetTrip.dispatch_id)
+      database.prepare('UPDATE dispatches SET vehicle_id=NULL,driver_id=NULL,assistant_id=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(sourceTrip.dispatch_id)
+    }
+    if(payload.transferDriver!==false){
+      const assistants=database.prepare('SELECT employee_id FROM dispatch_vehicle_assistants WHERE dispatch_day_id=? AND vehicle_id=?').all(day.id,sourceVehicleId)
+      const add=database.prepare('INSERT OR IGNORE INTO dispatch_vehicle_assistants(dispatch_day_id,vehicle_id,employee_id) VALUES(?,?,?)')
+      for(const item of assistants)add.run(day.id,targetId,item.employee_id)
+      database.prepare('DELETE FROM dispatch_vehicle_assistants WHERE dispatch_day_id=? AND vehicle_id=?').run(day.id,sourceVehicleId)
+    }
+    if(payload.setSourceMaintenance){database.prepare("UPDATE vehicles SET operational_status='maintenance',status='maintenance',updated_at=CURRENT_TIMESTAMP WHERE id=?").run(sourceVehicleId);database.prepare("INSERT INTO vehicle_status_history(vehicle_id,previous_status,new_status,reason,changed_by) VALUES(?,?,'maintenance',?,?)").run(sourceVehicleId,source.operational_status,payload.reason||'Vehicle route transferred due to maintenance',actor(payload.changedBy))}
+    invalidateDispatchDay(database,day.dispatch_date,'vehicle_route_transferred','vehicle',sourceVehicleId,before,{targetVehicleId:targetId,transferDriver:payload.transferDriver!==false,setSourceMaintenance:Boolean(payload.setSourceMaintenance),reason:payload.reason||null},payload.changedBy)
+    database.exec('COMMIT');return getDispatchDay(date,database)
+  }catch(error){database.exec('ROLLBACK');throw error}
+}
+
 export function assignAreaStops(date,payload,database=defaultDb){
   const day=dayByDate(database,iso(date));if(!day)throw new Error('Dispatch day not found')
   const stopIds=[...new Set((payload.stopIds||[]).map(Number).filter(Boolean))];if(!stopIds.length)throw new Error('Area 没有可分配客户')
   const placeholders=stopIds.map(()=>'?').join(',')
   const eligible=database.prepare(`SELECT ds.id FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id JOIN dispatches d ON d.id=dt.dispatch_id
-    LEFT JOIN vehicles v ON v.id=d.vehicle_id WHERE dt.dispatch_day_id=? AND ds.id IN (${placeholders}) AND (d.vehicle_id IS NULL OR v.status NOT IN ('available','assigned') OR (v.is_temporary=1 AND v.temporary_date<>?))`).all(day.id,...stopIds,day.dispatch_date)
+    LEFT JOIN vehicles v ON v.id=d.vehicle_id WHERE dt.dispatch_day_id=? AND ds.id IN (${placeholders}) AND (d.vehicle_id IS NULL OR v.operational_status NOT IN ('available','active') OR v.status NOT IN ('available','assigned') OR (v.is_temporary=1 AND v.temporary_date<>?))`).all(day.id,...stopIds,day.dispatch_date)
   if(eligible.length!==stopIds.length)throw new Error('Area 内有客户已被其他主管分配，请刷新后重试')
   database.exec('BEGIN IMMEDIATE')
   try{

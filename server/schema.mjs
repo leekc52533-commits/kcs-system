@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 9
+export const SCHEMA_VERSION = 10
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -120,6 +120,20 @@ CREATE TABLE IF NOT EXISTS vehicles (
   vehicle_name TEXT,
   registration_number TEXT,
   capacity_kg REAL,
+  official_sequence INTEGER,
+  brand TEXT,
+  model TEXT,
+  manufacture_year INTEGER,
+  registration_date TEXT,
+  vehicle_type TEXT,
+  chassis_number TEXT,
+  engine_number TEXT,
+  gross_vehicle_weight_kg REAL,
+  unladen_weight_kg REAL,
+  operational_status TEXT NOT NULL DEFAULT 'active',
+  is_common INTEGER NOT NULL DEFAULT 1,
+  remark TEXT,
+  sold_at TEXT,
   default_base_location_id INTEGER REFERENCES operational_locations(id),
   default_start_location_id INTEGER REFERENCES operational_locations(id),
   default_end_location_id INTEGER REFERENCES operational_locations(id),
@@ -326,6 +340,122 @@ CREATE TABLE IF NOT EXISTS vehicle_preferred_areas (
   PRIMARY KEY(vehicle_id, area_id)
 );
 
+CREATE TABLE IF NOT EXISTS vehicle_preferred_zones (
+  vehicle_id INTEGER NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+  zone_group_id INTEGER NOT NULL REFERENCES zone_groups(id),
+  PRIMARY KEY(vehicle_id, zone_group_id)
+);
+
+CREATE TABLE IF NOT EXISTS vehicle_compliance_reminders (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  vehicle_id INTEGER NOT NULL UNIQUE REFERENCES vehicles(id),
+  puspakom_due_date TEXT,
+  road_tax_due_date TEXT,
+  insurance_due_date TEXT,
+  loan_payment_due_date TEXT,
+  next_service_date TEXT,
+  next_service_mileage REAL,
+  updated_by TEXT,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS vehicle_maintenance_records (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  vehicle_id INTEGER NOT NULL REFERENCES vehicles(id),
+  maintenance_date TEXT NOT NULL,
+  mileage REAL,
+  fault_description TEXT,
+  repair_work TEXT,
+  parts_replaced TEXT,
+  workshop TEXT,
+  labour_cost REAL NOT NULL DEFAULT 0,
+  parts_cost REAL NOT NULL DEFAULT 0,
+  total_cost REAL NOT NULL DEFAULT 0,
+  invoice_storage_key TEXT,
+  invoice_original_name TEXT,
+  before_photo_storage_key TEXT,
+  before_photo_original_name TEXT,
+  after_photo_storage_key TEXT,
+  after_photo_original_name TEXT,
+  downtime_start TEXT,
+  downtime_end TEXT,
+  approved_by TEXT,
+  follow_up_date TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS vehicle_fuel_records (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  vehicle_id INTEGER NOT NULL REFERENCES vehicles(id),
+  fuel_at TEXT NOT NULL,
+  driver_id INTEGER REFERENCES employees(id),
+  mileage REAL,
+  fuel_station TEXT,
+  litres REAL,
+  price_per_litre REAL,
+  total_amount REAL,
+  receipt_storage_key TEXT,
+  receipt_original_name TEXT,
+  full_tank INTEGER NOT NULL DEFAULT 0 CHECK(full_tank IN (0,1)),
+  related_dispatch_date TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS vehicle_tyre_records (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  vehicle_id INTEGER NOT NULL REFERENCES vehicles(id),
+  tyre_position TEXT NOT NULL,
+  brand TEXT,
+  install_date TEXT,
+  install_mileage REAL,
+  cost REAL,
+  repair_rotation_history TEXT,
+  replacement_date TEXT,
+  photo_storage_key TEXT,
+  photo_original_name TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS vehicle_documents (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  vehicle_id INTEGER NOT NULL REFERENCES vehicles(id),
+  document_type TEXT NOT NULL,
+  title TEXT,
+  storage_key TEXT NOT NULL UNIQUE,
+  original_name TEXT NOT NULL,
+  content_type TEXT,
+  size_bytes INTEGER,
+  document_date TEXT,
+  expiry_date TEXT,
+  uploaded_by TEXT,
+  uploaded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS vehicle_status_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  vehicle_id INTEGER NOT NULL REFERENCES vehicles(id),
+  previous_status TEXT,
+  new_status TEXT NOT NULL,
+  reason TEXT,
+  changed_by TEXT,
+  changed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS vehicle_usage_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  vehicle_id INTEGER NOT NULL REFERENCES vehicles(id),
+  driver_id INTEGER REFERENCES employees(id),
+  dispatch_date TEXT NOT NULL,
+  trips_completed INTEGER NOT NULL DEFAULT 0,
+  collection_weight_kg REAL,
+  kilometres REAL,
+  fuel_cost REAL,
+  downtime_hours REAL,
+  incidents TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(vehicle_id, dispatch_date)
+);
+
 CREATE TABLE IF NOT EXISTS dispatch_vehicle_assistants (
   dispatch_day_id INTEGER NOT NULL REFERENCES dispatch_days(id) ON DELETE CASCADE,
   vehicle_id INTEGER NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
@@ -437,6 +567,12 @@ CREATE INDEX IF NOT EXISTS dispatch_trips_day_idx ON dispatch_trips(dispatch_day
 CREATE INDEX IF NOT EXISTS dispatch_vehicle_assistants_employee_idx ON dispatch_vehicle_assistants(employee_id, dispatch_day_id);
 CREATE INDEX IF NOT EXISTS special_requests_date_idx ON special_collection_requests(requested_collection_date, status);
 CREATE INDEX IF NOT EXISTS schedule_exceptions_dates_idx ON schedule_exceptions(original_date, target_date);
+CREATE INDEX IF NOT EXISTS vehicle_maintenance_vehicle_idx ON vehicle_maintenance_records(vehicle_id, maintenance_date DESC);
+CREATE INDEX IF NOT EXISTS vehicle_fuel_vehicle_idx ON vehicle_fuel_records(vehicle_id, fuel_at DESC);
+CREATE INDEX IF NOT EXISTS vehicle_tyre_vehicle_idx ON vehicle_tyre_records(vehicle_id, install_date DESC);
+CREATE INDEX IF NOT EXISTS vehicle_documents_vehicle_idx ON vehicle_documents(vehicle_id, document_type);
+CREATE INDEX IF NOT EXISTS vehicle_status_history_vehicle_idx ON vehicle_status_history(vehicle_id, changed_at DESC);
+CREATE INDEX IF NOT EXISTS vehicle_usage_vehicle_idx ON vehicle_usage_history(vehicle_id, dispatch_date DESC);
 
 INSERT OR IGNORE INTO zone_groups(id,code,name,sort_order) VALUES
   (1,'ZONE-1','Zone 1',1),
@@ -444,4 +580,7 @@ INSERT OR IGNORE INTO zone_groups(id,code,name,sort_order) VALUES
   (3,'ZONE-3','Zone 3',3),
   (4,'ZONE-4','Zone 4',4),
   (5,'ZONE-5','Zone 5',5);
+
+CREATE TRIGGER IF NOT EXISTS sold_vehicle_no_delete BEFORE DELETE ON vehicles
+WHEN OLD.operational_status='sold' BEGIN SELECT RAISE(ABORT,'Sold vehicle history cannot be deleted'); END;
 `

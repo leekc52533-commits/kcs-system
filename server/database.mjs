@@ -35,6 +35,20 @@ ensureColumn('vehicles', 'is_temporary', 'INTEGER NOT NULL DEFAULT 0')
 ensureColumn('vehicles', 'temporary_date', 'TEXT')
 ensureColumn('vehicles', 'vehicle_name', 'TEXT')
 ensureColumn('vehicles', 'default_base_location_id', 'INTEGER REFERENCES operational_locations(id)')
+ensureColumn('vehicles', 'official_sequence', 'INTEGER')
+ensureColumn('vehicles', 'brand', 'TEXT')
+ensureColumn('vehicles', 'model', 'TEXT')
+ensureColumn('vehicles', 'manufacture_year', 'INTEGER')
+ensureColumn('vehicles', 'registration_date', 'TEXT')
+ensureColumn('vehicles', 'vehicle_type', 'TEXT')
+ensureColumn('vehicles', 'chassis_number', 'TEXT')
+ensureColumn('vehicles', 'engine_number', 'TEXT')
+ensureColumn('vehicles', 'gross_vehicle_weight_kg', 'REAL')
+ensureColumn('vehicles', 'unladen_weight_kg', 'REAL')
+ensureColumn('vehicles', 'operational_status', "TEXT NOT NULL DEFAULT 'active'")
+ensureColumn('vehicles', 'is_common', 'INTEGER NOT NULL DEFAULT 1')
+ensureColumn('vehicles', 'remark', 'TEXT')
+ensureColumn('vehicles', 'sold_at', 'TEXT')
 ensureColumn('employees', 'employment_status', "TEXT NOT NULL DEFAULT 'active'")
 ensureColumn('employees', 'default_base_location_id', 'INTEGER REFERENCES operational_locations(id)')
 ensureColumn('employees', 'default_area_id', 'INTEGER REFERENCES areas(id)')
@@ -86,17 +100,46 @@ if (currentVersion === 0) {
     if (groups[0]) db.prepare('UPDATE areas SET zone_group_id=? WHERE zone_group_id IS NULL').run(groups[0].id)
     db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (9)').run()
   }
+  if (currentVersion < 10) db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (10)').run()
 }
 
-if (db.prepare('SELECT COUNT(*) count FROM vehicles').get().count === 0) {
-  const seedVehicle = db.prepare("INSERT INTO vehicles(vehicle_code,status) VALUES(?,'available')")
+const officialVehicles = [
+  ['Lorry 1','QAV3468','available',0,null],
+  ['Lorry 2','QAA4293N','active',1,null],
+  ['Lorry 3','QAB1225B','active',1,null],
+  ['Lorry 4','QM3028M','active',1,'Hino'],
+  ['Lorry 5','QTY5028','active',1,'Hino'],
+  ['Lorry 6','QM630S','active',1,'Foton']
+]
+
+function normalizeOfficialVehicles() {
   db.exec('BEGIN IMMEDIATE')
-  try { for (let number=1;number<=5;number+=1) seedVehicle.run(`Lorry ${number}`); db.exec('COMMIT') }
-  catch (error) { db.exec('ROLLBACK'); throw error }
+  try {
+    for (let index=0; index<officialVehicles.length; index+=1) {
+      const [code,registration,operationalStatus,isCommon,existingName]=officialVehicles[index]
+      const sequence=index+1
+      let target=db.prepare('SELECT * FROM vehicles WHERE official_sequence=? OR vehicle_code=? ORDER BY id LIMIT 1').get(sequence,code)
+      const plateMatch=db.prepare("SELECT * FROM vehicles WHERE REPLACE(REPLACE(UPPER(COALESCE(registration_number,'')),' ',''),'-','')=? ORDER BY id LIMIT 1").get(registration)
+      if(!target&&plateMatch)target=plateMatch
+      if(!target){const result=db.prepare(`INSERT INTO vehicles(vehicle_code,registration_number,status,operational_status,official_sequence,is_common,vehicle_name) VALUES(?,?,'available',?,?,?,?)`).run(code,registration,operationalStatus,sequence,isCommon,existingName);target={id:Number(result.lastInsertRowid)}}
+      if(plateMatch&&plateMatch.id!==target.id){
+        for(const [table,column] of [['dispatches','vehicle_id'],['special_collection_requests','vehicle_id']])db.prepare(`UPDATE ${table} SET ${column}=? WHERE ${column}=?`).run(target.id,plateMatch.id)
+        db.prepare('UPDATE vehicles SET vehicle_name=COALESCE(?,vehicle_name),capacity_kg=COALESCE(?,capacity_kg),default_base_location_id=COALESCE(?,default_base_location_id),remark=COALESCE(remark,?) WHERE id=?').run(plateMatch.vehicle_name,plateMatch.capacity_kg,plateMatch.default_base_location_id,`Merged legacy vehicle record #${plateMatch.id}`,target.id)
+        db.prepare('DELETE FROM vehicles WHERE id=?').run(plateMatch.id)
+      }
+      db.prepare(`UPDATE vehicles SET vehicle_code=?,registration_number=?,official_sequence=?,operational_status=?,is_common=?,status='available',is_temporary=0,temporary_date=NULL,vehicle_name=COALESCE(vehicle_name,?),updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(code,registration,sequence,operationalStatus,isCommon,existingName,target.id)
+    }
+    let sold=db.prepare("SELECT * FROM vehicles WHERE REPLACE(REPLACE(UPPER(COALESCE(registration_number,'')),' ',''),'-','')='QTW2704'").get()
+    if(!sold){const result=db.prepare("INSERT INTO vehicles(vehicle_code,registration_number,status,operational_status,is_common,sold_at,remark) VALUES('Former Vehicle','QTW2704','inactive','sold',0,CURRENT_TIMESTAMP,'Vehicle sold; retained for history only')").run();sold={id:Number(result.lastInsertRowid)}}
+    db.prepare("UPDATE vehicles SET operational_status='sold',status='inactive',official_sequence=NULL,is_common=0,sold_at=COALESCE(sold_at,CURRENT_TIMESTAMP),updated_at=CURRENT_TIMESTAMP WHERE id=?").run(sold.id)
+    db.exec('COMMIT')
+  } catch(error){db.exec('ROLLBACK');throw error}
 }
+normalizeOfficialVehicles()
+db.exec(`CREATE TRIGGER IF NOT EXISTS sold_vehicle_no_delete BEFORE DELETE ON vehicles WHEN OLD.operational_status='sold' BEGIN SELECT RAISE(ABORT,'Sold vehicle history cannot be deleted'); END;`)
 
 export function getSystemStatus() {
-  const tableNames = ['users','customers','branches','branch_schedules','zone_groups','areas','employees','vehicles','operational_locations','dispatches','dispatch_stops','dispatch_days','dispatch_trips','special_collection_requests','schedule_exceptions','stop_documents','import_batches','import_errors','jodoo_sync_events','jodoo_outbox_jobs']
+  const tableNames = ['users','customers','branches','branch_schedules','zone_groups','areas','employees','vehicles','vehicle_documents','vehicle_maintenance_records','vehicle_fuel_records','vehicle_tyre_records','vehicle_compliance_reminders','vehicle_status_history','vehicle_usage_history','operational_locations','dispatches','dispatch_stops','dispatch_days','dispatch_trips','special_collection_requests','schedule_exceptions','stop_documents','import_batches','import_errors','jodoo_sync_events','jodoo_outbox_jobs']
   const counts = Object.fromEntries(tableNames.map((table) => [table, db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get().count]))
   return { database: 'connected', schemaVersion: SCHEMA_VERSION, counts }
 }
