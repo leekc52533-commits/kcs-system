@@ -54,6 +54,8 @@ function ensureUnassignedTrip(database,day){
   return database.prepare('SELECT * FROM dispatch_trips WHERE id=?').get(result.lastInsertRowid)
 }
 
+function branchZoneSnapshot(database,branchId){return database.prepare(`SELECT a.id areaId,a.name areaName,a.zone_group_id zoneGroupId,z.name zoneGroupName FROM branches b LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN zone_groups z ON z.id=a.zone_group_id WHERE b.id=?`).get(branchId)||{}}
+
 function ensureVehicleTrip(database,day,vehicleId,tripNumber){
   const found=database.prepare(`SELECT dt.* FROM dispatch_trips dt JOIN dispatches d ON d.id=dt.dispatch_id WHERE dt.dispatch_day_id=? AND d.vehicle_id=? AND dt.trip_number=?`).get(day.id,vehicleId,tripNumber)
   if(found)return found
@@ -70,8 +72,9 @@ function addScheduledStop(database, day, schedule) {
   if (exists) return false
   const trip=ensureUnassignedTrip(database,day)
   const sequence=database.prepare('SELECT COALESCE(MAX(stop_sequence),0)+1 value FROM dispatch_stops WHERE dispatch_id=?').get(trip.dispatch_id).value
-  database.prepare(`INSERT INTO dispatch_stops(dispatch_id,branch_id,stop_sequence,status,dispatch_trip_id,source_schedule_id)
-    VALUES(?,?,?,'locked',?,?)`).run(trip.dispatch_id,schedule.branch_id,sequence,trip.id,schedule.id)
+  const snapshot=branchZoneSnapshot(database,schedule.branch_id)
+  database.prepare(`INSERT INTO dispatch_stops(dispatch_id,branch_id,stop_sequence,status,dispatch_trip_id,source_schedule_id,zone_group_id_snapshot,zone_group_name_snapshot,area_name_snapshot)
+    VALUES(?,?,?,'locked',?,?,?,?,?)`).run(trip.dispatch_id,schedule.branch_id,sequence,trip.id,schedule.id,snapshot.zoneGroupId??null,snapshot.zoneGroupName??'待确认',snapshot.areaName??'未分区')
   return true
 }
 
@@ -103,7 +106,7 @@ export function generateDay(payload={},database=defaultDb){return generateRange(
 function stopRows(database, dayId) {
   return database.prepare(`SELECT ds.id,ds.stop_sequence stopSequence,ds.sequence_locked sequenceLocked,ds.estimated_weight_kg estimatedWeightKg,
     ds.source_special_request_id specialRequestId,b.jodoo_branch_id branchId,b.branch_name branchName,c.name customerName,c.payment_type paymentType,c.occ_price occPrice,
-    b.area_id areaId,a.name area,a.zone_group_id zoneGroupId,z.name zoneGroup,b.latitude,b.longitude,b.time_restriction timeRestriction,
+    b.area_id areaId,COALESCE(ds.area_name_snapshot,a.name) area,COALESCE(ds.zone_group_id_snapshot,a.zone_group_id) zoneGroupId,COALESCE(ds.zone_group_name_snapshot,z.name,'待确认') zoneGroup,z.sort_order zoneSortOrder,b.latitude,b.longitude,b.time_restriction timeRestriction,
     dt.id tripId,dt.trip_number tripNumber,d.vehicle_id vehicleId,v.vehicle_code vehicle,d.driver_id driverId,dr.name driver,d.assistant_id assistantId,asst.name assistant
     FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id JOIN dispatches d ON d.id=dt.dispatch_id
     JOIN branches b ON b.id=ds.branch_id LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN zone_groups z ON z.id=a.zone_group_id
@@ -138,7 +141,7 @@ function dayView(database, day) {
     return{...vehicle,driverId:basis.driverId??null,driver:basis.driver??null,assistantIds:assistants.map(item=>item.id),assistants,startLocationId:basis.startLocationId??null,startLocation:basis.startLocation??null,endLocationId:basis.endLocationId??null,endLocation:basis.endLocation??null,areas,slots,customerCount:slots.reduce((sum,slot)=>sum+slot.stops.length,0)}
   })
   const unassignedStops=stops.filter(stop=>!stop.vehicleId||!availableIds.has(stop.vehicleId))
-  const unassignedGroups=[...new Map(unassignedStops.map(stop=>[stop.areaId??'unassigned',{areaId:stop.areaId??null,areaName:stop.area||'未分区',zoneGroupId:stop.zoneGroupId??1,zoneGroupName:stop.zoneGroup||'Zone 1'}])).values()].map(group=>{
+  const unassignedGroups=[...new Map(unassignedStops.map(stop=>[stop.areaId??'unassigned',{areaId:stop.areaId??null,areaName:stop.area||'未分区',zoneGroupId:stop.zoneGroupId??'pending',zoneGroupName:stop.zoneGroup||'待确认',zoneSortOrder:stop.zoneSortOrder??9999}])).values()].map(group=>{
     const groupedStops=unassignedStops.filter(stop=>(stop.areaId??null)===group.areaId),weights=groupedStops.filter(stop=>stop.estimatedWeightKg!=null)
     return{...group,customerCount:groupedStops.length,estimatedWeightKg:weights.reduce((sum,stop)=>sum+Number(stop.estimatedWeightKg),0),weightedCustomerCount:weights.length,
       missingGpsCount:groupedStops.filter(stop=>!Number.isFinite(stop.latitude)||!Number.isFinite(stop.longitude)||stop.latitude===0||stop.longitude===0).length,
@@ -148,7 +151,7 @@ function dayView(database, day) {
     const areas=unassignedGroups.filter(group=>group.zoneGroupId===zone.zoneGroupId),zoneStops=areas.flatMap(group=>group.stops)
     return{...zone,areaCount:areas.length,customerCount:zoneStops.length,estimatedWeightKg:areas.reduce((sum,group)=>sum+group.estimatedWeightKg,0),weightedCustomerCount:areas.reduce((sum,group)=>sum+group.weightedCustomerCount,0),
       missingGpsCount:areas.reduce((sum,group)=>sum+group.missingGpsCount,0),timeRestrictionCount:areas.reduce((sum,group)=>sum+group.timeRestrictionCount,0),stops:zoneStops,areas}
-  }).sort((a,b)=>a.zoneGroupId-b.zoneGroupId)
+  }).sort((a,b)=>a.zoneSortOrder-b.zoneSortOrder||String(a.zoneGroupName).localeCompare(String(b.zoneGroupName)))
   const warningCount=unassignedStops.length+vehicleBoards.filter(board=>board.customerCount>0&&!board.driverId).length+specials.filter(x=>x.requestType==='potential_new'&&newCustomerMissing(x).length).length
   return {...day,stops,trips:assignedTrips,vehicleBoards,unassignedStops,unassignedGroups,unassignedZones,specialRequests:specials,warningCount,legacyUnassignedTripCount:allTrips.filter(item=>!item.vehicleId).length}
 }
@@ -235,7 +238,8 @@ export function createStop(payload,database=defaultDb){
   if(!trip)throw new Error('Trip not found')
   if(payload.specialRequestId){const duplicate=database.prepare('SELECT id FROM dispatch_stops WHERE source_special_request_id=? AND dispatch_trip_id=?').get(payload.specialRequestId,trip.id);if(duplicate)return database.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(duplicate.id)}
   const sequence=Number(payload.stopSequence||database.prepare('SELECT COALESCE(MAX(stop_sequence),0)+1 value FROM dispatch_stops WHERE dispatch_id=?').get(trip.dispatch_id).value)
-  const result=database.prepare(`INSERT INTO dispatch_stops(dispatch_id,branch_id,stop_sequence,status,dispatch_trip_id,source_special_request_id,estimated_weight_kg,sequence_locked) VALUES(?,?,?,'locked',?,?,?,?)`).run(trip.dispatch_id,branch.id,sequence,trip.id,payload.specialRequestId||null,payload.estimatedWeightKg??null,payload.sequenceLocked?1:0)
+  const snapshot=branchZoneSnapshot(database,branch.id)
+  const result=database.prepare(`INSERT INTO dispatch_stops(dispatch_id,branch_id,stop_sequence,status,dispatch_trip_id,source_special_request_id,estimated_weight_kg,sequence_locked,zone_group_id_snapshot,zone_group_name_snapshot,area_name_snapshot) VALUES(?,?,?,'locked',?,?,?,?,?,?,?)`).run(trip.dispatch_id,branch.id,sequence,trip.id,payload.specialRequestId||null,payload.estimatedWeightKg??null,payload.sequenceLocked?1:0,snapshot.zoneGroupId??null,snapshot.zoneGroupName??'待确认',snapshot.areaName??'未分区')
   invalidateDispatchDay(database,day.dispatch_date,'stop_added','dispatch_stop',result.lastInsertRowid,null,payload,payload.changedBy)
   return database.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(result.lastInsertRowid)
 }
@@ -270,6 +274,7 @@ export function updateStop(id,payload,database=defaultDb){
       database.prepare('UPDATE dispatch_stops SET stop_sequence=stop_sequence+100000 WHERE dispatch_id=? AND stop_sequence>=?').run(tripRow.dispatch_id,wanted);database.prepare('UPDATE dispatch_stops SET stop_sequence=stop_sequence-99999 WHERE dispatch_id=? AND stop_sequence>=100000').run(tripRow.dispatch_id)
     }
     database.prepare(`UPDATE dispatch_stops SET dispatch_id=?,dispatch_trip_id=?,stop_sequence=?,sequence_locked=COALESCE(?,sequence_locked),estimated_weight_kg=COALESCE(?,estimated_weight_kg) WHERE id=?`).run(tripRow.dispatch_id,trip,wanted,payload.sequenceLocked==null?null:Number(Boolean(payload.sequenceLocked)),payload.estimatedWeightKg??null,id)
+    if(targetDate!==before.dispatch_date){const snapshot=branchZoneSnapshot(database,before.branch_id);database.prepare('UPDATE dispatch_stops SET zone_group_id_snapshot=?,zone_group_name_snapshot=?,area_name_snapshot=? WHERE id=?').run(snapshot.zoneGroupId??null,snapshot.zoneGroupName??'待确认',snapshot.areaName??'未分区',id)}
     if(targetDate!==before.dispatch_date&&before.source_schedule_id&&!database.prepare("SELECT id FROM schedule_exceptions WHERE schedule_id=? AND exception_type='move_date' AND original_date=? AND target_date=? AND permanent=0").get(before.source_schedule_id,before.dispatch_date,targetDate))database.prepare(`INSERT INTO schedule_exceptions(branch_id,schedule_id,exception_type,original_date,target_date,permanent,reason,created_by) VALUES(?,?,'move_date',?,?,0,?,?)`).run(before.branch_id,before.source_schedule_id,before.dispatch_date,targetDate,payload.reason||'Weekly planner drag-and-drop',actor(payload.changedBy))
     invalidateDispatchDay(database,before.dispatch_date,'stop_updated','dispatch_stop',id,before,payload,payload.changedBy)
     if(targetDate!==before.dispatch_date)invalidateDispatchDay(database,targetDate,'stop_moved_in','dispatch_stop',id,null,payload,payload.changedBy)

@@ -24,6 +24,7 @@ ensureColumn('branches', 'source_customer_id', 'TEXT')
 ensureColumn('branches', 'source_area_id', 'TEXT')
 ensureColumn('branches', 'time_restriction', 'TEXT')
 ensureColumn('areas', 'zone_group_id', 'INTEGER REFERENCES zone_groups(id)')
+ensureColumn('areas', 'zone_assignment_status', "TEXT NOT NULL DEFAULT 'pending_confirmation'")
 ensureColumn('customers', 'phone', 'TEXT')
 ensureColumn('customers', 'whatsapp', 'TEXT')
 ensureColumn('dispatch_stops', 'dispatch_trip_id', 'INTEGER REFERENCES dispatch_trips(id)')
@@ -31,6 +32,9 @@ ensureColumn('dispatch_stops', 'source_schedule_id', 'INTEGER REFERENCES branch_
 ensureColumn('dispatch_stops', 'source_special_request_id', 'INTEGER REFERENCES special_collection_requests(id)')
 ensureColumn('dispatch_stops', 'estimated_weight_kg', 'REAL')
 ensureColumn('dispatch_stops', 'sequence_locked', 'INTEGER NOT NULL DEFAULT 0')
+ensureColumn('dispatch_stops', 'zone_group_id_snapshot', 'INTEGER')
+ensureColumn('dispatch_stops', 'zone_group_name_snapshot', 'TEXT')
+ensureColumn('dispatch_stops', 'area_name_snapshot', 'TEXT')
 ensureColumn('vehicles', 'is_temporary', 'INTEGER NOT NULL DEFAULT 0')
 ensureColumn('vehicles', 'temporary_date', 'TEXT')
 ensureColumn('vehicles', 'vehicle_name', 'TEXT')
@@ -101,6 +105,26 @@ if (currentVersion === 0) {
     db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (9)').run()
   }
   if (currentVersion < 10) db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (10)').run()
+  if (currentVersion < 11) {
+    db.exec(`
+      UPDATE dispatch_stops SET
+        zone_group_id_snapshot=(SELECT a.zone_group_id FROM branches b LEFT JOIN areas a ON a.id=b.area_id WHERE b.id=dispatch_stops.branch_id),
+        zone_group_name_snapshot=(SELECT z.name FROM branches b LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN zone_groups z ON z.id=a.zone_group_id WHERE b.id=dispatch_stops.branch_id),
+        area_name_snapshot=(SELECT a.name FROM branches b LEFT JOIN areas a ON a.id=b.area_id WHERE b.id=dispatch_stops.branch_id)
+      WHERE zone_group_name_snapshot IS NULL;
+      UPDATE zone_groups SET code='KUCHING-A',name='古晋 A区',sort_order=1,is_active=1 WHERE id=1;
+      UPDATE zone_groups SET code='KUCHING-B',name='古晋 B区',sort_order=2,is_active=1 WHERE id=2;
+      UPDATE zone_groups SET code='SERIAN-A',name='西连 A区',sort_order=3,is_active=1 WHERE id=3;
+      UPDATE zone_groups SET code='SERIAN-B',name='西连 B区',sort_order=4,is_active=1 WHERE id=4;
+      UPDATE zone_groups SET code='SAMARAHAN-A',name='Samarahan A区',sort_order=5,is_active=1 WHERE id=5;
+      INSERT OR IGNORE INTO zone_groups(code,name,sort_order,is_active) VALUES('SAMARAHAN-B','Samarahan B区',6,1);
+      INSERT OR IGNORE INTO zone_groups(code,name,sort_order,is_active) VALUES('LUNDU-BAU','伦乐 / 石隆门区',7,1);
+      UPDATE areas SET zone_assignment_status='pending_confirmation';
+      UPDATE areas SET zone_group_id=(SELECT id FROM zone_groups WHERE code='LUNDU-BAU'),zone_assignment_status='confirmed',updated_at=CURRENT_TIMESTAMP
+      WHERE UPPER(name) LIKE '%LUNDU%' OR UPPER(name)='BAU';
+    `)
+    db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (11)').run()
+  }
 }
 
 const officialVehicles = [

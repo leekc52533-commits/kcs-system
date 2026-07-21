@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 10
+export const SCHEMA_VERSION = 11
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS areas (
   jodoo_area_id TEXT UNIQUE,
   name TEXT NOT NULL,
   zone_group_id INTEGER NOT NULL DEFAULT 1 REFERENCES zone_groups(id),
+  zone_assignment_status TEXT NOT NULL DEFAULT 'pending_confirmation',
   schedule_text TEXT,
   default_driver_name TEXT,
   is_active INTEGER NOT NULL DEFAULT 1,
@@ -177,6 +178,9 @@ CREATE TABLE IF NOT EXISTS dispatch_stops (
   source_special_request_id INTEGER REFERENCES special_collection_requests(id),
   estimated_weight_kg REAL,
   sequence_locked INTEGER NOT NULL DEFAULT 0,
+  zone_group_id_snapshot INTEGER,
+  zone_group_name_snapshot TEXT,
+  area_name_snapshot TEXT,
   UNIQUE(dispatch_id, stop_sequence)
 );
 
@@ -575,11 +579,13 @@ CREATE INDEX IF NOT EXISTS vehicle_status_history_vehicle_idx ON vehicle_status_
 CREATE INDEX IF NOT EXISTS vehicle_usage_vehicle_idx ON vehicle_usage_history(vehicle_id, dispatch_date DESC);
 
 INSERT OR IGNORE INTO zone_groups(id,code,name,sort_order) VALUES
-  (1,'ZONE-1','Zone 1',1),
-  (2,'ZONE-2','Zone 2',2),
-  (3,'ZONE-3','Zone 3',3),
-  (4,'ZONE-4','Zone 4',4),
-  (5,'ZONE-5','Zone 5',5);
+  (1,'KUCHING-A','古晋 A区',1),
+  (2,'KUCHING-B','古晋 B区',2),
+  (3,'SERIAN-A','西连 A区',3),
+  (4,'SERIAN-B','西连 B区',4),
+  (5,'SAMARAHAN-A','Samarahan A区',5),
+  (6,'SAMARAHAN-B','Samarahan B区',6),
+  (7,'LUNDU-BAU','伦乐 / 石隆门区',7);
 
 CREATE TRIGGER IF NOT EXISTS sold_vehicle_no_delete BEFORE DELETE ON vehicles
 WHEN OLD.operational_status='sold' BEGIN SELECT RAISE(ABORT,'Sold vehicle history cannot be deleted'); END;

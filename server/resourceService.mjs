@@ -47,28 +47,73 @@ export function listResources(database = defaultDb) {
     vehicles: vehicleRows(database),
     employees: employeeRows(database),
     locations: database.prepare(`SELECT id,name,location_type locationType,address,latitude,longitude,can_start canStart,can_end canEnd,is_active isActive FROM operational_locations ORDER BY name`).all(),
-    areas: database.prepare(`SELECT a.id,a.jodoo_area_id areaId,a.name,a.is_active isActive,a.zone_group_id zoneGroupId,z.name zoneGroup
+    areas: database.prepare(`SELECT a.id,a.jodoo_area_id areaId,a.name,a.is_active isActive,a.zone_group_id zoneGroupId,a.zone_assignment_status zoneAssignmentStatus,z.name zoneGroup
       FROM areas a JOIN zone_groups z ON z.id=a.zone_group_id ORDER BY z.sort_order,a.name`).all(),
-    zoneGroups: database.prepare(`SELECT z.id,z.code,z.name,z.sort_order sortOrder,z.is_active isActive,COUNT(a.id) areaCount
+    zoneGroups: database.prepare(`SELECT z.id,z.code,z.name,z.sort_order sortOrder,z.is_active isActive,COUNT(a.id) areaCount,SUM(CASE WHEN a.zone_assignment_status='pending_confirmation' THEN 1 ELSE 0 END) pendingAreaCount
       FROM zone_groups z LEFT JOIN areas a ON a.zone_group_id=z.id GROUP BY z.id ORDER BY z.sort_order,z.id`).all()
   }
+}
+
+const zoneRow=(database,id)=>database.prepare(`SELECT z.id,z.code,z.name,z.sort_order sortOrder,z.is_active isActive,COUNT(a.id) areaCount,SUM(CASE WHEN a.zone_assignment_status='pending_confirmation' THEN 1 ELSE 0 END) pendingAreaCount FROM zone_groups z LEFT JOIN areas a ON a.zone_group_id=z.id WHERE z.id=? GROUP BY z.id`).get(id)
+const zoneRows=database=>database.prepare(`SELECT z.id,z.code,z.name,z.sort_order sortOrder,z.is_active isActive,COUNT(a.id) areaCount,SUM(CASE WHEN a.zone_assignment_status='pending_confirmation' THEN 1 ELSE 0 END) pendingAreaCount FROM zone_groups z LEFT JOIN areas a ON a.zone_group_id=z.id GROUP BY z.id ORDER BY z.sort_order,z.id`).all()
+const auditZone=(database,action,id,before,after,changedBy)=>database.prepare(`INSERT INTO audit_logs(action,entity_type,entity_id,before_json,after_json) VALUES(?,?,?,?,?)`).run(`${action}:${text(changedBy)||'Supervisor'}`,'zone_group',String(id),before?JSON.stringify(before):null,after?JSON.stringify(after):null)
+const affectedDates=(database,areaIds)=>{if(!areaIds.length)return[];const marks=areaIds.map(()=>'?').join(',');return database.prepare(`SELECT DISTINCT dd.dispatch_date FROM dispatch_days dd JOIN dispatch_trips dt ON dt.dispatch_day_id=dd.id JOIN dispatch_stops ds ON ds.dispatch_trip_id=dt.id JOIN branches b ON b.id=ds.branch_id WHERE b.area_id IN (${marks}) AND dd.dispatch_date>=date('now','localtime') AND dd.status IN ('approved','published')`).all(...areaIds).map(item=>item.dispatch_date)}
+
+export function listZoneGroups(database=defaultDb){return{items:zoneRows(database),areas:listResources(database).areas}}
+
+export function createZoneGroup(payload,database=defaultDb){
+  const name=text(payload.name);if(!name)throw new Error('Zone Group Name is required')
+  const next=database.prepare('SELECT COALESCE(MAX(id),0)+1 value FROM zone_groups').get().value,code=text(payload.code)||`ZONE-${next}`,sortOrder=Number(payload.sortOrder??database.prepare('SELECT COALESCE(MAX(sort_order),0)+1 value FROM zone_groups').get().value)
+  const result=database.prepare('INSERT INTO zone_groups(code,name,sort_order,is_active) VALUES(?,?,?,1)').run(code,name,sortOrder)
+  const item=zoneRow(database,Number(result.lastInsertRowid));auditZone(database,'zone_created',item.id,null,item,payload.changedBy);return item
 }
 
 export function updateZoneGroup(id, payload, database = defaultDb) {
   const before=database.prepare('SELECT * FROM zone_groups WHERE id=?').get(id);if(!before)throw new Error('Zone Group not found')
   if(!text(payload.name??before.name))throw new Error('Zone Group Name is required')
-  database.prepare('UPDATE zone_groups SET name=?,is_active=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(text(payload.name??before.name),payload.isActive===undefined?before.is_active:Number(Boolean(payload.isActive)),id)
-  return database.prepare(`SELECT z.id,z.code,z.name,z.sort_order sortOrder,z.is_active isActive,COUNT(a.id) areaCount FROM zone_groups z LEFT JOIN areas a ON a.zone_group_id=z.id WHERE z.id=? GROUP BY z.id`).get(id)
+  database.prepare('UPDATE zone_groups SET name=?,code=?,sort_order=?,is_active=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(text(payload.name??before.name),text(payload.code??before.code),Number(payload.sortOrder??before.sort_order),payload.isActive===undefined?before.is_active:Number(Boolean(payload.isActive)),id)
+  const item=zoneRow(database,id);auditZone(database,'zone_updated',id,before,item,payload.changedBy);return item
+}
+
+export function setZoneActive(id,isActive,payload={},database=defaultDb){return updateZoneGroup(id,{isActive,changedBy:payload.changedBy},database)}
+
+export function mergeZoneGroups(payload,database=defaultDb){
+  const targetId=Number(payload.targetZoneId),sourceIds=[...new Set((payload.sourceZoneIds||[]).map(Number).filter(id=>id&&id!==targetId))]
+  const target=database.prepare('SELECT * FROM zone_groups WHERE id=?').get(targetId);if(!target||!sourceIds.length)throw new Error('Target Zone and at least one different source Zone are required')
+  const marks=sourceIds.map(()=>'?').join(','),sources=database.prepare(`SELECT * FROM zone_groups WHERE id IN (${marks})`).all(...sourceIds);if(sources.length!==sourceIds.length)throw new Error('One or more source Zones were not found')
+  const areaIds=database.prepare(`SELECT id FROM areas WHERE zone_group_id IN (${marks})`).all(...sourceIds).map(item=>item.id),dates=affectedDates(database,areaIds)
+  database.exec('BEGIN IMMEDIATE');try{
+    database.prepare(`UPDATE areas SET zone_group_id=?,zone_assignment_status='confirmed',updated_at=CURRENT_TIMESTAMP WHERE zone_group_id IN (${marks})`).run(targetId,...sourceIds)
+    for(const sourceId of sourceIds){database.prepare('INSERT OR IGNORE INTO vehicle_preferred_zones(vehicle_id,zone_group_id) SELECT vehicle_id,? FROM vehicle_preferred_zones WHERE zone_group_id=?').run(targetId,sourceId);database.prepare('DELETE FROM vehicle_preferred_zones WHERE zone_group_id=?').run(sourceId)}
+    database.prepare(`UPDATE zone_groups SET is_active=0,updated_at=CURRENT_TIMESTAMP WHERE id IN (${marks})`).run(...sourceIds)
+    if(payload.name)database.prepare('UPDATE zone_groups SET name=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(text(payload.name),targetId)
+    for(const date of dates)invalidateDispatchDay(database,date,'zone_groups_merged','zone_group',targetId,sources,{targetZoneId:targetId,sourceZoneIds:sourceIds,areaIds},payload.changedBy)
+    auditZone(database,'zones_merged',targetId,sources,zoneRow(database,targetId),payload.changedBy);database.exec('COMMIT');return listZoneGroups(database)
+  }catch(error){database.exec('ROLLBACK');throw error}
+}
+
+export function splitZoneGroup(payload,database=defaultDb){
+  const sourceId=Number(payload.sourceZoneId),areaIds=[...new Set((payload.areaIds||[]).map(Number).filter(Boolean))];if(!sourceId||!text(payload.name)||!areaIds.length)throw new Error('Source Zone, new name and at least one Area are required')
+  const source=database.prepare('SELECT * FROM zone_groups WHERE id=?').get(sourceId);if(!source)throw new Error('Source Zone not found')
+  const marks=areaIds.map(()=>'?').join(','),matched=database.prepare(`SELECT id FROM areas WHERE zone_group_id=? AND id IN (${marks})`).all(sourceId,...areaIds);if(matched.length!==areaIds.length)throw new Error('All selected Areas must currently belong to the source Zone')
+  const dates=affectedDates(database,areaIds)
+  database.exec('BEGIN IMMEDIATE');try{
+    const next=database.prepare('SELECT COALESCE(MAX(id),0)+1 value FROM zone_groups').get().value,code=text(payload.code)||`ZONE-${next}`,sortOrder=Number(payload.sortOrder??source.sort_order+1)
+    const created=database.prepare('INSERT INTO zone_groups(code,name,sort_order,is_active) VALUES(?,?,?,1)').run(code,text(payload.name),sortOrder),newId=Number(created.lastInsertRowid)
+    database.prepare(`UPDATE areas SET zone_group_id=?,zone_assignment_status='confirmed',updated_at=CURRENT_TIMESTAMP WHERE id IN (${marks})`).run(newId,...areaIds)
+    for(const date of dates)invalidateDispatchDay(database,date,'zone_group_split','zone_group',sourceId,source,{newZoneId:newId,areaIds},payload.changedBy)
+    auditZone(database,'zone_split',newId,source,zoneRow(database,newId),payload.changedBy);database.exec('COMMIT');return{zone:zoneRow(database,newId),...listZoneGroups(database)}
+  }catch(error){database.exec('ROLLBACK');throw error}
 }
 
 export function assignAreaZone(areaId, zoneGroupId, payload={}, database = defaultDb) {
   const before=database.prepare('SELECT * FROM areas WHERE id=?').get(areaId);if(!before)throw new Error('Area not found')
   const zone=database.prepare('SELECT id FROM zone_groups WHERE id=? AND is_active=1').get(zoneGroupId);if(!zone)throw new Error('Zone Group not found or inactive')
-  database.prepare('UPDATE areas SET zone_group_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(zoneGroupId,areaId)
+  database.prepare("UPDATE areas SET zone_group_id=?,zone_assignment_status='confirmed',updated_at=CURRENT_TIMESTAMP WHERE id=?").run(zoneGroupId,areaId)
   const dates=database.prepare(`SELECT DISTINCT dd.dispatch_date FROM dispatch_days dd JOIN dispatch_trips dt ON dt.dispatch_day_id=dd.id JOIN dispatch_stops ds ON ds.dispatch_trip_id=dt.id JOIN branches b ON b.id=ds.branch_id
     WHERE b.area_id=? AND dd.dispatch_date>=date('now','localtime') AND dd.status IN ('approved','published')`).all(areaId)
   for(const item of dates)invalidateDispatchDay(database,item.dispatch_date,'area_zone_changed','area',areaId,before,{zoneGroupId},payload.changedBy)
-  return database.prepare(`SELECT a.id,a.jodoo_area_id areaId,a.name,a.zone_group_id zoneGroupId,z.name zoneGroup FROM areas a JOIN zone_groups z ON z.id=a.zone_group_id WHERE a.id=?`).get(areaId)
+  return database.prepare(`SELECT a.id,a.jodoo_area_id areaId,a.name,a.zone_group_id zoneGroupId,a.zone_assignment_status zoneAssignmentStatus,z.name zoneGroup FROM areas a JOIN zone_groups z ON z.id=a.zone_group_id WHERE a.id=?`).get(areaId)
 }
 
 export function createVehicle(payload, database = defaultDb) {

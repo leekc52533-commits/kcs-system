@@ -130,7 +130,9 @@ export function commitImport(batchId, database = db) {
       if (row.action === 'error' || (row.type === 'locations' && row.action === 'unmatched') || row.action === 'unchanged') continue
       const n = row.normalized
       if (row.type === 'areas') {
-        const zone=database.prepare("SELECT id FROM zone_groups WHERE source_driver=? ORDER BY sort_order LIMIT 1").get(n.driver)||database.prepare('SELECT id FROM zone_groups ORDER BY sort_order,id LIMIT 1').get()
+        // 新 Area 只取得技术上的暂存归属；zone_assignment_status 保持待确认，不根据 Driver 或名称猜测营运 Zone。
+        const zone=database.prepare('SELECT id FROM zone_groups WHERE is_active=1 ORDER BY sort_order,id LIMIT 1').get()
+        if(!zone)throw new Error('请先建立至少一个启用的 Zone Group')
         statements.areas.run(n.areaId,n.name,zone.id,n.scheduleText,n.driver,n.sourceUpdatedAt)
       }
       if (row.type === 'customers') statements.customers.run(n.customerId,n.name,n.tin,n.paymentType,n.occPrice,n.sourceUpdatedAt)

@@ -60,14 +60,14 @@ npm run preview   # 预览正式构建
 - `GET /api/import-batches`、`GET /api/import-batches/:id/errors`
 - `POST /api/import/preview`、`POST /api/import/commit`
 
-SQLite schema 目前为 v10。`branches` 保留现有架构，同时保存原始 CustomerID/AreaID，方便显示未匹配关联并保证重复导入幂等。v8 增加车辆名称、默认基地、惯用区域、员工任职状态与默认区域，并以 `dispatch_vehicle_assistants` 支持一辆车多位 Assistant/Crew；v9 增加固定五个 `zone_groups` 和 Area 的必要归属关系；v10 增加完整车辆资料、合规提醒、保养、燃油、轮胎、文件、状态与使用历史。升级不会删除既有周计划、Trip 或站点。Route Ready 规则集中在 `shared/importRules.js`：至少一条有效排程、有效经纬度，并且客户/分店状态不是 Paused、Closed 或 Ended；当前没有来源状态时视为 Active。
+SQLite schema 目前为 v11。`branches` 保留现有架构，同时保存原始 CustomerID/AreaID，方便显示未匹配关联并保证重复导入幂等。v10 增加完整车辆资料、合规提醒、保养、燃油、轮胎、文件、状态与使用历史；v11 取消 Zone 数量限制，增加 Area 归属确认状态与派车 Zone/Area 快照。升级不会删除既有周计划、Trip 或站点。Route Ready 规则集中在 `shared/importRules.js`：至少一条有效排程、有效经纬度，并且客户/分店状态不是 Paused、Closed 或 Ended；当前没有来源状态时视为 Active。
 
 ## 一周派车与每日发布
 
 1. 进入“一周派车”。“今天”“明天”“后天”和“其他日期”进入单日视图，只读取所选一天；“未来 7 天”才进入连续七日周视图。
 2. 单日视图按“更新当天草稿”，周视图按“更新 7 天草稿”。系统读取 `BranchSchedule` 幂等建立所需日期；`Call` 排程不会自动加入，两周一次排程会使用 Take Date/Next Take Date 作为周期锚点。
 3. 每天的车辆栏只来自 Vehicle Master 中当天可用的车辆。自动草稿默认显示五辆常用车 `Lorry 2` 至 `Lorry 6`；`Lorry 1 — QAV3468 — Available` 随时可在车辆选择器直接选用，不需要先启用。系统不会根据 Area、客户、Schedule 或 Trip 数量制造车辆栏。
-4. 新产生的客户先进入“未分配客户池”。客户池默认折叠成五个 Zone Group；展开 Zone 后才显示详细 Area 和客户。Zone、Area 和单个客户都可整体拖到车辆的任一 Trip；Area 可跨车辆或拆给多辆车，一辆车也可接收多个 Zone/Area。
+4. 新产生的客户先进入“未分配客户池”。客户池按 `Zone Group → Area → Customer` 默认折叠；展开 Zone 后才显示详细 Area 和客户。Zone、Area 和单个客户都可整体拖到车辆的任一 Trip；一个 Zone 可拆给多辆车，一辆车也可接收多个 Zone。Zone 不绑定车辆或司机。
 5. 所有车辆选择器统一显示 `Lorry Number — Registration Number — Status`。车辆选择器同时显示 Capacity、Default Base 和 Preferred/Usual Areas；Maintenance、Inactive 与 Sold 默认隐藏，可切换查看但不能选择。基地、惯用 Area 和 Zone Group 都只作建议，不会强制绑定车辆或司机。
 6. Driver 选择器只列 Employee Master 的 Driver，可按姓名或员工编号搜索，并显示任职状态、默认基地/区域和当天分配。司机同一天不能重复分配，必须先在原车辆按“解除当前司机分配”。Assistant/Crew 支持搜索和多选。Start/End Location 从 Location Master 选择。只有主管按“新增临时车辆”才会为指定日期增加额外车辆。
 7. 可把站点拖到其他日期、车辆或趟次，也可调整顺序并锁定客户顺序。
@@ -85,7 +85,10 @@ SQLite schema 目前为 v10。`branches` 保留现有架构，同时保存原始
 - 发票、收据、车辆文件和照片只写入本机 `data/uploads/vehicles/`。前端接受 JPG、PNG、WEBP 或 PDF，单一附件上限 8 MB；这些文件不会进入 GitHub。
 - Employee Master 可新增员工、设定 Driver/Assistant 等角色，并启用或停用。派车页不会自行制造司机或跟车员。
 - Location Master 可新增出发／结束地点，并分别设定是否允许作为 Start 或 End Location。
-- Zone Group Master 固定显示五大区。主管可以重命名五大区，并把每个详细 Area 调整到其中一个 Zone Group。系统保证每个 Area 必须有归属；详细 Area 仍用于 GPS 路线、距离与统计，Zone Group 只负责管理和初步派车分类。
+- Zone Group Master 不限制 Zone 数量。当前初始化七区：古晋 A区、古晋 B区、西连 A区、西连 B区、Samarahan A区、Samarahan B区、伦乐 / 石隆门区。主管可新增、改名、调整顺序、停用、重新启用、合并或拆分；以后可独立建立伦乐区、石隆门区或其他营运区。
+- 每个 Area 必须保留一个 Zone 关联。迁移不会猜测 97 个 Area 的最终归属：明确的 AKSES LUNDU、PASAR LUNDU 和 BAU 已归入“伦乐 / 石隆门区”并标记已确认，其余保留原关联并显示“待确认”。主管重新选择或确认当前 Zone 后才改为“已确认”。
+- 拆分只建立新 Zone 并移动主管勾选的 Area；合并会把来源 Zone 的 Area 移到目标 Zone，再停用来源 Zone，不会删除来源 Zone。上述操作不修改客户、BranchID、GPS、排程或路线历史。
+- `dispatch_stops` 保存产生路线当时的 Zone Group 与 Area 名称快照。旧路线继续显示旧快照；调整归属后新产生的派车才读取最新 Zone。
 
 发布会阻挡缺车辆、缺司机、缺 OCC Price、缺 Payment Type，以及潜在新客户缺 CustomerID、BranchID、价格、付款方式、地址或 Location。未正确安排的客户承诺也会阻挡发布，只有这一项可以由主管填写例外原因确认；账号和营运资料缺失不能绕过。
 
@@ -117,7 +120,10 @@ SQLite schema 目前为 v10。`branches` 保留现有架构，同时保存原始
 - `POST /api/schedule-exceptions`
 - `GET|POST /api/temporary-locations`、`POST /api/temporary-locations/:id/adopt`
 - `GET /api/resources`
-- `PATCH /api/zone-groups/:id`、`PATCH /api/areas/:id/zone-group`
+- `GET|POST /api/zone-groups`、`PATCH /api/zone-groups/:id`
+- `POST /api/zone-groups/:id/deactivate|reactivate`
+- `POST /api/zone-groups/merge`、`POST /api/zone-groups/split`
+- `PATCH /api/areas/:id/zone-group`
 - `POST /api/vehicles`、`PATCH /api/vehicles/:id`、`POST /api/vehicles/temporary`
 - `GET /api/vehicles/:id`
 - `POST /api/vehicles/:id/compliance|maintenance|fuel|tyres|documents|usage`
