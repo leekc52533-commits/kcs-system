@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 11
+export const SCHEMA_VERSION = 12
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS areas (
   jodoo_area_id TEXT UNIQUE,
   name TEXT NOT NULL,
   zone_group_id INTEGER NOT NULL DEFAULT 1 REFERENCES zone_groups(id),
+  confirmed_zone_group_id INTEGER REFERENCES zone_groups(id),
   zone_assignment_status TEXT NOT NULL DEFAULT 'pending_confirmation',
   schedule_text TEXT,
   default_driver_name TEXT,

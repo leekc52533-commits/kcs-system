@@ -54,7 +54,7 @@ function ensureUnassignedTrip(database,day){
   return database.prepare('SELECT * FROM dispatch_trips WHERE id=?').get(result.lastInsertRowid)
 }
 
-function branchZoneSnapshot(database,branchId){return database.prepare(`SELECT a.id areaId,a.name areaName,a.zone_group_id zoneGroupId,z.name zoneGroupName FROM branches b LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN zone_groups z ON z.id=a.zone_group_id WHERE b.id=?`).get(branchId)||{}}
+function branchZoneSnapshot(database,branchId){return database.prepare(`SELECT a.id areaId,a.name areaName,COALESCE(a.confirmed_zone_group_id,a.zone_group_id) zoneGroupId,z.name zoneGroupName FROM branches b LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN zone_groups z ON z.id=COALESCE(a.confirmed_zone_group_id,a.zone_group_id) WHERE b.id=?`).get(branchId)||{}}
 
 function ensureVehicleTrip(database,day,vehicleId,tripNumber){
   const found=database.prepare(`SELECT dt.* FROM dispatch_trips dt JOIN dispatches d ON d.id=dt.dispatch_id WHERE dt.dispatch_day_id=? AND d.vehicle_id=? AND dt.trip_number=?`).get(day.id,vehicleId,tripNumber)

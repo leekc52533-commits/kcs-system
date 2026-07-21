@@ -25,6 +25,7 @@ ensureColumn('branches', 'source_area_id', 'TEXT')
 ensureColumn('branches', 'time_restriction', 'TEXT')
 ensureColumn('areas', 'zone_group_id', 'INTEGER REFERENCES zone_groups(id)')
 ensureColumn('areas', 'zone_assignment_status', "TEXT NOT NULL DEFAULT 'pending_confirmation'")
+ensureColumn('areas', 'confirmed_zone_group_id', 'INTEGER REFERENCES zone_groups(id)')
 ensureColumn('customers', 'phone', 'TEXT')
 ensureColumn('customers', 'whatsapp', 'TEXT')
 ensureColumn('dispatch_stops', 'dispatch_trip_id', 'INTEGER REFERENCES dispatch_trips(id)')
@@ -124,6 +125,12 @@ if (currentVersion === 0) {
       WHERE UPPER(name) LIKE '%LUNDU%' OR UPPER(name)='BAU';
     `)
     db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (11)').run()
+  }
+  if (currentVersion < 12) {
+    db.exec(`
+      UPDATE areas SET confirmed_zone_group_id=zone_group_id WHERE confirmed_zone_group_id IS NULL;
+    `)
+    db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (12)').run()
   }
 }
 
