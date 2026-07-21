@@ -118,7 +118,7 @@ export default function DispatchPage({ onBack }) {
   return <div className="page dispatch-page">
     <button type="button" className="dispatch-back" onClick={onBack}>← 返回总览</button>
     <div className="dispatch-title"><div><em>DRIVER WORKFLOW PROTOTYPE</em><h1>今日派车 · 测试路线</h1><p>Jodoo 开单资料进入 KCS 后，司机完成 KCS 要求即可前往下一家；照片由后台继续同步。</p></div><span>Jodoo 后台同步测试</span></div>
-    <section className="route-summary"><div><span>测试车辆</span><strong>Lorry A</strong></div><div><span>司机</span><strong>测试司机</strong></div><div><span>路线进度</span><strong>{finishedCount} / {stops.length}</strong></div><div className="route-progress"><span><i style={{ width: `${progress}%` }}/></span><small>{progress}% 完成</small></div></section>
+    <section className="route-summary"><div><span>测试车辆</span><strong>Lorry A — 未设置号码/车牌</strong></div><div><span>司机</span><strong>测试司机</strong></div><div><span>路线进度</span><strong>{finishedCount} / {stops.length}</strong></div><div className="route-progress"><span><i style={{ width: `${progress}%` }}/></span><small>{progress}% 完成</small></div></section>
 
     <div className="dispatch-layout"><aside className="stop-list"><div className="stop-list-title"><em>今日路线</em><h2>顾客顺序</h2></div>{stops.map((item, index) => {
       const available = isStopUnlocked(stops, index)

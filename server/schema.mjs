@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 8
+export const SCHEMA_VERSION = 9
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -17,10 +17,21 @@ CREATE TABLE IF NOT EXISTS users (
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS zone_groups (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL UNIQUE,
+  source_driver TEXT,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0,1)),
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS areas (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   jodoo_area_id TEXT UNIQUE,
   name TEXT NOT NULL,
+  zone_group_id INTEGER NOT NULL DEFAULT 1 REFERENCES zone_groups(id),
   schedule_text TEXT,
   default_driver_name TEXT,
   is_active INTEGER NOT NULL DEFAULT 1,
@@ -426,4 +437,11 @@ CREATE INDEX IF NOT EXISTS dispatch_trips_day_idx ON dispatch_trips(dispatch_day
 CREATE INDEX IF NOT EXISTS dispatch_vehicle_assistants_employee_idx ON dispatch_vehicle_assistants(employee_id, dispatch_day_id);
 CREATE INDEX IF NOT EXISTS special_requests_date_idx ON special_collection_requests(requested_collection_date, status);
 CREATE INDEX IF NOT EXISTS schedule_exceptions_dates_idx ON schedule_exceptions(original_date, target_date);
+
+INSERT OR IGNORE INTO zone_groups(id,code,name,sort_order) VALUES
+  (1,'ZONE-1','Zone 1',1),
+  (2,'ZONE-2','Zone 2',2),
+  (3,'ZONE-3','Zone 3',3),
+  (4,'ZONE-4','Zone 4',4),
+  (5,'ZONE-5','Zone 5',5);
 `

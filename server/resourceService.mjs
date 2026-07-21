@@ -38,8 +38,28 @@ export function listResources(database = defaultDb) {
     vehicles: vehicleRows(database),
     employees: employeeRows(database),
     locations: database.prepare(`SELECT id,name,location_type locationType,address,latitude,longitude,can_start canStart,can_end canEnd,is_active isActive FROM operational_locations ORDER BY name`).all(),
-    areas: database.prepare('SELECT id,name,is_active isActive FROM areas ORDER BY name').all()
+    areas: database.prepare(`SELECT a.id,a.jodoo_area_id areaId,a.name,a.is_active isActive,a.zone_group_id zoneGroupId,z.name zoneGroup
+      FROM areas a JOIN zone_groups z ON z.id=a.zone_group_id ORDER BY z.sort_order,a.name`).all(),
+    zoneGroups: database.prepare(`SELECT z.id,z.code,z.name,z.sort_order sortOrder,z.is_active isActive,COUNT(a.id) areaCount
+      FROM zone_groups z LEFT JOIN areas a ON a.zone_group_id=z.id GROUP BY z.id ORDER BY z.sort_order,z.id`).all()
   }
+}
+
+export function updateZoneGroup(id, payload, database = defaultDb) {
+  const before=database.prepare('SELECT * FROM zone_groups WHERE id=?').get(id);if(!before)throw new Error('Zone Group not found')
+  if(!text(payload.name??before.name))throw new Error('Zone Group Name is required')
+  database.prepare('UPDATE zone_groups SET name=?,is_active=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(text(payload.name??before.name),payload.isActive===undefined?before.is_active:Number(Boolean(payload.isActive)),id)
+  return database.prepare(`SELECT z.id,z.code,z.name,z.sort_order sortOrder,z.is_active isActive,COUNT(a.id) areaCount FROM zone_groups z LEFT JOIN areas a ON a.zone_group_id=z.id WHERE z.id=? GROUP BY z.id`).get(id)
+}
+
+export function assignAreaZone(areaId, zoneGroupId, payload={}, database = defaultDb) {
+  const before=database.prepare('SELECT * FROM areas WHERE id=?').get(areaId);if(!before)throw new Error('Area not found')
+  const zone=database.prepare('SELECT id FROM zone_groups WHERE id=? AND is_active=1').get(zoneGroupId);if(!zone)throw new Error('Zone Group not found or inactive')
+  database.prepare('UPDATE areas SET zone_group_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(zoneGroupId,areaId)
+  const dates=database.prepare(`SELECT DISTINCT dd.dispatch_date FROM dispatch_days dd JOIN dispatch_trips dt ON dt.dispatch_day_id=dd.id JOIN dispatch_stops ds ON ds.dispatch_trip_id=dt.id JOIN branches b ON b.id=ds.branch_id
+    WHERE b.area_id=? AND dd.dispatch_date>=date('now','localtime') AND dd.status IN ('approved','published')`).all(areaId)
+  for(const item of dates)invalidateDispatchDay(database,item.dispatch_date,'area_zone_changed','area',areaId,before,{zoneGroupId},payload.changedBy)
+  return database.prepare(`SELECT a.id,a.jodoo_area_id areaId,a.name,a.zone_group_id zoneGroupId,z.name zoneGroup FROM areas a JOIN zone_groups z ON z.id=a.zone_group_id WHERE a.id=?`).get(areaId)
 }
 
 export function createVehicle(payload, database = defaultDb) {

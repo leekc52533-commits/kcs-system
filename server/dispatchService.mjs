@@ -103,10 +103,10 @@ export function generateDay(payload={},database=defaultDb){return generateRange(
 function stopRows(database, dayId) {
   return database.prepare(`SELECT ds.id,ds.stop_sequence stopSequence,ds.sequence_locked sequenceLocked,ds.estimated_weight_kg estimatedWeightKg,
     ds.source_special_request_id specialRequestId,b.jodoo_branch_id branchId,b.branch_name branchName,c.name customerName,c.payment_type paymentType,c.occ_price occPrice,
-    b.area_id areaId,a.name area,b.latitude,b.longitude,b.time_restriction timeRestriction,
+    b.area_id areaId,a.name area,a.zone_group_id zoneGroupId,z.name zoneGroup,b.latitude,b.longitude,b.time_restriction timeRestriction,
     dt.id tripId,dt.trip_number tripNumber,d.vehicle_id vehicleId,v.vehicle_code vehicle,d.driver_id driverId,dr.name driver,d.assistant_id assistantId,asst.name assistant
     FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id JOIN dispatches d ON d.id=dt.dispatch_id
-    JOIN branches b ON b.id=ds.branch_id LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas a ON a.id=b.area_id
+    JOIN branches b ON b.id=ds.branch_id LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN zone_groups z ON z.id=a.zone_group_id
     LEFT JOIN vehicles v ON v.id=d.vehicle_id LEFT JOIN employees dr ON dr.id=d.driver_id LEFT JOIN employees asst ON asst.id=d.assistant_id
     WHERE dt.dispatch_day_id=? ORDER BY dt.trip_number,ds.stop_sequence`).all(dayId)
 }
@@ -137,14 +137,19 @@ function dayView(database, day) {
     return{...vehicle,driverId:basis.driverId??null,driver:basis.driver??null,assistantIds:assistants.map(item=>item.id),assistants,startLocationId:basis.startLocationId??null,startLocation:basis.startLocation??null,endLocationId:basis.endLocationId??null,endLocation:basis.endLocation??null,areas,slots,customerCount:slots.reduce((sum,slot)=>sum+slot.stops.length,0)}
   })
   const unassignedStops=stops.filter(stop=>!stop.vehicleId||!availableIds.has(stop.vehicleId))
-  const unassignedGroups=[...new Map(unassignedStops.map(stop=>[stop.areaId??'unassigned',{areaId:stop.areaId??null,areaName:stop.area||'未分区'}])).values()].map(group=>{
+  const unassignedGroups=[...new Map(unassignedStops.map(stop=>[stop.areaId??'unassigned',{areaId:stop.areaId??null,areaName:stop.area||'未分区',zoneGroupId:stop.zoneGroupId??1,zoneGroupName:stop.zoneGroup||'Zone 1'}])).values()].map(group=>{
     const groupedStops=unassignedStops.filter(stop=>(stop.areaId??null)===group.areaId),weights=groupedStops.filter(stop=>stop.estimatedWeightKg!=null)
     return{...group,customerCount:groupedStops.length,estimatedWeightKg:weights.reduce((sum,stop)=>sum+Number(stop.estimatedWeightKg),0),weightedCustomerCount:weights.length,
       missingGpsCount:groupedStops.filter(stop=>!Number.isFinite(stop.latitude)||!Number.isFinite(stop.longitude)||stop.latitude===0||stop.longitude===0).length,
       timeRestrictionCount:groupedStops.filter(stop=>Boolean(String(stop.timeRestriction||'').trim())).length,stops:groupedStops}
   }).sort((a,b)=>a.areaName.localeCompare(b.areaName))
+  const unassignedZones=[...new Map(unassignedGroups.map(group=>[group.zoneGroupId,{zoneGroupId:group.zoneGroupId,zoneGroupName:group.zoneGroupName}])).values()].map(zone=>{
+    const areas=unassignedGroups.filter(group=>group.zoneGroupId===zone.zoneGroupId),zoneStops=areas.flatMap(group=>group.stops)
+    return{...zone,areaCount:areas.length,customerCount:zoneStops.length,estimatedWeightKg:areas.reduce((sum,group)=>sum+group.estimatedWeightKg,0),weightedCustomerCount:areas.reduce((sum,group)=>sum+group.weightedCustomerCount,0),
+      missingGpsCount:areas.reduce((sum,group)=>sum+group.missingGpsCount,0),timeRestrictionCount:areas.reduce((sum,group)=>sum+group.timeRestrictionCount,0),stops:zoneStops,areas}
+  }).sort((a,b)=>a.zoneGroupId-b.zoneGroupId)
   const warningCount=unassignedStops.length+vehicleBoards.filter(board=>board.customerCount>0&&!board.driverId).length+specials.filter(x=>x.requestType==='potential_new'&&newCustomerMissing(x).length).length
-  return {...day,stops,trips:assignedTrips,vehicleBoards,unassignedStops,unassignedGroups,specialRequests:specials,warningCount,legacyUnassignedTripCount:allTrips.filter(item=>!item.vehicleId).length}
+  return {...day,stops,trips:assignedTrips,vehicleBoards,unassignedStops,unassignedGroups,unassignedZones,specialRequests:specials,warningCount,legacyUnassignedTripCount:allTrips.filter(item=>!item.vehicleId).length}
 }
 
 const resourceOptions=(database)=>({
@@ -156,7 +161,8 @@ const resourceOptions=(database)=>({
     e.default_base_location_id defaultBaseLocationId,base.name defaultBase,e.default_area_id defaultAreaId,a.name defaultArea
     FROM employees e LEFT JOIN operational_locations base ON base.id=e.default_base_location_id LEFT JOIN areas a ON a.id=e.default_area_id ORDER BY e.name`).all(),
   locations:database.prepare('SELECT id,name,can_start canStart,can_end canEnd FROM operational_locations WHERE is_active=1 ORDER BY name').all(),
-  areas:database.prepare('SELECT id,name FROM areas WHERE is_active=1 ORDER BY name').all()
+  areas:database.prepare('SELECT a.id,a.name,a.zone_group_id zoneGroupId,z.name zoneGroup FROM areas a JOIN zone_groups z ON z.id=a.zone_group_id WHERE a.is_active=1 ORDER BY z.sort_order,a.name').all(),
+  zoneGroups:database.prepare('SELECT id,code,name,sort_order sortOrder FROM zone_groups WHERE is_active=1 ORDER BY sort_order,id').all()
 })
 
 export function getDispatchWeek({startDate=iso()}={},database=defaultDb){

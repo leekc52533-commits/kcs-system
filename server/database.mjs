@@ -23,6 +23,7 @@ function ensureColumn(table, column, definition) {
 ensureColumn('branches', 'source_customer_id', 'TEXT')
 ensureColumn('branches', 'source_area_id', 'TEXT')
 ensureColumn('branches', 'time_restriction', 'TEXT')
+ensureColumn('areas', 'zone_group_id', 'INTEGER REFERENCES zone_groups(id)')
 ensureColumn('customers', 'phone', 'TEXT')
 ensureColumn('customers', 'whatsapp', 'TEXT')
 ensureColumn('dispatch_stops', 'dispatch_trip_id', 'INTEGER REFERENCES dispatch_trips(id)')
@@ -37,6 +38,13 @@ ensureColumn('vehicles', 'default_base_location_id', 'INTEGER REFERENCES operati
 ensureColumn('employees', 'employment_status', "TEXT NOT NULL DEFAULT 'active'")
 ensureColumn('employees', 'default_base_location_id', 'INTEGER REFERENCES operational_locations(id)')
 ensureColumn('employees', 'default_area_id', 'INTEGER REFERENCES areas(id)')
+db.exec(`
+  CREATE INDEX IF NOT EXISTS areas_zone_group_idx ON areas(zone_group_id, name);
+  CREATE TRIGGER IF NOT EXISTS areas_zone_required_insert BEFORE INSERT ON areas
+  WHEN NEW.zone_group_id IS NULL BEGIN SELECT RAISE(ABORT,'Area must belong to a Zone Group'); END;
+  CREATE TRIGGER IF NOT EXISTS areas_zone_required_update BEFORE UPDATE OF zone_group_id ON areas
+  WHEN NEW.zone_group_id IS NULL BEGIN SELECT RAISE(ABORT,'Area must belong to a Zone Group'); END;
+`)
 
 const currentVersion = Number(db.prepare('SELECT COALESCE(MAX(version), 0) AS version FROM schema_meta').get().version)
 if (currentVersion === 0) {
@@ -68,6 +76,16 @@ if (currentVersion === 0) {
   if (currentVersion < 6) db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (6)').run()
   if (currentVersion < 7) db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (7)').run()
   if (currentVersion < 8) db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (8)').run()
+  if (currentVersion < 9) {
+    const groups = db.prepare('SELECT id FROM zone_groups ORDER BY sort_order,id LIMIT 5').all()
+    const drivers = db.prepare("SELECT DISTINCT TRIM(default_driver_name) driver FROM areas WHERE TRIM(COALESCE(default_driver_name,''))<>'' ORDER BY driver LIMIT 5").all()
+    for (let index=0; index<drivers.length && index<groups.length; index+=1) {
+      db.prepare('UPDATE zone_groups SET source_driver=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(drivers[index].driver,groups[index].id)
+      db.prepare('UPDATE areas SET zone_group_id=? WHERE TRIM(default_driver_name)=?').run(groups[index].id,drivers[index].driver)
+    }
+    if (groups[0]) db.prepare('UPDATE areas SET zone_group_id=? WHERE zone_group_id IS NULL').run(groups[0].id)
+    db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (9)').run()
+  }
 }
 
 if (db.prepare('SELECT COUNT(*) count FROM vehicles').get().count === 0) {
@@ -78,7 +96,7 @@ if (db.prepare('SELECT COUNT(*) count FROM vehicles').get().count === 0) {
 }
 
 export function getSystemStatus() {
-  const tableNames = ['users','customers','branches','branch_schedules','areas','employees','vehicles','operational_locations','dispatches','dispatch_stops','dispatch_days','dispatch_trips','special_collection_requests','schedule_exceptions','stop_documents','import_batches','import_errors','jodoo_sync_events','jodoo_outbox_jobs']
+  const tableNames = ['users','customers','branches','branch_schedules','zone_groups','areas','employees','vehicles','operational_locations','dispatches','dispatch_stops','dispatch_days','dispatch_trips','special_collection_requests','schedule_exceptions','stop_documents','import_batches','import_errors','jodoo_sync_events','jodoo_outbox_jobs']
   const counts = Object.fromEntries(tableNames.map((table) => [table, db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get().count]))
   return { database: 'connected', schemaVersion: SCHEMA_VERSION, counts }
 }

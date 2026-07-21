@@ -86,7 +86,7 @@ export function previewImport(payload, database = db) {
 }
 
 const upserts = {
-  areas: `INSERT INTO areas (jodoo_area_id,name,schedule_text,default_driver_name,source_updated_at) VALUES (?,?,?,?,?) ON CONFLICT(jodoo_area_id) DO UPDATE SET name=excluded.name,schedule_text=excluded.schedule_text,default_driver_name=excluded.default_driver_name,source_updated_at=excluded.source_updated_at,updated_at=CURRENT_TIMESTAMP`,
+  areas: `INSERT INTO areas (jodoo_area_id,name,zone_group_id,schedule_text,default_driver_name,source_updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(jodoo_area_id) DO UPDATE SET name=excluded.name,schedule_text=excluded.schedule_text,default_driver_name=excluded.default_driver_name,source_updated_at=excluded.source_updated_at,updated_at=CURRENT_TIMESTAMP`,
   customers: `INSERT INTO customers (jodoo_customer_id,name,tin_number,payment_type,occ_price,source_updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(jodoo_customer_id) DO UPDATE SET name=excluded.name,tin_number=excluded.tin_number,payment_type=excluded.payment_type,occ_price=excluded.occ_price,source_updated_at=excluded.source_updated_at,updated_at=CURRENT_TIMESTAMP`,
   branches: `INSERT INTO branches (jodoo_branch_id,customer_id,area_id,source_customer_id,source_area_id,branch_name,address,latitude,longitude,gps_status,gps_verified_at,parking_note,truck_access,gps_remark,source_updated_at) VALUES (?,(SELECT id FROM customers WHERE jodoo_customer_id=?),(SELECT id FROM areas WHERE jodoo_area_id=?),?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(jodoo_branch_id) DO UPDATE SET customer_id=excluded.customer_id,area_id=excluded.area_id,source_customer_id=excluded.source_customer_id,source_area_id=excluded.source_area_id,branch_name=excluded.branch_name,address=excluded.address,latitude=excluded.latitude,longitude=excluded.longitude,gps_status=excluded.gps_status,gps_verified_at=excluded.gps_verified_at,parking_note=excluded.parking_note,truck_access=excluded.truck_access,gps_remark=excluded.gps_remark,source_updated_at=excluded.source_updated_at,updated_at=CURRENT_TIMESTAMP`,
   schedules: `INSERT INTO branch_schedules (jodoo_schedule_id,branch_id,source_branch_id,frequency,days_of_week,take_date,next_take_date,source_updated_at) VALUES (?,(SELECT id FROM branches WHERE jodoo_branch_id=?),?,?,?,?,?,?) ON CONFLICT(jodoo_schedule_id) DO UPDATE SET branch_id=excluded.branch_id,source_branch_id=excluded.source_branch_id,frequency=excluded.frequency,days_of_week=excluded.days_of_week,take_date=excluded.take_date,next_take_date=excluded.next_take_date,source_updated_at=excluded.source_updated_at,updated_at=CURRENT_TIMESTAMP`,
@@ -129,7 +129,10 @@ export function commitImport(batchId, database = db) {
     for (const row of preview.rows) {
       if (row.action === 'error' || (row.type === 'locations' && row.action === 'unmatched') || row.action === 'unchanged') continue
       const n = row.normalized
-      if (row.type === 'areas') statements.areas.run(n.areaId,n.name,n.scheduleText,n.driver,n.sourceUpdatedAt)
+      if (row.type === 'areas') {
+        const zone=database.prepare("SELECT id FROM zone_groups WHERE source_driver=? ORDER BY sort_order LIMIT 1").get(n.driver)||database.prepare('SELECT id FROM zone_groups ORDER BY sort_order,id LIMIT 1').get()
+        statements.areas.run(n.areaId,n.name,zone.id,n.scheduleText,n.driver,n.sourceUpdatedAt)
+      }
       if (row.type === 'customers') statements.customers.run(n.customerId,n.name,n.tin,n.paymentType,n.occPrice,n.sourceUpdatedAt)
       if (row.type === 'branches') statements.branches.run(n.branchId,n.customerId,n.areaId,n.customerId,n.areaId,n.branchName,n.address,n.latitude,n.longitude,n.gpsStatus,n.gpsVerifiedAt,n.parkingNote,n.truckAccess,n.gpsRemark,n.sourceUpdatedAt)
       if (row.type === 'schedules') statements.schedules.run(n.scheduleId,n.branchId,n.branchId,n.frequency,n.daysOfWeek,n.takeDate,n.nextTakeDate,n.sourceUpdatedAt)
