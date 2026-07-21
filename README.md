@@ -1,6 +1,6 @@
 # KCS Dispatch System
 
-KCS 司机派送与回收作业系统。当前版本包含司机顺序流程、Jodoo Excel 正式导入、SQLite 客户/分店/排程/GPS 主档、资料质量页面、主管一周派车、临时收货请求，以及 Jodoo（简道云）连接的后台骨架。
+KCS 司机派送与回收作业系统。当前版本包含司机顺序流程、Jodoo Excel 正式导入、SQLite 客户/分店/排程/GPS 主档、资料质量页面、主管一周派车、临时收货请求、GPS-Based Zone Recommendation V1，以及 Jodoo（简道云）连接的后台骨架。
 
 ## 运行环境
 
@@ -60,7 +60,18 @@ npm run preview   # 预览正式构建
 - `GET /api/import-batches`、`GET /api/import-batches/:id/errors`
 - `POST /api/import/preview`、`POST /api/import/commit`
 
-SQLite schema 目前为 v12。`branches` 保留现有架构，同时保存原始 CustomerID/AreaID，方便显示未匹配关联并保证重复导入幂等。v10 增加完整车辆资料、合规提醒、保养、燃油、轮胎、文件、状态与使用历史；v11 取消 Zone 数量限制，增加 Area 归属确认状态与派车 Zone/Area 快照；v12 分开保存 Area 当前待确认 Zone 与最后已确认 Zone。升级不会删除既有周计划、Trip 或站点。Route Ready 规则集中在 `shared/importRules.js`：至少一条有效排程、有效经纬度，并且客户/分店状态不是 Paused、Closed 或 Ended；当前没有来源状态时视为 Active。
+SQLite schema 目前为 v13。`branches` 保留现有架构，同时保存原始 CustomerID/AreaID，方便显示未匹配关联并保证重复导入幂等。v10 增加完整车辆资料、合规提醒、保养、燃油、轮胎、文件、状态与使用历史；v11 取消 Zone 数量限制，增加 Area 归属确认状态与派车 Zone/Area 快照；v12 分开保存 Area 当前待确认 Zone 与最后已确认 Zone；v13 增加 Zone 边界版本、GPS 推荐与主管决定历史。升级不会删除既有周计划、Trip 或站点。Route Ready 规则集中在 `shared/importRules.js`：至少一条有效排程、有效经纬度，并且客户/分店状态不是 Paused、Closed 或 Ended；当前没有来源状态时视为 Active。
+
+## GPS-Based Zone Recommendation V1
+
+- 左侧进入“GPS Zone 建议”。`Zone Boundary Map` 使用 OpenStreetMap/Leaflet，不需要 Google Maps API Key；地图底图需要网络连接，polygon 与推荐资料保存在本机 SQLite。
+- 主管选择 Zone 后点击地图逐点绘制边界，或复制当前边界修改，再保存为新版本。每个版本保存 polygon、可选中心点、版本号、effective date 与 active status；旧版本不会被覆盖。
+- 保存边界或导入新的 official GPS 后会重新计算建议。单一 polygon 内为 High；边界线上为 Medium；重叠 Zone 标记 Boundary Conflict；polygon 外显示最近边界及距离。
+- 没有 polygon 时，系统综合最近 official GPS 客户、最近 Area GPS 中心及可用 Zone 中心产生 recommendation only。当前没有道路距离矩阵，界面会明确说明距离为直线近似，不会冒充公路行驶距离。
+- temporary GPS 从不参与建议。只有主管按“接受建议”或“确认其他归属”后，Branch 的正式 Area 才会改变；保持原归属、稍后处理和批量确认 High 均会保存决定与审计资料。
+- 边界修改只重新计算建议，不自动覆盖主管确认结果。旧 Dispatch 继续使用保存于 `dispatch_stops` 的 Area/Zone 快照。
+
+完整技术设计、算法说明及操作流程见 [`docs/GPS_ZONE_RECOMMENDATION_V1.md`](docs/GPS_ZONE_RECOMMENDATION_V1.md)。
 
 ## 一周派车与每日发布
 
@@ -128,6 +139,10 @@ SQLite schema 目前为 v12。`branches` 保留现有架构，同时保存原始
 - `PATCH /api/areas/:id/zone-group`
 - `GET /api/areas/:id/zone-confirmation`
 - `POST /api/areas/bulk-zone-group`、`POST /api/areas/bulk-confirmation`
+- `GET /api/zone-boundaries`、`POST /api/zone-groups/:id/boundaries`
+- `GET /api/gps-zone-recommendations`、`POST /api/gps-zone-recommendations/recalculate`
+- `POST /api/gps-zone-recommendations/:id/decision`
+- `POST /api/gps-zone-recommendations/bulk-confirm-high`
 - `POST /api/vehicles`、`PATCH /api/vehicles/:id`、`POST /api/vehicles/temporary`
 - `GET /api/vehicles/:id`
 - `POST /api/vehicles/:id/compliance|maintenance|fuel|tyres|documents|usage`

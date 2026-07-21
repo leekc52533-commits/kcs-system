@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 12
+export const SCHEMA_VERSION = 13
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -558,6 +558,57 @@ CREATE TABLE IF NOT EXISTS temporary_locations (
   adopted_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS zone_boundaries (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  zone_group_id INTEGER NOT NULL REFERENCES zone_groups(id),
+  boundary_version INTEGER NOT NULL,
+  polygon_json TEXT,
+  center_latitude REAL,
+  center_longitude REAL,
+  effective_date TEXT NOT NULL,
+  is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0,1)),
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(zone_group_id,boundary_version)
+);
+
+CREATE TABLE IF NOT EXISTS gps_zone_recommendations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  branch_id INTEGER NOT NULL UNIQUE REFERENCES branches(id) ON DELETE CASCADE,
+  official_latitude REAL,
+  official_longitude REAL,
+  current_area_id INTEGER REFERENCES areas(id),
+  current_zone_group_id INTEGER REFERENCES zone_groups(id),
+  recommended_area_id INTEGER REFERENCES areas(id),
+  recommended_zone_group_id INTEGER REFERENCES zone_groups(id),
+  boundary_id INTEGER REFERENCES zone_boundaries(id),
+  match_type TEXT NOT NULL,
+  confidence TEXT NOT NULL CHECK(confidence IN ('high','medium','low','none')),
+  boundary_conflict INTEGER NOT NULL DEFAULT 0 CHECK(boundary_conflict IN (0,1)),
+  nearest_distance_m REAL,
+  reason_json TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','accepted','kept_original','selected_other','later','no_gps')),
+  calculated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  decided_by TEXT,
+  decided_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS gps_zone_decisions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  recommendation_id INTEGER REFERENCES gps_zone_recommendations(id),
+  branch_id INTEGER NOT NULL REFERENCES branches(id),
+  decision TEXT NOT NULL,
+  old_area_id INTEGER REFERENCES areas(id),
+  new_area_id INTEGER REFERENCES areas(id),
+  old_zone_group_id INTEGER REFERENCES zone_groups(id),
+  new_zone_group_id INTEGER REFERENCES zone_groups(id),
+  official_latitude REAL,
+  official_longitude REAL,
+  recommendation_reason_json TEXT,
+  confirmed_by TEXT NOT NULL,
+  confirmed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS branches_customer_idx ON branches(customer_id);
 CREATE INDEX IF NOT EXISTS branches_area_idx ON branches(area_id);
 CREATE INDEX IF NOT EXISTS schedules_branch_idx ON branch_schedules(branch_id);
@@ -578,6 +629,9 @@ CREATE INDEX IF NOT EXISTS vehicle_tyre_vehicle_idx ON vehicle_tyre_records(vehi
 CREATE INDEX IF NOT EXISTS vehicle_documents_vehicle_idx ON vehicle_documents(vehicle_id, document_type);
 CREATE INDEX IF NOT EXISTS vehicle_status_history_vehicle_idx ON vehicle_status_history(vehicle_id, changed_at DESC);
 CREATE INDEX IF NOT EXISTS vehicle_usage_vehicle_idx ON vehicle_usage_history(vehicle_id, dispatch_date DESC);
+CREATE INDEX IF NOT EXISTS zone_boundaries_zone_idx ON zone_boundaries(zone_group_id,is_active,effective_date);
+CREATE INDEX IF NOT EXISTS gps_recommendations_status_idx ON gps_zone_recommendations(status,confidence,boundary_conflict);
+CREATE INDEX IF NOT EXISTS gps_zone_decisions_branch_idx ON gps_zone_decisions(branch_id,confirmed_at DESC);
 
 INSERT OR IGNORE INTO zone_groups(id,code,name,sort_order) VALUES
   (1,'KUCHING-A','古晋 A区',1),

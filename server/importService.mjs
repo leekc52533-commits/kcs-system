@@ -1,5 +1,6 @@
 import crypto from 'node:crypto'
 import { db } from './database.mjs'
+import { recalculateRecommendations } from './gpsRecommendationService.mjs'
 import { cleanId, cleanText, identifyFile, normalizeDayOfWeek, validCoordinate } from '../shared/importRules.js'
 
 const previews = new Map()
@@ -144,6 +145,7 @@ export function commitImport(batchId, database = db) {
     database.prepare(`UPDATE import_batches SET status='completed',summary_json=?,completed_at=CURRENT_TIMESTAMP WHERE id=?`).run(JSON.stringify(preview.summary), databaseBatchId)
     database.exec('COMMIT')
     previews.delete(batchId)
+    recalculateRecommendations({changedBy:'Jodoo Excel Import'},database)
     return { id: databaseBatchId, status: 'completed', summary: preview.summary }
   } catch (error) {
     database.exec('ROLLBACK')

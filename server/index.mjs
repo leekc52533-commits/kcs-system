@@ -7,6 +7,7 @@ import { approveDay, assignAreaStops, assignVehicleDay, createScheduleException,
 import { addTemporaryLocation, adoptTemporaryLocation, convertToExisting, createSpecialRequest, linkNewAccount, listSpecialRequests, listTemporaryLocations, scheduleSpecialRequest, searchCustomerBranches, updateSpecialRequest } from './specialRequestService.mjs'
 import { assignAreaZone, createEmployee, createLocation, createTemporaryVehicle, createVehicle, createZoneGroup, getAreaConfirmationDetail, listResources, listZoneGroups, mergeZoneGroups, moveAreasToZone, setAreasConfirmation, setZoneActive, splitZoneGroup, updateEmployee, updateLocation, updateVehicle, updateZoneGroup } from './resourceService.mjs'
 import { addFuelRecord, addMaintenanceRecord, addTyreRecord, addUsageRecord, addVehicleDocument, getVehicleDetail, updateVehicleCompliance } from './vehicleService.mjs'
+import { bulkAcceptHighConfidence, decideRecommendation, ensureRecommendations, listRecommendations, listZoneBoundaries, recalculateRecommendations, saveZoneBoundary } from './gpsRecommendationService.mjs'
 
 const port = Number(process.env.KCS_API_PORT || 8787)
 
@@ -68,6 +69,12 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && /^\/api\/dispatch\/day\/[^/]+\/assign-area$/.test(url.pathname)) {const parts=url.pathname.split('/');return sendJson(response,200,assignAreaStops(decodeURIComponent(parts[4]),(await readJson(request)).payload))}
     if (request.method === 'GET' && url.pathname === '/api/resources') return sendJson(response,200,listResources())
     if (request.method === 'GET' && url.pathname === '/api/zone-groups') return sendJson(response,200,listZoneGroups())
+    if (request.method === 'GET' && url.pathname === '/api/zone-boundaries') return sendJson(response,200,listZoneBoundaries({includeHistory:url.searchParams.get('history')==='true'}))
+    if (request.method === 'POST' && /^\/api\/zone-groups\/\d+\/boundaries$/.test(url.pathname)) return sendJson(response,201,saveZoneBoundary(Number(url.pathname.split('/')[3]),(await readJson(request)).payload))
+    if (request.method === 'GET' && url.pathname === '/api/gps-zone-recommendations') return sendJson(response,200,listRecommendations(Object.fromEntries(url.searchParams)))
+    if (request.method === 'POST' && url.pathname === '/api/gps-zone-recommendations/recalculate') return sendJson(response,200,recalculateRecommendations((await readJson(request)).payload))
+    if (request.method === 'POST' && url.pathname === '/api/gps-zone-recommendations/bulk-confirm-high') return sendJson(response,200,bulkAcceptHighConfidence((await readJson(request)).payload))
+    if (request.method === 'POST' && /^\/api\/gps-zone-recommendations\/\d+\/decision$/.test(url.pathname)) return sendJson(response,200,decideRecommendation(Number(url.pathname.split('/')[3]),(await readJson(request)).payload))
     if (request.method === 'POST' && url.pathname === '/api/zone-groups') return sendJson(response,201,createZoneGroup((await readJson(request)).payload))
     if (request.method === 'POST' && url.pathname === '/api/zone-groups/merge') return sendJson(response,200,mergeZoneGroups((await readJson(request)).payload))
     if (request.method === 'POST' && url.pathname === '/api/zone-groups/split') return sendJson(response,201,splitZoneGroup((await readJson(request)).payload))
@@ -114,6 +121,7 @@ const server = http.createServer(async (request, response) => {
   }
 })
 
+ensureRecommendations()
 server.listen(port, '127.0.0.1', () => {
   console.log(`[KCS API] ready on http://127.0.0.1:${port}`)
   console.log(`[KCS API] database: ${databasePath}`)

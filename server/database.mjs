@@ -132,6 +132,7 @@ if (currentVersion === 0) {
     `)
     db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (12)').run()
   }
+  if (currentVersion < 13) db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (13)').run()
 }
 
 const officialVehicles = [
@@ -170,7 +171,7 @@ normalizeOfficialVehicles()
 db.exec(`CREATE TRIGGER IF NOT EXISTS sold_vehicle_no_delete BEFORE DELETE ON vehicles WHEN OLD.operational_status='sold' BEGIN SELECT RAISE(ABORT,'Sold vehicle history cannot be deleted'); END;`)
 
 export function getSystemStatus() {
-  const tableNames = ['users','customers','branches','branch_schedules','zone_groups','areas','employees','vehicles','vehicle_documents','vehicle_maintenance_records','vehicle_fuel_records','vehicle_tyre_records','vehicle_compliance_reminders','vehicle_status_history','vehicle_usage_history','operational_locations','dispatches','dispatch_stops','dispatch_days','dispatch_trips','special_collection_requests','schedule_exceptions','stop_documents','import_batches','import_errors','jodoo_sync_events','jodoo_outbox_jobs']
+  const tableNames = ['users','customers','branches','branch_schedules','zone_groups','areas','zone_boundaries','gps_zone_recommendations','gps_zone_decisions','employees','vehicles','vehicle_documents','vehicle_maintenance_records','vehicle_fuel_records','vehicle_tyre_records','vehicle_compliance_reminders','vehicle_status_history','vehicle_usage_history','operational_locations','dispatches','dispatch_stops','dispatch_days','dispatch_trips','special_collection_requests','schedule_exceptions','stop_documents','import_batches','import_errors','jodoo_sync_events','jodoo_outbox_jobs']
   const counts = Object.fromEntries(tableNames.map((table) => [table, db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get().count]))
   return { database: 'connected', schemaVersion: SCHEMA_VERSION, counts }
 }
