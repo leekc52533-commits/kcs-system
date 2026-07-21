@@ -60,16 +60,25 @@ npm run preview   # 预览正式构建
 - `GET /api/import-batches`、`GET /api/import-batches/:id/errors`
 - `POST /api/import/preview`、`POST /api/import/commit`
 
-SQLite schema 目前为 v6。`branches` 保留现有架构，同时保存原始 CustomerID/AreaID，方便显示未匹配关联并保证重复导入幂等。Route Ready 规则集中在 `shared/importRules.js`：至少一条有效排程、有效经纬度，并且客户/分店状态不是 Paused、Closed 或 Ended；当前没有来源状态时视为 Active。
+SQLite schema 目前为 v7。`branches` 保留现有架构，同时保存原始 CustomerID/AreaID，方便显示未匹配关联并保证重复导入幂等。v7 为车辆增加临时车辆标记和适用日期；升级不会删除既有周计划、Trip 或站点。Route Ready 规则集中在 `shared/importRules.js`：至少一条有效排程、有效经纬度，并且客户/分店状态不是 Paused、Closed 或 Ended；当前没有来源状态时视为 Active。
 
 ## 一周派车与每日发布
 
-1. 进入“一周派车”，选择今天、明天、后天或任意开始日期。
-2. 按“根据排程产生／更新草稿”。系统读取 `BranchSchedule`，幂等建立未来七天；`Call` 排程不会自动加入，两周一次排程会使用 Take Date/Next Take Date 作为周期锚点。
-3. 每日按 Area 初步分组，再为 Trip 选择车辆、司机、跟车员、出发和结束地点。Area 不绑定车辆或员工。
-4. 可把站点拖到其他日期、车辆或趟次，也可调整顺序并锁定客户顺序。
-5. 每天分别按“批准”或“批准并发布”。`GET /api/driver/today?driverId={id}` 只返回电脑当天、已发布且分配给该司机的路线。
-6. 已批准/已发布路线改变后会变成 `reapproval_required`。再次批准人与时间、版本，以及修改前后 JSON 会写入审批和变更记录。
+1. 进入“一周派车”。“今天”“明天”“后天”和“其他日期”进入单日视图，只读取所选一天；“未来 7 天”才进入连续七日周视图。
+2. 单日视图按“更新当天草稿”，周视图按“更新 7 天草稿”。系统读取 `BranchSchedule` 幂等建立所需日期；`Call` 排程不会自动加入，两周一次排程会使用 Take Date/Next Take Date 作为周期锚点。
+3. 每天的车辆栏只来自 Vehicle Master 中当天可用的车辆。首次升级且车辆主档为空时会建立 `Lorry 1` 至 `Lorry 5`；系统不会再根据 Area、客户、Schedule 或 Trip 数量制造车辆栏。
+4. 新产生的客户先进入“未分配客户池”，再拖入某辆车的 Trip 1、Trip 2 或 Trip 3。每辆车固定显示三个趟次槽位；Area 只供参考，可跨车辆或拆给多辆车。
+5. Driver、Assistant 从 Employee Master 选择，Start/End Location 从 Location Master 选择。只有主管按“新增临时车辆”才会为指定日期增加额外车辆。
+6. 可把站点拖到其他日期、车辆或趟次，也可调整顺序并锁定客户顺序。
+7. 每天分别按“批准”或“批准并发布”。`GET /api/driver/today?driverId={id}` 只返回电脑当天、已发布且分配给该司机的路线。
+8. 已批准/已发布路线改变后会变成 `reapproval_required`。再次批准人与时间、版本，以及修改前后 JSON 会写入审批和变更记录。
+
+## Vehicle、Employee 与 Location Master
+
+- 在侧栏进入“员工、车辆与地点”，可切换三个 Master 页面。
+- Vehicle Master 可新增车辆、改名称，并把状态设为“启用／可用”“已分配”“维修”或“停用”。维修和停用车辆不会出现在当天派车车辆栏；其既有计划与站点仍保留并回到未分配状态供主管处理。
+- Employee Master 可新增员工、设定 Driver/Assistant 等角色，并启用或停用。派车页不会自行制造司机或跟车员。
+- Location Master 可新增出发／结束地点，并分别设定是否允许作为 Start 或 End Location。
 
 发布会阻挡缺车辆、缺司机、缺 OCC Price、缺 Payment Type，以及潜在新客户缺 CustomerID、BranchID、价格、付款方式、地址或 Location。未正确安排的客户承诺也会阻挡发布，只有这一项可以由主管填写例外原因确认；账号和营运资料缺失不能绕过。
 
@@ -86,8 +95,9 @@ SQLite schema 目前为 v6。`branches` 保留现有架构，同时保存原始 
 
 新增 `weekly_dispatch_plans`、`dispatch_days`、`dispatch_trips`、`dispatch_approvals`、`dispatch_change_logs`、`special_collection_requests`、`schedule_exceptions` 和 `temporary_locations`；既有 `dispatch_stops` 以兼容方式扩展，没有删除旧表。
 
-- `GET /api/dispatch/week`、`POST /api/dispatch/generate-week`
+- `GET /api/dispatch/week`、`POST /api/dispatch/generate-week`、`POST /api/dispatch/generate-day`
 - `GET /api/dispatch/day/:date`
+- `PATCH /api/dispatch/day/:date/vehicle/:vehicleId`
 - `POST /api/dispatch/day/:date/approve|publish|reopen`
 - `POST /api/dispatch/stops`、`PATCH|DELETE /api/dispatch/stops/:id`
 - `PATCH /api/dispatch/trips/:id`
@@ -98,8 +108,12 @@ SQLite schema 目前为 v6。`branches` 保留现有架构，同时保存原始 
 - `POST /api/special-requests/:id/schedule|convert-to-existing|link-new-account`
 - `POST /api/schedule-exceptions`
 - `GET|POST /api/temporary-locations`、`POST /api/temporary-locations/:id/adopt`
+- `GET /api/resources`
+- `POST /api/vehicles`、`PATCH /api/vehicles/:id`、`POST /api/vehicles/temporary`
+- `POST /api/employees`、`PATCH /api/employees/:id`
+- `POST /api/locations`、`PATCH /api/locations/:id`
 
-V1 尚未包含 Google Maps 道路优化、实时车辆定位、奖金系统、Jodoo API 自动同步、完整登录/角色权限和资源请假/维修管理画面。当前司机资料隔离由 API 的日期、发布状态和 driverId 过滤实现；正式上线前必须接入登录身份，不能信任浏览器传入的 driverId。
+V1 尚未包含 Google Maps 道路优化、实时车辆定位、奖金系统、Jodoo API 自动同步、完整登录/角色权限和员工请假流程。车辆的启用、停用和维修状态已有基础管理。当前司机资料隔离由 API 的日期、发布状态和 driverId 过滤实现；正式上线前必须接入登录身份，不能信任浏览器传入的 driverId。
 
 ## 项目结构
 

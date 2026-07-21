@@ -29,6 +29,8 @@ ensureColumn('dispatch_stops', 'source_schedule_id', 'INTEGER REFERENCES branch_
 ensureColumn('dispatch_stops', 'source_special_request_id', 'INTEGER REFERENCES special_collection_requests(id)')
 ensureColumn('dispatch_stops', 'estimated_weight_kg', 'REAL')
 ensureColumn('dispatch_stops', 'sequence_locked', 'INTEGER NOT NULL DEFAULT 0')
+ensureColumn('vehicles', 'is_temporary', 'INTEGER NOT NULL DEFAULT 0')
+ensureColumn('vehicles', 'temporary_date', 'TEXT')
 
 const currentVersion = Number(db.prepare('SELECT COALESCE(MAX(version), 0) AS version FROM schema_meta').get().version)
 if (currentVersion === 0) {
@@ -58,6 +60,14 @@ if (currentVersion === 0) {
   if (currentVersion < 4) db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (4)').run()
   if (currentVersion < 5) db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (5)').run()
   if (currentVersion < 6) db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (6)').run()
+  if (currentVersion < 7) db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (7)').run()
+}
+
+if (db.prepare('SELECT COUNT(*) count FROM vehicles').get().count === 0) {
+  const seedVehicle = db.prepare("INSERT INTO vehicles(vehicle_code,status) VALUES(?,'available')")
+  db.exec('BEGIN IMMEDIATE')
+  try { for (let number=1;number<=5;number+=1) seedVehicle.run(`Lorry ${number}`); db.exec('COMMIT') }
+  catch (error) { db.exec('ROLLBACK'); throw error }
 }
 
 export function getSystemStatus() {

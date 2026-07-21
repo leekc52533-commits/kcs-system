@@ -3,8 +3,9 @@ import { databasePath, getSystemStatus, uploadsDir } from './database.mjs'
 import { getJodooIntegrationStatus, recordJodooWebhook, verifyJodooWebhookToken } from './jodoo.mjs'
 import { commitImport, previewImport } from './importService.mjs'
 import { customerBranchDetail, customerBranches, dashboardSummary, dataQualitySummary, importBatches, importErrors, schedules } from './queryService.mjs'
-import { approveDay, createScheduleException, createStop, createTrip, deleteStop, driverToday, generateWeek, getDispatchDay, getDispatchWeek, promisedCheck, publishDay, reopenDay, updateStop, updateTrip } from './dispatchService.mjs'
+import { approveDay, assignVehicleDay, createScheduleException, createStop, createTrip, deleteStop, driverToday, generateDay, generateWeek, getDispatchDay, getDispatchWeek, promisedCheck, publishDay, reopenDay, updateStop, updateTrip } from './dispatchService.mjs'
 import { addTemporaryLocation, adoptTemporaryLocation, convertToExisting, createSpecialRequest, linkNewAccount, listSpecialRequests, listTemporaryLocations, scheduleSpecialRequest, searchCustomerBranches, updateSpecialRequest } from './specialRequestService.mjs'
+import { createEmployee, createLocation, createTemporaryVehicle, createVehicle, listResources, updateEmployee, updateLocation, updateVehicle } from './resourceService.mjs'
 
 const port = Number(process.env.KCS_API_PORT || 8787)
 
@@ -45,6 +46,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'GET' && url.pathname === '/api/data-quality/summary') return sendJson(response, 200, dataQualitySummary())
     if (request.method === 'GET' && url.pathname === '/api/dispatch/week') return sendJson(response, 200, getDispatchWeek(Object.fromEntries(url.searchParams)))
     if (request.method === 'POST' && url.pathname === '/api/dispatch/generate-week') return sendJson(response, 200, generateWeek((await readJson(request)).payload))
+    if (request.method === 'POST' && url.pathname === '/api/dispatch/generate-day') return sendJson(response, 200, generateDay((await readJson(request)).payload))
     if (request.method === 'GET' && url.pathname.startsWith('/api/dispatch/day/')) {
       const item=getDispatchDay(decodeURIComponent(url.pathname.slice('/api/dispatch/day/'.length)))
       return item?sendJson(response,200,item):sendJson(response,404,{error:'Dispatch day not found'})
@@ -60,6 +62,15 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'PATCH' && /^\/api\/dispatch\/stops\/\d+$/.test(url.pathname)) return sendJson(response,200,updateStop(Number(url.pathname.split('/').at(-1)),(await readJson(request)).payload))
     if (request.method === 'DELETE' && /^\/api\/dispatch\/stops\/\d+$/.test(url.pathname)) return sendJson(response,200,deleteStop(Number(url.pathname.split('/').at(-1)),(await readJson(request)).payload))
     if (request.method === 'PATCH' && /^\/api\/dispatch\/trips\/\d+$/.test(url.pathname)) return sendJson(response,200,updateTrip(Number(url.pathname.split('/').at(-1)),(await readJson(request)).payload))
+    if (request.method === 'PATCH' && /^\/api\/dispatch\/day\/[^/]+\/vehicle\/\d+$/.test(url.pathname)) {const parts=url.pathname.split('/');return sendJson(response,200,assignVehicleDay(decodeURIComponent(parts[4]),Number(parts[6]),(await readJson(request)).payload))}
+    if (request.method === 'GET' && url.pathname === '/api/resources') return sendJson(response,200,listResources())
+    if (request.method === 'POST' && url.pathname === '/api/vehicles') return sendJson(response,201,createVehicle((await readJson(request)).payload))
+    if (request.method === 'POST' && url.pathname === '/api/vehicles/temporary') return sendJson(response,201,createTemporaryVehicle((await readJson(request)).payload))
+    if (request.method === 'PATCH' && /^\/api\/vehicles\/\d+$/.test(url.pathname)) return sendJson(response,200,updateVehicle(Number(url.pathname.split('/').at(-1)),(await readJson(request)).payload))
+    if (request.method === 'POST' && url.pathname === '/api/employees') return sendJson(response,201,createEmployee((await readJson(request)).payload))
+    if (request.method === 'PATCH' && /^\/api\/employees\/\d+$/.test(url.pathname)) return sendJson(response,200,updateEmployee(Number(url.pathname.split('/').at(-1)),(await readJson(request)).payload))
+    if (request.method === 'POST' && url.pathname === '/api/locations') return sendJson(response,201,createLocation((await readJson(request)).payload))
+    if (request.method === 'PATCH' && /^\/api\/locations\/\d+$/.test(url.pathname)) return sendJson(response,200,updateLocation(Number(url.pathname.split('/').at(-1)),(await readJson(request)).payload))
     if (request.method === 'POST' && url.pathname === '/api/schedule-exceptions') return sendJson(response,201,createScheduleException((await readJson(request)).payload))
     if (request.method === 'GET' && url.pathname === '/api/special-requests/customer-search') return sendJson(response,200,{items:searchCustomerBranches(Object.fromEntries(url.searchParams))})
     if (request.method === 'GET' && url.pathname === '/api/special-requests') return sendJson(response,200,{items:listSpecialRequests(Object.fromEntries(url.searchParams))})

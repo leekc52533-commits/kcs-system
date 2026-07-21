@@ -1,12 +1,2 @@
-.add-trip {
-  width: calc(100% - 16px);
-  margin: 3px 8px 9px;
-  padding: 8px;
-  border: 1px dashed #b9c7ce;
-  border-radius: 7px;
-  color: #52717b;
-  background: #fff;
-  font-size: 9px;
-  font-weight: 800;
-  cursor: pointer;
-}
+.single-day-board{max-width:1120px}.single-day-board .vehicle-day{min-height:500px}.vehicle-day{min-width:290px}.unassigned-pool{margin:8px;padding:10px;border:2px dashed #d5a85f;border-radius:9px;background:#fffaf0}.unassigned-pool>header{display:flex;justify-content:space-between}.unassigned-pool>header strong{font-size:11px}.unassigned-pool>header span{color:#9c6726;font-size:9px;font-weight:800}.unassigned-pool>p,.vehicle-trips section>p{margin:8px 0 0;color:#8a969e;font-size:8px;text-align:center}.unassigned-pool>div{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:5px}.vehicle-board-list{display:grid;gap:9px;margin:8px}.vehicle-board{overflow:hidden;border:1px solid #dce4e8;border-radius:10px;background:#fff}.vehicle-board>header{padding:10px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #edf1f3}.vehicle-board>header strong,.vehicle-board>header small{display:block}.vehicle-board>header strong{font-size:12px}.vehicle-board>header small{margin-top:3px;color:#7c8993;font-size:8px}.vehicle-board>header>span{max-width:45%;color:#5e7c75;font-size:8px;text-align:right}.vehicle-crew{display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:8px;background:#f6f8f9}.vehicle-crew select{min-width:0;padding:6px;border:1px solid #d7e0e5;border-radius:5px;background:#fff;font-size:8px}.vehicle-trips{display:grid;grid-template-columns:repeat(3,minmax(150px,1fr));gap:6px;padding:8px;overflow-x:auto}.vehicle-trips>section{min-height:74px;padding:6px;border:1px dashed #c9d4da;border-radius:7px;background:#fafcfc}.vehicle-trips>section>header{display:flex;justify-content:space-between}.vehicle-trips>section>header strong{font-size:9px}.vehicle-trips>section>header span{display:grid;place-items:center;width:18px;height:18px;border-radius:50%;color:#fff;background:#6c858f;font-size:8px}.temporary-vehicle{width:calc(100% - 16px);margin:1px 8px 9px;padding:8px;border:1px dashed #7aa99d;border-radius:7px;color:#176b59;background:#f5fbf9;font-size:9px;font-weight:800;cursor:pointer}.sequence-locked{cursor:not-allowed;background:#fff7e8}.week-board .vehicle-trips{grid-template-columns:1fr}.week-board .vehicle-crew{grid-template-columns:1fr}.week-board .unassigned-pool>div{grid-template-columns:1fr}
+@media(max-width:760px){.vehicle-trips{grid-template-columns:1fr}.vehicle-crew{grid-template-columns:1fr}.unassigned-pool>div{grid-template-columns:1fr}}

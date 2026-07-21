@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 6
+export const SCHEMA_VERSION = 7
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -107,6 +107,8 @@ CREATE TABLE IF NOT EXISTS vehicles (
   default_start_location_id INTEGER REFERENCES operational_locations(id),
   default_end_location_id INTEGER REFERENCES operational_locations(id),
   status TEXT NOT NULL DEFAULT 'available' CHECK (status IN ('available','assigned','maintenance','inactive')),
+  is_temporary INTEGER NOT NULL DEFAULT 0 CHECK (is_temporary IN (0,1)),
+  temporary_date TEXT,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
