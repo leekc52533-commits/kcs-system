@@ -28,6 +28,43 @@ ensureColumn('areas', 'zone_assignment_status', "TEXT NOT NULL DEFAULT 'pending_
 ensureColumn('areas', 'confirmed_zone_group_id', 'INTEGER REFERENCES zone_groups(id)')
 ensureColumn('customers', 'phone', 'TEXT')
 ensureColumn('customers', 'whatsapp', 'TEXT')
+ensureColumn('customers', 'legal_name', 'TEXT')
+ensureColumn('customers', 'registration_number', 'TEXT')
+ensureColumn('customers', 'billing_address', 'TEXT')
+ensureColumn('customers', 'contact_person', 'TEXT')
+ensureColumn('customers', 'email', 'TEXT')
+ensureColumn('customers', 'default_payment_type', 'TEXT')
+ensureColumn('customers', 'credit_terms', 'TEXT')
+ensureColumn('customers', 'status', "TEXT NOT NULL DEFAULT 'active'")
+ensureColumn('customers', 'notes', 'TEXT')
+ensureColumn('customers', 'source_system', "TEXT NOT NULL DEFAULT 'Jodoo'")
+ensureColumn('customers', 'created_by', 'TEXT')
+ensureColumn('customers', 'created_at', 'TEXT')
+ensureColumn('branches', 'contact_person', 'TEXT')
+ensureColumn('branches', 'phone', 'TEXT')
+ensureColumn('branches', 'collection_frequency', 'TEXT')
+ensureColumn('branches', 'assigned_weekdays', 'TEXT')
+ensureColumn('branches', 'occ_price', 'REAL')
+ensureColumn('branches', 'payment_type', 'TEXT')
+ensureColumn('branches', 'proof_requirements', 'TEXT')
+ensureColumn('branches', 'vehicle_restriction', 'TEXT')
+ensureColumn('branches', 'status', "TEXT NOT NULL DEFAULT 'active'")
+ensureColumn('branches', 'notes', 'TEXT')
+ensureColumn('branches', 'source_system', "TEXT NOT NULL DEFAULT 'Jodoo'")
+ensureColumn('branches', 'created_by', 'TEXT')
+ensureColumn('branches', 'created_at', 'TEXT')
+ensureColumn('areas', 'zone_confirmed_by', 'TEXT')
+ensureColumn('areas', 'zone_confirmed_at', 'TEXT')
+ensureColumn('operational_locations', 'operational_type', 'TEXT')
+ensureColumn('operational_locations', 'location_code', 'TEXT')
+ensureColumn('operational_locations', 'operating_hours', 'TEXT')
+ensureColumn('operational_locations', 'contact_person', 'TEXT')
+ensureColumn('operational_locations', 'phone', 'TEXT')
+ensureColumn('operational_locations', 'status', "TEXT NOT NULL DEFAULT 'active'")
+ensureColumn('operational_locations', 'notes', 'TEXT')
+ensureColumn('operational_locations', 'buyer_id', 'INTEGER REFERENCES buyers(id)')
+ensureColumn('operational_locations', 'created_by', 'TEXT')
+ensureColumn('operational_locations', 'created_at', 'TEXT')
 ensureColumn('dispatch_stops', 'dispatch_trip_id', 'INTEGER REFERENCES dispatch_trips(id)')
 ensureColumn('dispatch_stops', 'source_schedule_id', 'INTEGER REFERENCES branch_schedules(id)')
 ensureColumn('dispatch_stops', 'source_special_request_id', 'INTEGER REFERENCES special_collection_requests(id)')
@@ -59,6 +96,9 @@ ensureColumn('employees', 'default_base_location_id', 'INTEGER REFERENCES operat
 ensureColumn('employees', 'default_area_id', 'INTEGER REFERENCES areas(id)')
 db.exec(`
   CREATE INDEX IF NOT EXISTS areas_zone_group_idx ON areas(zone_group_id, name);
+  CREATE INDEX IF NOT EXISTS customers_status_idx ON customers(status,name);
+  CREATE INDEX IF NOT EXISTS branches_status_idx ON branches(status,branch_name);
+  CREATE UNIQUE INDEX IF NOT EXISTS operational_locations_code_idx ON operational_locations(location_code) WHERE location_code IS NOT NULL;
   CREATE TRIGGER IF NOT EXISTS areas_zone_required_insert BEFORE INSERT ON areas
   WHEN NEW.zone_group_id IS NULL BEGIN SELECT RAISE(ABORT,'Area must belong to a Zone Group'); END;
   CREATE TRIGGER IF NOT EXISTS areas_zone_required_update BEFORE UPDATE OF zone_group_id ON areas
@@ -133,6 +173,23 @@ if (currentVersion === 0) {
     db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (12)').run()
   }
   if (currentVersion < 13) db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (13)').run()
+  if (currentVersion < 14) {
+    db.exec(`
+      UPDATE customers SET
+        default_payment_type=COALESCE(default_payment_type,payment_type),
+        status=CASE WHEN is_active=1 THEN 'active' ELSE 'paused' END,
+        created_at=COALESCE(created_at,updated_at,CURRENT_TIMESTAMP);
+      UPDATE branches SET
+        status=CASE WHEN is_active=1 THEN 'active' ELSE 'paused' END,
+        collection_frequency=COALESCE(collection_frequency,(SELECT GROUP_CONCAT(DISTINCT frequency) FROM branch_schedules s WHERE s.branch_id=branches.id)),
+        assigned_weekdays=COALESCE(assigned_weekdays,(SELECT GROUP_CONCAT(DISTINCT days_of_week) FROM branch_schedules s WHERE s.branch_id=branches.id)),
+        created_at=COALESCE(created_at,updated_at,CURRENT_TIMESTAMP);
+      UPDATE areas SET zone_confirmed_by=COALESCE(zone_confirmed_by,'Legacy Supervisor Confirmation'),zone_confirmed_at=COALESCE(zone_confirmed_at,updated_at,CURRENT_TIMESTAMP)
+      WHERE zone_assignment_status='confirmed' AND confirmed_zone_group_id IS NOT NULL;
+      UPDATE operational_locations SET operational_type=COALESCE(operational_type,CASE location_type WHEN 'depot' THEN 'Company Yard' WHEN 'employee_home' THEN 'Employee Base' WHEN 'factory' THEN 'Buyer' ELSE 'Other' END),created_at=COALESCE(created_at,updated_at,CURRENT_TIMESTAMP);
+    `)
+    db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (14)').run()
+  }
 }
 
 const officialVehicles = [
@@ -171,7 +228,7 @@ normalizeOfficialVehicles()
 db.exec(`CREATE TRIGGER IF NOT EXISTS sold_vehicle_no_delete BEFORE DELETE ON vehicles WHEN OLD.operational_status='sold' BEGIN SELECT RAISE(ABORT,'Sold vehicle history cannot be deleted'); END;`)
 
 export function getSystemStatus() {
-  const tableNames = ['users','customers','branches','branch_schedules','zone_groups','areas','zone_boundaries','gps_zone_recommendations','gps_zone_decisions','employees','vehicles','vehicle_documents','vehicle_maintenance_records','vehicle_fuel_records','vehicle_tyre_records','vehicle_compliance_reminders','vehicle_status_history','vehicle_usage_history','operational_locations','dispatches','dispatch_stops','dispatch_days','dispatch_trips','special_collection_requests','schedule_exceptions','stop_documents','import_batches','import_errors','jodoo_sync_events','jodoo_outbox_jobs']
+  const tableNames = ['users','customers','branches','branch_schedules','zone_groups','areas','zone_boundaries','gps_zone_recommendations','gps_zone_decisions','employees','vehicles','vehicle_documents','vehicle_maintenance_records','vehicle_fuel_records','vehicle_tyre_records','vehicle_compliance_reminders','vehicle_status_history','vehicle_usage_history','buyers','operational_locations','master_change_history','data_transfer_logs','dispatches','dispatch_stops','dispatch_days','dispatch_trips','special_collection_requests','schedule_exceptions','stop_documents','import_batches','import_errors','jodoo_sync_events','jodoo_outbox_jobs']
   const counts = Object.fromEntries(tableNames.map((table) => [table, db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get().count]))
   return { database: 'connected', schemaVersion: SCHEMA_VERSION, counts }
 }

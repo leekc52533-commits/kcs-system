@@ -218,8 +218,8 @@ export function setAreasConfirmation(areaIds,confirmed,payload={},database=defau
   const changedEffectiveIds=confirmed?beforeRows.filter(item=>(item.confirmed_zone_group_id??item.zone_group_id)!==item.zone_group_id).map(item=>item.id):[]
   const dates=affectedDates(database,changedEffectiveIds)
   database.exec('BEGIN IMMEDIATE');try{
-    if(confirmed)database.prepare(`UPDATE areas SET confirmed_zone_group_id=zone_group_id,zone_assignment_status='confirmed',updated_at=CURRENT_TIMESTAMP WHERE id IN (${marks})`).run(...ids)
-    else database.prepare(`UPDATE areas SET confirmed_zone_group_id=COALESCE(confirmed_zone_group_id,zone_group_id),zone_assignment_status='pending_confirmation',updated_at=CURRENT_TIMESTAMP WHERE id IN (${marks})`).run(...ids)
+    if(confirmed)database.prepare(`UPDATE areas SET confirmed_zone_group_id=zone_group_id,zone_assignment_status='confirmed',zone_confirmed_by=?,zone_confirmed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id IN (${marks})`).run(text(payload.changedBy)||'Supervisor',...ids)
+    else database.prepare(`UPDATE areas SET confirmed_zone_group_id=COALESCE(confirmed_zone_group_id,zone_group_id),zone_assignment_status='pending_confirmation',zone_confirmed_by=NULL,zone_confirmed_at=NULL,updated_at=CURRENT_TIMESTAMP WHERE id IN (${marks})`).run(...ids)
     for(const before of beforeRows)auditArea(database,confirmed?'area_zone_confirmed':'area_zone_confirmation_revoked',before.id,before,{zoneGroupId:before.zone_group_id,confirmedZoneGroupId:confirmed?before.zone_group_id:(before.confirmed_zone_group_id??before.zone_group_id),zoneAssignmentStatus:confirmed?'confirmed':'pending_confirmation'},payload.changedBy)
     for(const date of dates)invalidateDispatchDay(database,date,'area_zone_confirmed','area','batch',beforeRows,{areaIds:changedEffectiveIds},payload.changedBy)
     database.exec('COMMIT')

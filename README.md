@@ -168,4 +168,17 @@ public/    网站公开静态资源
 
 运行期间产生的数据保存在本机 `data/` 目录，不进入公开仓库。`.gitignore` 也排除 `uploads/`、`*.sqlite`、`*.sqlite3`、`.env` 和 `01_Source_Data/`。生产使用前应配置备份、访问控制、HTTPS，并完成 Jodoo 测试环境的端到端验证。
 
+## Customer Master & Operational Location Foundation V1
+
+KCS 现在是新 Customer、Customer Branch、official/temporary GPS、Buyer 与 Operational Location 的主要维护入口；Jodoo 暂时只继续用于开单。左侧“客户与营运地点”包含：
+
+- Customer Master：新增、查看、编辑、暂停、恢复、关闭、搜索、筛选和审计。
+- Customer Branch Master：一个 Customer 多 Branch，价格、付款方式、收货周期、GPS、Area/Zone 与营运限制分开维护。
+- GPS Collector：先保存 temporary GPS，主管填写理由并采用后才更新 official GPS；不会自动修改 Area/Zone。
+- Buyer Master：与 Customer 分表，用作卖货、卸货和路线终点。
+- Operational Location：Company Yard、Buyer、Employee Base、Workshop、Fuel Station、Other。
+- Excel / CSV：七类主档均支持空白模板、预览、New/Update/Unchanged/Error、错误导出、事务提交、幂等导入及带时间戳导出。
+
+数据库 schema 已升级到 v14。现有 253 个 Customer、475 个 Branch 与 97 个已确认 Area 原样保留；旧 Dispatch 的 Area/Zone snapshot 不会改变。详细开发、管理员操作、API、导入导出、GPS、备份、安全和 Jodoo 切换说明见 [Customer Master V1](docs/CUSTOMER_MASTER_V1.md)。
+
 2026-07-19 本机五份来源文件首次实际导入结果：1,216 行；新增 1,099、更新 0、没有变化 115、无法匹配排程 2。导入后共有 253 个客户、475 间分店、276 条排程（其中 2 条 BranchID 未匹配）、118 间有效 GPS、106 间 Route Ready。再次导入相同五份文件时新增 0、更新 0、没有变化 1,214、无法匹配 2，验证没有产生重复主档。

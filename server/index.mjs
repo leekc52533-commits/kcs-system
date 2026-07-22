@@ -8,6 +8,8 @@ import { addTemporaryLocation, adoptTemporaryLocation, convertToExisting, create
 import { assignAreaZone, createEmployee, createLocation, createTemporaryVehicle, createVehicle, createZoneGroup, getAreaConfirmationDetail, getZoneGroupMetricDetails, listResources, listZoneGroups, mergeZoneGroups, setAreasConfirmation, setZoneActive, splitZoneGroup, supervisorMoveAreasToZone, updateEmployee, updateLocation, updateVehicle, updateZoneGroup } from './resourceService.mjs'
 import { addFuelRecord, addMaintenanceRecord, addTyreRecord, addUsageRecord, addVehicleDocument, getVehicleDetail, updateVehicleCompliance } from './vehicleService.mjs'
 import { bulkAcceptHighConfidence, decideRecommendation, ensureRecommendations, listRecommendations, listZoneBoundaries, recalculateRecommendations, saveZoneBoundary } from './gpsRecommendationService.mjs'
+import { adoptBranchGps, areaCloseout, captureBranchGps, createBranch, createCustomer, getBranch, getCustomer, listBranches, listBuyers, listCustomers, listGpsCollector, listMasterAudit, listOperationalLocations, saveBuyer, saveOperationalLocation, updateBranch, updateCustomer } from './customerMasterService.mjs'
+import { commitMasterImport, listTransferLogs, masterExport, masterTemplate, previewMasterImport } from './masterTransferService.mjs'
 
 const port = Number(process.env.KCS_API_PORT || 8787)
 
@@ -39,6 +41,30 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'GET' && url.pathname === '/api/system/status') return sendJson(response, 200, { ...getSystemStatus(), integrations: { jodoo: getJodooIntegrationStatus() } })
     if (request.method === 'GET' && url.pathname === '/api/integrations/jodoo/status') return sendJson(response, 200, getJodooIntegrationStatus())
     if (request.method === 'GET' && url.pathname === '/api/dashboard/summary') return sendJson(response, 200, dashboardSummary())
+    if (request.method === 'GET' && url.pathname === '/api/master/area-closeout') return sendJson(response,200,areaCloseout())
+    if (request.method === 'GET' && url.pathname === '/api/master/audit') return sendJson(response,200,{items:listMasterAudit(Object.fromEntries(url.searchParams))})
+    if (request.method === 'GET' && url.pathname === '/api/customers') return sendJson(response,200,listCustomers(Object.fromEntries(url.searchParams)))
+    if (request.method === 'POST' && url.pathname === '/api/customers') return sendJson(response,201,createCustomer((await readJson(request)).payload))
+    if (request.method === 'GET' && /^\/api\/customers\/[^/]+$/.test(url.pathname)) {const item=getCustomer(decodeURIComponent(url.pathname.split('/').at(-1)));return item?sendJson(response,200,item):sendJson(response,404,{error:'Customer not found'})}
+    if (request.method === 'PATCH' && /^\/api\/customers\/[^/]+$/.test(url.pathname)) return sendJson(response,200,updateCustomer(decodeURIComponent(url.pathname.split('/').at(-1)),(await readJson(request)).payload))
+    if (request.method === 'GET' && url.pathname === '/api/master/branches') return sendJson(response,200,listBranches(Object.fromEntries(url.searchParams)))
+    if (request.method === 'POST' && url.pathname === '/api/master/branches') return sendJson(response,201,createBranch((await readJson(request)).payload))
+    if (request.method === 'GET' && /^\/api\/master\/branches\/[^/]+$/.test(url.pathname)) {const item=getBranch(decodeURIComponent(url.pathname.split('/').at(-1)));return item?sendJson(response,200,item):sendJson(response,404,{error:'Branch not found'})}
+    if (request.method === 'PATCH' && /^\/api\/master\/branches\/[^/]+$/.test(url.pathname)) return sendJson(response,200,updateBranch(decodeURIComponent(url.pathname.split('/').at(-1)),(await readJson(request)).payload))
+    if (request.method === 'GET' && url.pathname === '/api/gps-collector') return sendJson(response,200,{items:listGpsCollector(Object.fromEntries(url.searchParams))})
+    if (request.method === 'POST' && /^\/api\/gps-collector\/branch\/[^/]+$/.test(url.pathname)) return sendJson(response,201,captureBranchGps(decodeURIComponent(url.pathname.split('/').at(-1)),(await readJson(request)).payload))
+    if (request.method === 'POST' && /^\/api\/gps-collector\/\d+\/adopt$/.test(url.pathname)) return sendJson(response,200,adoptBranchGps(Number(url.pathname.split('/')[3]),(await readJson(request)).payload))
+    if (request.method === 'GET' && url.pathname === '/api/buyers') return sendJson(response,200,{items:listBuyers(Object.fromEntries(url.searchParams))})
+    if (request.method === 'POST' && url.pathname === '/api/buyers') return sendJson(response,201,saveBuyer((await readJson(request)).payload))
+    if (request.method === 'PATCH' && /^\/api\/buyers\/\d+$/.test(url.pathname)) return sendJson(response,200,saveBuyer((await readJson(request)).payload,Number(url.pathname.split('/').at(-1))))
+    if (request.method === 'GET' && url.pathname === '/api/operational-locations') return sendJson(response,200,{items:listOperationalLocations(Object.fromEntries(url.searchParams))})
+    if (request.method === 'POST' && url.pathname === '/api/operational-locations') return sendJson(response,201,saveOperationalLocation((await readJson(request)).payload))
+    if (request.method === 'PATCH' && /^\/api\/operational-locations\/\d+$/.test(url.pathname)) return sendJson(response,200,saveOperationalLocation((await readJson(request)).payload,Number(url.pathname.split('/').at(-1))))
+    if (request.method === 'GET' && /^\/api\/master-transfer\/[^/]+\/template$/.test(url.pathname)) return sendJson(response,200,masterTemplate(url.pathname.split('/')[3]))
+    if (request.method === 'GET' && /^\/api\/master-transfer\/[^/]+\/export$/.test(url.pathname)) return sendJson(response,200,masterExport(url.pathname.split('/')[3],Object.fromEntries(url.searchParams)))
+    if (request.method === 'GET' && url.pathname === '/api/master-transfer/logs') return sendJson(response,200,{items:listTransferLogs()})
+    if (request.method === 'POST' && url.pathname === '/api/master-transfer/preview') return sendJson(response,200,previewMasterImport((await readJson(request)).payload))
+    if (request.method === 'POST' && url.pathname === '/api/master-transfer/commit') {const payload=(await readJson(request)).payload;return sendJson(response,200,commitMasterImport(payload.batchId,payload))}
     if (request.method === 'GET' && url.pathname === '/api/customer-branches') return sendJson(response, 200, customerBranches(Object.fromEntries(url.searchParams)))
     if (request.method === 'GET' && url.pathname.startsWith('/api/customer-branches/')) {
       const item = customerBranchDetail(decodeURIComponent(url.pathname.slice('/api/customer-branches/'.length)))

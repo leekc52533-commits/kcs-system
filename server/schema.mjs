@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 13
+export const SCHEMA_VERSION = 14
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -34,6 +34,8 @@ CREATE TABLE IF NOT EXISTS areas (
   zone_group_id INTEGER NOT NULL DEFAULT 1 REFERENCES zone_groups(id),
   confirmed_zone_group_id INTEGER REFERENCES zone_groups(id),
   zone_assignment_status TEXT NOT NULL DEFAULT 'pending_confirmation',
+  zone_confirmed_by TEXT,
+  zone_confirmed_at TEXT,
   schedule_text TEXT,
   default_driver_name TEXT,
   is_active INTEGER NOT NULL DEFAULT 1,
@@ -48,6 +50,20 @@ CREATE TABLE IF NOT EXISTS customers (
   tin_number TEXT,
   payment_type TEXT CHECK (payment_type IN ('Cash','Credit') OR payment_type IS NULL),
   occ_price REAL,
+  legal_name TEXT,
+  registration_number TEXT,
+  billing_address TEXT,
+  contact_person TEXT,
+  phone TEXT,
+  whatsapp TEXT,
+  email TEXT,
+  default_payment_type TEXT,
+  credit_terms TEXT,
+  status TEXT NOT NULL DEFAULT 'active',
+  notes TEXT,
+  source_system TEXT NOT NULL DEFAULT 'Jodoo',
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   is_active INTEGER NOT NULL DEFAULT 1,
   source_updated_at TEXT,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -70,6 +86,19 @@ CREATE TABLE IF NOT EXISTS branches (
   truck_access TEXT,
   gps_remark TEXT,
   time_restriction TEXT,
+  contact_person TEXT,
+  phone TEXT,
+  collection_frequency TEXT,
+  assigned_weekdays TEXT,
+  occ_price REAL,
+  payment_type TEXT,
+  proof_requirements TEXT,
+  vehicle_restriction TEXT,
+  status TEXT NOT NULL DEFAULT 'active',
+  notes TEXT,
+  source_system TEXT NOT NULL DEFAULT 'Jodoo',
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   is_active INTEGER NOT NULL DEFAULT 1,
   source_updated_at TEXT,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -91,11 +120,21 @@ CREATE TABLE IF NOT EXISTS branch_schedules (
 
 CREATE TABLE IF NOT EXISTS operational_locations (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  location_code TEXT UNIQUE,
   name TEXT NOT NULL,
   location_type TEXT NOT NULL CHECK (location_type IN ('depot','parking','employee_home','factory','temporary','other')),
   address TEXT,
   latitude REAL,
   longitude REAL,
+  operational_type TEXT,
+  operating_hours TEXT,
+  contact_person TEXT,
+  phone TEXT,
+  status TEXT NOT NULL DEFAULT 'active',
+  notes TEXT,
+  buyer_id INTEGER REFERENCES buyers(id),
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   can_start INTEGER NOT NULL DEFAULT 0,
   can_end INTEGER NOT NULL DEFAULT 0,
   is_active INTEGER NOT NULL DEFAULT 1,
@@ -609,6 +648,54 @@ CREATE TABLE IF NOT EXISTS gps_zone_decisions (
   confirmed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS buyers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  buyer_code TEXT NOT NULL UNIQUE,
+  buyer_name TEXT NOT NULL,
+  location_name TEXT,
+  address TEXT,
+  latitude REAL,
+  longitude REAL,
+  contact_person TEXT,
+  phone TEXT,
+  material_accepted TEXT,
+  operating_hours TEXT,
+  unloading_restrictions TEXT,
+  pricing_notes TEXT,
+  status TEXT NOT NULL DEFAULT 'active',
+  notes TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS master_change_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  change_type TEXT NOT NULL,
+  field_name TEXT,
+  old_value TEXT,
+  new_value TEXT,
+  before_json TEXT,
+  after_json TEXT,
+  reason TEXT,
+  changed_by TEXT NOT NULL,
+  changed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS data_transfer_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  operation_type TEXT NOT NULL,
+  module TEXT NOT NULL,
+  file_name TEXT,
+  file_format TEXT,
+  scope_json TEXT,
+  summary_json TEXT,
+  performed_by TEXT NOT NULL,
+  performed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS branches_customer_idx ON branches(customer_id);
 CREATE INDEX IF NOT EXISTS branches_area_idx ON branches(area_id);
 CREATE INDEX IF NOT EXISTS schedules_branch_idx ON branch_schedules(branch_id);
@@ -632,6 +719,9 @@ CREATE INDEX IF NOT EXISTS vehicle_usage_vehicle_idx ON vehicle_usage_history(ve
 CREATE INDEX IF NOT EXISTS zone_boundaries_zone_idx ON zone_boundaries(zone_group_id,is_active,effective_date);
 CREATE INDEX IF NOT EXISTS gps_recommendations_status_idx ON gps_zone_recommendations(status,confidence,boundary_conflict);
 CREATE INDEX IF NOT EXISTS gps_zone_decisions_branch_idx ON gps_zone_decisions(branch_id,confirmed_at DESC);
+CREATE INDEX IF NOT EXISTS buyers_status_idx ON buyers(status,buyer_name);
+CREATE INDEX IF NOT EXISTS master_change_history_entity_idx ON master_change_history(entity_type,entity_id,changed_at DESC);
+CREATE INDEX IF NOT EXISTS data_transfer_logs_module_idx ON data_transfer_logs(module,performed_at DESC);
 
 INSERT OR IGNORE INTO zone_groups(id,code,name,sort_order) VALUES
   (1,'KUCHING-A','古晋 A区',1),
