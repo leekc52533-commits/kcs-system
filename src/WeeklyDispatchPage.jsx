@@ -75,7 +75,7 @@ function DriverPicker({board,allBoards,employees,onChange}){
 
 function AssistantPicker({board,employees,onChange}){
   const[open,setOpen]=useState(false),[search,setSearch]=useState(''),[selected,setSelected]=useState(board.assistantIds)
-  useEffect(()=>setSelected(board.assistantIds),[board.assistantIds])
+  useEffect(()=>{setSelected(board.assistantIds)},[board.assistantIds])
   const crew=useMemo(()=>employees.filter(item=>(['assistant','crew','attendant / crew'].includes(String(item.role||'').toLowerCase())||item.additionalRoles?.includes('Attendant / Crew'))&&`${item.name} ${item.employeeCode||''}`.toLowerCase().includes(search.toLowerCase())),[employees,search])
   const toggle=(id)=>{const next=selected.includes(id)?selected.filter(item=>item!==id):[...selected,id];setSelected(next);onChange(next)}
   return <div className="resource-picker"><button className={`picker-trigger ${!selected.length?'missing':''}`} onClick={()=>setOpen(!open)}>{board.assistants.length?board.assistants.map(item=>item.name).join('、'):'未分配跟车员'} ▾</button>{open&&<div className="picker-panel employee-picker-panel"><input autoFocus placeholder="搜索跟车员姓名或员工编号" value={search} onChange={event=>setSearch(event.target.value)}/><div>{crew.map(item=>{const disabled=!usableEmployee(item),checked=selected.includes(item.id);return <button key={item.id} disabled={disabled} onClick={()=>toggle(item.id)}><strong>{checked?'☑':'☐'} {item.name} · {item.employeeCode||'无员工编号'}</strong><small>{item.role} · {employmentStatus[item.employmentStatus]||item.employmentStatus} · Base {item.defaultBase||'未设置'} · Area {item.defaultArea||'未设置'}{disabled?' · 不可用':''}</small></button>})}{crew.length===0&&<p>Employee Master 没有 Assistant/Crew</p>}</div></div>}</div>

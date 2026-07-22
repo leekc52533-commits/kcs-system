@@ -7,7 +7,7 @@ const api=async(path,options={})=>{const response=await fetch(path,{headers:{'Co
 export default function GpsMigrationPage(){
   const[batch,setBatch]=useState(null),[batches,setBatches]=useState([]),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState('')
   const load=()=>api('/api/gps-migration/batches').then(x=>setBatches(x.items)).catch(e=>setError(e.message))
-  useEffect(load,[])
+  useEffect(()=>{load()},[])
   const preview=async event=>{const file=event.target.files[0];if(!file)return;setBusy(true);setError('');try{const sheet=await readSpreadsheet(file);setBatch(await api('/api/gps-migration/preview',{method:'POST',body:JSON.stringify({fileName:file.name,rows:sheet.rows})}))}catch(e){setError(e.message)}finally{setBusy(false)}}
   const commit=async()=>{if(!confirm('只会写入没有 official GPS 的 New 记录。Conflict 不会自动覆盖，是否继续？'))return;setBusy(true);try{setBatch(await api(`/api/gps-migration/batches/${batch.id}/commit`,{method:'POST',body:'{}'}));setMessage('迁移已提交；Conflict 仍等待主管逐笔决定。');load()}catch(e){setError(e.message)}finally{setBusy(false)}}
   const resolve=async(row,decision)=>{const reason=prompt('请输入处理原因');if(reason==null)return;await api(`/api/gps-migration/rows/${row.id}/resolve`,{method:'POST',body:JSON.stringify({decision,reason})});setBatch(await api(`/api/gps-migration/batches/${batch.id}`))}

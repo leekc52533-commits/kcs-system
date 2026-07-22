@@ -56,9 +56,9 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && url.pathname === '/api/auth/login') {const result=login((await readJson(request)).payload,meta(request));response.setHeader('Set-Cookie',sessionCookie(result.token,12*3600));return sendJson(response,200,{account:result.account,expiresAt:result.expiresAt})}
     if (request.method === 'POST' && url.pathname === '/api/integrations/jodoo/webhook') {const token=request.headers['x-jodoo-token']||url.searchParams.get('token');if(!verifyJodooWebhookToken(token))return sendJson(response,401,{error:'Invalid Jodoo webhook token'});const{rawBody,payload}=await readJson(request);return sendJson(response,202,{accepted:true,...recordJodooWebhook(rawBody,payload)})}
     const session=getSession(cookies(request).kcs_session)
+    if (request.method === 'GET' && url.pathname === '/api/auth/session') return sendJson(response,200,{account:session||null})
     if(!session)return sendJson(response,401,{error:'请先登录 KCS'})
     request.kcsSession=session
-    if (request.method === 'GET' && url.pathname === '/api/auth/session') return sendJson(response,200,{account:session})
     if (request.method === 'POST' && url.pathname === '/api/auth/logout') {logout(session);response.setHeader('Set-Cookie',sessionCookie('',0));return sendJson(response,200,{ok:true})}
     if (request.method === 'POST' && url.pathname === '/api/auth/change-password') return sendJson(response,200,changePassword(session,(await readJson(request)).payload))
     if(session.mustChangePassword)return sendJson(response,403,{error:'首次登录必须先修改密码',code:'PASSWORD_CHANGE_REQUIRED'})
