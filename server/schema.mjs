@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 14
+export const SCHEMA_VERSION = 15
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -149,10 +149,76 @@ CREATE TABLE IF NOT EXISTS employees (
   job_role TEXT,
   home_location_id INTEGER REFERENCES operational_locations(id),
   employment_status TEXT NOT NULL DEFAULT 'active' CHECK (employment_status IN ('active','on_leave','inactive')),
+  employment_detail_status TEXT,
   default_base_location_id INTEGER REFERENCES operational_locations(id),
   default_area_id INTEGER REFERENCES areas(id),
   is_active INTEGER NOT NULL DEFAULT 1,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS auth_accounts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL UNIQUE REFERENCES employees(id),
+  username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  password_hash TEXT NOT NULL,
+  role TEXT NOT NULL CHECK(role IN ('admin','supervisor','office','driver','crew')),
+  is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0,1)),
+  must_change_password INTEGER NOT NULL DEFAULT 1 CHECK(must_change_password IN (0,1)),
+  failed_login_count INTEGER NOT NULL DEFAULT 0,
+  locked_until TEXT,
+  last_login_at TEXT,
+  password_changed_at TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  disabled_at TEXT,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS employee_job_roles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK(role IN ('Driver','Attendant / Crew','Supervisor','Office','Admin','Mechanic / Workshop','Other')),
+  is_primary INTEGER NOT NULL DEFAULT 0 CHECK(is_primary IN (0,1)),
+  is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0,1)),
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(employee_id,role)
+);
+
+CREATE TABLE IF NOT EXISTS employee_role_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL REFERENCES employees(id),
+  old_roles_json TEXT,
+  new_roles_json TEXT NOT NULL,
+  reason TEXT,
+  changed_by TEXT NOT NULL,
+  changed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS auth_sessions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  account_id INTEGER NOT NULL REFERENCES auth_accounts(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  ip_address TEXT,
+  user_agent TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expires_at TEXT NOT NULL,
+  revoked_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS auth_audit_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  account_id INTEGER REFERENCES auth_accounts(id),
+  employee_id INTEGER REFERENCES employees(id),
+  username TEXT,
+  action TEXT NOT NULL,
+  success INTEGER NOT NULL CHECK(success IN (0,1)),
+  ip_address TEXT,
+  user_agent TEXT,
+  detail_json TEXT,
+  actor TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS vehicles (
@@ -593,8 +659,55 @@ CREATE TABLE IF NOT EXISTS temporary_locations (
   distance_from_official_m REAL,
   captured_by TEXT,
   captured_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  accuracy_m REAL,
+  device_captured_at TEXT,
+  server_received_at TEXT,
+  employee_id INTEGER REFERENCES employees(id),
+  dispatch_id INTEGER REFERENCES dispatches(id),
+  dispatch_stop_id INTEGER REFERENCES dispatch_stops(id),
+  photo_storage_key TEXT,
+  photo_original_name TEXT,
+  photo_content_type TEXT,
+  remark TEXT,
+  review_decision TEXT,
+  review_reason TEXT,
+  reviewed_by_account_id INTEGER REFERENCES auth_accounts(id),
+  reviewed_by TEXT,
+  reviewed_at TEXT,
   adopted_by TEXT,
   adopted_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS gps_migration_batches (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  file_name TEXT NOT NULL,
+  file_hash TEXT NOT NULL UNIQUE,
+  status TEXT NOT NULL DEFAULT 'previewed',
+  summary_json TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  committed_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS gps_migration_rows (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  batch_id INTEGER NOT NULL REFERENCES gps_migration_batches(id) ON DELETE CASCADE,
+  row_number INTEGER NOT NULL,
+  branch_id_text TEXT,
+  customer_id_text TEXT,
+  customer_name TEXT,
+  branch_name TEXT,
+  latitude REAL,
+  longitude REAL,
+  old_latitude REAL,
+  old_longitude REAL,
+  classification TEXT NOT NULL,
+  decision TEXT,
+  decision_reason TEXT,
+  decided_by TEXT,
+  decided_at TEXT,
+  raw_json TEXT,
+  UNIQUE(batch_id,row_number)
 );
 
 CREATE TABLE IF NOT EXISTS zone_boundaries (

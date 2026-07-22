@@ -162,8 +162,9 @@ const resourceOptions=(database)=>({
     (SELECT GROUP_CONCAT(a.name,'|') FROM vehicle_preferred_areas vpa JOIN areas a ON a.id=vpa.area_id WHERE vpa.vehicle_id=v.id) preferredAreaNames
     FROM vehicles v LEFT JOIN operational_locations base ON base.id=v.default_base_location_id ORDER BY v.operational_status='sold',v.is_temporary,COALESCE(v.official_sequence,999),v.vehicle_code`).all().map(item=>({...item,preferredAreas:item.preferredAreaNames?item.preferredAreaNames.split('|'):[]})),
   employees:database.prepare(`SELECT e.id,e.employee_code employeeCode,e.name,e.job_role role,e.employment_status employmentStatus,e.is_active isActive,
-    e.default_base_location_id defaultBaseLocationId,base.name defaultBase,e.default_area_id defaultAreaId,a.name defaultArea
-    FROM employees e LEFT JOIN operational_locations base ON base.id=e.default_base_location_id LEFT JOIN areas a ON a.id=e.default_area_id ORDER BY e.name`).all(),
+    e.default_base_location_id defaultBaseLocationId,base.name defaultBase,e.default_area_id defaultAreaId,a.name defaultArea,GROUP_CONCAT(CASE WHEN r.is_active=1 THEN r.role END,'|') additionalRoles
+    FROM employees e LEFT JOIN operational_locations base ON base.id=e.default_base_location_id LEFT JOIN areas a ON a.id=e.default_area_id LEFT JOIN employee_job_roles r ON r.employee_id=e.id
+    WHERE e.is_active=1 AND e.employment_status='active' GROUP BY e.id ORDER BY e.name`).all().map(item=>({...item,additionalRoles:item.additionalRoles?item.additionalRoles.split('|'):[]})),
   locations:database.prepare('SELECT id,name,can_start canStart,can_end canEnd FROM operational_locations WHERE is_active=1 ORDER BY name').all(),
   areas:database.prepare('SELECT a.id,a.name,a.zone_group_id zoneGroupId,z.name zoneGroup FROM areas a JOIN zone_groups z ON z.id=a.zone_group_id WHERE a.is_active=1 ORDER BY z.sort_order,a.name').all(),
   zoneGroups:database.prepare('SELECT id,code,name,sort_order sortOrder FROM zone_groups WHERE is_active=1 ORDER BY sort_order,id').all()
@@ -291,14 +292,16 @@ export function assignVehicleDay(date,vehicleId,payload,database=defaultDb){
   const before=database.prepare(`SELECT d.driver_id driverId,d.assistant_id assistantId,d.start_location_id startLocationId,d.end_location_id endLocationId FROM dispatch_trips dt JOIN dispatches d ON d.id=dt.dispatch_id WHERE dt.dispatch_day_id=? AND d.vehicle_id=? LIMIT 1`).get(day.id,vehicleId)||{}
   before.assistantIds=database.prepare('SELECT employee_id id FROM dispatch_vehicle_assistants WHERE dispatch_day_id=? AND vehicle_id=? ORDER BY employee_id').all(day.id,vehicleId).map(item=>item.id)
   if(payload.driverId){
-    const driver=database.prepare(`SELECT * FROM employees WHERE id=? AND is_active=1 AND employment_status='active' AND lower(job_role)='driver'`).get(payload.driverId)
+    const driver=database.prepare(`SELECT * FROM employees e WHERE id=? AND is_active=1 AND employment_status='active' AND (lower(job_role)='driver' OR EXISTS(SELECT 1 FROM employee_job_roles r WHERE r.employee_id=e.id AND r.role='Driver' AND r.is_active=1))`).get(payload.driverId)
     if(!driver)throw new Error('所选员工不是可用 Driver')
     const conflict=database.prepare(`SELECT v.vehicle_code vehicle FROM dispatch_trips dt JOIN dispatches d ON d.id=dt.dispatch_id JOIN vehicles v ON v.id=d.vehicle_id
       WHERE dt.dispatch_day_id=? AND d.driver_id=? AND d.vehicle_id<>? LIMIT 1`).get(day.id,payload.driverId,vehicleId)
     if(conflict)throw new Error(`该司机当天已分配给 ${conflict.vehicle}，请先解除原分配`)
+    const assistantConflict=database.prepare(`SELECT 1 FROM dispatch_vehicle_assistants WHERE dispatch_day_id=? AND employee_id=? LIMIT 1`).get(day.id,payload.driverId)
+    if(assistantConflict)throw new Error('该员工当天已担任 Attendant，不能同时担任 Driver')
   }
   const assistantIds=payload.assistantIds===undefined?null:[...new Set((payload.assistantIds||[]).map(Number).filter(Boolean))]
-  if(assistantIds)for(const employeeId of assistantIds){const employee=database.prepare(`SELECT id FROM employees WHERE id=? AND is_active=1 AND employment_status='active' AND lower(job_role) IN ('assistant','crew')`).get(employeeId);if(!employee)throw new Error('所选员工不是可用 Assistant/Crew')}
+  if(assistantIds)for(const employeeId of assistantIds){if(Number(payload.driverId)===employeeId)throw new Error('同一员工同一天不能同时担任 Driver 与 Attendant');const employee=database.prepare(`SELECT id FROM employees e WHERE id=? AND is_active=1 AND employment_status='active' AND (lower(job_role) IN ('assistant','crew','attendant / crew') OR EXISTS(SELECT 1 FROM employee_job_roles r WHERE r.employee_id=e.id AND r.role='Attendant / Crew' AND r.is_active=1))`).get(employeeId);if(!employee)throw new Error('所选员工不是可用 Assistant/Crew');const driving=database.prepare(`SELECT 1 FROM dispatch_trips dt JOIN dispatches d ON d.id=dt.dispatch_id WHERE dt.dispatch_day_id=? AND d.driver_id=? LIMIT 1`).get(day.id,employeeId);if(driving)throw new Error('该员工当天已担任 Driver，不能同时担任 Attendant');const otherVehicle=database.prepare(`SELECT v.vehicle_code vehicle FROM dispatch_vehicle_assistants dva JOIN vehicles v ON v.id=dva.vehicle_id WHERE dva.dispatch_day_id=? AND dva.employee_id=? AND dva.vehicle_id<>? LIMIT 1`).get(day.id,employeeId,vehicleId);if(otherVehicle)throw new Error(`该跟车员当天已分配给 ${otherVehicle.vehicle}，请先解除原分配`)}
   database.exec('BEGIN IMMEDIATE')
   try{
     if(assistantIds){database.prepare('DELETE FROM dispatch_vehicle_assistants WHERE dispatch_day_id=? AND vehicle_id=?').run(day.id,vehicleId);const insert=database.prepare('INSERT INTO dispatch_vehicle_assistants(dispatch_day_id,vehicle_id,employee_id) VALUES(?,?,?)');for(const employeeId of assistantIds)insert.run(day.id,vehicleId,employeeId)}
@@ -355,9 +358,9 @@ export function assignAreaStops(date,payload,database=defaultDb){
   }catch(error){database.exec('ROLLBACK');throw error}
 }
 
-export function driverToday({driverId,date=iso()}={},database=defaultDb){
+export function driverToday({driverId,employeeId=driverId,includeAssistant=false,date=iso()}={},database=defaultDb){
   const day=dayByDate(database,iso(date));if(!day||day.status!=='published')return{date:iso(date),published:false,trips:[]}
-  const trips=database.prepare(`SELECT dt.id,dt.trip_number tripNumber,d.vehicle_id vehicleId,v.vehicle_code vehicle,d.driver_id driverId FROM dispatch_trips dt JOIN dispatches d ON d.id=dt.dispatch_id LEFT JOIN vehicles v ON v.id=d.vehicle_id WHERE dt.dispatch_day_id=? AND d.driver_id=? AND EXISTS(SELECT 1 FROM dispatch_stops ds WHERE ds.dispatch_trip_id=dt.id)`).all(day.id,Number(driverId))
+  const trips=database.prepare(`SELECT dt.id,dt.trip_number tripNumber,d.vehicle_id vehicleId,v.vehicle_code vehicle,d.driver_id driverId FROM dispatch_trips dt JOIN dispatches d ON d.id=dt.dispatch_id LEFT JOIN vehicles v ON v.id=d.vehicle_id WHERE dt.dispatch_day_id=? AND (d.driver_id=? OR (?=1 AND (d.assistant_id=? OR EXISTS(SELECT 1 FROM dispatch_vehicle_assistants dva WHERE dva.dispatch_day_id=dt.dispatch_day_id AND dva.vehicle_id=d.vehicle_id AND dva.employee_id=?)))) AND EXISTS(SELECT 1 FROM dispatch_stops ds WHERE ds.dispatch_trip_id=dt.id)`).all(day.id,Number(employeeId),includeAssistant?1:0,Number(employeeId),Number(employeeId))
   return{date:day.dispatch_date,published:true,trips:trips.map(t=>({...t,assistants:database.prepare(`SELECT e.id,e.employee_code employeeCode,e.name FROM dispatch_vehicle_assistants dva JOIN employees e ON e.id=dva.employee_id WHERE dva.dispatch_day_id=? AND dva.vehicle_id=? ORDER BY e.name`).all(day.id,t.vehicleId),stops:database.prepare(`SELECT ds.id,ds.stop_sequence stopSequence,b.jodoo_branch_id branchId,b.branch_name branchName,c.name customerName,b.address,b.latitude,b.longitude,c.payment_type paymentType,c.occ_price occPrice FROM dispatch_stops ds JOIN branches b ON b.id=ds.branch_id LEFT JOIN customers c ON c.id=b.customer_id WHERE ds.dispatch_trip_id=? ORDER BY ds.stop_sequence`).all(t.id)}))}
 }
 

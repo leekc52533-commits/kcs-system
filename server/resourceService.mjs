@@ -36,11 +36,17 @@ function vehicleRows(database) {
 
 function employeeRows(database) {
   return database.prepare(`SELECT e.id,e.employee_code employeeCode,e.name,e.phone,e.job_role jobRole,e.is_active isActive,
-    e.employment_status employmentStatus,e.default_base_location_id defaultBaseLocationId,base.name defaultBase,
-    e.default_area_id defaultAreaId,a.name defaultArea
+    COALESCE(e.employment_detail_status,e.employment_status) employmentStatus,e.employment_status operationalEmploymentStatus,e.employment_detail_status employmentDetailStatus,e.default_base_location_id defaultBaseLocationId,base.name defaultBase,
+    e.default_area_id defaultAreaId,a.name defaultArea,aa.id accountId,aa.username,aa.role systemRole,aa.is_active accountActive,aa.must_change_password mustChangePassword,
+    GROUP_CONCAT(CASE WHEN ejr.is_active=1 THEN ejr.role END,'|') additionalRoles
     FROM employees e LEFT JOIN operational_locations base ON base.id=e.default_base_location_id
-    LEFT JOIN areas a ON a.id=e.default_area_id ORDER BY e.name`).all()
+    LEFT JOIN areas a ON a.id=e.default_area_id LEFT JOIN auth_accounts aa ON aa.employee_id=e.id LEFT JOIN employee_job_roles ejr ON ejr.employee_id=e.id
+    GROUP BY e.id ORDER BY e.name`).all().map(item=>({...item,additionalRoles:item.additionalRoles?item.additionalRoles.split('|'):[]}))
 }
+
+const JOB_ROLES=new Set(['Driver','Attendant / Crew','Supervisor','Office','Admin','Mechanic / Workshop','Other'])
+const normalizeJobRole=value=>{const raw=text(value)||'Other',mapped={driver:'Driver',assistant:'Attendant / Crew',crew:'Attendant / Crew',attendant:'Attendant / Crew',supervisor:'Supervisor',office:'Office',admin:'Admin',mechanic:'Mechanic / Workshop',workshop:'Mechanic / Workshop',other:'Other'}[raw.toLowerCase()]||raw;if(!JOB_ROLES.has(mapped))throw new Error('Invalid Employee Job Role');return mapped}
+function replaceEmployeeRoles(database,employeeId,primaryRole,roles,actor,reason,oldRoles=[]){const next=[...new Set([primaryRole,...(roles||[]).map(normalizeJobRole)])];database.prepare('DELETE FROM employee_job_roles WHERE employee_id=?').run(employeeId);const insert=database.prepare('INSERT INTO employee_job_roles(employee_id,role,is_primary,created_by) VALUES(?,?,?,?)');for(const role of next)insert.run(employeeId,role,role===primaryRole?1:0,actor);database.prepare('INSERT INTO employee_role_history(employee_id,old_roles_json,new_roles_json,reason,changed_by) VALUES(?,?,?,?,?)').run(employeeId,JSON.stringify(oldRoles),JSON.stringify(next),text(reason)||null,actor)}
 
 export function listResources(database = defaultDb) {
   return {
@@ -275,19 +281,25 @@ export function updateVehicle(id, payload, database = defaultDb) {
 
 export function createEmployee(payload, database = defaultDb) {
   if (!text(payload.name)) throw new Error('Employee Name is required')
-  const result = database.prepare(`INSERT INTO employees(employee_code,name,phone,job_role,employment_status,default_base_location_id,default_area_id,is_active) VALUES(?,?,?,?,?,?,?,?)`).run(
-    text(payload.employeeCode) || null, text(payload.name), text(payload.phone) || null, payload.jobRole || 'driver', payload.employmentStatus || 'active', idOrNull(payload.defaultBaseLocationId), idOrNull(payload.defaultAreaId), payload.isActive === false ? 0 : 1)
+  const primaryRole=normalizeJobRole(payload.jobRole),actor=text(payload.changedBy)||'Supervisor'
+  const detailStatus=payload.employmentStatus||'active',employmentStatus=['terminated','suspended'].includes(detailStatus)?'inactive':detailStatus
+  const result = database.prepare(`INSERT INTO employees(employee_code,name,phone,job_role,employment_status,employment_detail_status,default_base_location_id,default_area_id,is_active) VALUES(?,?,?,?,?,?,?,?,?)`).run(
+    text(payload.employeeCode) || null, text(payload.name), text(payload.phone) || null, primaryRole, employmentStatus,detailStatus, idOrNull(payload.defaultBaseLocationId), idOrNull(payload.defaultAreaId), payload.isActive === false||employmentStatus==='inactive' ? 0 : 1)
+  replaceEmployeeRoles(database,Number(result.lastInsertRowid),primaryRole,payload.additionalRoles,actor,payload.reason)
   return employeeRows(database).find((item) => item.id === Number(result.lastInsertRowid))
 }
 
 export function updateEmployee(id, payload, database = defaultDb) {
   const before = database.prepare('SELECT * FROM employees WHERE id=?').get(id)
   if (!before) throw new Error('Employee not found')
-  database.prepare(`UPDATE employees SET employee_code=?,name=?,phone=?,job_role=?,employment_status=?,default_base_location_id=?,default_area_id=?,is_active=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(
+  const primaryRole=normalizeJobRole(payload.jobRole??before.job_role),oldRoles=database.prepare('SELECT role FROM employee_job_roles WHERE employee_id=? AND is_active=1').all(id).map(item=>item.role),actor=text(payload.changedBy)||'Supervisor'
+  const detailStatus=payload.employmentStatus??before.employment_detail_status??before.employment_status,employmentStatus=['terminated','suspended'].includes(detailStatus)?'inactive':detailStatus
+  database.prepare(`UPDATE employees SET employee_code=?,name=?,phone=?,job_role=?,employment_status=?,employment_detail_status=?,default_base_location_id=?,default_area_id=?,is_active=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(
     payload.employeeCode === undefined ? before.employee_code : text(payload.employeeCode) || null, text(payload.name ?? before.name), payload.phone === undefined ? before.phone : text(payload.phone) || null,
-    payload.jobRole ?? before.job_role, payload.employmentStatus ?? before.employment_status, payload.defaultBaseLocationId === undefined ? before.default_base_location_id : idOrNull(payload.defaultBaseLocationId),
-    payload.defaultAreaId === undefined ? before.default_area_id : idOrNull(payload.defaultAreaId), payload.isActive === undefined ? before.is_active : Number(Boolean(payload.isActive)), id)
-  if (payload.isActive === false || (payload.employmentStatus && payload.employmentStatus !== 'active')) {
+    primaryRole, employmentStatus,detailStatus, payload.defaultBaseLocationId === undefined ? before.default_base_location_id : idOrNull(payload.defaultBaseLocationId),
+    payload.defaultAreaId === undefined ? before.default_area_id : idOrNull(payload.defaultAreaId), payload.isActive === undefined?(employmentStatus==='inactive'?0:before.is_active):Number(Boolean(payload.isActive)), id)
+  const roleChanged=primaryRole!==normalizeJobRole(before.job_role)||Boolean(payload.additionalRoles);if(roleChanged)replaceEmployeeRoles(database,id,primaryRole,payload.additionalRoles??oldRoles.filter(role=>role!==primaryRole),actor,payload.reason,oldRoles)
+  if (roleChanged||payload.isActive === false || (payload.employmentStatus && payload.employmentStatus !== 'active')) {
     const dates = database.prepare(`SELECT DISTINCT dd.dispatch_date FROM dispatch_days dd
       LEFT JOIN dispatch_trips dt ON dt.dispatch_day_id=dd.id LEFT JOIN dispatches d ON d.id=dt.dispatch_id
       LEFT JOIN dispatch_vehicle_assistants dva ON dva.dispatch_day_id=dd.id

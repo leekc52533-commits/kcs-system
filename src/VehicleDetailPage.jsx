@@ -6,10 +6,10 @@ const filePayload=file=>new Promise((resolve,reject)=>{if(!file)return resolve(n
 const money=value=>value==null?'—':`RM ${Number(value).toFixed(2)}`
 const value=value=>value==null||value===''?'—':value
 
-export default function VehicleDetailPage({vehicleId,resources,onBack}){
+export default function VehicleDetailPage({vehicleId,resources,onBack,currentUser}){
   const[detail,setDetail]=useState(null),[error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false)
   const load=useCallback(()=>api(`/api/vehicles/${vehicleId}`).then(setDetail).catch(item=>setError(item.message)),[vehicleId]);useEffect(()=>{load()},[load])
-  const save=async(url,body)=>{setBusy(true);setError('');try{await api(url,{method:url===`/api/vehicles/${vehicleId}`?'PATCH':'POST',body:JSON.stringify({...body,changedBy:'Supervisor',updatedBy:'Supervisor',uploadedBy:'Supervisor'})});setMessage('车辆资料已保存。');await load()}catch(item){setError(item.message)}finally{setBusy(false)}}
+  const save=async(url,body)=>{setBusy(true);setError('');try{await api(url,{method:url===`/api/vehicles/${vehicleId}`?'PATCH':'POST',body:JSON.stringify({...body,changedBy:currentUser.name,updatedBy:currentUser.name,uploadedBy:currentUser.name})});setMessage('车辆资料已保存。');await load()}catch(item){setError(item.message)}finally{setBusy(false)}}
   if(!detail)return <div className="page"><button onClick={onBack}>← 返回 Vehicle Master</button>{error||'车辆资料载入中…'}</div>
   const sold=detail.status==='sold'
   return <div className="page vehicle-detail-page"><button className="vehicle-back" onClick={onBack}>← 返回 Vehicle Master</button><header className="vehicle-detail-title"><div><em>VEHICLE MANAGEMENT</em><h1>{detail.vehicleCode} — {detail.registrationNumber}</h1><p>{sold?'已出售车辆：仅保留历史，不参加派车、保养或法定提醒。':'司机按每天派车记录关联，不会永久绑定车辆。'}</p></div><span className={`vehicle-state ${detail.status}`}>{detail.status}</span></header>{message&&<div className="planner-message">✓ {message}</div>}{error&&<div className="data-error">{error}</div>}

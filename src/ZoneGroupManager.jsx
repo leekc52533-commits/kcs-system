@@ -4,7 +4,7 @@ import './ZoneGroupManager.css'
 const request=async url=>{const response=await fetch(url),data=await response.json();if(!response.ok)throw new Error(data.error||'资料载入失败');return data}
 const gpsText=branch=>Number.isFinite(branch.latitude)&&Number.isFinite(branch.longitude)&&!(branch.latitude===0&&branch.longitude===0)?`${branch.latitude}, ${branch.longitude}`:'缺少正式 GPS'
 
-export default function ZoneGroupManager({groups,areas,save,currentUser={name:'LSK',role:'supervisor'}}){
+export default function ZoneGroupManager({groups,areas,save,currentUser}){
   const[form,setForm]=useState({name:'',code:'',sortOrder:''}),[search,setSearch]=useState(''),[selected,setSelected]=useState([]),[status,setStatus]=useState('pending'),[zoneFilter,setZoneFilter]=useState('all'),[gpsFilter,setGpsFilter]=useState('all'),[sort,setSort]=useState('name'),[detailId,setDetailId]=useState(null),[detail,setDetail]=useState(null),[detailError,setDetailError]=useState(''),[bulkZone,setBulkZone]=useState(''),[metricDetail,setMetricDetail]=useState(null),[metricVersion,setMetricVersion]=useState(0)
   useEffect(()=>{if(!detailId){setDetail(null);return}setDetail(null);setDetailError('');request(`/api/areas/${detailId}/zone-confirmation`).then(setDetail).catch(error=>setDetailError(error.message))},[detailId,areas])
   const filtered=useMemo(()=>areas.filter(area=>{

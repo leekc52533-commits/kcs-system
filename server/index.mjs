@@ -1,22 +1,34 @@
 import http from 'node:http'
-import { databasePath, getSystemStatus, uploadsDir } from './database.mjs'
+import os from 'node:os'
+import fs from 'node:fs'
+import path from 'node:path'
+import { db, databasePath, getSystemStatus, uploadsDir } from './database.mjs'
 import { getJodooIntegrationStatus, recordJodooWebhook, verifyJodooWebhookToken } from './jodoo.mjs'
 import { commitImport, previewImport } from './importService.mjs'
 import { customerBranchDetail, customerBranches, dashboardSummary, dataQualitySummary, importBatches, importErrors, schedules } from './queryService.mjs'
 import { approveDay, assignAreaStops, assignVehicleDay, createScheduleException, createStop, createTrip, deleteStop, driverToday, generateDay, generateWeek, getDispatchDay, getDispatchWeek, promisedCheck, publishDay, reopenDay, transferVehicleDay, updateStop, updateTrip } from './dispatchService.mjs'
-import { addTemporaryLocation, adoptTemporaryLocation, convertToExisting, createSpecialRequest, linkNewAccount, listSpecialRequests, listTemporaryLocations, scheduleSpecialRequest, searchCustomerBranches, updateSpecialRequest } from './specialRequestService.mjs'
+import { addTemporaryLocation, adoptTemporaryLocation, convertToExisting, createSpecialRequest, linkNewAccount, listSpecialRequests, listTemporaryLocations, reviewTemporaryLocation, scheduleSpecialRequest, searchCustomerBranches, updateSpecialRequest } from './specialRequestService.mjs'
 import { assignAreaZone, createEmployee, createLocation, createTemporaryVehicle, createVehicle, createZoneGroup, getAreaConfirmationDetail, getZoneGroupMetricDetails, listResources, listZoneGroups, mergeZoneGroups, setAreasConfirmation, setZoneActive, splitZoneGroup, supervisorMoveAreasToZone, updateEmployee, updateLocation, updateVehicle, updateZoneGroup } from './resourceService.mjs'
 import { addFuelRecord, addMaintenanceRecord, addTyreRecord, addUsageRecord, addVehicleDocument, getVehicleDetail, updateVehicleCompliance } from './vehicleService.mjs'
 import { bulkAcceptHighConfidence, decideRecommendation, ensureRecommendations, listRecommendations, listZoneBoundaries, recalculateRecommendations, saveZoneBoundary } from './gpsRecommendationService.mjs'
 import { adoptBranchGps, areaCloseout, captureBranchGps, createBranch, createCustomer, getBranch, getCustomer, listBranches, listBuyers, listCustomers, listGpsCollector, listMasterAudit, listOperationalLocations, saveBuyer, saveOperationalLocation, updateBranch, updateCustomer } from './customerMasterService.mjs'
 import { commitMasterImport, listTransferLogs, masterExport, masterTemplate, previewMasterImport } from './masterTransferService.mjs'
+import { bootstrapAccount, changePassword, createAccount, getSession, listAccounts, listAuthAudit, login, logout, roleCan, setupStatus, updateAccount } from './authService.mjs'
+import { commitGpsMigration, getGpsMigrationBatch, gpsMigrationTemplate, listGpsMigrationBatches, previewGpsMigration, resolveGpsMigrationRow } from './gpsMigrationService.mjs'
 
 const port = Number(process.env.KCS_API_PORT || 8787)
+const host = process.env.KCS_API_HOST || '0.0.0.0'
 
 function sendJson(response, status, value) {
   response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' })
   response.end(JSON.stringify(value))
 }
+
+const meta=request=>({ipAddress:request.socket.remoteAddress||null,userAgent:request.headers['user-agent']||null})
+const cookies=request=>Object.fromEntries(String(request.headers.cookie||'').split(';').map(item=>item.trim().split('=').map(decodeURIComponent)).filter(item=>item.length===2))
+const sessionCookie=(token,maxAge)=>`kcs_session=${encodeURIComponent(token||'')}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${process.env.KCS_HTTPS==='1'?'; Secure':''}`
+const networkUrls=()=>Object.values(os.networkInterfaces()).flat().filter(item=>item&&item.family==='IPv4'&&!item.internal).map(item=>`http://${item.address}:5175`)
+function permissionFor(pathname){if(pathname.startsWith('/api/mobile/'))return'mobile';if(/^\/api\/gps-collector\/branch\//.test(pathname))return'gps_capture';if(pathname==='/api/gps-collector'||/^\/api\/gps-collector\/\d+\/(adopt|review|photo)$/.test(pathname)||/^\/api\/temporary-locations\/\d+\/adopt$/.test(pathname))return'gps_review';if(pathname.startsWith('/api/auth/accounts')||pathname==='/api/auth/audit')return'accounts';if(/^\/api\/gps-migration\/(?:batches\/\d+\/commit|rows\/\d+\/resolve)$/.test(pathname))return'gps_migration_approve';if(pathname.startsWith('/api/gps-migration'))return'gps_migration';return'desktop'}
 
 async function readJson(request, maxBytes = 15_000_000) {
   const chunks = []
@@ -26,8 +38,9 @@ async function readJson(request, maxBytes = 15_000_000) {
     if (total > maxBytes) throw new Error('Request body is too large')
     chunks.push(chunk)
   }
-  const rawBody = Buffer.concat(chunks).toString('utf8')
-  return { rawBody, payload: JSON.parse(rawBody || '{}') }
+  const rawBody = Buffer.concat(chunks).toString('utf8'),payload=JSON.parse(rawBody || '{}')
+  if(request.kcsSession){const actor=request.kcsSession.employeeName;payload.changedBy=actor;for(const key of ['createdBy','approvedBy','publishedBy','reopenedBy','scheduledBy','generatedBy','adoptedBy','capturedBy','updatedBy','uploadedBy','confirmedBy'])if(Object.hasOwn(payload,key))payload[key]=actor}
+  return { rawBody, payload }
 }
 
 const server = http.createServer(async (request, response) => {
@@ -38,6 +51,34 @@ const server = http.createServer(async (request, response) => {
       return response.end()
     }
     if (request.method === 'GET' && url.pathname === '/api/health') return sendJson(response, 200, { status: 'ok', service: 'kcs-api' })
+    if (request.method === 'GET' && url.pathname === '/api/auth/setup-status') return sendJson(response,200,setupStatus())
+    if (request.method === 'POST' && url.pathname === '/api/auth/bootstrap') return sendJson(response,201,bootstrapAccount((await readJson(request)).payload,meta(request)))
+    if (request.method === 'POST' && url.pathname === '/api/auth/login') {const result=login((await readJson(request)).payload,meta(request));response.setHeader('Set-Cookie',sessionCookie(result.token,12*3600));return sendJson(response,200,{account:result.account,expiresAt:result.expiresAt})}
+    if (request.method === 'POST' && url.pathname === '/api/integrations/jodoo/webhook') {const token=request.headers['x-jodoo-token']||url.searchParams.get('token');if(!verifyJodooWebhookToken(token))return sendJson(response,401,{error:'Invalid Jodoo webhook token'});const{rawBody,payload}=await readJson(request);return sendJson(response,202,{accepted:true,...recordJodooWebhook(rawBody,payload)})}
+    const session=getSession(cookies(request).kcs_session)
+    if(!session)return sendJson(response,401,{error:'请先登录 KCS'})
+    request.kcsSession=session
+    if (request.method === 'GET' && url.pathname === '/api/auth/session') return sendJson(response,200,{account:session})
+    if (request.method === 'POST' && url.pathname === '/api/auth/logout') {logout(session);response.setHeader('Set-Cookie',sessionCookie('',0));return sendJson(response,200,{ok:true})}
+    if (request.method === 'POST' && url.pathname === '/api/auth/change-password') return sendJson(response,200,changePassword(session,(await readJson(request)).payload))
+    if(session.mustChangePassword)return sendJson(response,403,{error:'首次登录必须先修改密码',code:'PASSWORD_CHANGE_REQUIRED'})
+    const permission=permissionFor(url.pathname)
+    if(!roleCan(session.role,permission))return sendJson(response,403,{error:'此账号没有权限执行该操作'})
+    if (request.method === 'GET' && url.pathname === '/api/auth/accounts') return sendJson(response,200,{items:listAccounts()})
+    if (request.method === 'POST' && url.pathname === '/api/auth/accounts') return sendJson(response,201,createAccount((await readJson(request)).payload,session,meta(request)))
+    if (request.method === 'PATCH' && /^\/api\/auth\/accounts\/\d+$/.test(url.pathname)) return sendJson(response,200,updateAccount(Number(url.pathname.split('/').at(-1)),(await readJson(request)).payload,session,meta(request)))
+    if (request.method === 'GET' && url.pathname === '/api/auth/audit') return sendJson(response,200,{items:listAuthAudit(Object.fromEntries(url.searchParams))})
+    if (request.method === 'GET' && url.pathname === '/api/system/network') return sendJson(response,200,{host,apiPort:port,lanUrls:networkUrls(),httpsRequiredForGps:true})
+    if (request.method === 'GET' && url.pathname === '/api/mobile/today') {const data=driverToday({employeeId:session.employeeId,includeAssistant:session.role==='crew',date:url.searchParams.get('date')||undefined});for(const trip of data.trips||[])for(const stop of trip.stops||[]){delete stop.occPrice;delete stop.paymentType;delete stop.latitude;delete stop.longitude}return sendJson(response,200,data)}
+    if (request.method === 'GET' && url.pathname === '/api/mobile/branch-search') {const search=String(url.searchParams.get('search')||'').trim(),q=`%${search}%`;const items=db.prepare(`SELECT b.jodoo_branch_id branchId,b.branch_name branchName,c.name customerName,b.address,CASE WHEN b.latitude BETWEEN -90 AND 90 AND b.longitude BETWEEN -180 AND 180 AND NOT(b.latitude=0 AND b.longitude=0) THEN 1 ELSE 0 END hasOfficialGps,(SELECT verification_status FROM temporary_locations t WHERE t.branch_id=b.id ORDER BY t.id DESC LIMIT 1) temporaryGpsStatus FROM branches b LEFT JOIN customers c ON c.id=b.customer_id WHERE ?<>'' AND (b.jodoo_branch_id LIKE ? OR b.branch_name LIKE ? OR c.name LIKE ?) ORDER BY c.name,b.branch_name LIMIT 30`).all(search,q,q,q);return sendJson(response,200,{items})}
+    if (request.method === 'GET' && url.pathname === '/api/mobile/submissions') return sendJson(response,200,{items:listTemporaryLocations({employeeId:session.employeeId})})
+    if (request.method === 'POST' && url.pathname === '/api/mobile/temporary-customers') {const payload=(await readJson(request)).payload;return sendJson(response,201,createSpecialRequest({...payload,employeeId:session.employeeId,requestType:'potential_new',createdBy:session.employeeName,requestedCollectionDate:payload.requestedCollectionDate||new Date().toISOString().slice(0,10),status:'awaiting_supervisor'}))}
+    if (request.method === 'GET' && url.pathname === '/api/gps-migration/template') return sendJson(response,200,gpsMigrationTemplate())
+    if (request.method === 'GET' && url.pathname === '/api/gps-migration/batches') return sendJson(response,200,{items:listGpsMigrationBatches()})
+    if (request.method === 'GET' && /^\/api\/gps-migration\/batches\/\d+$/.test(url.pathname)) return sendJson(response,200,getGpsMigrationBatch(Number(url.pathname.split('/').at(-1))))
+    if (request.method === 'POST' && url.pathname === '/api/gps-migration/preview') return sendJson(response,200,previewGpsMigration((await readJson(request)).payload,session.username))
+    if (request.method === 'POST' && /^\/api\/gps-migration\/batches\/\d+\/commit$/.test(url.pathname)) return sendJson(response,200,commitGpsMigration(Number(url.pathname.split('/')[4]),session.username))
+    if (request.method === 'POST' && /^\/api\/gps-migration\/rows\/\d+\/resolve$/.test(url.pathname)) return sendJson(response,200,resolveGpsMigrationRow(Number(url.pathname.split('/')[4]),(await readJson(request)).payload,session.username))
     if (request.method === 'GET' && url.pathname === '/api/system/status') return sendJson(response, 200, { ...getSystemStatus(), integrations: { jodoo: getJodooIntegrationStatus() } })
     if (request.method === 'GET' && url.pathname === '/api/integrations/jodoo/status') return sendJson(response, 200, getJodooIntegrationStatus())
     if (request.method === 'GET' && url.pathname === '/api/dashboard/summary') return sendJson(response, 200, dashboardSummary())
@@ -52,8 +93,10 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'GET' && /^\/api\/master\/branches\/[^/]+$/.test(url.pathname)) {const item=getBranch(decodeURIComponent(url.pathname.split('/').at(-1)));return item?sendJson(response,200,item):sendJson(response,404,{error:'Branch not found'})}
     if (request.method === 'PATCH' && /^\/api\/master\/branches\/[^/]+$/.test(url.pathname)) return sendJson(response,200,updateBranch(decodeURIComponent(url.pathname.split('/').at(-1)),(await readJson(request)).payload))
     if (request.method === 'GET' && url.pathname === '/api/gps-collector') return sendJson(response,200,{items:listGpsCollector(Object.fromEntries(url.searchParams))})
-    if (request.method === 'POST' && /^\/api\/gps-collector\/branch\/[^/]+$/.test(url.pathname)) return sendJson(response,201,captureBranchGps(decodeURIComponent(url.pathname.split('/').at(-1)),(await readJson(request)).payload))
-    if (request.method === 'POST' && /^\/api\/gps-collector\/\d+\/adopt$/.test(url.pathname)) return sendJson(response,200,adoptBranchGps(Number(url.pathname.split('/')[3]),(await readJson(request)).payload))
+    if (request.method === 'GET' && /^\/api\/gps-collector\/\d+\/photo$/.test(url.pathname)) {const item=db.prepare('SELECT photo_storage_key,photo_content_type FROM temporary_locations WHERE id=?').get(Number(url.pathname.split('/')[3]));if(!item?.photo_storage_key)return sendJson(response,404,{error:'GPS photo not found'});const file=path.resolve(uploadsDir,item.photo_storage_key),root=path.resolve(uploadsDir)+path.sep;if(!file.startsWith(root)||!fs.existsSync(file))return sendJson(response,404,{error:'GPS photo not found'});response.writeHead(200,{'Content-Type':item.photo_content_type||'application/octet-stream','Cache-Control':'private, max-age=60'});return fs.createReadStream(file).pipe(response)}
+    if (request.method === 'POST' && /^\/api\/gps-collector\/branch\/[^/]+$/.test(url.pathname)) {const payload=(await readJson(request)).payload;if(['driver','crew'].includes(session.role)&&!payload.photo?.dataUrl)throw new Error('司机或跟车员采集 GPS 必须上传现场照片');return sendJson(response,201,captureBranchGps(decodeURIComponent(url.pathname.split('/').at(-1)),{...payload,employeeId:session.employeeId,capturedBy:session.employeeName,changedBy:session.employeeName}))}
+    if (request.method === 'POST' && /^\/api\/gps-collector\/\d+\/adopt$/.test(url.pathname)) {const payload=(await readJson(request)).payload;return sendJson(response,200,adoptBranchGps(Number(url.pathname.split('/')[3]),{...payload,adoptedBy:session.employeeName,changedBy:session.employeeName}))}
+    if (request.method === 'POST' && /^\/api\/gps-collector\/\d+\/review$/.test(url.pathname)) {const payload=(await readJson(request)).payload;return sendJson(response,200,reviewTemporaryLocation(Number(url.pathname.split('/')[3]),{...payload,reviewedBy:session.employeeName,reviewedByAccountId:session.id}))}
     if (request.method === 'GET' && url.pathname === '/api/buyers') return sendJson(response,200,{items:listBuyers(Object.fromEntries(url.searchParams))})
     if (request.method === 'POST' && url.pathname === '/api/buyers') return sendJson(response,201,saveBuyer((await readJson(request)).payload))
     if (request.method === 'PATCH' && /^\/api\/buyers\/\d+$/.test(url.pathname)) return sendJson(response,200,saveBuyer((await readJson(request)).payload,Number(url.pathname.split('/').at(-1))))
@@ -131,17 +174,11 @@ const server = http.createServer(async (request, response) => {
     }
     if (request.method === 'POST' && url.pathname === '/api/temporary-locations') return sendJson(response,201,addTemporaryLocation((await readJson(request)).payload))
     if (request.method === 'GET' && url.pathname === '/api/temporary-locations') return sendJson(response,200,{items:listTemporaryLocations(Object.fromEntries(url.searchParams))})
-    if (request.method === 'POST' && /^\/api\/temporary-locations\/\d+\/adopt$/.test(url.pathname)) return sendJson(response,200,adoptTemporaryLocation(Number(url.pathname.split('/')[3]),(await readJson(request)).payload))
+    if (request.method === 'POST' && /^\/api\/temporary-locations\/\d+\/adopt$/.test(url.pathname)) {const payload=(await readJson(request)).payload;return sendJson(response,200,adoptTemporaryLocation(Number(url.pathname.split('/')[3]),{...payload,adoptedBy:session.employeeName}))}
     if (request.method === 'GET' && url.pathname === '/api/import-batches') return sendJson(response, 200, { items: importBatches() })
     if (request.method === 'GET' && /^\/api\/import-batches\/\d+\/errors$/.test(url.pathname)) return sendJson(response, 200, { items: importErrors(Number(url.pathname.split('/')[3])) })
     if (request.method === 'POST' && url.pathname === '/api/import/preview') return sendJson(response, 200, previewImport((await readJson(request)).payload))
     if (request.method === 'POST' && url.pathname === '/api/import/commit') return sendJson(response, 200, commitImport((await readJson(request)).payload.batchId))
-    if (request.method === 'POST' && url.pathname === '/api/integrations/jodoo/webhook') {
-      const token = request.headers['x-jodoo-token'] || url.searchParams.get('token')
-      if (!verifyJodooWebhookToken(token)) return sendJson(response, 401, { error: 'Invalid Jodoo webhook token' })
-      const { rawBody, payload } = await readJson(request)
-      return sendJson(response, 202, { accepted: true, ...recordJodooWebhook(rawBody, payload) })
-    }
     return sendJson(response, 404, { error: 'Not found' })
   } catch (error) {
     return sendJson(response, error instanceof SyntaxError ? 400 : 500, { error: error.message })
@@ -149,8 +186,9 @@ const server = http.createServer(async (request, response) => {
 })
 
 ensureRecommendations()
-server.listen(port, '127.0.0.1', () => {
-  console.log(`[KCS API] ready on http://127.0.0.1:${port}`)
+server.listen(port, host, () => {
+  console.log(`[KCS API] ready on http://${host}:${port}`)
+  for(const url of networkUrls())console.log(`[KCS Mobile] ${url}`)
   console.log(`[KCS API] database: ${databasePath}`)
   console.log(`[KCS API] uploads: ${uploadsDir}`)
 })

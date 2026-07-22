@@ -154,7 +154,7 @@ SQLite schema 目前为 v13。`branches` 保留现有架构，同时保存原始
 - `POST /api/employees`、`PATCH /api/employees/:id`
 - `POST /api/locations`、`PATCH /api/locations/:id`
 
-V1 尚未包含 Google Maps 道路优化、实时车辆定位、奖金系统、Jodoo API 自动同步、完整登录/角色权限和员工请假流程。车辆的启用、停用和维修状态已有基础管理。当前司机资料隔离由 API 的日期、发布状态和 driverId 过滤实现；正式上线前必须接入登录身份，不能信任浏览器传入的 driverId。
+V1 尚未包含 Google Maps 道路优化、实时车辆定位、奖金系统、Jodoo API 自动同步和员工请假流程。KCS 内部登录、Session 与服务端角色权限已经完成；Driver/Crew 身份取自登录 Session，不再信任浏览器传入的 driverId。正式上线前仍须配置 HTTPS、反向代理、备份和灾难恢复。
 
 ## 项目结构
 
@@ -179,6 +179,17 @@ KCS 现在是新 Customer、Customer Branch、official/temporary GPS、Buyer 与
 - Operational Location：Company Yard、Buyer、Employee Base、Workshop、Fuel Station、Other。
 - Excel / CSV：七类主档均支持空白模板、预览、New/Update/Unchanged/Error、错误导出、事务提交、幂等导入及带时间戳导出。
 
-数据库 schema 已升级到 v14。现有 253 个 Customer、475 个 Branch 与 97 个已确认 Area 原样保留；旧 Dispatch 的 Area/Zone snapshot 不会改变。详细开发、管理员操作、API、导入导出、GPS、备份、安全和 Jodoo 切换说明见 [Customer Master V1](docs/CUSTOMER_MASTER_V1.md)。
+数据库 schema 已升级到 v15。现有 253 个 Customer、475 个 Branch、97 个 Area、9 个 Active Zone 与 118 个 official GPS 原样保留；旧 Dispatch 的 Area/Zone snapshot 不会改变。Customer 主档说明见 [Customer Master V1](docs/CUSTOMER_MASTER_V1.md)，登录、手机 GPS 与旧 GPS 迁移说明见 [Login / Mobile GPS / Migration V1](docs/LOGIN_MOBILE_GPS_MIGRATION_V1.md)。
+
+## Login、Employee Permission、Mobile GPS & Migration V1
+
+- 首次启动建立 Admin；每位员工使用唯一个人用户名，首次登录必须改密。
+- 密码使用 scrypt 加盐哈希，Session 使用 HttpOnly Cookie；连续失败会锁定并保存登录审计。
+- Employee Job Role 与 System Role 分开，支持主要岗位和兼任岗位。
+- Driver/Crew 登录后只进入手机简化界面，只能查看当天已发布且分配给自己的路线。
+- 手机 GPS 继续调用现有 GPS Collector API，只写入 `temporary_locations`；现场照片保存在本机 `data/uploads/gps/`。
+- Supervisor 在现有 GPS Collector 采用、拒绝、保留 official 或要求重新采集。
+- “旧 GPS 迁移”按 BranchID 预览 New / Unchanged / Conflict / Branch Not Found / Invalid GPS / Duplicate Source；Conflict 不自动覆盖。
+- 开发服务绑定 `0.0.0.0`，`GET /api/system/network` 会列出 LAN URL。手机 Geolocation 正式使用时必须配置 HTTPS。
 
 2026-07-19 本机五份来源文件首次实际导入结果：1,216 行；新增 1,099、更新 0、没有变化 115、无法匹配排程 2。导入后共有 253 个客户、475 间分店、276 条排程（其中 2 条 BranchID 未匹配）、118 间有效 GPS、106 间 Route Ready。再次导入相同五份文件时新增 0、更新 0、没有变化 1,214、无法匹配 2，验证没有产生重复主档。

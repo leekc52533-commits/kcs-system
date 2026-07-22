@@ -94,6 +94,22 @@ ensureColumn('vehicles', 'sold_at', 'TEXT')
 ensureColumn('employees', 'employment_status', "TEXT NOT NULL DEFAULT 'active'")
 ensureColumn('employees', 'default_base_location_id', 'INTEGER REFERENCES operational_locations(id)')
 ensureColumn('employees', 'default_area_id', 'INTEGER REFERENCES areas(id)')
+ensureColumn('employees', 'employment_detail_status', 'TEXT')
+ensureColumn('temporary_locations', 'accuracy_m', 'REAL')
+ensureColumn('temporary_locations', 'device_captured_at', 'TEXT')
+ensureColumn('temporary_locations', 'server_received_at', 'TEXT')
+ensureColumn('temporary_locations', 'employee_id', 'INTEGER REFERENCES employees(id)')
+ensureColumn('temporary_locations', 'dispatch_id', 'INTEGER REFERENCES dispatches(id)')
+ensureColumn('temporary_locations', 'dispatch_stop_id', 'INTEGER REFERENCES dispatch_stops(id)')
+ensureColumn('temporary_locations', 'photo_storage_key', 'TEXT')
+ensureColumn('temporary_locations', 'photo_original_name', 'TEXT')
+ensureColumn('temporary_locations', 'photo_content_type', 'TEXT')
+ensureColumn('temporary_locations', 'remark', 'TEXT')
+ensureColumn('temporary_locations', 'review_decision', 'TEXT')
+ensureColumn('temporary_locations', 'review_reason', 'TEXT')
+ensureColumn('temporary_locations', 'reviewed_by_account_id', 'INTEGER REFERENCES auth_accounts(id)')
+ensureColumn('temporary_locations', 'reviewed_by', 'TEXT')
+ensureColumn('temporary_locations', 'reviewed_at', 'TEXT')
 db.exec(`
   CREATE INDEX IF NOT EXISTS areas_zone_group_idx ON areas(zone_group_id, name);
   CREATE INDEX IF NOT EXISTS customers_status_idx ON customers(status,name);
@@ -190,6 +206,7 @@ if (currentVersion === 0) {
     `)
     db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (14)').run()
   }
+  if (currentVersion < 15) db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (15)').run()
 }
 
 const officialVehicles = [
@@ -225,10 +242,16 @@ function normalizeOfficialVehicles() {
   } catch(error){db.exec('ROLLBACK');throw error}
 }
 normalizeOfficialVehicles()
+db.exec(`
+  INSERT OR IGNORE INTO employee_job_roles(employee_id,role,is_primary,created_by)
+  SELECT id,
+    CASE lower(trim(COALESCE(job_role,''))) WHEN 'driver' THEN 'Driver' WHEN 'assistant' THEN 'Attendant / Crew' WHEN 'crew' THEN 'Attendant / Crew' WHEN 'supervisor' THEN 'Supervisor' WHEN 'office' THEN 'Office' WHEN 'admin' THEN 'Admin' WHEN 'mechanic' THEN 'Mechanic / Workshop' ELSE 'Other' END,
+    1,'Schema v15 migration' FROM employees;
+`)
 db.exec(`CREATE TRIGGER IF NOT EXISTS sold_vehicle_no_delete BEFORE DELETE ON vehicles WHEN OLD.operational_status='sold' BEGIN SELECT RAISE(ABORT,'Sold vehicle history cannot be deleted'); END;`)
 
 export function getSystemStatus() {
-  const tableNames = ['users','customers','branches','branch_schedules','zone_groups','areas','zone_boundaries','gps_zone_recommendations','gps_zone_decisions','employees','vehicles','vehicle_documents','vehicle_maintenance_records','vehicle_fuel_records','vehicle_tyre_records','vehicle_compliance_reminders','vehicle_status_history','vehicle_usage_history','buyers','operational_locations','master_change_history','data_transfer_logs','dispatches','dispatch_stops','dispatch_days','dispatch_trips','special_collection_requests','schedule_exceptions','stop_documents','import_batches','import_errors','jodoo_sync_events','jodoo_outbox_jobs']
+  const tableNames = ['users','auth_accounts','auth_sessions','auth_audit_logs','customers','branches','branch_schedules','zone_groups','areas','zone_boundaries','gps_zone_recommendations','gps_zone_decisions','employees','vehicles','vehicle_documents','vehicle_maintenance_records','vehicle_fuel_records','vehicle_tyre_records','vehicle_compliance_reminders','vehicle_status_history','vehicle_usage_history','buyers','operational_locations','master_change_history','data_transfer_logs','dispatches','dispatch_stops','dispatch_days','dispatch_trips','special_collection_requests','schedule_exceptions','temporary_locations','gps_migration_batches','gps_migration_rows','stop_documents','import_batches','import_errors','jodoo_sync_events','jodoo_outbox_jobs']
   const counts = Object.fromEntries(tableNames.map((table) => [table, db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get().count]))
   return { database: 'connected', schemaVersion: SCHEMA_VERSION, counts }
 }
