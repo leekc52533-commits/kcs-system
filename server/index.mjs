@@ -8,7 +8,7 @@ import { commitImport, previewImport } from './importService.mjs'
 import { customerBranchDetail, customerBranches, dashboardSummary, dataQualitySummary, importBatches, importErrors, schedules } from './queryService.mjs'
 import { approveDay, assignAreaStops, assignVehicleDay, createScheduleException, createStop, createTrip, deleteStop, driverToday, generateDay, generateWeek, getDispatchDay, getDispatchWeek, promisedCheck, publishDay, reopenDay, transferVehicleDay, updateStop, updateTrip } from './dispatchService.mjs'
 import { addTemporaryLocation, adoptTemporaryLocation, convertToExisting, createSpecialRequest, linkNewAccount, listSpecialRequests, listTemporaryLocations, reviewTemporaryLocation, scheduleSpecialRequest, searchCustomerBranches, updateSpecialRequest } from './specialRequestService.mjs'
-import { assignAreaZone, createEmployee, createLocation, createTemporaryVehicle, createVehicle, createZoneGroup, getAreaConfirmationDetail, getNextEmployeeCode, getZoneGroupMetricDetails, listResources, listZoneGroups, mergeZoneGroups, rehireEmployee, setAreasConfirmation, setZoneActive, splitZoneGroup, supervisorMoveAreasToZone, updateEmployee, updateLocation, updateVehicle, updateZoneGroup } from './resourceService.mjs'
+import { assertEmployeePayloadId, assignAreaZone, createEmployee, createLocation, createTemporaryVehicle, createVehicle, createZoneGroup, endEmployeeEmployment, getAreaConfirmationDetail, getNextEmployeeCode, getZoneGroupMetricDetails, listResources, listZoneGroups, mergeZoneGroups, rehireEmployee, setAreasConfirmation, setZoneActive, splitZoneGroup, supervisorMoveAreasToZone, updateEmployee, updateLocation, updateVehicle, updateZoneGroup } from './resourceService.mjs'
 import { addFuelRecord, addMaintenanceRecord, addTyreRecord, addUsageRecord, addVehicleDocument, getVehicleDetail, updateVehicleCompliance } from './vehicleService.mjs'
 import { bulkAcceptHighConfidence, decideRecommendation, ensureRecommendations, listRecommendations, listZoneBoundaries, recalculateRecommendations, saveZoneBoundary } from './gpsRecommendationService.mjs'
 import { adoptBranchGps, areaCloseout, captureBranchGps, createBranch, createCustomer, getBranch, getCustomer, listBranches, listBuyers, listCustomers, listGpsCollector, listMasterAudit, listOperationalLocations, saveBuyer, saveOperationalLocation, updateBranch, updateCustomer } from './customerMasterService.mjs'
@@ -164,8 +164,26 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'GET' && url.pathname === '/api/employees-sensitive-export') {if(session.role!=='admin'&&!accountCan(session,'employee_payroll_sensitive'))return sendJson(response,403,{error:'没有薪资敏感资料导出权限'});return sendJson(response,200,sensitiveEmployeeExport(url.searchParams.get('reason'),session,meta(request)))}
     if (request.method === 'GET' && /^\/api\/employees\/\d+$/.test(url.pathname)) {const id=Number(url.pathname.split('/').at(-1)),item=employeeDetail(id,{canViewSensitive:session.role==='admin'||accountCan(session,'employee_identity_sensitive')||accountCan(session,'employee_payroll_sensitive')});return item?sendJson(response,200,item):sendJson(response,404,{error:'Employee not found'})}
     if (request.method === 'POST' && url.pathname === '/api/employees') {if(!['admin','supervisor'].includes(session.role))return sendJson(response,403,{error:'只有Admin或Supervisor可以建立员工'});const payload=(await readJson(request)).payload;if(payload.nationalIdNumber&&session.role!=='admin'&&!accountCan(session,'employee_identity_sensitive'))return sendJson(response,403,{error:'没有身份证资料建立权限'});if(['bankAccountNumber','epfNumber','socsoNumber'].some(key=>payload[key])&&session.role!=='admin'&&!accountCan(session,'employee_payroll_sensitive'))return sendJson(response,403,{error:'没有薪资资料建立权限'});return sendJson(response,201,createEmployee({...payload,changedBy:session.employeeName}))}
-    if (request.method === 'PATCH' && /^\/api\/employees\/\d+$/.test(url.pathname)) {if(!['admin','supervisor'].includes(session.role))return sendJson(response,403,{error:'只有Admin或Supervisor可以修改员工'});const payload=(await readJson(request)).payload;if(Object.hasOwn(payload,'nationalIdNumber')&&session.role!=='admin'&&!accountCan(session,'employee_identity_sensitive'))return sendJson(response,403,{error:'没有身份证资料修改权限'});if(['bankName','bankAccountNumber','bankAccountHolderName','epfNumber','socsoNumber'].some(key=>Object.hasOwn(payload,key))&&session.role!=='admin'&&!accountCan(session,'employee_payroll_sensitive'))return sendJson(response,403,{error:'没有薪资资料修改权限'});return sendJson(response,200,updateEmployee(Number(url.pathname.split('/').at(-1)),{...payload,changedBy:session.employeeName}))}
-    if (request.method === 'POST' && /^\/api\/employees\/\d+\/rehire$/.test(url.pathname)) {if(!['admin','supervisor'].includes(session.role))return sendJson(response,403,{error:'没有重新入职权限'});return sendJson(response,200,rehireEmployee(Number(url.pathname.split('/')[3]),{...(await readJson(request)).payload,changedBy:session.employeeName}))}
+    if (request.method === 'PATCH' && /^\/api\/employees\/\d+$/.test(url.pathname)) {
+      if(!['admin','supervisor'].includes(session.role))return sendJson(response,403,{error:'只有Admin或Supervisor可以修改员工'})
+      const id=Number(url.pathname.split('/').at(-1)),payload=(await readJson(request)).payload
+      assertEmployeePayloadId(id,payload)
+      if(Object.hasOwn(payload,'nationalIdNumber')&&session.role!=='admin'&&!accountCan(session,'employee_identity_sensitive'))return sendJson(response,403,{error:'没有身份证资料修改权限'})
+      if(['bankName','bankAccountNumber','bankAccountHolderName','epfNumber','socsoNumber'].some(key=>Object.hasOwn(payload,key))&&session.role!=='admin'&&!accountCan(session,'employee_payroll_sensitive'))return sendJson(response,403,{error:'没有薪资资料修改权限'})
+      return sendJson(response,200,updateEmployee(id,{...payload,changedBy:session.employeeName}))
+    }
+    if (request.method === 'POST' && /^\/api\/employees\/\d+\/terminate$/.test(url.pathname)) {
+      if(!['admin','supervisor'].includes(session.role))return sendJson(response,403,{error:'没有办理离职权限'})
+      const id=Number(url.pathname.split('/')[3]),payload=(await readJson(request)).payload
+      assertEmployeePayloadId(id,payload)
+      return sendJson(response,200,endEmployeeEmployment(id,{...payload,changedBy:session.employeeName}))
+    }
+    if (request.method === 'POST' && /^\/api\/employees\/\d+\/rehire$/.test(url.pathname)) {
+      if(!['admin','supervisor'].includes(session.role))return sendJson(response,403,{error:'没有重新入职权限'})
+      const id=Number(url.pathname.split('/')[3]),payload=(await readJson(request)).payload
+      assertEmployeePayloadId(id,payload)
+      return sendJson(response,200,rehireEmployee(id,{...payload,changedBy:session.employeeName}))
+    }
     if (request.method === 'POST' && /^\/api\/employees\/\d+\/sensitive$/.test(url.pathname)) {const id=Number(url.pathname.split('/')[3]),payload=(await readJson(request)).payload,identity=payload.field==='nationalIdNumber',allowed=session.role==='admin'||accountCan(session,identity?'employee_identity_sensitive':'employee_payroll_sensitive');if(!allowed)return sendJson(response,403,{error:'没有查看该敏感资料的权限'});return sendJson(response,200,revealEmployeeField(id,payload.field,payload.reason,session,meta(request)))}
     if (request.method === 'GET' && /^\/api\/employees\/\d+\/sensitive-audit$/.test(url.pathname)) {if(session.role!=='admin')return sendJson(response,403,{error:'只有Admin可以查看敏感资料审计'});return sendJson(response,200,{items:sensitiveAccessLogs(Number(url.pathname.split('/')[3]))})}
     if (request.method === 'POST' && /^\/api\/employees\/\d+\/documents$/.test(url.pathname)) {if(session.role!=='admin'&&!accountCan(session,'employee_identity_sensitive'))return sendJson(response,403,{error:'没有身份证件管理权限'});return sendJson(response,201,addEmployeeDocument(Number(url.pathname.split('/')[3]),(await readJson(request)).payload,session,meta(request)))}
@@ -190,7 +208,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && url.pathname === '/api/import/commit') return sendJson(response, 200, commitImport((await readJson(request)).payload.batchId))
     return sendJson(response, 404, { error: 'Not found' })
   } catch (error) {
-    return sendJson(response, error instanceof SyntaxError ? 400 : 500, { error: error.message })
+    return sendJson(response, error.statusCode || (error instanceof SyntaxError ? 400 : 500), { error: error.message })
   }
 })
 

@@ -1,0 +1,11 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import {createEmployeeSelectionGuard,employeeDetailDraft,employeeMatchesDirectory} from '../src/employeeMasterState.js'
+
+const employee=(id,overrides={})=>({id,employeeCode:`EMP-${String(id).padStart(4,'0')}`,name:`Employee ${id}`,phone:`010${id}`,jobRole:'Driver',additionalRoles:[],employmentType:'Permanent',employmentStatus:'active',employmentStartDate:'2026-01-01',defaultBaseLocationId:id,usualAreaIds:[id],nationalIdMasked:'900101-13-****',nationalIdSuffix:String(id).padStart(4,'0'),employmentPeriods:[{id,rehireFlag:0}],accountId:id,accountActive:1,...overrides})
+
+test('从Employee A切换到Employee B会为所有可编辑字段建立全新draft',()=>{const first=employeeDetailDraft(employee(1,{name:'Employee A',jobRole:'Driver'})),second=employeeDetailDraft(employee(2,{name:'Employee B',jobRole:'Office',employmentType:'Contractor',phone:'019999'}));assert.equal(first.name,'Employee A');assert.equal(second.employeeId,2);assert.equal(second.name,'Employee B');assert.equal(second.employeeCode,'EMP-0002');assert.equal(second.phone,'019999');assert.equal(second.jobRole,'Office');assert.equal(second.employmentType,'Contractor');assert.deepEqual(second.usualAreaIds,[2])})
+
+test('快速连续切换只接受最后一次Employee请求',()=>{const guard=createEmployeeSelectionGuard(),requestA=guard.begin(1),requestB=guard.begin(2);assert.equal(guard.isCurrent(requestA,1),false);assert.equal(guard.isCurrent(requestB,2),true);assert.equal(guard.isCurrent(requestB,1),false)})
+
+test('Employee Directory按状态、岗位、类型、账号及姓名编号电话IC后四位搜索',()=>{const active=employee(1,{name:'Alice Driver',phone:'012345',nationalIdSuffix:'7788'}),resigned=employee(2,{name:'Bob Office',jobRole:'Office',employmentType:'Contractor',employmentStatus:'resigned',accountActive:0,employmentPeriods:[{rehireFlag:1}]});assert.equal(employeeMatchesDirectory(active,{search:'EMP-0001',status:'active'}),true);assert.equal(employeeMatchesDirectory(active,{search:'012345',jobRole:'Driver',employmentType:'Permanent',accountStatus:'active'}),true);assert.equal(employeeMatchesDirectory(active,{search:'7788'}),true);assert.equal(employeeMatchesDirectory(resigned,{search:'Bob',status:'resigned'}),true);assert.equal(employeeMatchesDirectory(resigned,{status:'rehired'}),true);assert.equal(employeeMatchesDirectory(active,{status:'resigned'}),false)})

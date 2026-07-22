@@ -200,5 +200,7 @@ KCS 现在是新 Customer、Customer Branch、official/temporary GPS、Buyer 与
 - IC、银行、EPF及SOCSO默认遮罩。EPF/SOCSO完全可选；只有填写时才检查唯一。完整号码和IC附件只可由Admin或明确获授权账号查看，每次查看、下载、修改和敏感导出都会审计。
 - IC正反面保存在本机 `data/uploads/employee-documents/`，使用随机文件名，并通过登录与权限API下载；不会提交GitHub。
 - Employee支持XLSX/CSV模板、预览、New/Update/Unchanged/Error、错误报告、幂等提交和当前筛选导出。普通导出只包含遮罩号码，不含密码、哈希、Session、密钥或证件照片。
+- Employee Directory与Employee Detail已分开。详情按Employee ID重新读取并使用受控draft；切换时会清空旧资料、取消旧请求，并在保存前核对URL与payload的Employee ID。详情以Accordion显示基本资料、岗位、敏感资料、Employment Period、修改历史和KCS账号。
+- Active员工可执行“办理离职”，Resigned、Terminated、Contract End等员工可执行“重新入职”。旧Period关闭后保持不变，新Period继续沿用同一Employee ID与Employee Code。
 
 2026-07-19 本机五份来源文件首次实际导入结果：1,216 行；新增 1,099、更新 0、没有变化 115、无法匹配排程 2。导入后共有 253 个客户、475 间分店、276 条排程（其中 2 条 BranchID 未匹配）、118 间有效 GPS、106 间 Route Ready。再次导入相同五份文件时新增 0、更新 0、没有变化 1,214、无法匹配 2，验证没有产生重复主档。

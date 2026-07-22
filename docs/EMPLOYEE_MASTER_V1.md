@@ -8,6 +8,12 @@
 
 重新入职时打开原Employee并按“重新入职”。系统新增Employment Period，不修改旧Period；Employee ID、GPS、Dispatch及历史关联保持不变。重新启用原账号是独立确认动作，System Role不会因Job Role改变。
 
+Employee Directory支持姓名、Employee Code、电话及IC后四位搜索，并可按Employment Status、Job Role、Employment Type和Account Status筛选。点击一行才会打开独立详情Drawer；关闭后保留原筛选和列表位置。详情加载期间禁止保存，读取失败不会显示上一位员工资料。
+
+Active员工通过“办理离职”填写Last Working Day、Employment End Date、Leaving Reason及Resigned / Terminated / Contract End。系统关闭当前Period、停用账号并移出派车选择器。已离职员工通过“重新入职”建立Period 2、Period 3等新记录，旧Period不会被更新。
+
+所有Employee详情保存、离职及重新入职请求必须同时携带Employee ID。服务端核对URL Employee ID与payload Employee ID，不一致时返回409并拒绝写入。
+
 ## 敏感资料权限
 
 普通页面和普通导出只显示遮罩IC、银行、EPF及SOCSO。Admin可在账号区域明确授权：
