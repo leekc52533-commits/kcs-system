@@ -95,10 +95,25 @@ ensureColumn('employees', 'employment_status', "TEXT NOT NULL DEFAULT 'active'")
 ensureColumn('employees', 'default_base_location_id', 'INTEGER REFERENCES operational_locations(id)')
 ensureColumn('employees', 'default_area_id', 'INTEGER REFERENCES areas(id)')
 ensureColumn('employees', 'employment_detail_status', 'TEXT')
+ensureColumn('employees', 'employment_type', "TEXT NOT NULL DEFAULT 'Permanent'")
+ensureColumn('employees', 'employment_start_date', 'TEXT')
+ensureColumn('employees', 'employment_end_date', 'TEXT')
+ensureColumn('employees', 'last_working_day', 'TEXT')
+ensureColumn('employees', 'resignation_termination_reason', 'TEXT')
+ensureColumn('employees', 'national_id_number', 'TEXT')
+ensureColumn('employees', 'bank_name', 'TEXT')
+ensureColumn('employees', 'bank_account_number', 'TEXT')
+ensureColumn('employees', 'bank_account_holder_name', 'TEXT')
+ensureColumn('employees', 'epf_number', 'TEXT')
+ensureColumn('employees', 'socso_number', 'TEXT')
 ensureColumn('temporary_locations', 'accuracy_m', 'REAL')
 ensureColumn('temporary_locations', 'device_captured_at', 'TEXT')
 ensureColumn('temporary_locations', 'server_received_at', 'TEXT')
 ensureColumn('temporary_locations', 'employee_id', 'INTEGER REFERENCES employees(id)')
+ensureColumn('temporary_locations', 'employment_period_id', 'INTEGER REFERENCES employee_employment_history(id)')
+ensureColumn('dispatches', 'driver_employment_period_id', 'INTEGER REFERENCES employee_employment_history(id)')
+ensureColumn('dispatches', 'assistant_employment_period_id', 'INTEGER REFERENCES employee_employment_history(id)')
+ensureColumn('dispatch_vehicle_assistants', 'employment_period_id', 'INTEGER REFERENCES employee_employment_history(id)')
 ensureColumn('temporary_locations', 'dispatch_id', 'INTEGER REFERENCES dispatches(id)')
 ensureColumn('temporary_locations', 'dispatch_stop_id', 'INTEGER REFERENCES dispatch_stops(id)')
 ensureColumn('temporary_locations', 'photo_storage_key', 'TEXT')
@@ -115,6 +130,9 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS customers_status_idx ON customers(status,name);
   CREATE INDEX IF NOT EXISTS branches_status_idx ON branches(status,branch_name);
   CREATE UNIQUE INDEX IF NOT EXISTS operational_locations_code_idx ON operational_locations(location_code) WHERE location_code IS NOT NULL;
+  CREATE UNIQUE INDEX IF NOT EXISTS employees_national_id_unique ON employees(national_id_number) WHERE national_id_number IS NOT NULL AND TRIM(national_id_number)<>'';
+  CREATE UNIQUE INDEX IF NOT EXISTS employees_epf_unique ON employees(epf_number) WHERE epf_number IS NOT NULL AND TRIM(epf_number)<>'';
+  CREATE UNIQUE INDEX IF NOT EXISTS employees_socso_unique ON employees(socso_number) WHERE socso_number IS NOT NULL AND TRIM(socso_number)<>'';
   CREATE TRIGGER IF NOT EXISTS areas_zone_required_insert BEFORE INSERT ON areas
   WHEN NEW.zone_group_id IS NULL BEGIN SELECT RAISE(ABORT,'Area must belong to a Zone Group'); END;
   CREATE TRIGGER IF NOT EXISTS areas_zone_required_update BEFORE UPDATE OF zone_group_id ON areas
@@ -207,6 +225,15 @@ if (currentVersion === 0) {
     db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (14)').run()
   }
   if (currentVersion < 15) db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (15)').run()
+  if (currentVersion < 16) {
+    db.exec(`
+      INSERT INTO employee_employment_history(employee_id,start_date,end_date,last_working_day,employment_status,employment_type,primary_job_role,secondary_job_roles,resignation_or_termination_reason,rehire_flag,created_by)
+      SELECT e.id,e.employment_start_date,e.employment_end_date,e.last_working_day,COALESCE(e.employment_detail_status,e.employment_status),COALESCE(e.employment_type,'Permanent'),e.job_role,
+        (SELECT GROUP_CONCAT(role,'|') FROM employee_job_roles r WHERE r.employee_id=e.id AND r.is_primary=0 AND r.is_active=1),e.resignation_termination_reason,0,'Schema v16 migration'
+      FROM employees e WHERE NOT EXISTS(SELECT 1 FROM employee_employment_history h WHERE h.employee_id=e.id);
+    `)
+    db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (16)').run()
+  }
 }
 
 const officialVehicles = [
@@ -251,7 +278,7 @@ db.exec(`
 db.exec(`CREATE TRIGGER IF NOT EXISTS sold_vehicle_no_delete BEFORE DELETE ON vehicles WHEN OLD.operational_status='sold' BEGIN SELECT RAISE(ABORT,'Sold vehicle history cannot be deleted'); END;`)
 
 export function getSystemStatus() {
-  const tableNames = ['users','auth_accounts','auth_sessions','auth_audit_logs','customers','branches','branch_schedules','zone_groups','areas','zone_boundaries','gps_zone_recommendations','gps_zone_decisions','employees','vehicles','vehicle_documents','vehicle_maintenance_records','vehicle_fuel_records','vehicle_tyre_records','vehicle_compliance_reminders','vehicle_status_history','vehicle_usage_history','buyers','operational_locations','master_change_history','data_transfer_logs','dispatches','dispatch_stops','dispatch_days','dispatch_trips','special_collection_requests','schedule_exceptions','temporary_locations','gps_migration_batches','gps_migration_rows','stop_documents','import_batches','import_errors','jodoo_sync_events','jodoo_outbox_jobs']
+  const tableNames = ['users','auth_accounts','auth_sessions','auth_audit_logs','auth_account_permissions','customers','branches','branch_schedules','zone_groups','areas','zone_boundaries','gps_zone_recommendations','gps_zone_decisions','employees','employee_employment_history','employee_change_history','employee_documents','employee_sensitive_access_logs','vehicles','vehicle_documents','vehicle_maintenance_records','vehicle_fuel_records','vehicle_tyre_records','vehicle_compliance_reminders','vehicle_status_history','vehicle_usage_history','buyers','operational_locations','master_change_history','data_transfer_logs','dispatches','dispatch_stops','dispatch_days','dispatch_trips','special_collection_requests','schedule_exceptions','temporary_locations','gps_migration_batches','gps_migration_rows','stop_documents','import_batches','import_errors','jodoo_sync_events','jodoo_outbox_jobs']
   const counts = Object.fromEntries(tableNames.map((table) => [table, db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get().count]))
   return { database: 'connected', schemaVersion: SCHEMA_VERSION, counts }
 }

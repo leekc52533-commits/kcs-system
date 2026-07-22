@@ -179,7 +179,7 @@ KCS 现在是新 Customer、Customer Branch、official/temporary GPS、Buyer 与
 - Operational Location：Company Yard、Buyer、Employee Base、Workshop、Fuel Station、Other。
 - Excel / CSV：七类主档均支持空白模板、预览、New/Update/Unchanged/Error、错误导出、事务提交、幂等导入及带时间戳导出。
 
-数据库 schema 已升级到 v15。现有 253 个 Customer、475 个 Branch、97 个 Area、9 个 Active Zone 与 118 个 official GPS 原样保留；旧 Dispatch 的 Area/Zone snapshot 不会改变。Customer 主档说明见 [Customer Master V1](docs/CUSTOMER_MASTER_V1.md)，登录、手机 GPS 与旧 GPS 迁移说明见 [Login / Mobile GPS / Migration V1](docs/LOGIN_MOBILE_GPS_MIGRATION_V1.md)。
+数据库 schema 已升级到 v16。现有 Customer、Branch、Area、Zone、GPS 与旧 Dispatch snapshot 原样保留。Customer 主档说明见 [Customer Master V1](docs/CUSTOMER_MASTER_V1.md)，Employee 资料、安全、导入导出和重新入职流程见 [Employee Master V1](docs/EMPLOYEE_MASTER_V1.md)，登录、手机 GPS 与旧 GPS 迁移说明见 [Login / Mobile GPS / Migration V1](docs/LOGIN_MOBILE_GPS_MIGRATION_V1.md)。
 
 ## Login、Employee Permission、Mobile GPS & Migration V1
 
@@ -191,5 +191,14 @@ KCS 现在是新 Customer、Customer Branch、official/temporary GPS、Buyer 与
 - Supervisor 在现有 GPS Collector 采用、拒绝、保留 official 或要求重新采集。
 - “旧 GPS 迁移”按 BranchID 预览 New / Unchanged / Conflict / Branch Not Found / Invalid GPS / Duplicate Source；Conflict 不自动覆盖。
 - 开发服务绑定 `0.0.0.0`，`GET /api/system/network` 会列出 LAN URL。手机 Geolocation 正式使用时必须配置 HTTPS。
+
+## Employee Master & Employment History V1
+
+- Employee Code 默认按 `EMP-0001` 自动产生并检查唯一；Employee Name、编号、岗位和敏感资料变更必须填写原因并保留审计。
+- Job Role、Employment Type、Employment Status 与System Role互相独立；Contractor是雇佣类型，不是岗位。
+- 离职、终止或停职会结束当前Employment Period、停用账号并退出派车选择器；“重新入职”沿用同一个Employee ID并新增Period。
+- IC、银行、EPF及SOCSO默认遮罩。EPF/SOCSO完全可选；只有填写时才检查唯一。完整号码和IC附件只可由Admin或明确获授权账号查看，每次查看、下载、修改和敏感导出都会审计。
+- IC正反面保存在本机 `data/uploads/employee-documents/`，使用随机文件名，并通过登录与权限API下载；不会提交GitHub。
+- Employee支持XLSX/CSV模板、预览、New/Update/Unchanged/Error、错误报告、幂等提交和当前筛选导出。普通导出只包含遮罩号码，不含密码、哈希、Session、密钥或证件照片。
 
 2026-07-19 本机五份来源文件首次实际导入结果：1,216 行；新增 1,099、更新 0、没有变化 115、无法匹配排程 2。导入后共有 253 个客户、475 间分店、276 条排程（其中 2 条 BranchID 未匹配）、118 间有效 GPS、106 间 Route Ready。再次导入相同五份文件时新增 0、更新 0、没有变化 1,214、无法匹配 2，验证没有产生重复主档。

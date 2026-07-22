@@ -31,7 +31,9 @@ export function bootstrapAccount(payload,meta={},database=defaultDb){
   if(!username)throw new Error('请输入用户名')
   database.exec('BEGIN IMMEDIATE')
   try{
-    const employee=database.prepare(`INSERT INTO employees(employee_code,name,job_role,employment_status,is_active) VALUES(?,?,'Admin','active',1)`).run(code,name)
+    const employee=database.prepare(`INSERT INTO employees(employee_code,name,job_role,employment_status,employment_detail_status,employment_type,employment_start_date,is_active) VALUES(?,?,'Admin','active','active','Permanent',date('now','localtime'),1)`).run(code,name)
+    database.prepare(`INSERT INTO employee_job_roles(employee_id,role,is_primary,created_by) VALUES(?,'Admin',1,'Initial Setup')`).run(employee.lastInsertRowid)
+    database.prepare(`INSERT INTO employee_employment_history(employee_id,start_date,employment_status,employment_type,primary_job_role,rehire_flag,created_by) VALUES(?,date('now','localtime'),'active','Permanent','Admin',0,'Initial Setup')`).run(employee.lastInsertRowid)
     const account=database.prepare(`INSERT INTO auth_accounts(employee_id,username,password_hash,role,must_change_password,created_by) VALUES(?,?,?,?,1,?)`).run(employee.lastInsertRowid,username,hashPassword(payload.password),'admin','Initial Setup')
     audit(database,{accountId:Number(account.lastInsertRowid),employeeId:Number(employee.lastInsertRowid),username,action:'account_bootstrap',success:true,...meta,actor:'Initial Setup'})
     database.exec('COMMIT')
@@ -42,14 +44,16 @@ export function bootstrapAccount(payload,meta={},database=defaultDb){
 export function createAccount(payload,actor,meta={},database=defaultDb){
   const role=text(payload.role).toLowerCase(),username=text(payload.username),employeeId=Number(payload.employeeId)
   if(!ROLES.has(role))throw new Error('无效账号角色')
-  if(!employeeId||!database.prepare('SELECT id FROM employees WHERE id=?').get(employeeId))throw new Error('员工不存在')
+  if(!employeeId||!database.prepare("SELECT id FROM employees WHERE id=? AND employment_status='active' AND is_active=1").get(employeeId))throw new Error('员工不存在或当前不是Active状态')
   if(!username)throw new Error('请输入用户名')
   const result=database.prepare(`INSERT INTO auth_accounts(employee_id,username,password_hash,role,must_change_password,created_by) VALUES(?,?,?,?,1,?)`).run(employeeId,username,hashPassword(payload.password),role,actor?.username||actor?.employeeName||'Admin')
   audit(database,{accountId:Number(result.lastInsertRowid),employeeId,username,action:'account_created',success:true,...meta,actor:actor?.username})
   return publicAccount(database.prepare(`${accountSql} WHERE a.id=?`).get(result.lastInsertRowid))
 }
 
-export function listAccounts(database=defaultDb){return database.prepare(`${accountSql} ORDER BY e.name`).all().map(publicAccount)}
+const permissionsFor=(accountId,database)=>database.prepare('SELECT permission FROM auth_account_permissions WHERE account_id=? ORDER BY permission').all(accountId).map(item=>item.permission)
+const withPermissions=(account,database)=>account&&({...account,permissions:permissionsFor(account.id,database)})
+export function listAccounts(database=defaultDb){return database.prepare(`${accountSql} ORDER BY e.name`).all().map(row=>withPermissions(publicAccount(row),database))}
 
 export function updateAccount(id,payload,actor,meta={},database=defaultDb){
   const current=database.prepare(`${accountSql} WHERE a.id=?`).get(id);if(!current)throw new Error('账号不存在')
@@ -57,8 +61,9 @@ export function updateAccount(id,payload,actor,meta={},database=defaultDb){
   const isActive=payload.isActive==null?current.is_active:(payload.isActive?1:0)
   database.prepare(`UPDATE auth_accounts SET role=?,is_active=?,disabled_at=CASE WHEN ?=0 THEN CURRENT_TIMESTAMP ELSE NULL END,failed_login_count=CASE WHEN ? THEN 0 ELSE failed_login_count END,locked_until=CASE WHEN ? THEN NULL ELSE locked_until END,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(role,isActive,isActive,payload.unlock?1:0,payload.unlock?1:0,id)
   if(payload.password)database.prepare(`UPDATE auth_accounts SET password_hash=?,must_change_password=1,password_changed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(hashPassword(payload.password),id)
+  if(Array.isArray(payload.permissions)){database.prepare('DELETE FROM auth_account_permissions WHERE account_id=?').run(id);const insert=database.prepare('INSERT INTO auth_account_permissions(account_id,permission,granted_by) VALUES(?,?,?)');for(const permission of [...new Set(payload.permissions.map(text).filter(Boolean))])insert.run(id,permission,actor?.username||'Admin')}
   audit(database,{accountId:id,employeeId:current.employee_id,username:current.username,action:isActive?'account_updated':'account_disabled',success:true,...meta,actor:actor?.username,detail:{role,isActive:Boolean(isActive),unlocked:Boolean(payload.unlock)}})
-  return publicAccount(database.prepare(`${accountSql} WHERE a.id=?`).get(id))
+  return withPermissions(publicAccount(database.prepare(`${accountSql} WHERE a.id=?`).get(id)),database)
 }
 
 export function login(payload,meta={},database=defaultDb){
@@ -95,3 +100,5 @@ export function roleCan(role,permission){
   const map={admin:new Set(['desktop','accounts','gps_review','gps_migration','gps_migration_approve','mobile']),supervisor:new Set(['desktop','accounts','gps_review','gps_migration','gps_migration_approve','mobile']),office:new Set(['desktop','gps_migration','mobile']),driver:new Set(['mobile','gps_capture']),crew:new Set(['mobile','gps_capture'])}
   return Boolean(map[role]?.has(permission))
 }
+
+export function accountCan(account,permission,database=defaultDb){return account?.role==='admin'||Boolean(account?.id&&database.prepare('SELECT 1 FROM auth_account_permissions WHERE account_id=? AND permission=?').get(account.id,permission))}

@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 15
+export const SCHEMA_VERSION = 16
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -150,6 +150,17 @@ CREATE TABLE IF NOT EXISTS employees (
   home_location_id INTEGER REFERENCES operational_locations(id),
   employment_status TEXT NOT NULL DEFAULT 'active' CHECK (employment_status IN ('active','on_leave','inactive')),
   employment_detail_status TEXT,
+  employment_type TEXT NOT NULL DEFAULT 'Permanent',
+  employment_start_date TEXT,
+  employment_end_date TEXT,
+  last_working_day TEXT,
+  resignation_termination_reason TEXT,
+  national_id_number TEXT,
+  bank_name TEXT,
+  bank_account_number TEXT,
+  bank_account_holder_name TEXT,
+  epf_number TEXT,
+  socso_number TEXT,
   default_base_location_id INTEGER REFERENCES operational_locations(id),
   default_area_id INTEGER REFERENCES areas(id),
   is_active INTEGER NOT NULL DEFAULT 1,
@@ -193,6 +204,98 @@ CREATE TABLE IF NOT EXISTS employee_role_history (
   reason TEXT,
   changed_by TEXT NOT NULL,
   changed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS employee_familiar_areas (
+  employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  area_id INTEGER NOT NULL REFERENCES areas(id),
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY(employee_id,area_id)
+);
+
+CREATE TABLE IF NOT EXISTS employee_change_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL REFERENCES employees(id),
+  field_name TEXT NOT NULL,
+  old_value TEXT,
+  new_value TEXT,
+  reason TEXT NOT NULL,
+  changed_by TEXT NOT NULL,
+  changed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS employee_employment_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL REFERENCES employees(id),
+  start_date TEXT,
+  end_date TEXT,
+  last_working_day TEXT,
+  employment_status TEXT NOT NULL,
+  employment_type TEXT NOT NULL,
+  primary_job_role TEXT,
+  secondary_job_roles TEXT,
+  resignation_or_termination_reason TEXT,
+  rehire_flag INTEGER NOT NULL DEFAULT 0 CHECK(rehire_flag IN (0,1)),
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_by TEXT,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS employee_documents (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL REFERENCES employees(id),
+  document_type TEXT NOT NULL CHECK(document_type IN ('ic_front','ic_back')),
+  storage_key TEXT NOT NULL,
+  original_name TEXT,
+  content_type TEXT,
+  uploaded_by TEXT NOT NULL,
+  uploaded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  replaced_at TEXT,
+  is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0,1))
+);
+
+CREATE TABLE IF NOT EXISTS employee_sensitive_access_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL REFERENCES employees(id),
+  account_id INTEGER REFERENCES auth_accounts(id),
+  action TEXT NOT NULL,
+  field_name TEXT NOT NULL,
+  reason TEXT,
+  actor TEXT NOT NULL,
+  ip_address TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS auth_account_permissions (
+  account_id INTEGER NOT NULL REFERENCES auth_accounts(id) ON DELETE CASCADE,
+  permission TEXT NOT NULL,
+  granted_by TEXT NOT NULL,
+  granted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY(account_id,permission)
+);
+
+CREATE TABLE IF NOT EXISTS employee_import_batches (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  file_name TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'previewed',
+  summary_json TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  committed_by TEXT,
+  committed_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS employee_import_rows (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  batch_id INTEGER NOT NULL REFERENCES employee_import_batches(id) ON DELETE CASCADE,
+  row_number INTEGER NOT NULL,
+  employee_id INTEGER REFERENCES employees(id),
+  classification TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  error_message TEXT,
+  UNIQUE(batch_id,row_number)
 );
 
 CREATE TABLE IF NOT EXISTS auth_sessions (
@@ -255,7 +358,9 @@ CREATE TABLE IF NOT EXISTS dispatches (
   dispatch_date TEXT NOT NULL,
   vehicle_id INTEGER REFERENCES vehicles(id),
   driver_id INTEGER REFERENCES employees(id),
+  driver_employment_period_id INTEGER REFERENCES employee_employment_history(id),
   assistant_id INTEGER REFERENCES employees(id),
+  assistant_employment_period_id INTEGER REFERENCES employee_employment_history(id),
   start_location_id INTEGER REFERENCES operational_locations(id),
   end_location_id INTEGER REFERENCES operational_locations(id),
   status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','released','in_progress','completed','cancelled')),
@@ -570,6 +675,7 @@ CREATE TABLE IF NOT EXISTS dispatch_vehicle_assistants (
   dispatch_day_id INTEGER NOT NULL REFERENCES dispatch_days(id) ON DELETE CASCADE,
   vehicle_id INTEGER NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
   employee_id INTEGER NOT NULL REFERENCES employees(id),
+  employment_period_id INTEGER REFERENCES employee_employment_history(id),
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY(dispatch_day_id, vehicle_id, employee_id)
 );
@@ -663,6 +769,7 @@ CREATE TABLE IF NOT EXISTS temporary_locations (
   device_captured_at TEXT,
   server_received_at TEXT,
   employee_id INTEGER REFERENCES employees(id),
+  employment_period_id INTEGER REFERENCES employee_employment_history(id),
   dispatch_id INTEGER REFERENCES dispatches(id),
   dispatch_stop_id INTEGER REFERENCES dispatch_stops(id),
   photo_storage_key TEXT,
