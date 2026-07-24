@@ -26,7 +26,7 @@ function futureDates(database, branchIds) {
   if(!ids.length)return []
   const marks=ids.map(()=>'?').join(',')
   return database.prepare(`SELECT DISTINCT dd.dispatch_date FROM dispatch_days dd JOIN dispatch_trips dt ON dt.dispatch_day_id=dd.id JOIN dispatch_stops ds ON ds.dispatch_trip_id=dt.id
-    WHERE ds.branch_id IN (${marks}) AND dd.dispatch_date>=date('now','localtime')`).all(...ids).map(item=>item.dispatch_date)
+    WHERE ds.branch_id IN (${marks}) AND dd.dispatch_date>=date('now','+8 hours')`).all(...ids).map(item=>item.dispatch_date)
 }
 
 function invalidateBranches(database, branchIds, changeType, entityType, entityId, before, after, changedBy) {

@@ -13,9 +13,10 @@ import { addFuelRecord, addMaintenanceRecord, addTyreRecord, addUsageRecord, add
 import { bulkAcceptHighConfidence, decideRecommendation, ensureRecommendations, listRecommendations, listZoneBoundaries, recalculateRecommendations, saveZoneBoundary } from './gpsRecommendationService.mjs'
 import { adoptBranchGps, areaCloseout, captureBranchGps, createBranch, createCustomer, getBranch, getCustomer, listBranches, listBuyers, listCustomers, listGpsCollector, listMasterAudit, listOperationalLocations, saveBuyer, saveOperationalLocation, updateBranch, updateCustomer } from './customerMasterService.mjs'
 import { commitMasterImport, listTransferLogs, masterExport, masterTemplate, previewMasterImport } from './masterTransferService.mjs'
-import { accountCan, bootstrapAccount, changePassword, createAccount, getSession, listAccounts, listAuthAudit, login, logout, roleCan, setupStatus, updateAccount } from './authService.mjs'
+import { accountCan, bootstrapAccount, changePassword, createAccount, getSession, listAccounts, listAuthAudit, login, logout, setupStatus, updateAccount, updateOwnPreferences } from './authService.mjs'
 import { commitGpsMigration, getGpsMigrationBatch, gpsMigrationTemplate, listGpsMigrationBatches, previewGpsMigration, resolveGpsMigrationRow } from './gpsMigrationService.mjs'
 import { addEmployeeDocument, employeeDetail, employeeDocumentFile, revealEmployeeField, sensitiveAccessLogs, sensitiveEmployeeExport } from './employeeSensitiveService.mjs'
+import {kuchingDate} from '../shared/kuchingTime.js'
 
 const port = Number(process.env.KCS_API_PORT || 8787)
 const host = process.env.KCS_API_HOST || '0.0.0.0'
@@ -30,6 +31,9 @@ const cookies=request=>Object.fromEntries(String(request.headers.cookie||'').spl
 const sessionCookie=(token,maxAge)=>`kcs_session=${encodeURIComponent(token||'')}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${process.env.KCS_HTTPS==='1'?'; Secure':''}`
 const networkUrls=()=>Object.values(os.networkInterfaces()).flat().filter(item=>item&&item.family==='IPv4'&&!item.internal).map(item=>`http://${item.address}:5175`)
 function permissionFor(pathname){if(pathname.startsWith('/api/mobile/'))return'mobile';if(/^\/api\/gps-collector\/branch\//.test(pathname))return'gps_capture';if(pathname==='/api/gps-collector'||/^\/api\/gps-collector\/\d+\/(adopt|review|photo)$/.test(pathname)||/^\/api\/temporary-locations\/\d+\/adopt$/.test(pathname))return'gps_review';if(pathname.startsWith('/api/auth/accounts')||pathname==='/api/auth/audit')return'accounts';if(/^\/api\/gps-migration\/(?:batches\/\d+\/commit|rows\/\d+\/resolve)$/.test(pathname))return'gps_migration_approve';if(pathname.startsWith('/api/gps-migration'))return'gps_migration';return'desktop'}
+const canManageEmployees=session=>accountCan(session,'employee_manage')||session.role==='supervisor'
+const canViewIdentity=session=>accountCan(session,'sensitive_data')||accountCan(session,'employee_identity_sensitive')
+const canViewPayroll=session=>accountCan(session,'sensitive_data')||accountCan(session,'employee_payroll_sensitive')
 
 async function readJson(request, maxBytes = 15_000_000) {
   const chunks = []
@@ -62,18 +66,19 @@ const server = http.createServer(async (request, response) => {
     request.kcsSession=session
     if (request.method === 'POST' && url.pathname === '/api/auth/logout') {logout(session);response.setHeader('Set-Cookie',sessionCookie('',0));return sendJson(response,200,{ok:true})}
     if (request.method === 'POST' && url.pathname === '/api/auth/change-password') return sendJson(response,200,changePassword(session,(await readJson(request)).payload))
+    if (request.method === 'PATCH' && url.pathname === '/api/auth/preferences') return sendJson(response,200,{account:updateOwnPreferences(session,(await readJson(request)).payload)})
     if(session.mustChangePassword)return sendJson(response,403,{error:'首次登录必须先修改密码',code:'PASSWORD_CHANGE_REQUIRED'})
     const permission=permissionFor(url.pathname)
-    if(!roleCan(session.role,permission))return sendJson(response,403,{error:'此账号没有权限执行该操作'})
+    if(!accountCan(session,permission))return sendJson(response,403,{error:'此账号没有权限执行该操作'})
     if (request.method === 'GET' && url.pathname === '/api/auth/accounts') return sendJson(response,200,{items:listAccounts()})
     if (request.method === 'POST' && url.pathname === '/api/auth/accounts') return sendJson(response,201,createAccount((await readJson(request)).payload,session,meta(request)))
-    if (request.method === 'PATCH' && /^\/api\/auth\/accounts\/\d+$/.test(url.pathname)) {const payload=(await readJson(request)).payload;if(Array.isArray(payload.permissions)&&session.role!=='admin')return sendJson(response,403,{error:'只有Admin可以授权敏感资料权限'});return sendJson(response,200,updateAccount(Number(url.pathname.split('/').at(-1)),payload,session,meta(request)))}
+    if (request.method === 'PATCH' && /^\/api\/auth\/accounts\/\d+$/.test(url.pathname)) {const payload=(await readJson(request)).payload;if(Array.isArray(payload.permissions)&&session.role!=='owner_admin')return sendJson(response,403,{error:'只有Owner Admin可以授权敏感资料权限'});return sendJson(response,200,updateAccount(Number(url.pathname.split('/').at(-1)),payload,session,meta(request)))}
     if (request.method === 'GET' && url.pathname === '/api/auth/audit') return sendJson(response,200,{items:listAuthAudit(Object.fromEntries(url.searchParams))})
     if (request.method === 'GET' && url.pathname === '/api/system/network') return sendJson(response,200,{host,apiPort:port,lanUrls:networkUrls(),httpsRequiredForGps:true})
     if (request.method === 'GET' && url.pathname === '/api/mobile/today') {const data=driverToday({employeeId:session.employeeId,includeAssistant:session.role==='crew',date:url.searchParams.get('date')||undefined});for(const trip of data.trips||[])for(const stop of trip.stops||[]){delete stop.occPrice;delete stop.paymentType;delete stop.latitude;delete stop.longitude}return sendJson(response,200,data)}
     if (request.method === 'GET' && url.pathname === '/api/mobile/branch-search') {const search=String(url.searchParams.get('search')||'').trim(),q=`%${search}%`;const items=db.prepare(`SELECT b.jodoo_branch_id branchId,b.branch_name branchName,c.name customerName,b.address,CASE WHEN b.latitude BETWEEN -90 AND 90 AND b.longitude BETWEEN -180 AND 180 AND NOT(b.latitude=0 AND b.longitude=0) THEN 1 ELSE 0 END hasOfficialGps,(SELECT verification_status FROM temporary_locations t WHERE t.branch_id=b.id ORDER BY t.id DESC LIMIT 1) temporaryGpsStatus FROM branches b LEFT JOIN customers c ON c.id=b.customer_id WHERE ?<>'' AND (b.jodoo_branch_id LIKE ? OR b.branch_name LIKE ? OR c.name LIKE ?) ORDER BY c.name,b.branch_name LIMIT 30`).all(search,q,q,q);return sendJson(response,200,{items})}
     if (request.method === 'GET' && url.pathname === '/api/mobile/submissions') return sendJson(response,200,{items:listTemporaryLocations({employeeId:session.employeeId})})
-    if (request.method === 'POST' && url.pathname === '/api/mobile/temporary-customers') {const payload=(await readJson(request)).payload;return sendJson(response,201,createSpecialRequest({...payload,employeeId:session.employeeId,requestType:'potential_new',createdBy:session.employeeName,requestedCollectionDate:payload.requestedCollectionDate||new Date().toISOString().slice(0,10),status:'awaiting_supervisor'}))}
+    if (request.method === 'POST' && url.pathname === '/api/mobile/temporary-customers') {const payload=(await readJson(request)).payload;return sendJson(response,201,createSpecialRequest({...payload,employeeId:session.employeeId,requestType:'potential_new',createdBy:session.employeeName,requestedCollectionDate:payload.requestedCollectionDate||kuchingDate(),status:'awaiting_supervisor'}))}
     if (request.method === 'GET' && url.pathname === '/api/gps-migration/template') return sendJson(response,200,gpsMigrationTemplate())
     if (request.method === 'GET' && url.pathname === '/api/gps-migration/batches') return sendJson(response,200,{items:listGpsMigrationBatches()})
     if (request.method === 'GET' && /^\/api\/gps-migration\/batches\/\d+$/.test(url.pathname)) return sendJson(response,200,getGpsMigrationBatch(Number(url.pathname.split('/').at(-1))))
@@ -161,33 +166,33 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'PATCH' && /^\/api\/vehicles\/\d+$/.test(url.pathname)) return sendJson(response,200,updateVehicle(Number(url.pathname.split('/').at(-1)),(await readJson(request)).payload))
     if (request.method === 'POST' && /^\/api\/vehicles\/\d+\/(compliance|maintenance|fuel|tyres|documents|usage)$/.test(url.pathname)) {const parts=url.pathname.split('/'),id=Number(parts[3]),type=parts[4],payload=(await readJson(request)).payload;const handlers={compliance:updateVehicleCompliance,maintenance:addMaintenanceRecord,fuel:addFuelRecord,tyres:addTyreRecord,documents:addVehicleDocument,usage:addUsageRecord};return sendJson(response,type==='compliance'?200:201,handlers[type](id,payload))}
     if (request.method === 'GET' && url.pathname === '/api/employees/next-code') return sendJson(response,200,getNextEmployeeCode())
-    if (request.method === 'GET' && url.pathname === '/api/employees-sensitive-export') {if(session.role!=='admin'&&!accountCan(session,'employee_payroll_sensitive'))return sendJson(response,403,{error:'没有薪资敏感资料导出权限'});return sendJson(response,200,sensitiveEmployeeExport(url.searchParams.get('reason'),session,meta(request)))}
-    if (request.method === 'GET' && /^\/api\/employees\/\d+$/.test(url.pathname)) {const id=Number(url.pathname.split('/').at(-1)),item=employeeDetail(id,{canViewSensitive:session.role==='admin'||accountCan(session,'employee_identity_sensitive')||accountCan(session,'employee_payroll_sensitive')});return item?sendJson(response,200,item):sendJson(response,404,{error:'Employee not found'})}
-    if (request.method === 'POST' && url.pathname === '/api/employees') {if(!['admin','supervisor'].includes(session.role))return sendJson(response,403,{error:'只有Admin或Supervisor可以建立员工'});const payload=(await readJson(request)).payload;if(payload.nationalIdNumber&&session.role!=='admin'&&!accountCan(session,'employee_identity_sensitive'))return sendJson(response,403,{error:'没有身份证资料建立权限'});if(['bankAccountNumber','epfNumber','socsoNumber'].some(key=>payload[key])&&session.role!=='admin'&&!accountCan(session,'employee_payroll_sensitive'))return sendJson(response,403,{error:'没有薪资资料建立权限'});return sendJson(response,201,createEmployee({...payload,changedBy:session.employeeName}))}
+    if (request.method === 'GET' && url.pathname === '/api/employees-sensitive-export') {if(!canViewPayroll(session))return sendJson(response,403,{error:'没有薪资敏感资料导出权限'});return sendJson(response,200,sensitiveEmployeeExport(url.searchParams.get('reason'),session,meta(request)))}
+    if (request.method === 'GET' && /^\/api\/employees\/\d+$/.test(url.pathname)) {const id=Number(url.pathname.split('/').at(-1)),item=employeeDetail(id,{canViewSensitive:canViewIdentity(session)||canViewPayroll(session)});return item?sendJson(response,200,item):sendJson(response,404,{error:'Employee not found'})}
+    if (request.method === 'POST' && url.pathname === '/api/employees') {if(!canManageEmployees(session))return sendJson(response,403,{error:'没有建立员工权限'});const payload=(await readJson(request)).payload;if(payload.nationalIdNumber&&!canViewIdentity(session))return sendJson(response,403,{error:'没有身份证资料建立权限'});if(['bankAccountNumber','epfNumber','socsoNumber'].some(key=>payload[key])&&!canViewPayroll(session))return sendJson(response,403,{error:'没有薪资资料建立权限'});return sendJson(response,201,createEmployee({...payload,changedBy:session.employeeName}))}
     if (request.method === 'PATCH' && /^\/api\/employees\/\d+$/.test(url.pathname)) {
-      if(!['admin','supervisor'].includes(session.role))return sendJson(response,403,{error:'只有Admin或Supervisor可以修改员工'})
+      if(!canManageEmployees(session))return sendJson(response,403,{error:'没有修改员工权限'})
       const id=Number(url.pathname.split('/').at(-1)),payload=(await readJson(request)).payload
       assertEmployeePayloadId(id,payload)
-      if(Object.hasOwn(payload,'nationalIdNumber')&&session.role!=='admin'&&!accountCan(session,'employee_identity_sensitive'))return sendJson(response,403,{error:'没有身份证资料修改权限'})
-      if(['bankName','bankAccountNumber','bankAccountHolderName','epfNumber','socsoNumber'].some(key=>Object.hasOwn(payload,key))&&session.role!=='admin'&&!accountCan(session,'employee_payroll_sensitive'))return sendJson(response,403,{error:'没有薪资资料修改权限'})
+      if(Object.hasOwn(payload,'nationalIdNumber')&&!canViewIdentity(session))return sendJson(response,403,{error:'没有身份证资料修改权限'})
+      if(['bankName','bankAccountNumber','bankAccountHolderName','epfNumber','socsoNumber'].some(key=>Object.hasOwn(payload,key))&&!canViewPayroll(session))return sendJson(response,403,{error:'没有薪资资料修改权限'})
       return sendJson(response,200,updateEmployee(id,{...payload,changedBy:session.employeeName}))
     }
     if (request.method === 'POST' && /^\/api\/employees\/\d+\/terminate$/.test(url.pathname)) {
-      if(!['admin','supervisor'].includes(session.role))return sendJson(response,403,{error:'没有办理离职权限'})
+      if(!canManageEmployees(session))return sendJson(response,403,{error:'没有办理离职权限'})
       const id=Number(url.pathname.split('/')[3]),payload=(await readJson(request)).payload
       assertEmployeePayloadId(id,payload)
       return sendJson(response,200,endEmployeeEmployment(id,{...payload,changedBy:session.employeeName}))
     }
     if (request.method === 'POST' && /^\/api\/employees\/\d+\/rehire$/.test(url.pathname)) {
-      if(!['admin','supervisor'].includes(session.role))return sendJson(response,403,{error:'没有重新入职权限'})
+      if(!canManageEmployees(session))return sendJson(response,403,{error:'没有重新入职权限'})
       const id=Number(url.pathname.split('/')[3]),payload=(await readJson(request)).payload
       assertEmployeePayloadId(id,payload)
       return sendJson(response,200,rehireEmployee(id,{...payload,changedBy:session.employeeName}))
     }
-    if (request.method === 'POST' && /^\/api\/employees\/\d+\/sensitive$/.test(url.pathname)) {const id=Number(url.pathname.split('/')[3]),payload=(await readJson(request)).payload,identity=payload.field==='nationalIdNumber',allowed=session.role==='admin'||accountCan(session,identity?'employee_identity_sensitive':'employee_payroll_sensitive');if(!allowed)return sendJson(response,403,{error:'没有查看该敏感资料的权限'});return sendJson(response,200,revealEmployeeField(id,payload.field,payload.reason,session,meta(request)))}
-    if (request.method === 'GET' && /^\/api\/employees\/\d+\/sensitive-audit$/.test(url.pathname)) {if(session.role!=='admin')return sendJson(response,403,{error:'只有Admin可以查看敏感资料审计'});return sendJson(response,200,{items:sensitiveAccessLogs(Number(url.pathname.split('/')[3]))})}
-    if (request.method === 'POST' && /^\/api\/employees\/\d+\/documents$/.test(url.pathname)) {if(session.role!=='admin'&&!accountCan(session,'employee_identity_sensitive'))return sendJson(response,403,{error:'没有身份证件管理权限'});return sendJson(response,201,addEmployeeDocument(Number(url.pathname.split('/')[3]),(await readJson(request)).payload,session,meta(request)))}
-    if (request.method === 'GET' && /^\/api\/employee-documents\/\d+$/.test(url.pathname)) {if(session.role!=='admin'&&!accountCan(session,'employee_identity_sensitive'))return sendJson(response,403,{error:'没有身份证件查看权限'});const file=employeeDocumentFile(Number(url.pathname.split('/')[3]),session,url.searchParams.get('reason'),meta(request));response.writeHead(200,{'Content-Type':file.contentType,'Content-Disposition':`attachment; filename="${file.fileName}"`,'Cache-Control':'no-store, private'});return fs.createReadStream(file.absolute).pipe(response)}
+    if (request.method === 'POST' && /^\/api\/employees\/\d+\/sensitive$/.test(url.pathname)) {const id=Number(url.pathname.split('/')[3]),payload=(await readJson(request)).payload,identity=payload.field==='nationalIdNumber',allowed=identity?canViewIdentity(session):canViewPayroll(session);if(!allowed)return sendJson(response,403,{error:'没有查看该敏感资料的权限'});return sendJson(response,200,revealEmployeeField(id,payload.field,payload.reason,session,meta(request)))}
+    if (request.method === 'GET' && /^\/api\/employees\/\d+\/sensitive-audit$/.test(url.pathname)) {if(session.role!=='owner_admin')return sendJson(response,403,{error:'只有Owner Admin可以查看敏感资料审计'});return sendJson(response,200,{items:sensitiveAccessLogs(Number(url.pathname.split('/')[3]))})}
+    if (request.method === 'POST' && /^\/api\/employees\/\d+\/documents$/.test(url.pathname)) {if(!canViewIdentity(session))return sendJson(response,403,{error:'没有身份证件管理权限'});return sendJson(response,201,addEmployeeDocument(Number(url.pathname.split('/')[3]),(await readJson(request)).payload,session,meta(request)))}
+    if (request.method === 'GET' && /^\/api\/employee-documents\/\d+$/.test(url.pathname)) {if(!canViewIdentity(session))return sendJson(response,403,{error:'没有身份证件查看权限'});const file=employeeDocumentFile(Number(url.pathname.split('/')[3]),session,url.searchParams.get('reason'),meta(request));response.writeHead(200,{'Content-Type':file.contentType,'Content-Disposition':`attachment; filename="${file.fileName}"`,'Cache-Control':'no-store, private'});return fs.createReadStream(file.absolute).pipe(response)}
     if (request.method === 'POST' && url.pathname === '/api/locations') return sendJson(response,201,createLocation((await readJson(request)).payload))
     if (request.method === 'PATCH' && /^\/api\/locations\/\d+$/.test(url.pathname)) return sendJson(response,200,updateLocation(Number(url.pathname.split('/').at(-1)),(await readJson(request)).payload))
     if (request.method === 'POST' && url.pathname === '/api/schedule-exceptions') return sendJson(response,201,createScheduleException((await readJson(request)).payload))

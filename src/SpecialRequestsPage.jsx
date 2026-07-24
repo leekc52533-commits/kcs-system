@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
+import {kuchingDate} from '../shared/kuchingTime.js'
 
-const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+const today=kuchingDate
 const api=async(url,options={})=>{const r=await fetch(url,{headers:{'Content-Type':'application/json'},...options});const x=await r.json();if(!r.ok)throw new Error(x.error||'操作失败');return x}
 const statuses={new:'新请求',awaiting_supervisor:'等待主管',awaiting_customer_account:'等待建立账号',scheduled:'已排车',approved:'已批准',published:'已发布',completed:'已完成',rejected:'已拒绝',cancelled:'已取消'}
 

@@ -96,7 +96,7 @@ const upserts = {
 function invalidateApprovedDaysAfterImport(preview,database,batchId){
   const affected=new Map()
   const addDay=(day,row)=>{if(!affected.has(day.id))affected.set(day.id,{day,changes:[]});affected.get(day.id).changes.push({type:row.type,action:row.action,normalized:row.normalized})}
-  const future=database.prepare("SELECT * FROM dispatch_days WHERE dispatch_date>=date('now','localtime') AND status IN ('approved','published')").all()
+  const future=database.prepare("SELECT * FROM dispatch_days WHERE dispatch_date>=date('now','+8 hours') AND status IN ('approved','published')").all()
   for(const row of preview.rows){
     if(!['new','update'].includes(row.action)||!['areas','customers','branches','schedules','locations'].includes(row.type))continue
     let days=[]
@@ -104,9 +104,9 @@ function invalidateApprovedDaysAfterImport(preview,database,batchId){
       const wanted=String(row.normalized.daysOfWeek||'').split(/[,;/]/).map(x=>x.trim())
       const names=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
       days=future.filter(day=>wanted.includes(names[new Date(`${day.dispatch_date}T00:00:00`).getDay()]))
-    }else if(row.type==='customers')days=database.prepare(`SELECT DISTINCT dd.* FROM dispatch_days dd JOIN dispatch_trips dt ON dt.dispatch_day_id=dd.id JOIN dispatch_stops ds ON ds.dispatch_trip_id=dt.id JOIN branches b ON b.id=ds.branch_id JOIN customers c ON c.id=b.customer_id WHERE c.jodoo_customer_id=? AND dd.dispatch_date>=date('now','localtime') AND dd.status IN ('approved','published')`).all(row.normalized.customerId)
-    else if(row.type==='areas')days=database.prepare(`SELECT DISTINCT dd.* FROM dispatch_days dd JOIN dispatch_trips dt ON dt.dispatch_day_id=dd.id JOIN dispatch_stops ds ON ds.dispatch_trip_id=dt.id JOIN branches b ON b.id=ds.branch_id JOIN areas a ON a.id=b.area_id WHERE a.jodoo_area_id=? AND dd.dispatch_date>=date('now','localtime') AND dd.status IN ('approved','published')`).all(row.normalized.areaId)
-    else days=database.prepare(`SELECT DISTINCT dd.* FROM dispatch_days dd JOIN dispatch_trips dt ON dt.dispatch_day_id=dd.id JOIN dispatch_stops ds ON ds.dispatch_trip_id=dt.id JOIN branches b ON b.id=ds.branch_id WHERE b.jodoo_branch_id=? AND dd.dispatch_date>=date('now','localtime') AND dd.status IN ('approved','published')`).all(row.normalized.branchId)
+    }else if(row.type==='customers')days=database.prepare(`SELECT DISTINCT dd.* FROM dispatch_days dd JOIN dispatch_trips dt ON dt.dispatch_day_id=dd.id JOIN dispatch_stops ds ON ds.dispatch_trip_id=dt.id JOIN branches b ON b.id=ds.branch_id JOIN customers c ON c.id=b.customer_id WHERE c.jodoo_customer_id=? AND dd.dispatch_date>=date('now','+8 hours') AND dd.status IN ('approved','published')`).all(row.normalized.customerId)
+    else if(row.type==='areas')days=database.prepare(`SELECT DISTINCT dd.* FROM dispatch_days dd JOIN dispatch_trips dt ON dt.dispatch_day_id=dd.id JOIN dispatch_stops ds ON ds.dispatch_trip_id=dt.id JOIN branches b ON b.id=ds.branch_id JOIN areas a ON a.id=b.area_id WHERE a.jodoo_area_id=? AND dd.dispatch_date>=date('now','+8 hours') AND dd.status IN ('approved','published')`).all(row.normalized.areaId)
+    else days=database.prepare(`SELECT DISTINCT dd.* FROM dispatch_days dd JOIN dispatch_trips dt ON dt.dispatch_day_id=dd.id JOIN dispatch_stops ds ON ds.dispatch_trip_id=dt.id JOIN branches b ON b.id=ds.branch_id WHERE b.jodoo_branch_id=? AND dd.dispatch_date>=date('now','+8 hours') AND dd.status IN ('approved','published')`).all(row.normalized.branchId)
     days.forEach(day=>addDay(day,row))
   }
   for(const {day,changes} of affected.values()){

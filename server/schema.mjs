@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 16
+export const SCHEMA_VERSION = 17
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -173,6 +173,8 @@ CREATE TABLE IF NOT EXISTS auth_accounts (
   username TEXT NOT NULL UNIQUE COLLATE NOCASE,
   password_hash TEXT NOT NULL,
   role TEXT NOT NULL CHECK(role IN ('admin','supervisor','office','driver','crew')),
+  system_role TEXT NOT NULL DEFAULT 'office',
+  preferred_language TEXT NOT NULL DEFAULT 'en',
   is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0,1)),
   must_change_password INTEGER NOT NULL DEFAULT 1 CHECK(must_change_password IN (0,1)),
   failed_login_count INTEGER NOT NULL DEFAULT 0,
@@ -322,6 +324,17 @@ CREATE TABLE IF NOT EXISTS auth_audit_logs (
   detail_json TEXT,
   actor TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS auth_account_change_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  target_account_id INTEGER NOT NULL REFERENCES auth_accounts(id),
+  field_name TEXT NOT NULL,
+  old_value TEXT,
+  new_value TEXT,
+  changed_by_account_id INTEGER REFERENCES auth_accounts(id),
+  changed_by TEXT NOT NULL,
+  changed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS vehicles (

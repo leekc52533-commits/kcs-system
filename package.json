@@ -13,7 +13,10 @@
     "build": "vite build",
     "lint": "oxlint",
     "test": "node --test --test-concurrency=1",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "predeploy:kcs": "node scripts/predeploy.mjs",
+    "rollback:kcs": "node scripts/rollback.mjs",
+    "verify:data": "node scripts/verify-data.mjs"
   },
   "dependencies": {
     "exceljs": "^4.4.0",

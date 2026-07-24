@@ -37,6 +37,8 @@ npm run lint      # 代码检查
 npm run build     # 生成正式前端构建
 npm test          # 自动测试导入与 Route Ready 规则
 npm run preview   # 预览正式构建
+npm run predeploy:kcs # migration/部署前建立并验证SQLite备份
+npm run verify:data   # 核对schema、完整性及核心资料数量
 ```
 
 ## 首次导入五份 Jodoo Excel
@@ -60,7 +62,19 @@ npm run preview   # 预览正式构建
 - `GET /api/import-batches`、`GET /api/import-batches/:id/errors`
 - `POST /api/import/preview`、`POST /api/import/commit`
 
-SQLite schema 目前为 v13。`branches` 保留现有架构，同时保存原始 CustomerID/AreaID，方便显示未匹配关联并保证重复导入幂等。v10 增加完整车辆资料、合规提醒、保养、燃油、轮胎、文件、状态与使用历史；v11 取消 Zone 数量限制，增加 Area 归属确认状态与派车 Zone/Area 快照；v12 分开保存 Area 当前待确认 Zone 与最后已确认 Zone；v13 增加 Zone 边界版本、GPS 推荐与主管决定历史。升级不会删除既有周计划、Trip 或站点。Route Ready 规则集中在 `shared/importRules.js`：至少一条有效排程、有效经纬度，并且客户/分店状态不是 Paused、Closed 或 Ended；当前没有来源状态时视为 Active。
+SQLite schema 目前为 v17。`branches` 保留现有架构，同时保存原始 CustomerID/AreaID，方便显示未匹配关联并保证重复导入幂等。v10 增加完整车辆资料；v11-v13 增加动态 Zone、派车快照及 GPS 推荐；v14-v16 增加 Customer/Employee Master、敏感资料审计与多段 Employment Period；v17 增加兼容式 `system_role`、账号语言偏好及账号身份变更历史。升级不会删除既有周计划、Trip、站点、账号或密码哈希。Route Ready 规则集中在 `shared/importRules.js`。
+
+## 上线前 v17：日期、语言、导航与账号权限
+
+- 所有“今天／明天／后天”和未来日期判断统一为 `Asia/Kuching`。前端使用 `Intl` 指定时区，后台 SQLite 使用明确 UTC+8 日期；日期判断不再以 `toISOString()` 截取 UTC 日期。
+- 登录、Dashboard、司机手机核心流程、一周派车快捷操作及常用导航支持 Bahasa Melayu、中文、English。登录后语言选择写入该账号的 `preferred_language`；未登录选择只保存在当前浏览器。翻译缺失安全回退 English，并在开发模式警告。
+- 地址、道路、城市、州、基地、Operational Location 及地图地点值永远保留原始 English/Bahasa Melayu；只翻译字段标签，不翻译或复制地点主档。
+- 所有桌面非首页模块都有统一返回键；优先使用浏览器实际历史，没有模块历史时回到 Dashboard。编辑页必须接入未保存状态后才允许离开。
+- System Role 与 Employee Job Role 分开。`kcadmin` 兼容迁移为 `owner_admin`；另支持 `operations_admin`、`supervisor`、`office`、`driver`、`crew`。只有 Owner Admin 可修改普通账号 Username/System Role；Operations Admin 可建立、停用、解锁及重设普通账号，但不能管理 Owner、授权敏感资料或升为 Owner。
+- 登录、首次改密、修改密码、账号建立及重设密码使用独立眼睛按钮；密码继续采用加盐 scrypt，密码值不会写入 URL、日志或审计内容。
+- 正式域名为 `https://dispatch.leesaiker.com`；旧 sslip.io 地址继续由现有部署配置保留。本次代码不会自动修改 DNS、证书或反向代理。
+
+完整部署、回滚、权限矩阵、测试及故障处理见 [`docs/PRELAUNCH_V17.md`](docs/PRELAUNCH_V17.md)。
 
 ## GPS-Based Zone Recommendation V1
 

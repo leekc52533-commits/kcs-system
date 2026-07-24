@@ -1,3 +1,5 @@
+import {kuchingDate} from '../shared/kuchingTime.js'
+
 const safeCell=value=>{
   if(value==null)return ''
   const text=String(value)
@@ -11,7 +13,7 @@ export async function readSpreadsheet(file){
   const ExcelJS=(await import('exceljs/dist/exceljs.min.js')).default
   const workbook=new ExcelJS.Workbook();await workbook.xlsx.load(await file.arrayBuffer());const sheet=workbook.worksheets[0];if(!sheet)throw new Error('Excel 没有工作表')
   const headers=sheet.getRow(1).values.slice(1).map(value=>String(value?.text??value??'').trim()),rows=[]
-  sheet.eachRow((row,index)=>{if(index===1)return;const item={};let hasValue=false;headers.forEach((header,column)=>{const cell=row.getCell(column+1),raw=cell.value?.text??cell.value?.result??cell.value;if(raw!==null&&raw!==undefined&&raw!=='')hasValue=true;item[header]=raw instanceof Date?raw.toISOString().slice(0,10):raw});if(hasValue)rows.push(item)})
+  sheet.eachRow((row,index)=>{if(index===1)return;const item={};let hasValue=false;headers.forEach((header,column)=>{const cell=row.getCell(column+1),raw=cell.value?.text??cell.value?.result??cell.value;if(raw!==null&&raw!==undefined&&raw!=='')hasValue=true;item[header]=raw instanceof Date?kuchingDate(raw):raw});if(hasValue)rows.push(item)})
   return{format:'xlsx',sheetName:sheet.name,rows}
 }
 

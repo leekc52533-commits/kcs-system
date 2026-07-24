@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CircleMarker, MapContainer, Polygon, Popup, TileLayer, useMapEvents } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import './GpsZoneRecommendationPage.css'
+import {kuchingDate} from '../shared/kuchingTime.js'
 
 const api=async(url,options={})=>{const response=await fetch(url,{headers:{'Content-Type':'application/json'},...options}),data=await response.json();if(!response.ok)throw new Error(data.error||'操作失败');return data}
 const colors=['#16866f','#3277ad','#c87a32','#745bb7','#a45161','#287d89','#8b6b35','#516d7d','#b14e42']
-const today=()=>new Date().toISOString().slice(0,10)
+const today=kuchingDate
 
 export default function GpsZoneRecommendationPage({currentUser}){const[tab,setTab]=useState('recommendations'),[resources,setResources]=useState(null),[boundaries,setBoundaries]=useState(null),[recommendations,setRecommendations]=useState(null),[error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false)
   const load=useCallback(async()=>{try{const[resourceData,boundaryData,recommendationData]=await Promise.all([api('/api/resources'),api('/api/zone-boundaries?history=true'),api('/api/gps-zone-recommendations')]);setResources(resourceData);setBoundaries(boundaryData);setRecommendations(recommendationData);setError('')}catch(item){setError(item.message)}},[]);useEffect(()=>{load()},[load])

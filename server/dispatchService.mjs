@@ -1,16 +1,14 @@
 import { createHash } from 'node:crypto'
 import { db as defaultDb } from './database.mjs'
+import {addCalendarDays,kuchingDate} from '../shared/kuchingTime.js'
 
 const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
-const iso = (value = new Date()) => {
-  const date = value instanceof Date ? value : new Date(`${value}T00:00:00`)
-  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`
-}
-const addDays = (date, days) => { const next = new Date(`${date}T00:00:00`); next.setDate(next.getDate()+days); return iso(next) }
+const iso = (value = new Date()) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : kuchingDate(value)
+const addDays = addCalendarDays
 const json = (value) => value == null ? null : JSON.stringify(value)
 const actor = (value) => String(value || 'Supervisor')
 const currentEmploymentPeriod=(database,employeeId)=>employeeId?database.prepare('SELECT id FROM employee_employment_history WHERE employee_id=? ORDER BY id DESC LIMIT 1').get(employeeId)?.id||null:null
-const dayName = (date) => DAY_NAMES[new Date(`${date}T00:00:00`).getDay()]
+const dayName = (date) => DAY_NAMES[new Date(`${date}T00:00:00Z`).getUTCDay()]
 const scheduleMatches = (schedule, date) => {
   const frequency=String(schedule.frequency||'').toLowerCase()
   if(frequency==='call'||frequency.includes('on call'))return false

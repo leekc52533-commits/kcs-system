@@ -234,6 +234,36 @@ if (currentVersion === 0) {
     `)
     db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (16)').run()
   }
+  if (currentVersion < 17) {
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      ensureColumn('auth_accounts', 'system_role', 'TEXT')
+      ensureColumn('auth_accounts', 'preferred_language', "TEXT NOT NULL DEFAULT 'en'")
+      db.exec(`
+        UPDATE auth_accounts SET
+          system_role=CASE
+            WHEN lower(username)='kcadmin' THEN 'owner_admin'
+            WHEN role='admin' THEN 'operations_admin'
+            WHEN role IN ('supervisor','office','driver','crew') THEN role
+            ELSE 'office'
+          END
+        WHERE system_role IS NULL OR TRIM(system_role)='' OR system_role NOT IN ('owner_admin','operations_admin','supervisor','office','driver','crew');
+        UPDATE auth_accounts SET preferred_language=CASE
+          WHEN lower(username)='kcadmin' THEN 'zh'
+          WHEN employee_id IN (SELECT id FROM employees WHERE job_role IN ('Driver','Attendant / Crew','Assistant','Crew')) THEN 'ms'
+          ELSE 'en'
+        END
+        WHERE lower(username)='kcadmin'
+          OR employee_id IN (SELECT id FROM employees WHERE job_role IN ('Driver','Attendant / Crew','Assistant','Crew'))
+          OR preferred_language IS NULL OR preferred_language NOT IN ('ms','zh','en');
+      `)
+      db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (17)').run()
+      db.exec('COMMIT')
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
+  }
 }
 
 const officialVehicles = [
@@ -277,8 +307,11 @@ db.exec(`
 `)
 db.exec(`CREATE TRIGGER IF NOT EXISTS sold_vehicle_no_delete BEFORE DELETE ON vehicles WHEN OLD.operational_status='sold' BEGIN SELECT RAISE(ABORT,'Sold vehicle history cannot be deleted'); END;`)
 
+const integrityResult = db.prepare('PRAGMA integrity_check').get()
+if (integrityResult.integrity_check !== 'ok') throw new Error(`Database integrity check failed: ${integrityResult.integrity_check}`)
+
 export function getSystemStatus() {
-  const tableNames = ['users','auth_accounts','auth_sessions','auth_audit_logs','auth_account_permissions','customers','branches','branch_schedules','zone_groups','areas','zone_boundaries','gps_zone_recommendations','gps_zone_decisions','employees','employee_employment_history','employee_change_history','employee_documents','employee_sensitive_access_logs','vehicles','vehicle_documents','vehicle_maintenance_records','vehicle_fuel_records','vehicle_tyre_records','vehicle_compliance_reminders','vehicle_status_history','vehicle_usage_history','buyers','operational_locations','master_change_history','data_transfer_logs','dispatches','dispatch_stops','dispatch_days','dispatch_trips','special_collection_requests','schedule_exceptions','temporary_locations','gps_migration_batches','gps_migration_rows','stop_documents','import_batches','import_errors','jodoo_sync_events','jodoo_outbox_jobs']
+  const tableNames = ['users','auth_accounts','auth_sessions','auth_audit_logs','auth_account_change_history','auth_account_permissions','customers','branches','branch_schedules','zone_groups','areas','zone_boundaries','gps_zone_recommendations','gps_zone_decisions','employees','employee_employment_history','employee_change_history','employee_documents','employee_sensitive_access_logs','vehicles','vehicle_documents','vehicle_maintenance_records','vehicle_fuel_records','vehicle_tyre_records','vehicle_compliance_reminders','vehicle_status_history','vehicle_usage_history','buyers','operational_locations','master_change_history','data_transfer_logs','dispatches','dispatch_stops','dispatch_days','dispatch_trips','special_collection_requests','schedule_exceptions','temporary_locations','gps_migration_batches','gps_migration_rows','stop_documents','import_batches','import_errors','jodoo_sync_events','jodoo_outbox_jobs']
   const counts = Object.fromEntries(tableNames.map((table) => [table, db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get().count]))
   return { database: 'connected', schemaVersion: SCHEMA_VERSION, counts }
 }
