@@ -76,6 +76,8 @@ SQLite schema 目前为 v17。`branches` 保留现有架构，同时保存原始
 
 完整部署、回滚、权限矩阵、测试及故障处理见 [`docs/PRELAUNCH_V17.md`](docs/PRELAUNCH_V17.md)。
 
+> AWS 正式库与开发电脑的本机 SQLite 不同。正式库固定使用 `/var/lib/kcs/data/kcs-dispatch.db`，包含云端 EMP0003 及其账号；部署只允许对该库执行经过 backup rehearsal 的 schema migration，禁止用本机数据库覆盖。Ubuntu/systemd/Caddy 的完整 preflight、部署和回滚命令以 `PRELAUNCH_V17.md` 为准，本批次不会自动部署。
+
 ## GPS-Based Zone Recommendation V1
 
 - 左侧进入“GPS Zone 建议”。`Zone Boundary Map` 使用 OpenStreetMap/Leaflet，不需要 Google Maps API Key；地图底图需要网络连接，polygon 与推荐资料保存在本机 SQLite。

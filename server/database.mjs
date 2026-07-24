@@ -4,6 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import './config.mjs'
 import { SCHEMA_VERSION, schemaSql } from './schema.mjs'
+import { applyV17Migration } from './migrationV17.mjs'
 
 const serverDir = path.dirname(fileURLToPath(import.meta.url))
 const projectDir = path.resolve(serverDir, '..')
@@ -234,36 +235,7 @@ if (currentVersion === 0) {
     `)
     db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (16)').run()
   }
-  if (currentVersion < 17) {
-    db.exec('BEGIN IMMEDIATE')
-    try {
-      ensureColumn('auth_accounts', 'system_role', 'TEXT')
-      ensureColumn('auth_accounts', 'preferred_language', "TEXT NOT NULL DEFAULT 'en'")
-      db.exec(`
-        UPDATE auth_accounts SET
-          system_role=CASE
-            WHEN lower(username)='kcadmin' THEN 'owner_admin'
-            WHEN role='admin' THEN 'operations_admin'
-            WHEN role IN ('supervisor','office','driver','crew') THEN role
-            ELSE 'office'
-          END
-        WHERE system_role IS NULL OR TRIM(system_role)='' OR system_role NOT IN ('owner_admin','operations_admin','supervisor','office','driver','crew');
-        UPDATE auth_accounts SET preferred_language=CASE
-          WHEN lower(username)='kcadmin' THEN 'zh'
-          WHEN employee_id IN (SELECT id FROM employees WHERE job_role IN ('Driver','Attendant / Crew','Assistant','Crew')) THEN 'ms'
-          ELSE 'en'
-        END
-        WHERE lower(username)='kcadmin'
-          OR employee_id IN (SELECT id FROM employees WHERE job_role IN ('Driver','Attendant / Crew','Assistant','Crew'))
-          OR preferred_language IS NULL OR preferred_language NOT IN ('ms','zh','en');
-      `)
-      db.prepare('INSERT OR IGNORE INTO schema_meta (version) VALUES (17)').run()
-      db.exec('COMMIT')
-    } catch (error) {
-      db.exec('ROLLBACK')
-      throw error
-    }
-  }
+  if (currentVersion < 17) applyV17Migration(db)
 }
 
 const officialVehicles = [

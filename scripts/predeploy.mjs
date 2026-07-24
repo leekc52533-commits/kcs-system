@@ -13,7 +13,7 @@ const backupPath=path.join(backupDir,`kcs-dispatch-predeploy-${stamp}.sqlite`)
 const quote=value=>`'${String(value).replaceAll("'","''")}'`
 const source=new DatabaseSync(databasePath)
 try{
-  source.exec('PRAGMA wal_checkpoint(FULL)')
+  source.exec('PRAGMA wal_checkpoint(TRUNCATE)')
   const sourceIntegrity=source.prepare('PRAGMA integrity_check').get().integrity_check
   if(sourceIntegrity!=='ok')throw new Error(`Source integrity check failed: ${sourceIntegrity}`)
   source.exec(`VACUUM INTO ${quote(backupPath)}`)

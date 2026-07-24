@@ -13,6 +13,18 @@
 - `src/BackButton.jsx`、`src/navigation.js`：返回与未保存拦截。
 - `src/PasswordInput.jsx`、`src/AccountManagementPage.jsx`：密码眼睛及账号管理。
 - `scripts/predeploy.mjs`、`scripts/rollback.mjs`、`scripts/verify-data.mjs`：备份、恢复及资料核对。
+- `scripts/cloud-preflight.mjs`：只读记录 AWS 正式库的 Employee、Auth Account 与 EMP0003，并在 migration 后按 ID 验证完整保留。
+- `scripts/cloud-migration-rehearsal.mjs`：只在正式备份副本执行 v17 migration rehearsal，绝不连接写入正式数据库。
+
+## 重要环境区别
+
+开发电脑的 `data/kcs-dispatch.db` 是较旧的本机副本，不代表 AWS 正式数据库，也不得上传覆盖正式库。AWS 唯一正式数据库为：
+
+```text
+/var/lib/kcs/data/kcs-dispatch.db
+```
+
+已知 AWS 基线为 Customers 253、Branches 475、Employees 约 4（以 preflight 实查为准）、Vehicles 7、Zone Groups 9、Official GPS 118、Auth Accounts 2；并包含可登录账号 EMP0003 / `SUNDARAMUTI BIN MOHAMMAD`。任何本机数量差异都不能触发删除、同步回写或数据库替换。v17 只执行 schema migration。
 
 ## 使用方法
 
@@ -43,43 +55,115 @@ v17 只为 `auth_accounts` 增加：
 
 并增加 `auth_account_change_history`。旧 `role` 继续保留为兼容列，Owner/Operations 在旧列映射为 `admin`，因此旧关联与登录不改变。`kcadmin` 的新 System Role 为 `owner_admin`。migration 使用 `BEGIN IMMEDIATE`，失败会 rollback；启动完成后执行 `PRAGMA integrity_check`。
 
-## 部署与更新
+## Ubuntu / AWS 正式部署（本批次尚未执行）
 
-在停止旧服务后执行：
+以下命令只可在维护时段由正式服务器管理员执行。不要使用 `npm run dev`，不要复制本机 SQLite。假设现有 App、Database、systemd 和 Caddy 路径保持不变：
 
-```powershell
-git pull --ff-only origin main
-npm ci
-npm run predeploy:kcs
-npm run lint
-npm run build
-npm test
-npm run dev
+```bash
+set -euo pipefail
+APP=/opt/kcs-app
+DB=/var/lib/kcs/data/kcs-dispatch.db
+APP_USER="$(stat -c '%U' "$APP")"
+KCS_USER="$(systemctl show -p User --value kcs-api)"
+KCS_USER="${KCS_USER:-root}"
+KCS_GROUP="$(id -gn "$KCS_USER")"
+STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+BACKUP_DIR="/var/lib/kcs/backups/v17-$STAMP"
+RAW_BACKUP="$BACKUP_DIR/kcs-dispatch-before-v17.sqlite"
+SNAPSHOT="$BACKUP_DIR/preflight-v17.json"
+
+sudo install -d -m 0700 -o "$KCS_USER" -g "$KCS_GROUP" "$BACKUP_DIR"
+sudo systemctl stop kcs-api
+sudo systemctl is-active kcs-api && exit 1 || true
+
+# API停止后合并WAL，并在pull前先建立原始安全备份
+sudo -u "$KCS_USER" sqlite3 "$DB" "PRAGMA wal_checkpoint(TRUNCATE); PRAGMA integrity_check;"
+sudo -u "$KCS_USER" sqlite3 "$DB" ".backup '$RAW_BACKUP'"
+sudo chmod 0600 "$RAW_BACKUP"
+sudo -u "$KCS_USER" sqlite3 "$RAW_BACKUP" "PRAGMA integrity_check;"
+
+# 只更新程序，不上传或替换DB
+sudo -u "$APP_USER" -H git -C "$APP" pull --ff-only origin main
+sudo -u "$APP_USER" -H npm --prefix "$APP" ci
+
+# 对AWS正式库做只读preflight；必须看到EMP0003与2个账号
+sudo -u "$KCS_USER" env KCS_DB_PATH="$DB" \
+  node "$APP/scripts/cloud-preflight.mjs" --mode before --snapshot "$SNAPSHOT"
+
+# 再建立应用级校验备份，并只在备份副本演练migration
+sudo -u "$KCS_USER" env KCS_DB_PATH="$DB" KCS_BACKUP_DIR="$BACKUP_DIR" \
+  npm --prefix "$APP" run predeploy:kcs
+sudo -u "$KCS_USER" env KCS_DATA_DIR=/var/lib/kcs/data \
+  node "$APP/scripts/cloud-migration-rehearsal.mjs" --backup "$RAW_BACKUP" --snapshot "$SNAPSHOT"
+
+sudo -u "$APP_USER" -H npm --prefix "$APP" run lint
+sudo -u "$APP_USER" -H npm --prefix "$APP" run build
+sudo -u "$APP_USER" -H npm --prefix "$APP" test
+
+# 以上全部通过后，才对原AWS数据库执行独立的schema-v17-only migration。
+# 此命令不会载入server/database.mjs，因此不会执行车辆规范化、seed或其他启动期资料整理。
+sudo -u "$KCS_USER" env KCS_DB_PATH="$DB" KCS_DATA_DIR=/var/lib/kcs/data \
+  npm --prefix "$APP" run migrate:kcs
+sudo -u "$KCS_USER" env KCS_DB_PATH="$DB" \
+  node "$APP/scripts/cloud-preflight.mjs" --mode after --snapshot "$SNAPSHOT"
+
+sudo systemctl start kcs-api
+sudo systemctl --no-pager --full status kcs-api
+curl --fail --silent --show-error https://dispatch.leesaiker.com/api/health
+curl --fail --silent --show-error https://dispatch.leesaiker.com/api/auth/session
 ```
 
-确认：
+`cloud:preflight --mode after` 会阻止 Employee/Auth Account 数量下降，并逐一验证原 Employee ID、Employee Code、姓名、账号 ID、Username、启用状态及密码哈希指纹不变。因此 AWS 比本机多出的 EMP0003 和第二个账号必须保留。
 
-```powershell
-npm run verify:data
-Invoke-RestMethod https://dispatch.leesaiker.com/api/health
-Invoke-RestMethod https://dispatch.leesaiker.com/api/auth/session
+登录与权限核对必须使用浏览器进行：
+
+1. `kcadmin` 登录成功且显示 `owner_admin`。
+2. EMP0003 使用原账号登录成功，Employee ID、Employee Code 与历史不变。
+3. Operations Admin 可管理普通账号，但修改 Owner、提升 Owner 或读取敏感资料返回 403。
+4. Driver/Crew 只能进入手机页面。
+
+Caddyfile 本批次不需要改变。只有管理员确认配置确实有 diff 时才执行：
+
+```bash
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl reload caddy
 ```
 
-部署程序或反向代理继续使用现有配置。正式域名是 `https://dispatch.leesaiker.com`；不要删除旧 sslip.io 入口，直至管理层另行批准。
+否则不要 reload Caddy。正式域名继续为 `https://dispatch.leesaiker.com`，旧 sslip.io 入口保留。
 
-## 回滚
+## Ubuntu 完整回滚
 
-先完全停止 KCS API，确认 `kcs-dispatch.db-wal` 与 `kcs-dispatch.db-shm` 不存在，再执行：
+以下命令中的 `BACKUP_DIR` 必须换成该次部署实际目录。回滚先用仍在 v17 工作树内的恢复脚本恢复数据库，再切回部署前 Commit：
 
-```powershell
-npm run rollback:kcs -- --backup data/backups/kcs-dispatch-predeploy-YYYYMMDDTHHMMSSZ.sqlite --confirm
-git checkout <previous-commit> -- .
-npm ci
-npm run build
-npm run dev
+```bash
+set -euo pipefail
+APP=/opt/kcs-app
+DB=/var/lib/kcs/data/kcs-dispatch.db
+APP_USER="$(stat -c '%U' "$APP")"
+KCS_USER="$(systemctl show -p User --value kcs-api)"
+KCS_USER="${KCS_USER:-root}"
+BACKUP_DIR=/var/lib/kcs/backups/v17-YYYYMMDDTHHMMSSZ
+RAW_BACKUP="$BACKUP_DIR/kcs-dispatch-before-v17.sqlite"
+PRE_V17_COMMIT=4d2b248
+
+sudo systemctl stop kcs-api
+sudo -u "$KCS_USER" env KCS_DB_PATH="$DB" KCS_BACKUP_DIR="$BACKUP_DIR" \
+  npm --prefix "$APP" run rollback:kcs -- --backup "$RAW_BACKUP" --confirm
+sudo -u "$KCS_USER" sqlite3 "$DB" "PRAGMA integrity_check;"
+
+sudo -u "$APP_USER" -H git -C "$APP" checkout --detach "$PRE_V17_COMMIT"
+sudo -u "$APP_USER" -H npm --prefix "$APP" ci
+sudo -u "$APP_USER" -H npm --prefix "$APP" run build
+sudo systemctl start kcs-api
+
+curl --fail --silent --show-error https://dispatch.leesaiker.com/api/health
+sudo -u "$KCS_USER" sqlite3 "$DB" \
+  "SELECT 'employees',COUNT(*) FROM employees UNION ALL SELECT 'auth_accounts',COUNT(*) FROM auth_accounts;"
+sudo -u "$KCS_USER" sqlite3 "$DB" \
+  "SELECT e.id,e.employee_code,e.name,a.id,a.username,a.is_active FROM employees e LEFT JOIN auth_accounts a ON a.employee_id=e.id WHERE REPLACE(UPPER(e.employee_code),'-','')='EMP0003';"
 ```
 
-恢复脚本只接受 `data/backups/` 内通过 integrity check 的备份，并在覆盖前保存一份 `before-rollback` 安全副本。不要在 API 运行中恢复。
+恢复脚本会先 checkpoint 当前 WAL、验证当前库、建立 `before-rollback` 安全副本，再恢复已验证的 pre-v17 备份。Caddy 配置未改变时不 reload。确认稳定后，另行决定何时把 Git 工作树切回 `main`。
 
 ## 测试方法
 
@@ -99,7 +183,8 @@ npm run verify:data
 5. 所有密码输入默认隐藏且眼睛按钮彼此独立。
 6. 手机 390×844 无横向溢出。
 7. 正式域名登录页、`/api/health`、`/api/auth/session` 与 HTTPS。
-8. migration 后核心数量及 `PRAGMA integrity_check`。
+8. 使用包含 4 名员工、2 个账号和 EMP0003 的 AWS 型 fixture 验证 migration 幂等及完整保留。
+9. 正式部署前必须用 production backup rehearsal；本机旧数据库结果不能代替 AWS preflight。
 
 ## 地址与地点规范
 
@@ -108,7 +193,9 @@ Customer/Branch 地址、道路、城市、州、Company Yard、Employee Base、
 ## 常见错误
 
 - `auth/session 404`：旧 API 仍占用 8787；使用 `npm run dev`，启动器会先识别并关闭旧 KCS 进程。
-- migration 失败：不要重试写资料，停止服务并从 `data/backups` 回滚。
+- preflight 找不到 EMP0003、账号数少于 2 或正式数量下降：立即停止，不执行 migration。
+- rehearsal 失败：正式数据库尚未改变；保留备份与 snapshot，修正代码后重新开始。
+- migration/postflight 失败：不要启动 API，使用本次 `RAW_BACKUP` 完整回滚。
 - 语言出现英文：代表该 key 缺少目标语言；开发 Console 会记录 `[i18n] Missing ...`，补翻译后再发布。
 - 手机 GPS 失败：必须从 HTTPS 正式域名或浏览器允许的安全局域网环境进入，并授予 Location；不要把密码或 GPS 放进 URL。
 - Operations 收到 403：先确认目标不是 Owner/Operations、操作不是 Username/System Role/敏感授权；这是预期的服务端保护。

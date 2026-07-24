@@ -14,8 +14,21 @@ const backup=new DatabaseSync(backupPath,{readOnly:true})
 try{if(backup.prepare('PRAGMA integrity_check').get().integrity_check!=='ok')throw new Error('Backup integrity check failed')}finally{backup.close()}
 const stamp=new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d{3}Z$/,'Z')
 const safetyPath=path.join(backupDir,`kcs-dispatch-before-rollback-${stamp}.sqlite`)
-for(const suffix of ['-wal','-shm'])if(fs.existsSync(`${databasePath}${suffix}`))throw new Error(`Stop the KCS API before rollback; active SQLite file found: ${databasePath}${suffix}`)
-if(fs.existsSync(databasePath))fs.copyFileSync(databasePath,safetyPath)
+if(fs.existsSync(databasePath)){
+  const current=new DatabaseSync(databasePath)
+  try{
+    current.exec('PRAGMA wal_checkpoint(TRUNCATE)')
+    if(current.prepare('PRAGMA integrity_check').get().integrity_check!=='ok')throw new Error('Current database integrity check failed')
+    const quote=value=>`'${String(value).replaceAll("'","''")}'`
+    current.exec(`VACUUM INTO ${quote(safetyPath)}`)
+  }finally{current.close()}
+}
+for(const suffix of ['-wal','-shm']){
+  const sidecar=`${databasePath}${suffix}`
+  if(!fs.existsSync(sidecar))continue
+  if(fs.statSync(sidecar).size>0)throw new Error(`Stop the KCS API and checkpoint WAL before rollback: ${sidecar}`)
+  fs.rmSync(sidecar)
+}
 fs.copyFileSync(backupPath,databasePath)
 const restored=new DatabaseSync(databasePath,{readOnly:true})
 try{if(restored.prepare('PRAGMA integrity_check').get().integrity_check!=='ok')throw new Error('Restored database integrity check failed')}finally{restored.close()}
