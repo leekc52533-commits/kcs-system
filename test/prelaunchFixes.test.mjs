@@ -5,7 +5,7 @@ import {DatabaseSync} from 'node:sqlite'
 import {schemaSql,SCHEMA_VERSION} from '../server/schema.mjs'
 import {addCalendarDays,kuchingDate,shortcutForDate} from '../shared/kuchingTime.js'
 import {accountCan,bootstrapAccount,createAccount,login,roleCan,updateAccount,updateOwnPreferences} from '../server/authService.mjs'
-import {messages,translate} from '../src/translations.js'
+import {languageOptions,messages,translate} from '../src/translations.js'
 import {confirmNavigation,setNavigationDirty} from '../src/navigation.js'
 
 const database=()=>{const db=new DatabaseSync(':memory:');db.exec(`PRAGMA foreign_keys=ON;${schemaSql}`);return db}
@@ -45,6 +45,9 @@ test('language preference is saved per account',()=>{
   const db=database(),owner=bootstrapAccount({employeeName:'Owner',username:'kcadmin',password:'Initial123!',preferredLanguage:'zh'}, {},db)
   assert.equal(owner.role,'owner_admin')
   assert.equal(owner.preferredLanguage,'zh')
+  const loginChanged=login({username:'kcadmin',password:'Initial123!',preferredLanguage:'ms'}, {},db)
+  assert.equal(loginChanged.account.preferredLanguage,'ms')
+  assert.equal(login({username:'kcadmin',password:'Initial123!'}, {},db).account.preferredLanguage,'ms')
   const changed=updateOwnPreferences(owner,{preferredLanguage:'ms'},db)
   assert.equal(changed.preferredLanguage,'ms')
   assert.equal(db.prepare('SELECT preferred_language value FROM auth_accounts WHERE id=?').get(owner.id).value,'ms')
@@ -108,13 +111,29 @@ test('password visibility control exists and schema is v17',()=>{
 test('account name opens Profile menu and voluntary password change is cancellable',()=>{
   const app=fs.readFileSync(new URL('../src/App.jsx',import.meta.url),'utf8')
   const authPages=fs.readFileSync(new URL('../src/AuthPages.jsx',import.meta.url),'utf8')
-  assert.match(app,/function AccountProfileMenu/)
-  assert.match(app,/aria-haspopup="menu"/)
-  assert.match(app,/auth\.systemRole/)
-  assert.match(app,/auth\.preferredLanguage/)
+  const profile=fs.readFileSync(new URL('../src/AccountProfileMenu.jsx',import.meta.url),'utf8')
+  assert.match(profile,/aria-haspopup="menu"/)
+  assert.match(profile,/auth\.systemRole/)
+  assert.match(profile,/auth\.preferredLanguage/)
   assert.match(app,/forced=\{account\.mustChangePassword\}/)
   assert.doesNotMatch(app,/className="user-menu" onClick=\{onChangePassword\}/)
   assert.match(authPages,/\{!forced&&<button type="button" className="secondary" onClick=\{onCancel\}/)
   assert.match(authPages,/onDone\(result\.account\)/)
   assert.match(authPages,/auth\.forcedChangeReason/)
+})
+
+test('login keeps three languages while desktop and mobile use only Profile language selector',()=>{
+  const app=fs.readFileSync(new URL('../src/App.jsx',import.meta.url),'utf8')
+  const authPages=fs.readFileSync(new URL('../src/AuthPages.jsx',import.meta.url),'utf8')
+  const profile=fs.readFileSync(new URL('../src/AccountProfileMenu.jsx',import.meta.url),'utf8')
+  const css=fs.readFileSync(new URL('../src/App.css',import.meta.url),'utf8')
+  assert.equal((authPages.match(/<LanguageSelector/g)||[]).length,1)
+  assert.doesNotMatch(app,/LanguageSelector/)
+  assert.doesNotMatch(authPages,/LanguageSelector compact/)
+  assert.match(authPages,/preferredLanguage:language/)
+  assert.match(profile,/languageOptions\.map/)
+  assert.match(profile,/void setLanguage\(event\.target\.value\)/)
+  assert.match(css,/width:min\(300px,calc\(100vw - 28px\)\)/)
+  assert.doesNotMatch(css,/\.topbar \.account-profile\{display:none\}/)
+  for(const option of ['Bahasa Melayu','中文','English'])assert.ok(languageOptions.some(item=>item.label===option))
 })

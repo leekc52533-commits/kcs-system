@@ -28,11 +28,11 @@
 
 ## 使用方法
 
-登录页右上方可选 Bahasa Melayu、中文或 English。登录后的选择会写入个人账号，其他员工不受影响。Driver/Crew 可在手机顶部切换语言。
+登录页可选 Bahasa Melayu、中文或 English，并立即切换登录界面。登录成功时，当前选择会写入个人账号 `preferred_language`，同一浏览器也保存最近选择。下次登录或恢复 Session 后使用该账号上次保存的语言。
 
 Owner Admin 从左侧“账号管理”选择普通账号，可修改 Username/System Role；Operations Admin 只可建立、停用、启用、解锁和重设普通账号。Employee Code 在后台强制不可修改。
 
-右上角账号姓名现在打开 Account/Profile 菜单，而不是直接进入修改密码。菜单显示 Employee Name、Username、Employee Code、System Role 和 Preferred Language；Owner/Operations 另外可进入 Account Management。`kcadmin` 无论旧兼容字段为何值，都按受保护的 `owner_admin` 解析，而 Employee Primary Job Role 保持独立。
+登录后的桌面和 Driver/Crew 手机顶栏不再有独立语言下拉框。右上角账号姓名打开 Account/Profile 菜单，菜单显示 Employee Name、Username、Employee Code、System Role 和可选择的 Preferred Language；选择 Bahasa Melayu、中文或 English 后立即切换并自动保存，不需要 Save。Owner/Operations 另外可进入 Account Management。`kcadmin` 无论旧兼容字段为何值，都按受保护的 `owner_admin` 解析，而 Employee Primary Job Role 保持独立。
 
 用户主动选择 Change Password 时可以取消返回；成功后原 Session 继续有效，不会自动退出。只有首次临时密码或管理员重设密码后才设置 `must_change_password=true`。强制页面会说明原因、不能取消，但可退出账号。密码修改成功后清除 `must_change_password`，除非管理员再次重设密码，否则不会再次强制。
 
@@ -193,6 +193,8 @@ npm run verify:data
 9. 正式部署前必须用 production backup rehearsal；本机旧数据库结果不能代替 AWS preflight。
 10. 点击账号姓名只打开 Profile 菜单；Owner 显示 `owner_admin`，有权限者才显示 Account Management。
 11. 主动改密可取消且成功后 Session 仍有效；临时密码和管理员重设密码才强制，完成后 `must_change_password=0`。
+12. 登录页三语言即时切换；登录后顶栏没有重复语言下拉框，Profile 修改语言会即时生效并写入账号，下次登录继续使用。
+13. 桌面及 390×844 Driver/Crew 手机页面无横向溢出，Profile 菜单保持在 viewport 内。
 
 ## 地址与地点规范
 

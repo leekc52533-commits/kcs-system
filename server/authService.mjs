@@ -136,6 +136,7 @@ export function updateOwnPreferences(session,payload,database=defaultDb){
 
 export function login(payload,meta={},database=defaultDb){
   const username=text(payload.username),row=database.prepare(`${accountSql} WHERE a.username=? COLLATE NOCASE`).get(username)
+  const requestedLanguage=LANGUAGES.has(text(payload.preferredLanguage).toLowerCase())?text(payload.preferredLanguage).toLowerCase():null
   const locked=row?.locked_until&&new Date(row.locked_until)>new Date()
   if(!row||!row.is_active||row.employment_status!=='active'||locked||!verifyPassword(payload.password,row.password_hash)){
     if(row&&!locked){const failures=row.failed_login_count+1;const lockUntil=failures>=5?new Date(Date.now()+15*60_000).toISOString():null;database.prepare('UPDATE auth_accounts SET failed_login_count=?,locked_until=COALESCE(?,locked_until),updated_at=CURRENT_TIMESTAMP WHERE id=?').run(failures,lockUntil,row.id)}
@@ -145,12 +146,12 @@ export function login(payload,meta={},database=defaultDb){
   const token=crypto.randomBytes(32).toString('base64url'),tokenHash=crypto.createHash('sha256').update(token).digest('hex'),expiresAt=new Date(Date.now()+SESSION_HOURS*3600_000).toISOString().replace('T',' ').slice(0,19)
   database.exec('BEGIN IMMEDIATE')
   try{
-    database.prepare('UPDATE auth_accounts SET failed_login_count=0,locked_until=NULL,last_login_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(row.id)
+    database.prepare('UPDATE auth_accounts SET failed_login_count=0,locked_until=NULL,last_login_at=CURRENT_TIMESTAMP,preferred_language=COALESCE(?,preferred_language),updated_at=CURRENT_TIMESTAMP WHERE id=?').run(requestedLanguage,row.id)
     database.prepare('INSERT INTO auth_sessions(account_id,token_hash,ip_address,user_agent,expires_at) VALUES(?,?,?,?,?)').run(row.id,tokenHash,meta.ipAddress||null,meta.userAgent||null,expiresAt)
     audit(database,{accountId:row.id,employeeId:row.employee_id,username:row.username,action:'login',success:true,...meta})
     database.exec('COMMIT')
   }catch(error){database.exec('ROLLBACK');throw error}
-  return{token,expiresAt,account:publicAccount({...row,last_login_at:nowIso()})}
+  return{token,expiresAt,account:publicAccount({...database.prepare(`${accountSql} WHERE a.id=?`).get(row.id),last_login_at:nowIso()})}
 }
 
 export function getSession(token,database=defaultDb){

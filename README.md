@@ -67,7 +67,7 @@ SQLite schema 目前为 v17。`branches` 保留现有架构，同时保存原始
 ## 上线前 v17：日期、语言、导航与账号权限
 
 - 所有“今天／明天／后天”和未来日期判断统一为 `Asia/Kuching`。前端使用 `Intl` 指定时区，后台 SQLite 使用明确 UTC+8 日期；日期判断不再以 `toISOString()` 截取 UTC 日期。
-- 登录、Dashboard、司机手机核心流程、一周派车快捷操作及常用导航支持 Bahasa Melayu、中文、English。登录后语言选择写入该账号的 `preferred_language`；未登录选择只保存在当前浏览器。翻译缺失安全回退 English，并在开发模式警告。
+- 登录、Dashboard、司机手机核心流程、一周派车快捷操作及常用导航支持 Bahasa Melayu、中文、English。登录页保留三语言并即时切换；登录时把所选语言写入账号 `preferred_language`。登录后的桌面及手机顶栏不再重复显示语言下拉框，语言只在姓名 Account/Profile 菜单内选择、即时切换并自动保存。翻译缺失安全回退 English，并在开发模式警告。
 - 地址、道路、城市、州、基地、Operational Location 及地图地点值永远保留原始 English/Bahasa Melayu；只翻译字段标签，不翻译或复制地点主档。
 - 所有桌面非首页模块都有统一返回键；优先使用浏览器实际历史，没有模块历史时回到 Dashboard。编辑页必须接入未保存状态后才允许离开。
 - System Role 与 Employee Job Role 分开。`kcadmin` 兼容迁移为 `owner_admin`；另支持 `operations_admin`、`supervisor`、`office`、`driver`、`crew`。只有 Owner Admin 可修改普通账号 Username/System Role；Operations Admin 可建立、停用、解锁及重设普通账号，但不能管理 Owner、授权敏感资料或升为 Owner。
