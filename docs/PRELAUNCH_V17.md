@@ -32,6 +32,10 @@
 
 Owner Admin 从左侧“账号管理”选择普通账号，可修改 Username/System Role；Operations Admin 只可建立、停用、启用、解锁和重设普通账号。Employee Code 在后台强制不可修改。
 
+右上角账号姓名现在打开 Account/Profile 菜单，而不是直接进入修改密码。菜单显示 Employee Name、Username、Employee Code、System Role 和 Preferred Language；Owner/Operations 另外可进入 Account Management。`kcadmin` 无论旧兼容字段为何值，都按受保护的 `owner_admin` 解析，而 Employee Primary Job Role 保持独立。
+
+用户主动选择 Change Password 时可以取消返回；成功后原 Session 继续有效，不会自动退出。只有首次临时密码或管理员重设密码后才设置 `must_change_password=true`。强制页面会说明原因、不能取消，但可退出账号。密码修改成功后清除 `must_change_password`，除非管理员再次重设密码，否则不会再次强制。
+
 返回按钮优先返回实际上一页；没有 KCS 模块历史时回到 Dashboard。浏览器返回键使用同一模块历史。编辑 Employee 等有 dirty state 的页面，离开前需选择放弃或继续编辑。
 
 ## 权限与安全影响
@@ -54,6 +58,8 @@ v17 只为 `auth_accounts` 增加：
 - `preferred_language`
 
 并增加 `auth_account_change_history`。旧 `role` 继续保留为兼容列，Owner/Operations 在旧列映射为 `admin`，因此旧关联与登录不改变。`kcadmin` 的新 System Role 为 `owner_admin`。migration 使用 `BEGIN IMMEDIATE`，失败会 rollback；启动完成后执行 `PRAGMA integrity_check`。
+
+本次 Account/Profile 修正不提高 schema 版本，也不新增资料 migration；继续沿用 schema v17。
 
 ## Ubuntu / AWS 正式部署（本批次尚未执行）
 
@@ -185,6 +191,8 @@ npm run verify:data
 7. 正式域名登录页、`/api/health`、`/api/auth/session` 与 HTTPS。
 8. 使用包含 4 名员工、2 个账号和 EMP0003 的 AWS 型 fixture 验证 migration 幂等及完整保留。
 9. 正式部署前必须用 production backup rehearsal；本机旧数据库结果不能代替 AWS preflight。
+10. 点击账号姓名只打开 Profile 菜单；Owner 显示 `owner_admin`，有权限者才显示 Account Management。
+11. 主动改密可取消且成功后 Session 仍有效；临时密码和管理员重设密码才强制，完成后 `must_change_password=0`。
 
 ## 地址与地点规范
 
@@ -199,6 +207,8 @@ Customer/Branch 地址、道路、城市、州、Company Yard、Employee Base、
 - 语言出现英文：代表该 key 缺少目标语言；开发 Console 会记录 `[i18n] Missing ...`，补翻译后再发布。
 - 手机 GPS 失败：必须从 HTTPS 正式域名或浏览器允许的安全局域网环境进入，并授予 Location；不要把密码或 GPS 放进 URL。
 - Operations 收到 403：先确认目标不是 Owner/Operations、操作不是 Username/System Role/敏感授权；这是预期的服务端保护。
+- 点击姓名直接出现“首次登录修改密码”：确认前端已更新，并检查 `/api/auth/session` 的 `mustChangePassword`。若为 `false`，应显示 Profile 菜单；若为 `true`，代表账号仍在使用临时或管理员重设密码。
+- 改密后回到登录页：检查浏览器是否仍有 `kcs_session` HttpOnly Cookie、API 服务时间及 `/api/auth/session`；正常改密不会撤销现有 Session。
 
 ## 备份与维护
 

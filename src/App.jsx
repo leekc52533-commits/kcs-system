@@ -29,13 +29,13 @@ function AppContent(){
   const[guestLanguage,setGuestLanguage]=useState(()=>localStorage.getItem('kcs_language')||'en')
   const refresh=async()=>{try{const response=await fetch('/api/auth/session'),data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||`Auth API response ${response.status}`);setStartupError('');setAccount(data.account||null)}catch(error){setStartupError(error.message);setAccount(null)}}
   useEffect(()=>{void refresh()},[])
-  const logout=()=>fetch('/api/auth/logout',{method:'POST'}).finally(()=>setAccount(null))
+  const logout=()=>fetch('/api/auth/logout',{method:'POST'}).finally(()=>{setChanging(false);setAccount(null)})
   const selectedLanguage=account?.preferredLanguage||guestLanguage
   const setLanguage=async value=>{localStorage.setItem('kcs_language',value);setGuestLanguage(value);if(account){try{const response=await fetch('/api/auth/preferences',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({preferredLanguage:value})}),data=await response.json();if(response.ok)setAccount(data.account)}catch{ /* next session refresh will retry */ }}}
   let content
   if(account===undefined)content=<LoadingScreen/>
   else if(!account)content=<LoginPage onLogin={setAccount} startupError={startupError?`Login service: ${startupError}`:''}/>
-  else if(account.mustChangePassword||changing)content=<ChangePasswordPage account={account} onDone={()=>{setChanging(false);void refresh()}} onLogout={logout}/>
+  else if(account.mustChangePassword||changing)content=<ChangePasswordPage account={account} forced={account.mustChangePassword} onDone={updated=>{setChanging(false);setAccount(updated)}} onCancel={()=>setChanging(false)} onLogout={logout}/>
   else if(['driver','crew'].includes(account.role))content=<MobileApp account={account} onLogout={logout} onChangePassword={()=>setChanging(true)}/>
   else content=<DesktopApp account={account} onLogout={logout} onChangePassword={()=>setChanging(true)}/>
   return <I18nProvider language={selectedLanguage} setLanguage={setLanguage}>{content}</I18nProvider>
@@ -59,7 +59,30 @@ function DesktopApp({account,onLogout,onChangePassword}){
   const go=id=>{if(id===page){setMenuOpen(false);return}if(!confirmNavigation(t('common.unsaved')))return;window.history.pushState({kcsPage:id},'');setPage(id);setMenuOpen(false)}
   const title=t(navigation.find(x=>x[0]===page)?.[2]||'nav.dashboard'),currentUser={name:account.employeeName,role:account.role==='owner_admin'?'admin':account.role==='operations_admin'?'supervisor':account.role,systemRole:account.role}
   const dateLabel=kuchingDateLabel(new Date(),language==='zh'?'zh-MY':language==='ms'?'ms-MY':'en-MY')
-  return <div className="shell"><aside className={menuOpen?'sidebar open':'sidebar'}><div className="brand"><b>K</b><div><strong>KCS Dispatch</strong><span>LEE SAI KER ENTERPRISE</span></div></div><nav><small>{t('nav.workspace')}</small>{navigation.filter(item=>item[0]!=='accounts'||['owner_admin','operations_admin'].includes(account.role)).map(x=><button key={x[0]} className={page===x[0]?'active':''} onClick={()=>go(x[0])}><i>{x[1]}</i>{t(x[2])}</button>)}</nav><footer><div><i className={systemStatus.connected?'':'offline'}/><span><strong>{t(systemStatus.connected?'system.running':'system.waiting')}</strong><small>{systemStatus.label}</small></span></div><p>LEE SAI KER ENTERPRISE</p></footer></aside>{menuOpen&&<button className="shade" aria-label="Close menu" onClick={()=>setMenuOpen(false)}/>}<main><header className="topbar"><button className="menu" aria-label="Menu" onClick={()=>setMenuOpen(true)}>☰</button><div><small>KCS DISPATCH SYSTEM</small><strong>{title}</strong></div><span>{dateLabel}</span><LanguageSelector compact/><button className="user-menu" onClick={onChangePassword}>{account.employeeName}</button><button className="logout-button" onClick={onLogout}>{t('common.logout')}</button></header>{page!=='dashboard'&&<BackButton fallback={()=>go('dashboard')}/>} {page==='dashboard'?<Dashboard go={go}/>:page==='sync'?<ImportPage onBack={()=>go('dashboard')}/>:page==='gps-migration'?<GpsMigrationPage/>:page==='dispatch'?<WeeklyDispatchPage onOpenSpecial={()=>go('special')} currentUser={currentUser}/>:page==='special'?<SpecialRequestsPage onOpenPlanner={()=>go('dispatch')} currentUser={currentUser}/>:page==='customers'?<MasterDataPage currentUser={currentUser}/>:page==='schedule'?<SchedulesPage/>:page==='data'?<DataQualityPage/>:page==='gps-zone'?<GpsZoneRecommendationPage currentUser={currentUser}/>:page==='resources'?<ResourcePage currentUser={currentUser}/>:page==='accounts'?<AccountManagementPage account={account}/>:<Placeholder page={page} go={go}/>}</main></div>
+  return <div className="shell"><aside className={menuOpen?'sidebar open':'sidebar'}><div className="brand"><b>K</b><div><strong>KCS Dispatch</strong><span>LEE SAI KER ENTERPRISE</span></div></div><nav><small>{t('nav.workspace')}</small>{navigation.filter(item=>item[0]!=='accounts'||['owner_admin','operations_admin'].includes(account.role)).map(x=><button key={x[0]} className={page===x[0]?'active':''} onClick={()=>go(x[0])}><i>{x[1]}</i>{t(x[2])}</button>)}</nav><footer><div><i className={systemStatus.connected?'':'offline'}/><span><strong>{t(systemStatus.connected?'system.running':'system.waiting')}</strong><small>{systemStatus.label}</small></span></div><p>LEE SAI KER ENTERPRISE</p></footer></aside>{menuOpen&&<button className="shade" aria-label="Close menu" onClick={()=>setMenuOpen(false)}/>}<main><header className="topbar"><button className="menu" aria-label="Menu" onClick={()=>setMenuOpen(true)}>☰</button><div><small>KCS DISPATCH SYSTEM</small><strong>{title}</strong></div><span>{dateLabel}</span><LanguageSelector compact/><AccountProfileMenu account={account} onChangePassword={onChangePassword} onAccountManagement={()=>go('accounts')} onLogout={onLogout}/></header>{page!=='dashboard'&&<BackButton fallback={()=>go('dashboard')}/>} {page==='dashboard'?<Dashboard go={go}/>:page==='sync'?<ImportPage onBack={()=>go('dashboard')}/>:page==='gps-migration'?<GpsMigrationPage/>:page==='dispatch'?<WeeklyDispatchPage onOpenSpecial={()=>go('special')} currentUser={currentUser}/>:page==='special'?<SpecialRequestsPage onOpenPlanner={()=>go('dispatch')} currentUser={currentUser}/>:page==='customers'?<MasterDataPage currentUser={currentUser}/>:page==='schedule'?<SchedulesPage/>:page==='data'?<DataQualityPage/>:page==='gps-zone'?<GpsZoneRecommendationPage currentUser={currentUser}/>:page==='resources'?<ResourcePage currentUser={currentUser}/>:page==='accounts'?<AccountManagementPage account={account}/>:<Placeholder page={page} go={go}/>}</main></div>
+}
+
+function AccountProfileMenu({account,onChangePassword,onAccountManagement,onLogout}){
+  const{t}=useI18n(),[open,setOpen]=useState(false)
+  const canManage=['owner_admin','operations_admin'].includes(account.role)
+  const languageLabel={ms:'Bahasa Melayu',zh:'中文',en:'English'}[account.preferredLanguage]||'English'
+  const action=callback=>{setOpen(false);callback()}
+  return <div className="account-profile">
+    <button className="user-menu" aria-haspopup="menu" aria-expanded={open} onClick={()=>setOpen(value=>!value)}>{account.employeeName}<span>⌄</span></button>
+    {open&&<div className="account-profile-menu" role="menu">
+      <div className="account-profile-heading"><strong>{account.employeeName}</strong><span>{account.username}</span></div>
+      <dl>
+        <div><dt>{t('auth.employeeName')}</dt><dd>{account.employeeName}</dd></div>
+        <div><dt>{t('auth.username')}</dt><dd>{account.username}</dd></div>
+        <div><dt>{t('auth.employeeCode')}</dt><dd>{account.employeeCode||'—'}</dd></div>
+        <div><dt>{t('auth.systemRole')}</dt><dd><b>{account.role}</b></dd></div>
+        <div><dt>{t('auth.preferredLanguage')}</dt><dd>{languageLabel}</dd></div>
+      </dl>
+      <button role="menuitem" onClick={()=>action(onChangePassword)}>{t('auth.changePassword')}</button>
+      {canManage&&<button role="menuitem" onClick={()=>action(onAccountManagement)}>{t('nav.accounts')}</button>}
+      <button role="menuitem" className="danger" onClick={()=>action(onLogout)}>{t('common.logout')}</button>
+    </div>}
+  </div>
 }
 
 function Dashboard({go}){

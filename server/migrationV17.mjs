@@ -26,6 +26,9 @@ export function applyV17Migration(database){
           ELSE 'office'
         END
       WHERE system_role IS NULL OR TRIM(system_role)='' OR system_role NOT IN ('owner_admin','operations_admin','supervisor','office','driver','crew');
+      UPDATE auth_accounts
+      SET system_role='owner_admin',role='admin'
+      WHERE lower(username)='kcadmin';
       UPDATE auth_accounts SET preferred_language=CASE
         WHEN lower(username)='kcadmin' THEN 'zh'
         WHEN employee_id IN (SELECT id FROM employees WHERE job_role IN ('Driver','Attendant / Crew','Assistant','Crew')) THEN 'ms'

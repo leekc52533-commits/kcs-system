@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import {DatabaseSync} from 'node:sqlite'
 import {schemaSql,SCHEMA_VERSION} from '../server/schema.mjs'
 import {addCalendarDays,kuchingDate,shortcutForDate} from '../shared/kuchingTime.js'
-import {accountCan,bootstrapAccount,createAccount,roleCan,updateAccount,updateOwnPreferences} from '../server/authService.mjs'
+import {accountCan,bootstrapAccount,createAccount,login,roleCan,updateAccount,updateOwnPreferences} from '../server/authService.mjs'
 import {messages,translate} from '../src/translations.js'
 import {confirmNavigation,setNavigationDirty} from '../src/navigation.js'
 
@@ -48,6 +48,14 @@ test('language preference is saved per account',()=>{
   const changed=updateOwnPreferences(owner,{preferredLanguage:'ms'},db)
   assert.equal(changed.preferredLanguage,'ms')
   assert.equal(db.prepare('SELECT preferred_language value FROM auth_accounts WHERE id=?').get(owner.id).value,'ms')
+})
+
+test('kcadmin always resolves to owner_admin without changing Employee Job Role',()=>{
+  const db=database(),owner=bootstrapAccount({employeeName:'Kc Lee',username:'kcadmin',password:'Initial123!'}, {},db)
+  db.prepare("UPDATE auth_accounts SET system_role='office',role='office' WHERE id=?").run(owner.id)
+  const signed=login({username:'kcadmin',password:'Initial123!'}, {},db)
+  assert.equal(signed.account.role,'owner_admin')
+  assert.equal(db.prepare('SELECT job_role FROM employees WHERE id=?').get(owner.employeeId).job_role,'Admin')
 })
 
 test('owner admin can change ordinary username and role with audit',()=>{
@@ -95,4 +103,18 @@ test('password visibility control exists and schema is v17',()=>{
   assert.match(source,/type=\{visible\?'text':'password'\}/)
   assert.match(source,/auth\.showPassword/)
   assert.equal(SCHEMA_VERSION,17)
+})
+
+test('account name opens Profile menu and voluntary password change is cancellable',()=>{
+  const app=fs.readFileSync(new URL('../src/App.jsx',import.meta.url),'utf8')
+  const authPages=fs.readFileSync(new URL('../src/AuthPages.jsx',import.meta.url),'utf8')
+  assert.match(app,/function AccountProfileMenu/)
+  assert.match(app,/aria-haspopup="menu"/)
+  assert.match(app,/auth\.systemRole/)
+  assert.match(app,/auth\.preferredLanguage/)
+  assert.match(app,/forced=\{account\.mustChangePassword\}/)
+  assert.doesNotMatch(app,/className="user-menu" onClick=\{onChangePassword\}/)
+  assert.match(authPages,/\{!forced&&<button type="button" className="secondary" onClick=\{onCancel\}/)
+  assert.match(authPages,/onDone\(result\.account\)/)
+  assert.match(authPages,/auth\.forcedChangeReason/)
 })

@@ -16,7 +16,7 @@ const normalizeRole = role => {
   return value === 'admin' ? 'owner_admin' : value
 }
 const legacyRole = role => ['owner_admin','operations_admin'].includes(role) ? 'admin' : role
-const resolvedRole = row => normalizeRole(row?.system_role || (String(row?.username).toLowerCase()==='kcadmin' ? 'owner_admin' : row?.role))
+const resolvedRole = row => String(row?.username||'').toLowerCase()==='kcadmin' ? 'owner_admin' : normalizeRole(row?.system_role || row?.role)
 const language = value => LANGUAGES.has(text(value).toLowerCase()) ? text(value).toLowerCase() : 'en'
 
 export function hashPassword(password){
@@ -169,7 +169,7 @@ export function changePassword(session,payload,database=defaultDb){
   if(!row||!verifyPassword(payload.currentPassword,row.password_hash))throw new Error('当前密码不正确')
   database.prepare(`UPDATE auth_accounts SET password_hash=?,must_change_password=0,password_changed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(hashPassword(payload.newPassword),row.id)
   audit(database,{accountId:row.id,employeeId:row.employee_id,username:row.username,action:'password_changed',success:true,actor:row.username})
-  return{ok:true}
+  return{ok:true,account:publicAccount(database.prepare(`${accountSql} WHERE a.id=?`).get(row.id))}
 }
 
 export function listAuthAudit(params={},database=defaultDb){
