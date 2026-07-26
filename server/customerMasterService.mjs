@@ -1,7 +1,7 @@
 import { db as defaultDb } from './database.mjs'
 import { invalidateDispatchDay } from './dispatchService.mjs'
 import { addTemporaryLocation, adoptTemporaryLocation } from './specialRequestService.mjs'
-import { listBranchMaterials, normalizeCollectionSettings, replaceBranchMaterials } from './materialPriceService.mjs'
+import { listBranchMaterials, listCustomerMaterialPricing, normalizeCollectionSettings, replaceBranchMaterialSelections, saveCustomerMaterialPricing } from './materialPriceService.mjs'
 
 const text = value => String(value ?? '').trim()
 const nullable = value => text(value) || null
@@ -50,6 +50,7 @@ export function listCustomers(params={},database=defaultDb){
 export function getCustomer(customerId,database=defaultDb){
   const item=database.prepare(`${customerSelect} WHERE c.jodoo_customer_id=? GROUP BY c.id`).get(customerId);if(!item)return null
   item.branches=listBranches({customerId,pageSize:500},database).items
+  item.materialPricing=listCustomerMaterialPricing(item.customerId,database)?.items||[]
   item.audit=listMasterAudit({entityType:'customer',entityId:customerId},database)
   return item
 }
@@ -57,9 +58,12 @@ export function getCustomer(customerId,database=defaultDb){
 export function createCustomer(payload,database=defaultDb){
   const customerId=text(payload.customerId),name=text(payload.customerName||payload.name);if(!customerId||!name)throw new Error('Customer ID and Customer Name are required')
   const status=statusValue(payload.status),payment=paymentValue(payload.defaultPaymentType??payload.paymentType),actor=text(payload.changedBy||payload.createdBy)||'Supervisor'
-  database.prepare(`INSERT INTO customers(jodoo_customer_id,name,legal_name,registration_number,billing_address,contact_person,phone,whatsapp,email,default_payment_type,payment_type,credit_terms,status,notes,source_system,created_by,created_at,is_active)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'KCS',?,CURRENT_TIMESTAMP,?)`).run(customerId,name,nullable(payload.legalName),nullable(payload.registrationNumber),nullable(payload.billingAddress),nullable(payload.contactPerson),nullable(payload.phone),nullable(payload.whatsapp),nullable(payload.email),payment,payment,nullable(payload.creditTerms),status,nullable(payload.notes),actor,status==='active'?1:0)
-  const item=getCustomer(customerId,database);history(database,'customer',customerId,'created',null,item,{changedBy:actor,reason:payload.reason});return item
+  database.exec('SAVEPOINT create_customer');try{
+    database.prepare(`INSERT INTO customers(jodoo_customer_id,name,legal_name,registration_number,billing_address,contact_person,phone,whatsapp,email,default_payment_type,payment_type,credit_terms,status,notes,source_system,created_by,created_at,is_active)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'KCS',?,CURRENT_TIMESTAMP,?)`).run(customerId,name,nullable(payload.legalName),nullable(payload.registrationNumber),nullable(payload.billingAddress),nullable(payload.contactPerson),nullable(payload.phone),nullable(payload.whatsapp),nullable(payload.email),payment,payment,nullable(payload.creditTerms),status,nullable(payload.notes),actor,status==='active'?1:0)
+    saveCustomerMaterialPricing(customerId,payload.materialPricing,{changedBy:actor,reason:payload.reason,confirmed:Boolean(payload.pricingConfirmed)},database)
+    const item=getCustomer(customerId,database);history(database,'customer',customerId,'created',null,item,{changedBy:actor,reason:payload.reason});database.exec('RELEASE create_customer');return item
+  }catch(error){database.exec('ROLLBACK TO create_customer; RELEASE create_customer');throw error}
 }
 
 export function updateCustomer(customerId,payload,database=defaultDb){
@@ -69,10 +73,11 @@ export function updateCustomer(customerId,payload,database=defaultDb){
   database.exec('SAVEPOINT update_customer');try{
     database.prepare(`UPDATE customers SET name=?,legal_name=?,registration_number=?,billing_address=?,contact_person=?,phone=?,whatsapp=?,email=?,default_payment_type=?,payment_type=?,credit_terms=?,status=?,notes=?,is_active=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(
       text(payload.customerName??payload.name??before.name),payload.legalName===undefined?before.legal_name:nullable(payload.legalName),payload.registrationNumber===undefined?before.registration_number:nullable(payload.registrationNumber),payload.billingAddress===undefined?before.billing_address:nullable(payload.billingAddress),payload.contactPerson===undefined?before.contact_person:nullable(payload.contactPerson),payload.phone===undefined?before.phone:nullable(payload.phone),payload.whatsapp===undefined?before.whatsapp:nullable(payload.whatsapp),payload.email===undefined?before.email:nullable(payload.email),payment,payment,payload.creditTerms===undefined?before.credit_terms:nullable(payload.creditTerms),status,payload.notes===undefined?before.notes:nullable(payload.notes),status==='active'?1:0,before.id)
+    const pricingResult=saveCustomerMaterialPricing(before.id,payload.materialPricing,{changedBy:actor,reason:payload.reason,confirmed:Boolean(payload.pricingConfirmed)},database)
     const after=database.prepare('SELECT * FROM customers WHERE id=?').get(before.id),branchIds=database.prepare('SELECT id FROM branches WHERE customer_id=?').all(before.id).map(x=>x.id)
     history(database,'customer',customerId,'updated',before,after,{changedBy:actor,reason:payload.reason})
     const critical=['name','default_payment_type','payment_type','status','is_active'],changed=critical.some(key=>before[key]!==after[key])
-    if(changed)invalidateBranches(database,branchIds,'customer_master_changed','customer',customerId,before,after,actor)
+    if(changed||pricingResult.changed)invalidateBranches(database,branchIds,'customer_master_changed','customer',customerId,before,{...after,materialPricing:pricingResult.items},actor)
     database.exec('RELEASE update_customer');return getCustomer(customerId,database)
   }catch(error){database.exec('ROLLBACK TO update_customer; RELEASE update_customer');throw error}
 }
@@ -112,7 +117,7 @@ export function createBranch(payload,database=defaultDb){
   database.exec('SAVEPOINT create_branch');try{
     const result=database.prepare(`INSERT INTO branches(jodoo_branch_id,customer_id,area_id,source_customer_id,source_area_id,branch_name,address,latitude,longitude,gps_status,gps_verified_at,contact_person,phone,collection_frequency,assigned_weekdays,time_restriction,occ_price,payment_type,proof_requirements,vehicle_restriction,status,notes,source_system,created_by,created_at,is_active)
       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'KCS',?,CURRENT_TIMESTAMP,?)`).run(branchId,customer.id,area?.id||null,customerId,payload.areaId?text(payload.areaId):null,name,nullable(payload.address),payload.officialLatitude??null,payload.officialLongitude??null,nullable(payload.gpsVerificationStatus),payload.gpsVerifiedAt||null,nullable(payload.contactPerson),nullable(payload.phone),settings.collectionFrequency,settings.assignedWeekdaysStorage,nullable(payload.collectionTimeConstraint),payload.occPrice??null,payment,nullable(payload.proofRequirements),nullable(payload.vehicleRestriction),status,nullable(payload.notes),actor,status==='active'?1:0)
-    replaceBranchMaterials(Number(result.lastInsertRowid),payload.materials,{changedBy:actor,reason:payload.reason||'Branch created'},database)
+    replaceBranchMaterialSelections(Number(result.lastInsertRowid),payload.materials,{changedBy:actor,reason:payload.reason||'Branch created'},database)
     const item=getBranch(branchId,database);history(database,'branch',branchId,'created',null,item,{changedBy:actor,reason:payload.reason});database.exec('RELEASE create_branch');return item
   }catch(error){database.exec('ROLLBACK TO create_branch; RELEASE create_branch');throw error}
 }
@@ -127,7 +132,7 @@ export function updateBranch(branchId,payload,database=defaultDb){
   database.exec('SAVEPOINT update_branch');try{
     database.prepare(`UPDATE branches SET customer_id=?,area_id=?,source_customer_id=?,source_area_id=?,branch_name=?,address=?,latitude=?,longitude=?,gps_status=?,gps_verified_at=?,contact_person=?,phone=?,collection_frequency=?,assigned_weekdays=?,time_restriction=?,occ_price=?,payment_type=?,proof_requirements=?,vehicle_restriction=?,status=?,notes=?,is_active=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(
       customer?.id??before.customer_id,area?.id??before.area_id,payload.customerId??before.source_customer_id,area?.jodoo_area_id??before.source_area_id,text(payload.branchName??before.branch_name),payload.address===undefined?before.address:nullable(payload.address),payload.officialLatitude===undefined?before.latitude:payload.officialLatitude,payload.officialLongitude===undefined?before.longitude:payload.officialLongitude,payload.gpsVerificationStatus===undefined?before.gps_status:nullable(payload.gpsVerificationStatus),payload.gpsVerifiedAt===undefined?before.gps_verified_at:payload.gpsVerifiedAt||null,payload.contactPerson===undefined?before.contact_person:nullable(payload.contactPerson),payload.phone===undefined?before.phone:nullable(payload.phone),settings?settings.collectionFrequency:before.collection_frequency,settings?settings.assignedWeekdaysStorage:before.assigned_weekdays,payload.collectionTimeConstraint===undefined?before.time_restriction:nullable(payload.collectionTimeConstraint),payload.occPrice===undefined?before.occ_price:payload.occPrice,payment,payload.proofRequirements===undefined?before.proof_requirements:nullable(payload.proofRequirements),payload.vehicleRestriction===undefined?before.vehicle_restriction:nullable(payload.vehicleRestriction),status,payload.notes===undefined?before.notes:nullable(payload.notes),status==='active'?1:0,before.id)
-    const priceResult=replaceBranchMaterials(before.id,payload.materials,{changedBy:actor,reason:payload.reason||'Branch material price update'},database)
+    const priceResult=replaceBranchMaterialSelections(before.id,payload.materials,{changedBy:actor,reason:payload.reason||'Branch material price type update'},database)
     const after=database.prepare('SELECT * FROM branches WHERE id=?').get(before.id);history(database,'branch',branchId,'updated',before,{...after,materials:priceResult.items},{changedBy:actor,reason:payload.reason})
     const critical=['customer_id','area_id','branch_name','address','latitude','longitude','collection_frequency','assigned_weekdays','time_restriction','occ_price','payment_type','status','is_active'],changed=critical.some(key=>before[key]!==after[key])
     if(changed||priceResult.changed)invalidateBranches(database,[before.id],'branch_master_changed','branch',branchId,before,{...after,materials:priceResult.items},actor)

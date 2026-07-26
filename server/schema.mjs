@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 18
+export const SCHEMA_VERSION = 19
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -1008,6 +1008,69 @@ CREATE TABLE IF NOT EXISTS dispatch_stop_material_prices (
   UNIQUE(dispatch_stop_id,material_id)
 );
 
+CREATE TABLE IF NOT EXISTS customer_material_pricing (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  material_id INTEGER NOT NULL REFERENCES materials(id),
+  standard_price_level_id INTEGER REFERENCES material_price_levels(id),
+  standard_special_price REAL CHECK(standard_special_price>=0 OR standard_special_price IS NULL),
+  standard_effective_date TEXT,
+  outstation_enabled INTEGER NOT NULL DEFAULT 0 CHECK(outstation_enabled IN (0,1)),
+  outstation_price_level_id INTEGER REFERENCES material_price_levels(id),
+  outstation_special_price REAL CHECK(outstation_special_price>=0 OR outstation_special_price IS NULL),
+  outstation_effective_date TEXT,
+  status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','inactive')),
+  updated_by TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CHECK((standard_price_level_id IS NOT NULL AND standard_special_price IS NULL) OR (standard_price_level_id IS NULL AND standard_special_price IS NOT NULL)),
+  CHECK(outstation_enabled=0 OR ((outstation_price_level_id IS NOT NULL AND outstation_special_price IS NULL) OR (outstation_price_level_id IS NULL AND outstation_special_price IS NOT NULL))),
+  UNIQUE(customer_id,material_id)
+);
+
+CREATE TABLE IF NOT EXISTS customer_material_pricing_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_material_pricing_id INTEGER NOT NULL REFERENCES customer_material_pricing(id),
+  customer_id INTEGER NOT NULL REFERENCES customers(id),
+  material_id INTEGER NOT NULL REFERENCES materials(id),
+  before_json TEXT,
+  after_json TEXT NOT NULL,
+  affected_standard_branch_count INTEGER NOT NULL DEFAULT 0,
+  affected_outstation_branch_count INTEGER NOT NULL DEFAULT 0,
+  reason TEXT NOT NULL,
+  changed_by TEXT NOT NULL,
+  changed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS branch_material_price_selections (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
+  material_id INTEGER NOT NULL REFERENCES materials(id),
+  customer_material_pricing_id INTEGER REFERENCES customer_material_pricing(id),
+  price_type TEXT NOT NULL DEFAULT 'standard' CHECK(price_type IN ('standard','outstation')),
+  uses_legacy_price INTEGER NOT NULL DEFAULT 0 CHECK(uses_legacy_price IN (0,1)),
+  legacy_price_level_id INTEGER REFERENCES material_price_levels(id),
+  legacy_special_price REAL,
+  legacy_effective_date TEXT,
+  assigned_by TEXT,
+  assigned_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(branch_id,material_id)
+);
+
+CREATE TABLE IF NOT EXISTS branch_material_price_selection_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  branch_id INTEGER NOT NULL REFERENCES branches(id),
+  material_id INTEGER NOT NULL REFERENCES materials(id),
+  old_price_type TEXT,
+  new_price_type TEXT,
+  old_customer_material_pricing_id INTEGER,
+  new_customer_material_pricing_id INTEGER,
+  reason TEXT NOT NULL,
+  changed_by TEXT NOT NULL,
+  changed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS branches_customer_idx ON branches(customer_id);
 CREATE INDEX IF NOT EXISTS branches_area_idx ON branches(area_id);
 CREATE INDEX IF NOT EXISTS schedules_branch_idx ON branch_schedules(branch_id);
@@ -1039,6 +1102,11 @@ CREATE INDEX IF NOT EXISTS branch_material_prices_branch_idx ON branch_material_
 CREATE INDEX IF NOT EXISTS branch_material_prices_material_idx ON branch_material_prices(material_id,price_level_id,status);
 CREATE INDEX IF NOT EXISTS material_price_history_level_idx ON material_price_history(price_level_id,changed_at DESC);
 CREATE INDEX IF NOT EXISTS branch_material_price_history_branch_idx ON branch_material_price_history(branch_id,changed_at DESC);
+CREATE INDEX IF NOT EXISTS customer_material_pricing_customer_idx ON customer_material_pricing(customer_id,status);
+CREATE INDEX IF NOT EXISTS customer_material_pricing_material_idx ON customer_material_pricing(material_id,status);
+CREATE INDEX IF NOT EXISTS customer_material_pricing_history_customer_idx ON customer_material_pricing_history(customer_id,changed_at DESC);
+CREATE INDEX IF NOT EXISTS branch_material_price_selections_branch_idx ON branch_material_price_selections(branch_id);
+CREATE INDEX IF NOT EXISTS branch_material_price_selections_pricing_idx ON branch_material_price_selections(customer_material_pricing_id,price_type);
 
 INSERT OR IGNORE INTO zone_groups(id,code,name,sort_order) VALUES
   (1,'KUCHING-A','古晋 A区',1),

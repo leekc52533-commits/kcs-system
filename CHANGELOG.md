@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased — Schema v19
+
+- Added Customer-level Standard Price and optional Outstation Price per Material.
+- Added Branch Standard/Outstation selection without duplicating new actual prices.
+- Migrated existing v18 Branch Materials to Standard with an idempotent legacy-price compatibility fallback.
+- Added Customer pricing and Branch selection audit history, affected Branch lists and second confirmation.
+- Added stable Customer + Branch + Material price resolution and immutable completed-stop snapshot tests.
+- Added strict v17 → v18 → v19 migration and rollback documentation. AWS was not deployed.
+
 ## Unreleased — Schema v18
 
 - Added Materials, unlimited Price Levels, Branch Price Lists and Special Prices.

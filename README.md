@@ -62,11 +62,15 @@ npm run verify:data   # 核对schema、完整性及核心资料数量
 - `GET /api/import-batches`、`GET /api/import-batches/:id/errors`
 - `POST /api/import/preview`、`POST /api/import/commit`
 
-SQLite schema 目前为 v18。`branches` 保留现有架构，同时保存原始 CustomerID/AreaID，方便显示未匹配关联并保证重复导入幂等。v10 增加完整车辆资料；v11-v13 增加动态 Zone、派车快照及 GPS 推荐；v14-v16 增加 Customer/Employee Master、敏感资料审计与多段 Employment Period；v17 增加兼容式 `system_role`、账号语言偏好及账号身份变更历史；v18 增加通用 Materials、共享 Price Levels、Branch Price List、Special Price、调价审计及派车价格快照。升级不会删除既有周计划、Trip、站点、账号或密码哈希。Route Ready 规则集中在 `shared/importRules.js`。
+SQLite schema 目前为 v19。`branches` 保留现有架构，同时保存原始 CustomerID/AreaID，方便显示未匹配关联并保证重复导入幂等。v10 增加完整车辆资料；v11-v13 增加动态 Zone、派车快照及 GPS 推荐；v14-v16 增加 Customer/Employee Master、敏感资料审计与多段 Employment Period；v17 增加兼容式 `system_role`、账号语言偏好及账号身份变更历史；v18 增加通用 Materials、共享 Price Levels、Branch Price List、Special Price、调价审计及派车价格快照；v19 增加 Customer Standard / Outstation Price 与 Branch 价格类型选择。升级不会删除既有周计划、Trip、站点、账号或密码哈希。Route Ready 规则集中在 `shared/importRules.js`。
 
 ## Schema v18：Materials、Prices 与收货规则
 
 Customer Branch 正常页面已取消单独 OCC Price，改为可保存多个 `Materials & Current Prices`。相同旧 OCC 价格会自动共用同一个 Price Level，迁移可重复执行而不产生重复资料。Collection Frequency 支持固定次数、Daily、On Call 与 Paused；Assigned Weekdays 为多选且允许稍后决定。完整开发说明、管理员步骤、测试、备份、AWS 部署/回滚与未来开单读取规则见 [`docs/MATERIALS_PRICES_V18.md`](docs/MATERIALS_PRICES_V18.md)。
+
+## Schema v19：Customer Standard / Outstation Price
+
+每个 Customer 可按 Material 设置 Standard Price 和可选 Outstation Price；每个 Branch 只选择 Standard 或 Outstation。现有 v18 Branch Materials 会幂等迁移为 Standard 并保留原价，Customer 价格修改保存影响范围与审计，旧单据继续读取不可变快照。完整模型、操作、权限、测试及 v17→v18→v19 部署/回滚顺序见 [`docs/CUSTOMER_STANDARD_OUTSTATION_V19.md`](docs/CUSTOMER_STANDARD_OUTSTATION_V19.md)。
 
 ## 上线前 v17：日期、语言、导航与账号权限
 
