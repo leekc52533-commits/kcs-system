@@ -117,3 +117,29 @@ sqlite3 "$KCS_DB_PATH" "PRAGMA integrity_check; SELECT MAX(version) FROM schema_
 ```
 
 备份、WAL、数据库、上传附件及环境变量不会进入公开 GitHub。
+
+## Branch编辑修正（v19，无migration）
+
+### 管理员操作
+
+1. 在 Customer Material Pricing 选择 Standard 或 Outstation Price Level 后，确认下方立即出现实际 `RM/kg`。
+2. 在 Branch 选择 Material，再选择 Standard 或 Outstation；下拉选项与下方摘要都会显示该 Branch 实际使用价格。
+3. 保存成功后 Modal 自动关闭并刷新 Branch 清单。若 Modal 保留，表示 API 保存失败，应按字段错误修正后重试。
+4. Collection Frequency 可以暂时留空。旧资料若含可识别名称会标准化；无法识别的旧值会显示警告，单纯修改价格不会覆盖或验证该旧值。
+
+### 错误处理
+
+- `Invalid Collection Frequency "..."` 会列出当前无效值及所有允许值，不再只返回笼统错误。
+- 打开另一间 Branch 时，前一间的 draft、dirty/validation state 与异步响应不会复用。
+- 成功与失败提示互斥；保存失败不会关闭 Modal，保存成功不会残留旧错误。
+
+### 测试方法
+
+```bash
+node --test test/branchEditorContinuous.test.mjs test/customerPricingV19.test.mjs
+npm run lint
+npm run build
+npm test
+```
+
+连续编辑测试在同一会话模型中建立并编辑10间不同 Branch，交替使用 Standard/Outstation，覆盖已设置、未设置及旧版无效 Frequency，逐间保存重开后核对 Material、类型、实际价格、Frequency 与 Weekdays。完整测试不读取或修改 AWS 数据库。

@@ -84,13 +84,17 @@ export function updateCustomer(customerId,payload,database=defaultDb){
 
 const branchSelect=`SELECT b.id internalId,b.jodoo_branch_id branchId,c.jodoo_customer_id customerId,c.name customerName,b.branch_name branchName,b.address,
   COALESCE(a.confirmed_zone_group_id,a.zone_group_id) zoneGroupId,z.name zoneGroup,a.id areaInternalId,a.jodoo_area_id areaId,a.name area,b.latitude officialLatitude,b.longitude officialLongitude,
-  b.gps_status gpsVerificationStatus,b.gps_verified_at gpsVerifiedAt,b.contact_person contactPerson,b.phone,COALESCE(b.collection_frequency,GROUP_CONCAT(DISTINCT s.frequency)) collectionFrequency,
-  COALESCE(b.assigned_weekdays,GROUP_CONCAT(DISTINCT s.days_of_week)) assignedWeekdays,b.time_restriction collectionTimeConstraint,COALESCE(b.occ_price,c.occ_price) legacyOccPrice,
+  b.gps_status gpsVerificationStatus,b.gps_verified_at gpsVerifiedAt,b.contact_person contactPerson,b.phone,b.collection_frequency collectionFrequency,
+  b.assigned_weekdays assignedWeekdays,b.time_restriction collectionTimeConstraint,COALESCE(b.occ_price,c.occ_price) legacyOccPrice,
   COALESCE(b.payment_type,c.default_payment_type,c.payment_type) paymentType,b.proof_requirements proofRequirements,b.vehicle_restriction vehicleRestriction,b.status,b.notes,b.source_system sourceSystem,
   (SELECT tl.latitude FROM temporary_locations tl WHERE tl.branch_id=b.id ORDER BY tl.id DESC LIMIT 1) temporaryLatitude,
   (SELECT tl.longitude FROM temporary_locations tl WHERE tl.branch_id=b.id ORDER BY tl.id DESC LIMIT 1) temporaryLongitude,
   (SELECT tl.verification_status FROM temporary_locations tl WHERE tl.branch_id=b.id ORDER BY tl.id DESC LIMIT 1) temporaryGpsStatus,
-  COUNT(DISTINCT s.id) scheduleCount,(SELECT COUNT(*) FROM branch_material_prices bmp WHERE bmp.branch_id=b.id AND bmp.status='active') materialCount,b.created_by createdBy,b.created_at createdAt,b.updated_at updatedAt
+  COUNT(DISTINCT s.id) scheduleCount,(SELECT COUNT(*) FROM (
+    SELECT material_id FROM branch_material_price_selections bmps WHERE bmps.branch_id=b.id
+    UNION
+    SELECT material_id FROM branch_material_prices bmp WHERE bmp.branch_id=b.id AND bmp.status='active'
+  )) materialCount,b.created_by createdBy,b.created_at createdAt,b.updated_at updatedAt
   FROM branches b LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN zone_groups z ON z.id=COALESCE(a.confirmed_zone_group_id,a.zone_group_id) LEFT JOIN branch_schedules s ON s.branch_id=b.id`
 
 export function listBranches(params={},database=defaultDb){
@@ -104,7 +108,14 @@ export function listBranches(params={},database=defaultDb){
 export function getBranch(branchId,database=defaultDb){
   const item=database.prepare(`${branchSelect} WHERE b.jodoo_branch_id=? GROUP BY b.id`).get(branchId);if(!item)return null
   item.materials=listBranchMaterials(item.internalId,database)
-  try{const settings=normalizeCollectionSettings(item.collectionFrequency,item.assignedWeekdays);item.assignedWeekdays=settings.assignedWeekdays;item.frequencyWarning=settings.frequencyWarning}catch{item.assignedWeekdays=String(item.assignedWeekdays||'').split(/[,;/]/).map(value=>value.trim()).filter(Boolean);item.frequencyWarning=null}
+  const storedFrequency=item.collectionFrequency
+  const settings=normalizeCollectionSettings(storedFrequency,item.assignedWeekdays,{strict:false})
+  item.collectionFrequency=settings.collectionFrequency
+  item.assignedWeekdays=settings.assignedWeekdays
+  item.frequencyWarning=settings.frequencyWarning
+  item.frequencyNormalizationWarning=storedFrequency&&!settings.collectionFrequency
+    ? `Stored Collection Frequency "${storedFrequency}" is not recognized. It will remain unchanged until a valid value is selected.`
+    : null
   item.schedules=database.prepare('SELECT jodoo_schedule_id scheduleId,frequency,days_of_week assignedWeekdays,take_date takeDate,next_take_date nextTakeDate,is_active isActive FROM branch_schedules WHERE branch_id=? ORDER BY id').all(item.internalId)
   item.audit=listMasterAudit({entityType:'branch',entityId:branchId},database);return item
 }

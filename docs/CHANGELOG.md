@@ -1,5 +1,14 @@
 # KCS Change Log
 
+## Customer Branch consecutive-edit and resolved-price fix
+
+- Customer and Branch pricing selectors display the selected Standard, Outstation or Customer Special Price in RM/kg immediately.
+- Branch details are fetched by BranchID on every open; request sequencing and BranchID component keys prevent stale or mixed form state.
+- A successful save closes the modal and refreshes the list. A failed save keeps the modal open, and success/error messages are mutually exclusive.
+- Frontend and backend now share Collection Frequency and weekday normalization. Blank and untouched legacy values no longer block price-only edits; invalid values return a field-specific message.
+- Added a 10-Branch continuous-session regression covering alternating Standard/Outstation prices, configured/unconfigured/legacy Frequency values, saved data and reopen verification.
+- Schema remains v19. No AWS deployment or production-data change was performed.
+
 ## Application-controlled multilingual form validation
 
 - 登录、首次改密、普通改密、账号建立和账号重设密码改用 KCS 字段级验证，不再触发浏览器原生 `required` / `minLength` 气泡。

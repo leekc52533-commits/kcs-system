@@ -230,3 +230,11 @@ KCS 现在是新 Customer、Customer Branch、official/temporary GPS、Buyer 与
 - Active员工可执行“办理离职”，Resigned、Terminated、Contract End等员工可执行“重新入职”。旧Period关闭后保持不变，新Period继续沿用同一Employee ID与Employee Code。
 
 2026-07-19 本机五份来源文件首次实际导入结果：1,216 行；新增 1,099、更新 0、没有变化 115、无法匹配排程 2。导入后共有 253 个客户、475 间分店、276 条排程（其中 2 条 BranchID 未匹配）、118 间有效 GPS、106 间 Route Ready。再次导入相同五份文件时新增 0、更新 0、没有变化 1,214、无法匹配 2，验证没有产生重复主档。
+
+## Customer Branch 连续编辑与价格显示
+
+- Customer Material Pricing 和 Branch Material 下拉会立即显示 `Standard — RMx.xx/kg`、`Outstation — RMx.xx/kg` 或 `Special Price — RMx.xx/kg`。
+- Branch 保存成功后编辑窗口自动关闭、清单自动刷新；API 失败时窗口保留并只显示错误，不会同时显示成功信息。
+- 每次打开 Branch 都按 BranchID 重新读取详情。快速连续切换使用请求序号隔离旧响应，表单也以 BranchID 重新建立，避免上一间 Branch 的资料或错误残留。
+- Collection Frequency 使用前后端共同定义。空白及尚未设置的旧 Branch 可继续保存其他字段；可识别的旧名称会标准化，无法识别的旧值会提示但在用户未修改 Frequency 时保持原值。
+- 本修正不改变 schema（仍为 v19），不修改 GPS、Schedule、Vehicle、账号或 AWS 正式资料。详细测试与故障处理见 [Customer Standard / Outstation v19](docs/CUSTOMER_STANDARD_OUTSTATION_V19.md)。

@@ -1,25 +1,14 @@
 import {db as defaultDb} from './database.mjs'
+import {
+  COLLECTION_FREQUENCIES,
+  COLLECTION_WEEKDAYS,
+  normalizeCollectionSettings,
+} from '../shared/collectionSettings.js'
 
-export const COLLECTION_FREQUENCIES=['Once a week','Twice a week','3 times a week','4 times a week','Daily','On Call','Paused']
-export const WEEKDAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
+export {COLLECTION_FREQUENCIES, normalizeCollectionSettings}
+export const WEEKDAYS=COLLECTION_WEEKDAYS
 const text=value=>String(value??'').trim()
 const amount=value=>{const number=Number(value);if(!Number.isFinite(number)||number<0)throw new Error('Price must be zero or greater');return Math.round(number*1e6)/1e6}
-const parseWeekdays=value=>{
-  const source=Array.isArray(value)?value:String(value||'').replace(/^\[|\]$/g,'').split(/[,;/]/)
-  const normalized=[...new Set(source.map(item=>String(item).replaceAll('"','').trim()).map(item=>item==='Thurday'?'Thursday':item).filter(Boolean))]
-  const invalid=normalized.filter(item=>!WEEKDAYS.includes(item));if(invalid.length)throw new Error(`Invalid weekday: ${invalid.join(', ')}`)
-  return WEEKDAYS.filter(item=>normalized.includes(item))
-}
-
-export function normalizeCollectionSettings(frequency,weekdays){
-  const value=text(frequency)
-  if(value&&!COLLECTION_FREQUENCIES.includes(value))throw new Error('Invalid Collection Frequency')
-  let selected=parseWeekdays(weekdays)
-  if(['On Call','Paused'].includes(value))selected=[]
-  const expected={'Once a week':1,'Twice a week':2,'3 times a week':3,'4 times a week':4,Daily:7}[value]
-  const warning=expected&&selected.length&&selected.length!==expected?`${value} expects ${expected} weekday${expected===1?'':'s'}, but ${selected.length} selected.`:null
-  return{collectionFrequency:value||null,assignedWeekdays:selected,assignedWeekdaysStorage:selected.length?JSON.stringify(selected):null,frequencyWarning:warning}
-}
 
 export function listBranchMaterials(branchId,database=defaultDb){
   return database.prepare(`SELECT s.id,s.branch_id branchInternalId,m.id materialId,m.material_code materialCode,m.material_name materialName,m.unit,

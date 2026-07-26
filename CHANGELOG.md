@@ -2,6 +2,9 @@
 
 ## Unreleased — Schema v19
 
+- Fixed consecutive Customer Branch editing: each modal reloads by BranchID, prevents stale responses, resets validation state, closes only after a confirmed save, and refreshes the list.
+- Standard, Outstation and Customer Special Price selectors now show the resolved RM/kg price immediately.
+- Centralized Collection Frequency and weekday normalization for frontend and backend, including blank/legacy values and field-specific validation errors.
 - Added Customer-level Standard Price and optional Outstation Price per Material.
 - Added Branch Standard/Outstation selection without duplicating new actual prices.
 - Migrated existing v18 Branch Materials to Standard with an idempotent legacy-price compatibility fallback.
