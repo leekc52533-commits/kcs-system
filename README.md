@@ -235,7 +235,8 @@ KCS 现在是新 Customer、Customer Branch、official/temporary GPS、Buyer 与
 
 - Customer Material Pricing 和 Branch Material 下拉会立即显示 `Standard — RMx.xx/kg`、`Outstation — RMx.xx/kg` 或 `Special Price — RMx.xx/kg`。
 - Customer Special Price 勾选改为单次原子 state 更新，金额输入框立即出现；支持 0 至 3 位小数、拒绝非数字和负数，保存重开后仍按 Customer + Material 保留。
-- Branch 可选文字字段使用“已触碰字段”提交规则：未编辑的字段不发送；主动清空 Notes、Phone、Address 等字段时发送空字符串，服务端明确转为 `NULL`，不会用旧值回填。
+- Branch表单在提交时从实际HTML表单读取Notes、Phone、Address等可选字段；明确空字符串或`null`写成`NULL`，API payload未包含的字段才保留原值。Collection Frequency也可明确清空。
+- Customer Material Pricing继续采用PATCH/upsert语义，不会因为某项未出现在数组中就自动删除。页面移除会明确提交`removedMaterialIds`；没有Branch引用时软停用并审计，有引用时整个事务拒绝。
 - Branch 保存成功后编辑窗口自动关闭、清单自动刷新；API 失败时窗口保留并只显示错误，不会同时显示成功信息。
 - 每次打开 Branch 都按 BranchID 重新读取详情。快速连续切换使用请求序号隔离旧响应，表单也以 BranchID 重新建立，避免上一间 Branch 的资料或错误残留。
 - Collection Frequency 使用前后端共同定义。空白及尚未设置的旧 Branch 可继续保存其他字段；可识别的旧名称会标准化，无法识别的旧值会提示但在用户未修改 Frequency 时保持原值。

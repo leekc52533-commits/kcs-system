@@ -1,5 +1,13 @@
 # KCS Change Log
 
+## Branch主动清空与Customer Pricing安全移除
+
+- Branch提交从实际HTML表单收集可选字段，避免受React state事件批次或自动填表行为影响。
+- 服务端使用`hasOwnProperty`区分未提交、空字符串、`null`和普通文字；空值统一写成`NULL`。
+- Customer Material Pricing明确使用`removedMaterialIds`，不存在“数组缺失即删除”。
+- 没有Branch引用时Pricing软停用并写历史；仍被Branch使用时整笔Customer更新回滚。
+- Schema维持v19，没有migration；开发及测试不连接AWS。
+
 ## Customer Special Price与Branch空值修正
 
 - Customer Special Price checkbox改为函数式原子state更新，避免清除Price Level时覆盖Special Price状态。

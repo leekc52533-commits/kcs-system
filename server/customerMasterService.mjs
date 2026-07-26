@@ -5,7 +5,7 @@ import { listBranchMaterials, listCustomerMaterialPricing, normalizeCollectionSe
 
 const text = value => String(value ?? '').trim()
 const nullable = value => text(value) || null
-const submittedNullable = (payload, key, existing) => Object.hasOwn(payload, key) && payload[key] !== undefined
+const submittedNullable = (payload, key, existing) => Object.prototype.hasOwnProperty.call(payload, key) && payload[key] !== undefined
   ? nullable(payload[key])
   : existing
 const statusValue = value => {
@@ -64,7 +64,7 @@ export function createCustomer(payload,database=defaultDb){
   database.exec('SAVEPOINT create_customer');try{
     database.prepare(`INSERT INTO customers(jodoo_customer_id,name,legal_name,registration_number,billing_address,contact_person,phone,whatsapp,email,default_payment_type,payment_type,credit_terms,status,notes,source_system,created_by,created_at,is_active)
       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'KCS',?,CURRENT_TIMESTAMP,?)`).run(customerId,name,nullable(payload.legalName),nullable(payload.registrationNumber),nullable(payload.billingAddress),nullable(payload.contactPerson),nullable(payload.phone),nullable(payload.whatsapp),nullable(payload.email),payment,payment,nullable(payload.creditTerms),status,nullable(payload.notes),actor,status==='active'?1:0)
-    saveCustomerMaterialPricing(customerId,payload.materialPricing,{changedBy:actor,reason:payload.reason,confirmed:Boolean(payload.pricingConfirmed)},database)
+    saveCustomerMaterialPricing(customerId,payload.materialPricing,{changedBy:actor,reason:payload.reason,confirmed:Boolean(payload.pricingConfirmed),removedMaterialIds:payload.removedMaterialIds},database)
     const item=getCustomer(customerId,database);history(database,'customer',customerId,'created',null,item,{changedBy:actor,reason:payload.reason});database.exec('RELEASE create_customer');return item
   }catch(error){database.exec('ROLLBACK TO create_customer; RELEASE create_customer');throw error}
 }
@@ -76,7 +76,7 @@ export function updateCustomer(customerId,payload,database=defaultDb){
   database.exec('SAVEPOINT update_customer');try{
     database.prepare(`UPDATE customers SET name=?,legal_name=?,registration_number=?,billing_address=?,contact_person=?,phone=?,whatsapp=?,email=?,default_payment_type=?,payment_type=?,credit_terms=?,status=?,notes=?,is_active=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(
       text(payload.customerName??payload.name??before.name),payload.legalName===undefined?before.legal_name:nullable(payload.legalName),payload.registrationNumber===undefined?before.registration_number:nullable(payload.registrationNumber),payload.billingAddress===undefined?before.billing_address:nullable(payload.billingAddress),payload.contactPerson===undefined?before.contact_person:nullable(payload.contactPerson),payload.phone===undefined?before.phone:nullable(payload.phone),payload.whatsapp===undefined?before.whatsapp:nullable(payload.whatsapp),payload.email===undefined?before.email:nullable(payload.email),payment,payment,payload.creditTerms===undefined?before.credit_terms:nullable(payload.creditTerms),status,payload.notes===undefined?before.notes:nullable(payload.notes),status==='active'?1:0,before.id)
-    const pricingResult=saveCustomerMaterialPricing(before.id,payload.materialPricing,{changedBy:actor,reason:payload.reason,confirmed:Boolean(payload.pricingConfirmed)},database)
+    const pricingResult=saveCustomerMaterialPricing(before.id,payload.materialPricing,{changedBy:actor,reason:payload.reason,confirmed:Boolean(payload.pricingConfirmed),removedMaterialIds:payload.removedMaterialIds},database)
     const after=database.prepare('SELECT * FROM customers WHERE id=?').get(before.id),branchIds=database.prepare('SELECT id FROM branches WHERE customer_id=?').all(before.id).map(x=>x.id)
     history(database,'customer',customerId,'updated',before,after,{changedBy:actor,reason:payload.reason})
     const critical=['name','default_payment_type','payment_type','status','is_active'],changed=critical.some(key=>before[key]!==after[key])

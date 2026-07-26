@@ -47,6 +47,14 @@ export function buildBranchSavePayload(form, {
   return payload
 }
 
+export function collectBranchOptionalFields(formData) {
+  const fields = {}
+  for (const field of BRANCH_OPTIONAL_TEXT_FIELDS) {
+    if (formData.has(field)) fields[field] = formData.get(field)
+  }
+  return fields
+}
+
 export function updateCustomerPricingDraft(items, index, patch) {
   return (items || []).map((item, itemIndex) => itemIndex === index
     ? {

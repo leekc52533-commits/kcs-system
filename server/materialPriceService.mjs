@@ -68,14 +68,16 @@ const priceChoice=(item,prefix,database)=>{
   return{levelId,special,effectiveDate:text(item[`${prefix}EffectiveDate`])||(special!=null?new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kuching'}):level.effective_date)}
 }
 
-export function saveCustomerMaterialPricing(customerId,items,{changedBy='Administrator',reason='Customer material pricing update',confirmed=false}={},database=defaultDb){
-  if(!Array.isArray(items))return{changed:false,...listCustomerMaterialPricing(customerId,database)}
+export function saveCustomerMaterialPricing(customerId,items,{changedBy='Administrator',reason='Customer material pricing update',confirmed=false,removedMaterialIds=[]}={},database=defaultDb){
+  const removals=[...new Set((Array.isArray(removedMaterialIds)?removedMaterialIds:[]).map(Number).filter(Boolean))]
+  if(!Array.isArray(items)&&removals.length===0)return{changed:false,...listCustomerMaterialPricing(customerId,database)}
   const customer=database.prepare('SELECT id,jodoo_customer_id FROM customers WHERE id=? OR jodoo_customer_id=?').get(Number(customerId)||-1,String(customerId));if(!customer)throw new Error('Customer not found')
-  const materialIds=items.map(item=>Number(item.materialId));if(materialIds.some(id=>!id)||new Set(materialIds).size!==materialIds.length)throw new Error('The same Material cannot be added more than once')
+  const submittedItems=Array.isArray(items)?items:[],materialIds=submittedItems.map(item=>Number(item.materialId));if(materialIds.some(id=>!id)||new Set(materialIds).size!==materialIds.length)throw new Error('The same Material cannot be added more than once')
+  if(removals.some(materialId=>materialIds.includes(materialId)))throw new Error('A Material cannot be updated and removed in the same request')
   const before=listCustomerMaterialPricing(customer.id,database),upsert=database.prepare(`INSERT INTO customer_material_pricing(customer_id,material_id,standard_price_level_id,standard_special_price,standard_effective_date,outstation_enabled,outstation_price_level_id,outstation_special_price,outstation_effective_date,status,updated_by)
     VALUES(?,?,?,?,?,?,?,?,?,'active',?) ON CONFLICT(customer_id,material_id) DO UPDATE SET standard_price_level_id=excluded.standard_price_level_id,standard_special_price=excluded.standard_special_price,standard_effective_date=excluded.standard_effective_date,outstation_enabled=excluded.outstation_enabled,outstation_price_level_id=excluded.outstation_price_level_id,outstation_special_price=excluded.outstation_special_price,outstation_effective_date=excluded.outstation_effective_date,status='active',updated_by=excluded.updated_by,updated_at=CURRENT_TIMESTAMP`)
   let changed=false
-  for(const item of items){
+  for(const item of submittedItems){
     const materialId=Number(item.materialId);if(!database.prepare('SELECT id FROM materials WHERE id=?').get(materialId))throw new Error('Material not found')
     const standard=priceChoice(item,'standard',database),outstationEnabled=Boolean(item.outstationEnabled),outstation=outstationEnabled?priceChoice(item,'outstation',database):{levelId:null,special:null,effectiveDate:null}
     const old=before.items.find(entry=>entry.materialId===materialId),next={standardPriceLevelId:standard.levelId,standardSpecialPrice:standard.special,standardEffectiveDate:standard.effectiveDate,outstationEnabled,outstationPriceLevelId:outstation.levelId,outstationSpecialPrice:outstation.special,outstationEffectiveDate:outstation.effectiveDate}
@@ -90,6 +92,16 @@ export function saveCustomerMaterialPricing(customerId,items,{changedBy='Adminis
       database.prepare(`INSERT INTO customer_material_pricing_history(customer_material_pricing_id,customer_id,material_id,before_json,after_json,affected_standard_branch_count,affected_outstation_branch_count,reason,changed_by) VALUES(?,?,?,?,?,?,?,?,?)`).run(current.id,customer.id,materialId,old?JSON.stringify(oldComparable):null,JSON.stringify(next),old?.standardBranchCount||0,old?.outstationBranchCount||0,text(reason)||'Customer material pricing update',changedBy)
       changed=true
     }
+  }
+  for(const materialId of removals){
+    const current=database.prepare('SELECT * FROM customer_material_pricing WHERE customer_id=? AND material_id=?').get(customer.id,materialId)
+    if(!current||current.status==='inactive')continue
+    const branchCount=database.prepare(`SELECT COUNT(DISTINCT s.branch_id) count FROM branch_material_price_selections s JOIN branches b ON b.id=s.branch_id WHERE b.customer_id=? AND s.material_id=?`).get(customer.id,materialId).count
+    if(branchCount>0)throw new Error(`Cannot remove Customer Material Pricing while ${branchCount} Branches still use it`)
+    const old=before.items.find(entry=>entry.materialId===materialId),after={...(old||current),status:'inactive',removed:true}
+    database.prepare("UPDATE customer_material_pricing SET status='inactive',updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND customer_id=?").run(changedBy,current.id,customer.id)
+    database.prepare(`INSERT INTO customer_material_pricing_history(customer_material_pricing_id,customer_id,material_id,before_json,after_json,affected_standard_branch_count,affected_outstation_branch_count,reason,changed_by) VALUES(?,?,?,?,?,?,?,?,?)`).run(current.id,customer.id,materialId,JSON.stringify(old||current),JSON.stringify(after),old?.standardBranchCount||0,old?.outstationBranchCount||0,text(reason)||'Customer material pricing removed',changedBy)
+    changed=true
   }
   return{changed,...listCustomerMaterialPricing(customer.id,database)}
 }

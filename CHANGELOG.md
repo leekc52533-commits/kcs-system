@@ -2,6 +2,8 @@
 
 ## Unreleased — Schema v19
 
+- Added explicit `removedMaterialIds` handling for Customer Material Pricing. Unused pricing is safely deactivated and audited; referenced pricing and cross-Customer removal are rejected or ignored without dangling references.
+- Branch optional fields are now collected from the submitted HTML form, so an intentional empty string reliably reaches the API and becomes `NULL`; omitted API fields still preserve the stored value.
 - Fixed Customer Special Price checkbox state overwrite by applying one functional, atomic pricing update; the amount input now appears immediately and validates non-negative values with up to three decimal places.
 - Branch optional text fields now distinguish untouched fields from an intentional blank; clearing Notes writes `NULL` and remains visible in audit history.
 - Fixed consecutive Customer Branch editing: each modal reloads by BranchID, prevents stale responses, resets validation state, closes only after a confirmed save, and refreshes the list.

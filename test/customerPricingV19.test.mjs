@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import {readFileSync} from 'node:fs'
 import {DatabaseSync} from 'node:sqlite'
 import {schemaSql} from '../server/schema.mjs'
 import {applyV19Migration,syncV18BranchPricesToV19} from '../server/migrationV19.mjs'
@@ -96,6 +97,63 @@ test('Customer Special Price can return to shared Standard/Outstation and valida
   assert.throws(()=>saveCustomerMaterialPricing('SWITCH',[{materialId:price.occ,standardSpecialPrice:.1234}],{confirmed:true},db),/up to 3 decimal/)
 })
 
+test('explicit removedMaterialIds safely deactivates only unused Customer Pricing and audits removal',()=>{
+  const db=database(),price=levels(db)
+  createCustomer({customerId:'REMOVE',customerName:'Remove Test',materialPricing:[
+    {materialId:price.occ,standardSpecialPrice:.123},
+    {materialId:price.plastic,standardPriceLevelId:price.plastic10.id},
+  ]},db)
+  createCustomer({customerId:'OTHER',customerName:'Other Customer',materialPricing:[
+    {materialId:price.occ,standardPriceLevelId:price.occ30.id},
+  ]},db)
+  assert.equal(getCustomer('REMOVE',db).materialPricing.length,2)
+
+  updateCustomer('REMOVE',{
+    customerName:'Remove Test',
+    materialPricing:[{materialId:price.plastic,standardPriceLevelId:price.plastic10.id}],
+    removedMaterialIds:[price.occ],
+    changedBy:'Admin',
+    reason:'Remove unused OCC pricing',
+  },db)
+
+  assert.deepEqual(getCustomer('REMOVE',db).materialPricing.map(item=>item.materialCode),['PLASTIC'])
+  assert.equal(db.prepare('SELECT status FROM customer_material_pricing WHERE customer_id=(SELECT id FROM customers WHERE jodoo_customer_id=?) AND material_id=?').get('REMOVE',price.occ).status,'inactive')
+  assert.equal(getCustomer('OTHER',db).materialPricing[0].materialCode,'OCC')
+  const history=db.prepare('SELECT before_json,after_json,reason,changed_by FROM customer_material_pricing_history WHERE customer_id=(SELECT id FROM customers WHERE jodoo_customer_id=?) AND material_id=? ORDER BY id DESC LIMIT 1').get('REMOVE',price.occ)
+  assert.equal(JSON.parse(history.before_json).standardSpecialPrice,.123)
+  assert.equal(JSON.parse(history.after_json).removed,true)
+  assert.equal(history.reason,'Remove unused OCC pricing')
+  assert.equal(history.changed_by,'Admin')
+})
+
+test('Pricing omission never deletes, cross-Customer removal is scoped, and Branch references block removal transactionally',()=>{
+  const db=database(),price=levels(db)
+  createCustomer({customerId:'SAFE',customerName:'Safe',materialPricing:[
+    {materialId:price.occ,standardPriceLevelId:price.occ30.id},
+    {materialId:price.plastic,standardPriceLevelId:price.plastic10.id},
+  ]},db)
+  createCustomer({customerId:'SCOPED',customerName:'Scoped',materialPricing:[
+    {materialId:price.occ,standardPriceLevelId:price.occ28.id},
+  ]},db)
+  createBranch({branchId:'SAFE-BRANCH',customerId:'SAFE',branchName:'Safe Branch',materials:[{materialId:price.occ,priceType:'standard'}]},db)
+
+  saveCustomerMaterialPricing('SAFE',[{materialId:price.occ,standardPriceLevelId:price.occ30.id}],{changedBy:'Admin',reason:'Partial pricing update'},db)
+  assert.deepEqual(getCustomer('SAFE',db).materialPricing.map(item=>item.materialCode),['OCC','PLASTIC'])
+  saveCustomerMaterialPricing('SCOPED',undefined,{removedMaterialIds:[price.plastic],changedBy:'Admin',reason:'Scoped no-op'},db)
+  assert.equal(getCustomer('SAFE',db).materialPricing.some(item=>item.materialCode==='PLASTIC'),true)
+
+  assert.throws(()=>updateCustomer('SAFE',{
+    customerName:'Should roll back',
+    materialPricing:[{materialId:price.plastic,standardPriceLevelId:price.plastic10.id}],
+    removedMaterialIds:[price.occ],
+    changedBy:'Admin',
+    reason:'Blocked removal',
+  },db),/1 Branches still use it/)
+  assert.equal(getCustomer('SAFE',db).customerName,'Safe')
+  assert.equal(getCustomer('SAFE',db).materialPricing.find(item=>item.materialCode==='OCC').status,'active')
+  assert.throws(()=>saveCustomerMaterialPricing('SAFE',[{materialId:price.occ,standardPriceLevelId:price.occ30.id}],{removedMaterialIds:[price.occ]},db),/updated and removed/)
+})
+
 test('completed dispatch snapshot stays immutable after Customer price changes',()=>{
   const db=database(),price=levels(db);createCustomer({customerId:'SNAP',customerName:'Snapshot'},db)
   saveCustomerMaterialPricing('SNAP',[{materialId:price.occ,standardPriceLevelId:price.occ30.id,outstationEnabled:true,outstationPriceLevelId:price.occ28.id}],{reason:'Opening'},db)
@@ -113,4 +171,13 @@ test('Customer pricing permission remains server-authorized',()=>{
   assert.equal(accountCan({id:Number(account.lastInsertRowid),role:'supervisor'},'price_manage',db),false)
   db.prepare("INSERT INTO auth_account_permissions(account_id,permission,granted_by) VALUES(?,'price_manage','Owner')").run(account.lastInsertRowid)
   assert.equal(accountCan({id:Number(account.lastInsertRowid),role:'supervisor'},'price_manage',db),true)
+})
+
+test('Customer editor sends explicit removals and failed saves keep the modal open',()=>{
+  const source=readFileSync(new URL('../src/MasterDataPage.jsx',import.meta.url),'utf8')
+  const routes=readFileSync(new URL('../server/index.mjs',import.meta.url),'utf8')
+  assert.match(source,/removedMaterialIds/)
+  assert.match(source,/const payload=\{\.\.\.form,removedMaterialIds,pricingConfirmed,reason\}/)
+  assert.match(source,/catch\(item\)\{fail\(item\.message\)\}/)
+  assert.match(routes,/Array\.isArray\(payload\.removedMaterialIds\).*price_manage/)
 })

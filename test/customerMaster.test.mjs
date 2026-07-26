@@ -11,19 +11,23 @@ function seed(db){createCustomer({customerId:'C1',customerName:'Alpha Trading',d
 
 test('Customer 与 Branch 由 KCS 建立并保持唯一编号及多 Branch 关系',()=>{const db=fixture();seed(db);createBranch({branchId:'B2',customerId:'C1',branchName:'Second Branch',areaId:'A1'},db);assert.equal(getCustomer('C1',db).branches.length,2);assert.equal(getBranch('B1',db).sourceSystem,'KCS');assert.throws(()=>createCustomer({customerId:'C1',customerName:'Duplicate'},db),/UNIQUE/);assert.throws(()=>createBranch({branchId:'B1',customerId:'C1',branchName:'Duplicate'},db),/UNIQUE/)})
 
-test('Branch备注可主动清空为NULL，未提交notes时保留原值并记录审计',()=>{
+test('Branch可选字段主动清空为NULL，未提交字段保留原值并记录审计',()=>{
   const db=fixture();seed(db)
-  updateBranch('B1',{notes:'Temporary note',changedBy:'Supervisor',reason:'Add note'},db)
-  updateBranch('B1',{phone:'0123456789',changedBy:'Supervisor',reason:'Unrelated update'},db)
-  assert.equal(getBranch('B1',db).notes,'Temporary note')
+  updateBranch('B1',{address:'Road 9',contactPerson:'Alice',phone:'0123456789',notes:'Temporary note',collectionFrequency:'Once a week',assignedWeekdays:['Monday'],changedBy:'Supervisor',reason:'Add optional values'},db)
+  updateBranch('B1',{paymentType:'Credit',changedBy:'Supervisor',reason:'Unrelated update'},db)
+  const preserved=getBranch('B1',db)
+  assert.equal(preserved.address,'Road 9');assert.equal(preserved.contactPerson,'Alice');assert.equal(preserved.phone,'0123456789');assert.equal(preserved.notes,'Temporary note');assert.equal(preserved.collectionFrequency,'Once a week')
 
-  updateBranch('B1',{notes:'',changedBy:'Supervisor',reason:'Clear obsolete note'},db)
-  assert.equal(db.prepare("SELECT notes FROM branches WHERE jodoo_branch_id='B1'").get().notes,null)
-  assert.equal(getBranch('B1',db).notes,null)
+  updateBranch('B1',{address:'',contactPerson:'',phone:'',notes:'',collectionFrequency:'',assignedWeekdays:[],changedBy:'Supervisor',reason:'Clear optional values'},db)
+  const stored=db.prepare("SELECT address,contact_person,phone,notes,collection_frequency FROM branches WHERE jodoo_branch_id='B1'").get()
+  assert.equal(stored.address,null);assert.equal(stored.contact_person,null);assert.equal(stored.phone,null);assert.equal(stored.notes,null);assert.equal(stored.collection_frequency,null)
+  const reopened=getBranch('B1',db)
+  assert.equal(reopened.address,null);assert.equal(reopened.contactPerson,null);assert.equal(reopened.phone,null);assert.equal(reopened.notes,null);assert.equal(reopened.collectionFrequency,null)
   const audit=db.prepare("SELECT before_json,after_json,reason FROM master_change_history WHERE entity_type='branch' AND entity_id='B1' ORDER BY id DESC LIMIT 1").get()
-  assert.equal(JSON.parse(audit.before_json).notes,'Temporary note')
-  assert.equal(JSON.parse(audit.after_json).notes,null)
-  assert.equal(audit.reason,'Clear obsolete note')
+  const before=JSON.parse(audit.before_json),after=JSON.parse(audit.after_json)
+  assert.equal(before.address,'Road 9');assert.equal(before.contact_person,'Alice');assert.equal(before.phone,'0123456789');assert.equal(before.notes,'Temporary note');assert.equal(before.collection_frequency,'Once a week')
+  assert.equal(after.address,null);assert.equal(after.contact_person,null);assert.equal(after.phone,null);assert.equal(after.notes,null);assert.equal(after.collection_frequency,null)
+  assert.equal(audit.reason,'Clear optional values')
 })
 
 test('Customer 暂停、恢复、关闭与关键修改保留审计',()=>{const db=fixture();seed(db);updateCustomer('C1',{status:'paused',changedBy:'Supervisor',reason:'Credit review'},db);assert.equal(getCustomer('C1',db).status,'paused');updateCustomer('C1',{status:'active',changedBy:'Supervisor'},db);updateCustomer('C1',{status:'closed',changedBy:'Supervisor'},db);assert.equal(db.prepare("SELECT COUNT(*) n FROM master_change_history WHERE entity_type='customer' AND entity_id='C1'").get().n,4);assert.equal(db.prepare("SELECT COUNT(*) n FROM customers WHERE jodoo_customer_id='C1'").get().n,1)})

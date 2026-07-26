@@ -10,6 +10,7 @@ import {
 } from '../shared/collectionSettings.js'
 import {
   buildBranchSavePayload,
+  collectBranchOptionalFields,
   createBranchEditorDraft,
   formatPrice,
   priceTypeLabel,
@@ -148,6 +149,36 @@ test('Branch optional fields distinguish untouched values from an intentional bl
   assert.equal(Object.hasOwn(cleared, 'phone'), false)
 })
 
+test('Branch form submission reads explicit blank optional values from the actual form', () => {
+  const formData = new Map([
+    ['address', ''],
+    ['contactPerson', ''],
+    ['phone', ''],
+    ['collectionTimeConstraint', ''],
+    ['proofRequirements', ''],
+    ['vehicleRestriction', ''],
+    ['notes', ''],
+  ])
+  const submitted = collectBranchOptionalFields(formData)
+  assert.deepEqual(submitted, {
+    address: '',
+    contactPerson: '',
+    phone: '',
+    collectionTimeConstraint: '',
+    proofRequirements: '',
+    vehicleRestriction: '',
+    notes: '',
+  })
+  const payload = buildBranchSavePayload(
+    {...createBranchEditorDraft({branchId: 'B-1'}), ...submitted},
+    {touchedFields: new Set(Object.keys(submitted))},
+  )
+  for (const field of Object.keys(submitted)) {
+    assert.equal(Object.hasOwn(payload, field), true)
+    assert.equal(payload[field], '')
+  }
+})
+
 test('ten Branches can be edited continuously without carrying prior state, frequency errors or prices', () => {
   const db = database()
   const {materialId} = pricingFixture(db)
@@ -218,4 +249,6 @@ test('Branch modal lifecycle prevents stale data and closes only after a success
   assert.match(source, /await api\(url,\{method,body:JSON\.stringify/)
   assert.match(source, /setEditingState\(null\)\s+if\(await load\(\)\)notify\(/)
   assert.match(source, /catch\(item\)\{fail\(item\.message\)\}\s+finally\{setSaving\(false\)\}/)
+  assert.match(source, /collectBranchOptionalFields\(new FormData\(event\.currentTarget\)\)/)
+  assert.match(source, /name=\{key\}.*onInput=/)
 })

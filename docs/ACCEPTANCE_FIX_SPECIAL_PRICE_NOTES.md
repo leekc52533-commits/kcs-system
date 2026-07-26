@@ -19,17 +19,33 @@
 
 ### Branch Notes及同类可选文字字段
 
-前端现在记录用户实际触碰的可选文字字段。未触碰字段不会放进 PATCH payload；用户主动删空的字段会明确发送空字符串。
+前端在提交时从实际HTML表单读取可选文字字段，并为每个字段设置稳定的`name`。这避免React state事件批次、浏览器自动填表或测试工具清空字段时，DOM已经为空但旧state仍被提交。用户主动删空会明确发送空字符串。
 
 服务端统一使用字段存在性及 `undefined` 检查：
 
-- 未提交或值为 `undefined`：保留数据库原值。
+- payload没有该属性或值为 `undefined`：保留数据库原值。
 - 明确提交空字符串或仅空格：写入 `NULL`。
+- 明确提交 `null`：写入 `NULL`。
 - 明确提交文字：写入去除首尾空白后的值。
 
 相同规则只用于现有允许清空的 Branch 字段：Address、Contact Person、Phone、Collection Time Constraint、Proof Requirements、Vehicle Restriction 和 Notes。没有扩大业务字段范围。
 
 `master_change_history`继续保存修改前后完整快照、操作人、时间和原因，因此 Notes 从文字变为 `NULL` 仍可审计。
+
+## Customer Material Pricing安全移除协议
+
+Customer更新接口维持PATCH/upsert语义：`materialPricing`只新增或更新明确提交的项目，其他项目即使未出现在数组中也不会自动删除。
+
+页面点击“移除”会另外提交`removedMaterialIds`。服务端在Customer更新的同一个SAVEPOINT内：
+
+1. 验证Material ID只作用于当前Customer。
+2. 拒绝同一Material同时出现在更新和移除清单。
+3. 查询是否仍有该Customer的Branch引用。
+4. 有Branch引用时拒绝操作并回滚Customer及Pricing修改。
+5. 没有引用时将Pricing状态改为`inactive`，保留稳定ID和旧历史。
+6. 写入`customer_material_pricing_history`，记录移除前内容、停用结果、原因、操作人和时间。
+
+这种设计不执行危险的“缺失即删除”，不会跨Customer删除，也不会留下失效Branch引用。以后重新加入相同Material会复用唯一记录并恢复为active。
 
 ## 管理员操作
 
@@ -37,7 +53,9 @@
 2. 勾选 Customer Special Price 后输入金额；确认摘要显示 `Special Price — RMx.xx/kg`。
 3. 如改回共享价格，取消勾选并重新选择 Standard 或 Outstation Price Level。
 4. Branch Notes需要清除时，将内容全部删除后保存；重新打开必须保持空白。
-5. 保存失败时Modal保留并显示字段错误；成功时Modal关闭并刷新清单。
+5. Customer Pricing需要移除时，先确认没有Branch使用该Material，再点击“移除”并保存。
+6. 如果提示仍有Branch使用，先到相关Branch移除Material或改用其他有效配置；失败时Modal保留，不会显示成功。
+7. 保存成功时Modal关闭并刷新清单。
 
 ## 测试
 
@@ -50,7 +68,7 @@ npm run build
 npm test
 ```
 
-覆盖原子checkbox更新、即时输入框状态、金额验证、保存重开、Special与共享Price Level切换、多Material隔离、Branch Price List、Notes清空、未提交字段保留、审计快照、空白Frequency及连续Branch编辑。
+覆盖原子checkbox更新、即时输入框状态、金额验证、保存重开、Special与共享Price Level切换、多Material隔离、Branch Price List、Notes/Contact/Phone/Address/Frequency清空、未提交字段保留、审计快照、显式Pricing移除、跨Customer保护、Branch引用阻止、事务回滚及连续Branch编辑。
 
 ## 部署与回滚
 
@@ -76,7 +94,7 @@ curl -fsS https://dispatch.leesaiker.com/api/health
 
 ## 权限、安全与备份影响
 
-- 价格权限仍由服务端 `price_manage`验证。
+- 价格更新与`removedMaterialIds`移除权限都由服务端 `price_manage`验证。
 - 普通员工只能查看解析后的价格。
 - 不记录密码、密钥或附件内容。
 - 没有新表、新字段或附件。
