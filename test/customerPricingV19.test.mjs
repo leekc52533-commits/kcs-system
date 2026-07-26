@@ -81,6 +81,21 @@ test('Customer Special Price, reopen persistence and future Branch Price List re
   assert.equal(listCustomerMaterialPricing('SPECIAL',db).items[0].outstationPrice,.285)
 })
 
+test('Customer Special Price can return to shared Standard/Outstation and validates amounts',()=>{
+  const db=database(),price=levels(db)
+  createCustomer({customerId:'SWITCH',customerName:'Switch',materialPricing:[{materialId:price.occ,standardSpecialPrice:.315,outstationEnabled:true,outstationSpecialPrice:.285}]},db)
+  createBranch({branchId:'SWITCH-STD',customerId:'SWITCH',branchName:'Switch Standard',materials:[{materialId:price.occ,priceType:'standard'}]},db)
+  createBranch({branchId:'SWITCH-OUT',customerId:'SWITCH',branchName:'Switch Outstation',materials:[{materialId:price.occ,priceType:'outstation'}]},db)
+  saveCustomerMaterialPricing('SWITCH',[{materialId:price.occ,standardPriceLevelId:price.occ30.id,outstationEnabled:true,outstationPriceLevelId:price.occ28.id}],{changedBy:'Admin',reason:'Return to shared levels',confirmed:true},db)
+  assert.equal(getBranch('SWITCH-STD',db).materials[0].currentPrice,.30)
+  assert.equal(getBranch('SWITCH-STD',db).materials[0].priceSource,'customer_price_level')
+  assert.equal(getBranch('SWITCH-OUT',db).materials[0].currentPrice,.28)
+  assert.equal(getBranch('SWITCH-OUT',db).materials[0].priceSource,'customer_price_level')
+  assert.throws(()=>saveCustomerMaterialPricing('SWITCH',[{materialId:price.occ,standardSpecialPrice:'invalid'}],{confirmed:true},db),/valid number/)
+  assert.throws(()=>saveCustomerMaterialPricing('SWITCH',[{materialId:price.occ,standardSpecialPrice:-.01}],{confirmed:true},db),/cannot be negative/)
+  assert.throws(()=>saveCustomerMaterialPricing('SWITCH',[{materialId:price.occ,standardSpecialPrice:.1234}],{confirmed:true},db),/up to 3 decimal/)
+})
+
 test('completed dispatch snapshot stays immutable after Customer price changes',()=>{
   const db=database(),price=levels(db);createCustomer({customerId:'SNAP',customerName:'Snapshot'},db)
   saveCustomerMaterialPricing('SNAP',[{materialId:price.occ,standardPriceLevelId:price.occ30.id,outstationEnabled:true,outstationPriceLevelId:price.occ28.id}],{reason:'Opening'},db)

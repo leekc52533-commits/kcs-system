@@ -120,6 +120,8 @@ sqlite3 "$KCS_DB_PATH" "PRAGMA integrity_check; SELECT MAX(version) FROM schema_
 
 ## Branch编辑修正（v19，无migration）
 
+2026-07正式验收补丁进一步修复Customer Special Price checkbox的连续state覆盖，并为Branch Notes等可选文字字段增加“未提交/主动清空”语义。技术、测试、管理员操作及部署说明见[正式验收修正说明](ACCEPTANCE_FIX_SPECIAL_PRICE_NOTES.md)。
+
 ### 管理员操作
 
 1. 在 Customer Material Pricing 选择 Standard 或 Outstation Price Level 后，确认下方立即出现实际 `RM/kg`。

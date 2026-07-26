@@ -11,6 +11,21 @@ function seed(db){createCustomer({customerId:'C1',customerName:'Alpha Trading',d
 
 test('Customer 与 Branch 由 KCS 建立并保持唯一编号及多 Branch 关系',()=>{const db=fixture();seed(db);createBranch({branchId:'B2',customerId:'C1',branchName:'Second Branch',areaId:'A1'},db);assert.equal(getCustomer('C1',db).branches.length,2);assert.equal(getBranch('B1',db).sourceSystem,'KCS');assert.throws(()=>createCustomer({customerId:'C1',customerName:'Duplicate'},db),/UNIQUE/);assert.throws(()=>createBranch({branchId:'B1',customerId:'C1',branchName:'Duplicate'},db),/UNIQUE/)})
 
+test('Branch备注可主动清空为NULL，未提交notes时保留原值并记录审计',()=>{
+  const db=fixture();seed(db)
+  updateBranch('B1',{notes:'Temporary note',changedBy:'Supervisor',reason:'Add note'},db)
+  updateBranch('B1',{phone:'0123456789',changedBy:'Supervisor',reason:'Unrelated update'},db)
+  assert.equal(getBranch('B1',db).notes,'Temporary note')
+
+  updateBranch('B1',{notes:'',changedBy:'Supervisor',reason:'Clear obsolete note'},db)
+  assert.equal(db.prepare("SELECT notes FROM branches WHERE jodoo_branch_id='B1'").get().notes,null)
+  assert.equal(getBranch('B1',db).notes,null)
+  const audit=db.prepare("SELECT before_json,after_json,reason FROM master_change_history WHERE entity_type='branch' AND entity_id='B1' ORDER BY id DESC LIMIT 1").get()
+  assert.equal(JSON.parse(audit.before_json).notes,'Temporary note')
+  assert.equal(JSON.parse(audit.after_json).notes,null)
+  assert.equal(audit.reason,'Clear obsolete note')
+})
+
 test('Customer 暂停、恢复、关闭与关键修改保留审计',()=>{const db=fixture();seed(db);updateCustomer('C1',{status:'paused',changedBy:'Supervisor',reason:'Credit review'},db);assert.equal(getCustomer('C1',db).status,'paused');updateCustomer('C1',{status:'active',changedBy:'Supervisor'},db);updateCustomer('C1',{status:'closed',changedBy:'Supervisor'},db);assert.equal(db.prepare("SELECT COUNT(*) n FROM master_change_history WHERE entity_type='customer' AND entity_id='C1'").get().n,4);assert.equal(db.prepare("SELECT COUNT(*) n FROM customers WHERE jodoo_customer_id='C1'").get().n,1)})
 
 test('已批准路线涉及的价格或付款方式修改后要求重新批准',()=>{const db=fixture();seed(db);generateDay({startDate:'2026-08-03'},db);assignVehicleDay('2026-08-03',1,{driverId:1},db);const stop=getDispatchDay('2026-08-03',db).unassignedStops[0];updateStop(stop.id,{date:'2026-08-03',vehicleId:1,tripNumber:1},db);approveDay('2026-08-03',{},db);updateBranch('B1',{occPrice:0.65,changedBy:'Supervisor',reason:'New price'},db);assert.equal(getDispatchDay('2026-08-03',db).status,'reapproval_required');assert.equal(db.prepare("SELECT COUNT(*) n FROM dispatch_change_logs WHERE change_type='branch_master_changed'").get().n,1)})

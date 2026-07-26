@@ -13,6 +13,10 @@ import {
   createBranchEditorDraft,
   formatPrice,
   priceTypeLabel,
+  specialPriceEnabled,
+  toggleCustomerSpecialPrice,
+  updateCustomerPricingDraft,
+  validateCustomerPricing,
 } from '../src/branchEditorState.js'
 import {syncLegacyOccPrices} from '../server/migrationV18.mjs'
 import {
@@ -87,6 +91,61 @@ test('price labels immediately expose Standard, Outstation and Special Price val
   assert.equal(priceTypeLabel(pricing, 'outstation'), 'Outstation — RM0.17/kg')
   assert.equal(formatPrice(null), 'Price not configured')
   assert.equal(priceTypeLabel({...pricing, outstationSpecialPrice: 0.165}, 'outstation'), 'Special Price — RM0.17/kg')
+})
+
+test('Customer Special Price toggle is atomic, visible immediately and isolated per Material', () => {
+  const original = [
+    {materialId: 1, standardPriceLevelId: 10, standardSpecialPrice: ''},
+    {materialId: 2, standardPriceLevelId: 20, standardSpecialPrice: ''},
+  ]
+  const enabled = toggleCustomerSpecialPrice(original, 0, 'standard', true)
+  assert.equal(specialPriceEnabled(enabled[0], 'standard'), true)
+  assert.equal(enabled[0].standardSpecialPrice, 0)
+  assert.equal(enabled[0].standardPriceLevelId, '')
+  assert.deepEqual(enabled[1], original[1])
+  assert.deepEqual(original[0], {materialId: 1, standardPriceLevelId: 10, standardSpecialPrice: ''})
+
+  const priced = updateCustomerPricingDraft(enabled, 0, {standardSpecialPrice: '0.285'})
+  assert.doesNotThrow(() => validateCustomerPricing(priced))
+  assert.equal(priced[0].standardSpecialPrice, '0.285')
+  assert.deepEqual(priced[1], original[1])
+
+  const disabled = toggleCustomerSpecialPrice(priced, 0, 'standard', false)
+  assert.equal(specialPriceEnabled(disabled[0], 'standard'), false)
+  assert.throws(() => validateCustomerPricing(disabled), /Standard Price is required/)
+  const restored = updateCustomerPricingDraft(disabled, 0, {standardPriceLevelId: 10})
+  assert.doesNotThrow(() => validateCustomerPricing(restored))
+})
+
+test('Special Price rejects invalid, negative and excessive decimal values', () => {
+  const base = [{materialId: 1, standardPriceLevelId: '', standardSpecialPrice: ''}]
+  for (const value of ['abc', '-0.01', '0.1234']) {
+    const draft = updateCustomerPricingDraft(
+      toggleCustomerSpecialPrice(base, 0, 'standard', true),
+      0,
+      {standardSpecialPrice: value},
+    )
+    assert.throws(() => validateCustomerPricing(draft), /Special Price/)
+  }
+})
+
+test('Branch optional fields distinguish untouched values from an intentional blank', () => {
+  const form = createBranchEditorDraft({
+    branchId: 'B-1',
+    branchName: 'Branch One',
+    notes: 'Keep this note',
+    phone: '0123456789',
+  })
+  const untouched = buildBranchSavePayload(form, {touchedFields: new Set()})
+  assert.equal(Object.hasOwn(untouched, 'notes'), false)
+  assert.equal(Object.hasOwn(untouched, 'phone'), false)
+
+  const cleared = buildBranchSavePayload({...form, notes: ''}, {
+    touchedFields: new Set(['notes']),
+  })
+  assert.equal(Object.hasOwn(cleared, 'notes'), true)
+  assert.equal(cleared.notes, '')
+  assert.equal(Object.hasOwn(cleared, 'phone'), false)
 })
 
 test('ten Branches can be edited continuously without carrying prior state, frequency errors or prices', () => {

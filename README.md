@@ -234,7 +234,9 @@ KCS 现在是新 Customer、Customer Branch、official/temporary GPS、Buyer 与
 ## Customer Branch 连续编辑与价格显示
 
 - Customer Material Pricing 和 Branch Material 下拉会立即显示 `Standard — RMx.xx/kg`、`Outstation — RMx.xx/kg` 或 `Special Price — RMx.xx/kg`。
+- Customer Special Price 勾选改为单次原子 state 更新，金额输入框立即出现；支持 0 至 3 位小数、拒绝非数字和负数，保存重开后仍按 Customer + Material 保留。
+- Branch 可选文字字段使用“已触碰字段”提交规则：未编辑的字段不发送；主动清空 Notes、Phone、Address 等字段时发送空字符串，服务端明确转为 `NULL`，不会用旧值回填。
 - Branch 保存成功后编辑窗口自动关闭、清单自动刷新；API 失败时窗口保留并只显示错误，不会同时显示成功信息。
 - 每次打开 Branch 都按 BranchID 重新读取详情。快速连续切换使用请求序号隔离旧响应，表单也以 BranchID 重新建立，避免上一间 Branch 的资料或错误残留。
 - Collection Frequency 使用前后端共同定义。空白及尚未设置的旧 Branch 可继续保存其他字段；可识别的旧名称会标准化，无法识别的旧值会提示但在用户未修改 Frequency 时保持原值。
-- 本修正不改变 schema（仍为 v19），不修改 GPS、Schedule、Vehicle、账号或 AWS 正式资料。详细测试与故障处理见 [Customer Standard / Outstation v19](docs/CUSTOMER_STANDARD_OUTSTATION_V19.md)。
+- 本修正不改变 schema（仍为 v19），不修改 GPS、Schedule、Vehicle、账号或 AWS 正式资料。详细测试与故障处理见 [Customer Standard / Outstation v19](docs/CUSTOMER_STANDARD_OUTSTATION_V19.md)及[正式验收修正说明](docs/ACCEPTANCE_FIX_SPECIAL_PRICE_NOTES.md)。

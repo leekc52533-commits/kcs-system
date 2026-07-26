@@ -1,5 +1,13 @@
 # KCS Change Log
 
+## Customer Special Price与Branch空值修正
+
+- Customer Special Price checkbox改为函数式原子state更新，避免清除Price Level时覆盖Special Price状态。
+- 金额输入框立即显示；非数字、负数及超过三位小数会被前后端拒绝。
+- Branch可选文字字段明确区分“未提交”和“主动清空”；Notes清空后写入`NULL`，重新打开保持空白。
+- 审计继续保存Notes修改前后的完整快照。
+- Schema维持v19，没有migration，没有连接或修改AWS正式资料。
+
 ## Customer Branch consecutive-edit and resolved-price fix
 
 - Customer and Branch pricing selectors display the selected Standard, Outstation or Customer Special Price in RM/kg immediately.

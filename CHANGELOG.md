@@ -2,6 +2,8 @@
 
 ## Unreleased — Schema v19
 
+- Fixed Customer Special Price checkbox state overwrite by applying one functional, atomic pricing update; the amount input now appears immediately and validates non-negative values with up to three decimal places.
+- Branch optional text fields now distinguish untouched fields from an intentional blank; clearing Notes writes `NULL` and remains visible in audit history.
 - Fixed consecutive Customer Branch editing: each modal reloads by BranchID, prevents stale responses, resets validation state, closes only after a confirmed save, and refreshes the list.
 - Standard, Outstation and Customer Special Price selectors now show the resolved RM/kg price immediately.
 - Centralized Collection Frequency and weekday normalization for frontend and backend, including blank/legacy values and field-specific validation errors.

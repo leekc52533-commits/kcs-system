@@ -9,6 +9,13 @@ export {COLLECTION_FREQUENCIES, normalizeCollectionSettings}
 export const WEEKDAYS=COLLECTION_WEEKDAYS
 const text=value=>String(value??'').trim()
 const amount=value=>{const number=Number(value);if(!Number.isFinite(number)||number<0)throw new Error('Price must be zero or greater');return Math.round(number*1e6)/1e6}
+const specialPriceAmount=value=>{
+  const raw=text(value),number=Number(raw)
+  if(!raw||!Number.isFinite(number))throw new Error('Special Price must be a valid number')
+  if(number<0)throw new Error('Special Price cannot be negative')
+  if((raw.split('.')[1]||'').length>3)throw new Error('Special Price supports up to 3 decimal places')
+  return Math.round(number*1e3)/1e3
+}
 
 export function listBranchMaterials(branchId,database=defaultDb){
   return database.prepare(`SELECT s.id,s.branch_id branchInternalId,m.id materialId,m.material_code materialCode,m.material_name materialName,m.unit,
@@ -53,7 +60,7 @@ export function listCustomerMaterialPricing(customerId,database=defaultDb){
 }
 
 const priceChoice=(item,prefix,database)=>{
-  const special=item[`${prefix}SpecialPrice`]!==''&&item[`${prefix}SpecialPrice`]!=null?amount(item[`${prefix}SpecialPrice`]):null
+  const special=item[`${prefix}SpecialPrice`]!==''&&item[`${prefix}SpecialPrice`]!=null?specialPriceAmount(item[`${prefix}SpecialPrice`]):null
   const levelId=special==null?Number(item[`${prefix}PriceLevelId`])||null:null
   let level=null
   if(levelId){level=database.prepare('SELECT * FROM material_price_levels WHERE id=? AND material_id=?').get(levelId,Number(item.materialId));if(!level)throw new Error(`${prefix} Price Level does not belong to the selected Material`)}
@@ -134,7 +141,7 @@ export function replaceBranchMaterials(branchId,items,{changedBy='Supervisor',re
   const history=database.prepare(`INSERT INTO branch_material_price_history(branch_id,material_id,old_price_level_id,new_price_level_id,old_special_price,new_special_price,reason,changed_by) VALUES(?,?,?,?,?,?,?,?)`)
   for(const item of items){
     const materialId=Number(item.materialId),material=database.prepare('SELECT * FROM materials WHERE id=?').get(materialId);if(!material)throw new Error('Material not found')
-    const special=item.specialPrice!==''&&item.specialPrice!=null?amount(item.specialPrice):null
+    const special=item.specialPrice!==''&&item.specialPrice!=null?specialPriceAmount(item.specialPrice):null
     const priceLevelId=special==null?Number(item.priceLevelId)||null:null
     let level=null
     if(priceLevelId){level=database.prepare('SELECT * FROM material_price_levels WHERE id=? AND material_id=?').get(priceLevelId,materialId);if(!level)throw new Error('Price Level does not belong to the selected Material')}
