@@ -12,6 +12,7 @@
 - `src/translations.js`、`src/i18n.jsx`：BM/中文/English 与 English fallback。
 - `src/BackButton.jsx`、`src/navigation.js`：返回与未保存拦截。
 - `src/PasswordInput.jsx`、`src/AccountManagementPage.jsx`：密码眼睛及账号管理。
+- `src/formValidation.js`、`src/FieldError.jsx`：三语言字段验证、错误清除及无障碍字段关联；认证表单不再依赖浏览器原生验证气泡。
 - `scripts/predeploy.mjs`、`scripts/rollback.mjs`、`scripts/verify-data.mjs`：备份、恢复及资料核对。
 - `scripts/cloud-preflight.mjs`：只读记录 AWS 正式库的 Employee、Auth Account 与 EMP0003，并在 migration 后按 ID 验证完整保留。
 - `scripts/cloud-migration-rehearsal.mjs`：只在正式备份副本执行 v17 migration rehearsal，绝不连接写入正式数据库。
@@ -195,6 +196,8 @@ npm run verify:data
 11. 主动改密可取消且成功后 Session 仍有效；临时密码和管理员重设密码才强制，完成后 `must_change_password=0`。
 12. 登录页三语言即时切换；登录后顶栏没有重复语言下拉框，Profile 修改语言会即时生效并写入账号，下次登录继续使用。
 13. 桌面及 390×844 Driver/Crew 手机页面无横向溢出，Profile 菜单保持在 viewport 内。
+14. 在 BM、中文、English 分别空白提交登录及改密：错误显示在对应输入框下方，密码不足 8 位与确认不一致使用当前语言；Chrome 不出现原生 validation bubble。
+15. 账号建立／重设密码和手机临时客户表单重复以上检查，并确认输入内容后相关字段错误自动清除。
 
 ## 地址与地点规范
 
@@ -211,6 +214,7 @@ Customer/Branch 地址、道路、城市、州、Company Yard、Employee Base、
 - Operations 收到 403：先确认目标不是 Owner/Operations、操作不是 Username/System Role/敏感授权；这是预期的服务端保护。
 - 点击姓名直接出现“首次登录修改密码”：确认前端已更新，并检查 `/api/auth/session` 的 `mustChangePassword`。若为 `false`，应显示 Profile 菜单；若为 `true`，代表账号仍在使用临时或管理员重设密码。
 - 改密后回到登录页：检查浏览器是否仍有 `kcs_session` HttpOnly Cookie、API 服务时间及 `/api/auth/session`；正常改密不会撤销现有 Session。
+- 表单仍出现浏览器“请填写此字段”气泡：确认部署已包含应用字段验证版本、表单带 `noValidate`，并清除旧前端缓存；不要重新加回原生 `required` / `minLength` 作为用户提示。
 
 ## 备份与维护
 

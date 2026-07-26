@@ -7,6 +7,7 @@ import {addCalendarDays,kuchingDate,shortcutForDate} from '../shared/kuchingTime
 import {accountCan,bootstrapAccount,createAccount,login,roleCan,updateAccount,updateOwnPreferences} from '../server/authService.mjs'
 import {languageOptions,messages,translate} from '../src/translations.js'
 import {confirmNavigation,setNavigationDirty} from '../src/navigation.js'
+import {fieldAccessibility,passwordMessage,requiredMessage} from '../src/formValidation.js'
 
 const database=()=>{const db=new DatabaseSync(':memory:');db.exec(`PRAGMA foreign_keys=ON;${schemaSql}`);return db}
 const employee=(db,code,name='Employee')=>Number(db.prepare("INSERT INTO employees(employee_code,name,job_role,employment_status,is_active) VALUES(?,?,'Office','active',1)").run(code,name).lastInsertRowid)
@@ -39,6 +40,40 @@ test('three languages cover critical login/mobile actions and preserve location 
   const address='Jalan Datuk Tawi Sli, Kuching, Sarawak'
   assert.equal(address,'Jalan Datuk Tawi Sli, Kuching, Sarawak')
   assert.equal(translate('ms','missing.key'),'missing.key')
+})
+
+test('application validation uses exact BM Chinese and English required messages',()=>{
+  assert.equal(translate('ms','validation.required'),'Sila isi ruangan ini.')
+  assert.equal(translate('zh','validation.required'),'请填写此字段。')
+  assert.equal(translate('en','validation.required'),'Please fill in this field.')
+  for(const locale of ['ms','zh','en']){
+    const t=(key,variables)=>translate(locale,key,variables)
+    assert.equal(requiredMessage('   ',t),translate(locale,'validation.required'))
+    assert.equal(requiredMessage('value',t),'')
+    assert.equal(passwordMessage('',t),translate(locale,'validation.required'))
+    assert.equal(passwordMessage('1234567',t),translate(locale,'validation.passwordMin',{minimum:8}))
+    assert.equal(passwordMessage('12345678',t),'')
+  }
+})
+
+test('critical authentication forms disable native validation and expose accessible inline errors',()=>{
+  const auth=fs.readFileSync(new URL('../src/AuthPages.jsx',import.meta.url),'utf8')
+  const accounts=fs.readFileSync(new URL('../src/AccountManagementPage.jsx',import.meta.url),'utf8')
+  const special=fs.readFileSync(new URL('../src/SpecialRequestsPage.jsx',import.meta.url),'utf8')
+  for(const source of [auth,accounts,special]){
+    assert.match(source,/noValidate/)
+    assert.match(source,/fieldAccessibility/)
+    assert.match(source,/FieldError/)
+  }
+  assert.doesNotMatch(auth,/\brequired(?:=|\s|\/?>)/)
+  assert.doesNotMatch(auth,/\bminLength=/)
+  assert.doesNotMatch(accounts,/\brequired(?:=|\s|\/?>)/)
+  assert.doesNotMatch(accounts,/\bminLength=/)
+  assert.deepEqual(fieldAccessibility('field-error','Required'),{
+    'aria-invalid':true,
+    'aria-describedby':'field-error',
+    'aria-required':'true'
+  })
 })
 
 test('language preference is saved per account',()=>{

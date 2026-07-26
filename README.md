@@ -73,6 +73,7 @@ SQLite schema 目前为 v17。`branches` 保留现有架构，同时保存原始
 - System Role 与 Employee Job Role 分开。`kcadmin` 兼容迁移为 `owner_admin`；另支持 `operations_admin`、`supervisor`、`office`、`driver`、`crew`。只有 Owner Admin 可修改普通账号 Username/System Role；Operations Admin 可建立、停用、解锁及重设普通账号，但不能管理 Owner、授权敏感资料或升为 Owner。
 - 右上角员工姓名会打开 Account/Profile 菜单，显示 Username、Employee Code、System Role 与账号语言；不会直接触发改密。用户主动改密可取消且成功后保持登录。只有首次临时密码或管理员重设密码后的 `must_change_password=true` 才强制改密，完成后标志立即清除。
 - 登录、首次改密、修改密码、账号建立及重设密码使用独立眼睛按钮；密码继续采用加盐 scrypt，密码值不会写入 URL、日志或审计内容。
+- 登录、首次／普通改密、账号建立／重设、手机临时客户及临时收货请求不再依赖浏览器原生 `required` 气泡。必填、密码至少 8 位和确认密码不一致均在字段下方按当前 BM／中文／English 显示；输入后会清除相关错误，并提供 `aria-invalid`、`aria-describedby` 与可读错误区域。
 - 正式域名为 `https://dispatch.leesaiker.com`；旧 sslip.io 地址继续由现有部署配置保留。本次代码不会自动修改 DNS、证书或反向代理。
 
 完整部署、回滚、权限矩阵、测试及故障处理见 [`docs/PRELAUNCH_V17.md`](docs/PRELAUNCH_V17.md)。

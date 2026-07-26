@@ -47,6 +47,7 @@ export const messages = {
     'mobile.notPublished':'Today’s route has not been published.','mobile.openMap':'Open in map',
     'mobile.gpsUnsupported':'This browser does not support GPS','mobile.gpsFailed':'Unable to get GPS: {message}',
     'planner.week':'Future 7 Days','planner.single':'Daily Dispatch Plan','planner.today':'Today','planner.tomorrow':'Tomorrow','planner.dayAfter':'Day after tomorrow','planner.otherDate':'Other date','planner.updateWeek':'Update 7-day drafts','planner.updateDay':'Update daily draft','planner.loading':'Loading dispatch data…','planner.empty':'No draft for this date','planner.emptyHelp':'Use “Update daily draft” to generate it from BranchSchedule.','planner.special':'＋ Special collection request','planner.description':'Vehicles and crew come from Master data; Area and Default Base are recommendations only.',
+    'validation.required':'Please fill in this field.','validation.passwordMin':'Password must be at least {minimum} characters.',
     'validation.fallback':'Missing translation'
   },
   ms: {
@@ -89,7 +90,8 @@ export const messages = {
     'mobile.submitCollection':'Hantar kutipan menunggu','mobile.routeLoading':'Memuatkan laluan…',
     'mobile.notPublished':'Laluan hari ini belum diterbitkan.','mobile.openMap':'Buka dalam peta',
     'mobile.gpsUnsupported':'Pelayar ini tidak menyokong GPS','mobile.gpsFailed':'Tidak dapat memperoleh GPS: {message}',
-    'planner.week':'7 Hari Akan Datang','planner.single':'Pelan Penghantaran Harian','planner.today':'Hari ini','planner.tomorrow':'Esok','planner.dayAfter':'Lusa','planner.otherDate':'Tarikh lain','planner.updateWeek':'Kemas kini draf 7 hari','planner.updateDay':'Kemas kini draf harian','planner.loading':'Memuatkan data penghantaran…','planner.empty':'Tiada draf untuk tarikh ini','planner.emptyHelp':'Gunakan “Kemas kini draf harian” untuk menjana daripada BranchSchedule.','planner.special':'＋ Permintaan kutipan khas','planner.description':'Kenderaan dan kru daripada data Master; Area dan Default Base hanya cadangan.'
+    'planner.week':'7 Hari Akan Datang','planner.single':'Pelan Penghantaran Harian','planner.today':'Hari ini','planner.tomorrow':'Esok','planner.dayAfter':'Lusa','planner.otherDate':'Tarikh lain','planner.updateWeek':'Kemas kini draf 7 hari','planner.updateDay':'Kemas kini draf harian','planner.loading':'Memuatkan data penghantaran…','planner.empty':'Tiada draf untuk tarikh ini','planner.emptyHelp':'Gunakan “Kemas kini draf harian” untuk menjana daripada BranchSchedule.','planner.special':'＋ Permintaan kutipan khas','planner.description':'Kenderaan dan kru daripada data Master; Area dan Default Base hanya cadangan.',
+    'validation.required':'Sila isi ruangan ini.','validation.passwordMin':'Kata laluan mesti sekurang-kurangnya {minimum} aksara.'
   },
   zh: {
     'common.back':'返回','common.logout':'退出','common.loading':'载入中…','common.processing':'处理中…','common.save':'保存',
@@ -127,7 +129,8 @@ export const messages = {
     'mobile.requestedDate':'预计收货日期','mobile.submitCollection':'提交 Pending Collection','mobile.routeLoading':'载入中…',
     'mobile.notPublished':'今天尚未发布路线。','mobile.openMap':'在地图打开',
     'mobile.gpsUnsupported':'浏览器不支持 GPS','mobile.gpsFailed':'无法取得 GPS：{message}',
-    'planner.week':'未来 7 天派车','planner.single':'单日派车计划','planner.today':'今天','planner.tomorrow':'明天','planner.dayAfter':'后天','planner.otherDate':'其他日期','planner.updateWeek':'更新 7 天草稿','planner.updateDay':'更新当天草稿','planner.loading':'派车资料载入中…','planner.empty':'该日期尚未产生草稿','planner.emptyHelp':'按“更新当天草稿”从 BranchSchedule 建立所选日期。','planner.special':'＋ 临时收货请求','planner.description':'车辆、Driver 与 Assistant/Crew 均来自 Master；Area 与 Default Base 只作建议。'
+    'planner.week':'未来 7 天派车','planner.single':'单日派车计划','planner.today':'今天','planner.tomorrow':'明天','planner.dayAfter':'后天','planner.otherDate':'其他日期','planner.updateWeek':'更新 7 天草稿','planner.updateDay':'更新当天草稿','planner.loading':'派车资料载入中…','planner.empty':'该日期尚未产生草稿','planner.emptyHelp':'按“更新当天草稿”从 BranchSchedule 建立所选日期。','planner.special':'＋ 临时收货请求','planner.description':'车辆、Driver 与 Assistant/Crew 均来自 Master；Area 与 Default Base 只作建议。',
+    'validation.required':'请填写此字段。','validation.passwordMin':'密码至少需要 {minimum} 个字符。'
   }
 }
 
