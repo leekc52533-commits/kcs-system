@@ -19,7 +19,8 @@
     "verify:data": "node scripts/verify-data.mjs",
     "cloud:preflight": "node scripts/cloud-preflight.mjs",
     "cloud:rehearsal": "node scripts/cloud-migration-rehearsal.mjs",
-    "migrate:kcs": "node scripts/migrate.mjs"
+    "migrate:kcs": "node scripts/migrate.mjs",
+    "migrate:v18": "node scripts/migrate-v18.mjs"
   },
   "dependencies": {
     "exceljs": "^4.4.0",

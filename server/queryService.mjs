@@ -1,4 +1,5 @@
 import { db } from './database.mjs'
+import {listBranchMaterials} from './materialPriceService.mjs'
 
 const routeReadySql = `EXISTS (SELECT 1 FROM branch_schedules s WHERE s.branch_id=b.id AND s.is_active=1) AND b.latitude BETWEEN -90 AND 90 AND b.longitude BETWEEN -180 AND 180 AND NOT (b.latitude=0 AND b.longitude=0) AND b.is_active=1`
 const gpsValidSql = `b.latitude BETWEEN -90 AND 90 AND b.longitude BETWEEN -180 AND 180 AND NOT (b.latitude=0 AND b.longitude=0)`
@@ -27,14 +28,15 @@ export function customerBranches(params, database = db) {
   const page = Math.max(1, Number(params.page) || 1), pageSize = Math.min(100, Math.max(1, Number(params.pageSize) || 25))
   const base = `FROM branches b LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN zone_groups z ON z.id=a.zone_group_id`
   const total = database.prepare(`SELECT COUNT(*) total ${base} WHERE ${where.join(' AND ')}`).get(...args).total
-  const items = database.prepare(`SELECT b.jodoo_branch_id branchId,c.name customerName,b.branch_name branchName,z.name zoneGroup,a.name area,a.jodoo_area_id areaId,c.payment_type paymentType,c.occ_price occPrice,b.gps_status gpsStatus,b.latitude,b.longitude,COUNT(s.id) scheduleCount,GROUP_CONCAT(DISTINCT s.days_of_week) daysOfWeek,GROUP_CONCAT(DISTINCT s.frequency) frequency ${base} LEFT JOIN branch_schedules s ON s.branch_id=b.id WHERE ${where.join(' AND ')} GROUP BY b.id ORDER BY c.name,b.branch_name LIMIT ? OFFSET ?`).all(...args,pageSize,(page-1)*pageSize)
+  const items = database.prepare(`SELECT b.jodoo_branch_id branchId,c.name customerName,b.branch_name branchName,z.name zoneGroup,a.name area,a.jodoo_area_id areaId,COALESCE(b.payment_type,c.payment_type) paymentType,b.gps_status gpsStatus,b.latitude,b.longitude,COUNT(DISTINCT s.id) scheduleCount,(SELECT COUNT(*) FROM branch_material_prices bmp WHERE bmp.branch_id=b.id AND bmp.status='active') materialCount,GROUP_CONCAT(DISTINCT s.days_of_week) daysOfWeek,GROUP_CONCAT(DISTINCT s.frequency) frequency ${base} LEFT JOIN branch_schedules s ON s.branch_id=b.id WHERE ${where.join(' AND ')} GROUP BY b.id ORDER BY c.name,b.branch_name LIMIT ? OFFSET ?`).all(...args,pageSize,(page-1)*pageSize)
   return { items, pagination: { page, pageSize, total, pages: Math.ceil(total/pageSize) } }
 }
 
 export function customerBranchDetail(branchId, database = db) {
-  const item = database.prepare(`SELECT b.jodoo_branch_id branchId,c.jodoo_customer_id customerId,c.name customerName,c.tin_number tinNumber,c.payment_type paymentType,c.occ_price occPrice,b.branch_name branchName,b.address,b.latitude,b.longitude,b.gps_status gpsStatus,b.gps_verified_at gpsVerifiedDate,b.parking_note parkingNote,b.truck_access truckAccess,b.gps_remark gpsRemark,z.name zoneGroup,a.jodoo_area_id areaId,a.name area,a.schedule_text areaSchedule FROM branches b LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN zone_groups z ON z.id=a.zone_group_id WHERE b.jodoo_branch_id=?`).get(branchId)
+  const item = database.prepare(`SELECT b.id internalId,b.jodoo_branch_id branchId,c.jodoo_customer_id customerId,c.name customerName,c.tin_number tinNumber,COALESCE(b.payment_type,c.payment_type) paymentType,b.branch_name branchName,b.address,b.latitude,b.longitude,b.gps_status gpsStatus,b.gps_verified_at gpsVerifiedDate,b.parking_note parkingNote,b.truck_access truckAccess,b.gps_remark gpsRemark,z.name zoneGroup,a.jodoo_area_id areaId,a.name area,a.schedule_text areaSchedule FROM branches b LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN zone_groups z ON z.id=a.zone_group_id WHERE b.jodoo_branch_id=?`).get(branchId)
   if (!item) return null
   item.schedules = database.prepare(`SELECT jodoo_schedule_id scheduleId,frequency,days_of_week dayOfWeek,take_date takeDate,next_take_date nextTakeDate FROM branch_schedules WHERE source_branch_id=? ORDER BY days_of_week`).all(branchId)
+  item.materials=listBranchMaterials(item.internalId,database)
   item.warnings = []
   if (!item.customerId) item.warnings.push('CustomerID 找不到')
   if (!item.areaId) item.warnings.push('AreaID 找不到或未填写')

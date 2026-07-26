@@ -88,7 +88,7 @@ function generateRange({startDate=iso(),generatedBy='Supervisor',count=7}={}, da
       const date=addDays(start,offset)
       database.prepare(`INSERT OR IGNORE INTO dispatch_days(weekly_plan_id,dispatch_date) VALUES(?,?)`).run(plan.id,date)
       const day=dayByDate(database,date)
-      const schedules=database.prepare(`SELECT s.*,b.area_id FROM branch_schedules s JOIN branches b ON b.id=s.branch_id LEFT JOIN customers c ON c.id=b.customer_id WHERE s.is_active=1 AND b.is_active=1 AND COALESCE(c.is_active,1)=1`).all()
+      const schedules=database.prepare(`SELECT s.*,b.area_id FROM branch_schedules s JOIN branches b ON b.id=s.branch_id LEFT JOIN customers c ON c.id=b.customer_id WHERE s.is_active=1 AND b.is_active=1 AND COALESCE(c.is_active,1)=1 AND LOWER(TRIM(COALESCE(b.collection_frequency,''))) NOT IN ('on call','paused')`).all()
       for(const schedule of schedules) if(scheduleMatches(schedule,date)) createdStops+=Number(addScheduledStop(database,day,schedule))
       const additions=database.prepare(`SELECT s.*,b.area_id FROM schedule_exceptions e JOIN branch_schedules s ON s.id=e.schedule_id LEFT JOIN branches b ON b.id=s.branch_id WHERE e.target_date=? AND e.exception_type IN ('move_date','add_extra_collection','customer_request')`).all(date)
       for(const schedule of additions) createdStops+=Number(addScheduledStop(database,day,schedule))

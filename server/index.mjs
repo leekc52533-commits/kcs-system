@@ -16,6 +16,7 @@ import { commitMasterImport, listTransferLogs, masterExport, masterTemplate, pre
 import { accountCan, bootstrapAccount, changePassword, createAccount, getSession, listAccounts, listAuthAudit, login, logout, setupStatus, updateAccount, updateOwnPreferences } from './authService.mjs'
 import { commitGpsMigration, getGpsMigrationBatch, gpsMigrationTemplate, listGpsMigrationBatches, previewGpsMigration, resolveGpsMigrationRow } from './gpsMigrationService.mjs'
 import { addEmployeeDocument, employeeDetail, employeeDocumentFile, revealEmployeeField, sensitiveAccessLogs, sensitiveEmployeeExport } from './employeeSensitiveService.mjs'
+import { bulkUpdatePriceLevel, createMaterial, createPriceLevel, getMaterial, listMaterials, setPriceLevelStatus } from './materialPriceService.mjs'
 import {kuchingDate} from '../shared/kuchingTime.js'
 
 const port = Number(process.env.KCS_API_PORT || 8787)
@@ -88,6 +89,12 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'GET' && url.pathname === '/api/system/status') return sendJson(response, 200, { ...getSystemStatus(), integrations: { jodoo: getJodooIntegrationStatus() } })
     if (request.method === 'GET' && url.pathname === '/api/integrations/jodoo/status') return sendJson(response, 200, getJodooIntegrationStatus())
     if (request.method === 'GET' && url.pathname === '/api/dashboard/summary') return sendJson(response, 200, dashboardSummary())
+    if (request.method === 'GET' && url.pathname === '/api/materials') return sendJson(response,200,{items:listMaterials({includeInactive:url.searchParams.get('includeInactive')==='true'})})
+    if (request.method === 'GET' && /^\/api\/materials\/\d+$/.test(url.pathname)) {const item=getMaterial(Number(url.pathname.split('/').at(-1)));return item?sendJson(response,200,item):sendJson(response,404,{error:'Material not found'})}
+    if (request.method === 'POST' && url.pathname === '/api/materials') {if(!accountCan(session,'price_manage'))return sendJson(response,403,{error:'没有 Material 管理权限'});return sendJson(response,201,createMaterial((await readJson(request)).payload))}
+    if (request.method === 'POST' && /^\/api\/materials\/\d+\/price-levels$/.test(url.pathname)) {if(!accountCan(session,'price_manage'))return sendJson(response,403,{error:'没有 Price Level 管理权限'});return sendJson(response,201,createPriceLevel(Number(url.pathname.split('/')[3]),(await readJson(request)).payload))}
+    if (request.method === 'PATCH' && /^\/api\/price-levels\/\d+\/status$/.test(url.pathname)) {if(!accountCan(session,'price_manage'))return sendJson(response,403,{error:'没有 Price Level 管理权限'});const payload=(await readJson(request)).payload;return sendJson(response,200,setPriceLevelStatus(Number(url.pathname.split('/')[3]),payload.status,payload))}
+    if (request.method === 'POST' && /^\/api\/price-levels\/\d+\/bulk-update$/.test(url.pathname)) {if(!accountCan(session,'price_manage'))return sendJson(response,403,{error:'没有批量调价权限'});return sendJson(response,200,bulkUpdatePriceLevel(Number(url.pathname.split('/')[3]),(await readJson(request)).payload))}
     if (request.method === 'GET' && url.pathname === '/api/master/area-closeout') return sendJson(response,200,areaCloseout())
     if (request.method === 'GET' && url.pathname === '/api/master/audit') return sendJson(response,200,{items:listMasterAudit(Object.fromEntries(url.searchParams))})
     if (request.method === 'GET' && url.pathname === '/api/customers') return sendJson(response,200,listCustomers(Object.fromEntries(url.searchParams)))

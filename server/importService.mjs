@@ -1,6 +1,7 @@
 import crypto from 'node:crypto'
 import { db } from './database.mjs'
 import { recalculateRecommendations } from './gpsRecommendationService.mjs'
+import { syncLegacyOccPrices } from './migrationV18.mjs'
 import { cleanId, cleanText, identifyFile, normalizeDayOfWeek, validCoordinate } from '../shared/importRules.js'
 
 const previews = new Map()
@@ -141,6 +142,7 @@ export function commitImport(batchId, database = db) {
       if (row.type === 'schedules') statements.schedules.run(n.scheduleId,n.branchId,n.branchId,n.frequency,n.daysOfWeek,n.takeDate,n.nextTakeDate,n.sourceUpdatedAt)
       if (row.type === 'locations') database.prepare(`UPDATE branches SET latitude=COALESCE(?,latitude),longitude=COALESCE(?,longitude),gps_status=COALESCE(NULLIF(?,''),gps_status),gps_verified_at=COALESCE(NULLIF(?,''),gps_verified_at),parking_note=COALESCE(NULLIF(?,''),parking_note),truck_access=COALESCE(NULLIF(?,''),truck_access),gps_remark=COALESCE(NULLIF(?,''),gps_remark),source_updated_at=COALESCE(NULLIF(?,''),source_updated_at),updated_at=CURRENT_TIMESTAMP WHERE jodoo_branch_id=?`).run(n.latitude,n.longitude,n.gpsStatus,n.gpsVerifiedAt,n.parkingNote,n.truckAccess,n.gpsRemark,n.sourceUpdatedAt,n.branchId)
     }
+    syncLegacyOccPrices(database,{actor:'Jodoo Excel Import'})
     invalidateApprovedDaysAfterImport(preview,database,databaseBatchId)
     database.prepare(`UPDATE import_batches SET status='completed',summary_json=?,completed_at=CURRENT_TIMESTAMP WHERE id=?`).run(JSON.stringify(preview.summary), databaseBatchId)
     database.exec('COMMIT')

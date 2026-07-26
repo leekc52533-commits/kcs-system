@@ -151,7 +151,7 @@ export function login(payload,meta={},database=defaultDb){
     audit(database,{accountId:row.id,employeeId:row.employee_id,username:row.username,action:'login',success:true,...meta})
     database.exec('COMMIT')
   }catch(error){database.exec('ROLLBACK');throw error}
-  return{token,expiresAt,account:publicAccount({...database.prepare(`${accountSql} WHERE a.id=?`).get(row.id),last_login_at:nowIso()})}
+  return{token,expiresAt,account:withPermissions(publicAccount({...database.prepare(`${accountSql} WHERE a.id=?`).get(row.id),last_login_at:nowIso()}),database)}
 }
 
 export function getSession(token,database=defaultDb){
@@ -160,7 +160,7 @@ export function getSession(token,database=defaultDb){
   const row=database.prepare(`${accountSql} JOIN auth_sessions s ON s.account_id=a.id WHERE s.token_hash=? AND s.revoked_at IS NULL AND s.expires_at>CURRENT_TIMESTAMP AND a.is_active=1 AND e.employment_status='active'`).get(hash)
   if(!row)return null
   database.prepare(`UPDATE auth_sessions SET last_seen_at=CURRENT_TIMESTAMP WHERE token_hash=?`).run(hash)
-  return{...publicAccount(row),sessionTokenHash:hash}
+  return{...withPermissions(publicAccount(row),database),sessionTokenHash:hash}
 }
 
 export function logout(session,database=defaultDb){if(session?.sessionTokenHash)database.prepare('UPDATE auth_sessions SET revoked_at=CURRENT_TIMESTAMP WHERE token_hash=?').run(session.sessionTokenHash)}
@@ -181,8 +181,8 @@ export function listAuthAudit(params={},database=defaultDb){
 export function roleCan(role,permission){
   const normalized=normalizeRole(role)
   const map={
-    owner_admin:new Set(['desktop','accounts','account_identity','sensitive_data','system_security','gps_review','gps_migration','gps_migration_approve','mobile']),
-    operations_admin:new Set(['desktop','accounts','employee_manage','vehicle_manage','schedule_manage','gps_review','gps_migration','gps_migration_approve','mobile']),
+    owner_admin:new Set(['desktop','accounts','account_identity','sensitive_data','system_security','gps_review','gps_migration','gps_migration_approve','price_manage','mobile']),
+    operations_admin:new Set(['desktop','accounts','employee_manage','vehicle_manage','schedule_manage','gps_review','gps_migration','gps_migration_approve','price_manage','mobile']),
     supervisor:new Set(['desktop','gps_review','gps_migration','gps_migration_approve','mobile']),
     office:new Set(['desktop','gps_migration','mobile']),
     driver:new Set(['mobile','gps_capture']),
