@@ -2,8 +2,10 @@ import { useRef, useState } from 'react'
 import readXlsxFile from 'read-excel-file/browser'
 import { identifyFile } from './importRules.js'
 import {apiRequest} from './apiClient.js'
+import {useI18n} from './i18n.jsx'
 
 export default function ImportPage({ onBack }) {
+  const{t}=useI18n()
   const inputRef = useRef(null)
   const [files,setFiles]=useState([]), [preview,setPreview]=useState(null), [busy,setBusy]=useState(false), [message,setMessage]=useState('')
   const processFiles = async (fileList) => {
@@ -11,14 +13,14 @@ export default function ImportPage({ onBack }) {
     try {
       const parsed=[]
       for (const file of [...fileList]) {
-        if (!/\.xlsx$/i.test(file.name)) throw new Error(`${file.name} 不是 .xlsx 文件`)
+        if (!/\.xlsx$/i.test(file.name)) throw new Error(t('import.notXlsx',{file:file.name}))
         const sheets=await readXlsxFile(file)
         const candidates=Array.isArray(sheets[0]?.data)?sheets:[{sheet:'',data:sheets}]
         const matched=candidates.map((sheet)=>{
           const headers=(sheet.data?.[0]??[]).map((v)=>String(v??'').trim())
           return {sheet,headers,type:identifyFile(headers,sheet.sheet)}
         }).find((x)=>x.type)
-        if(!matched) throw new Error(`${file.name} 无法根据工作表与栏位识别`)
+        if(!matched) throw new Error(t('import.unrecognized',{file:file.name}))
         const rows=(matched.sheet.data??[]).slice(1).filter((row)=>row.some((v)=>v!==null&&v!=='')).map((row)=>Object.fromEntries(matched.headers.map((h,i)=>[h,row[i] instanceof Date?row[i].toISOString():row[i]??''])))
         parsed.push({name:file.name,sheetName:matched.sheet.sheet,headers:matched.headers,rows,type:matched.type})
       }
@@ -29,16 +31,16 @@ export default function ImportPage({ onBack }) {
   }
   const commit=async()=>{
     setBusy(true);setMessage('')
-    try{const result=await apiRequest('/api/import/commit',{method:'POST',body:JSON.stringify({batchId:preview.batchId})});setMessage(`导入完成：新增 ${result.summary.new}，更新 ${result.summary.update}，无变化 ${result.summary.unchanged}，无法匹配 ${result.summary.unmatched}`);setPreview({...preview,committed:true})}catch(error){setMessage(error.message)}finally{setBusy(false)}
+    try{const result=await apiRequest('/api/import/commit',{method:'POST',body:JSON.stringify({batchId:preview.batchId})});setMessage(t('import.completed',{newCount:result.summary.new,updated:result.summary.update,unchanged:result.summary.unchanged,unmatched:result.summary.unmatched}));setPreview({...preview,committed:true})}catch(error){setMessage(error.message)}finally{setBusy(false)}
   }
   return <div className="page import-page">
-    <button className="import-back" onClick={onBack}>← 返回总览</button>
-    <div className="import-title"><div><em>JODOO DATA IMPORT</em><h1>Excel 正式导入</h1><p>先预览数据库变化；只有按下“确认导入”后，才会在单一 transaction 内更新主档。</p></div><span className="safe-badge">预览不修改主档</span></div>
-    <section className="drop-zone" onDragOver={(e)=>e.preventDefault()} onDrop={(e)=>{e.preventDefault();processFiles(e.dataTransfer.files)}}><span className="upload-icon">⇧</span><h2>选择或拖入一份或多份 Jodoo Excel</h2><p>系统根据工作表名称和栏位识别 Customer List、Customer Branch、BranchSchedule、AreaInfo、Customer Location Update。</p><button onClick={()=>inputRef.current?.click()} disabled={busy}>{busy?'处理中…':'选择 Excel 文件'}</button><input ref={inputRef} hidden multiple type="file" accept=".xlsx" onChange={(e)=>processFiles(e.target.files)}/></section>
+    <button className="import-back" onClick={onBack}>← {t('common.back')}</button>
+    <div className="import-title"><div><em>JODOO DATA IMPORT</em><h1>{t('import.title')}</h1><p>{t('import.description')}</p></div><span className="safe-badge">{t('import.previewOnly')}</span></div>
+    <section className="drop-zone" onDragOver={(e)=>e.preventDefault()} onDrop={(e)=>{e.preventDefault();processFiles(e.dataTransfer.files)}}><span className="upload-icon">⇧</span><h2>{t('import.choose')}</h2><p>{t('import.systemRecognition')}</p><button onClick={()=>inputRef.current?.click()} disabled={busy}>{busy?t('common.processing'):t('import.selectFile')}</button><input ref={inputRef} hidden multiple type="file" accept=".xlsx" onChange={(e)=>processFiles(e.target.files)}/></section>
     {message&&<div className="import-message">{message}</div>}
-    {preview&&<><section className="import-summary">{[['总笔数','total'],['新增','new'],['更新','update'],['没有变化','unchanged'],['错误','error'],['无法匹配','unmatched']].map(([label,key])=><article key={key}><span>{label}</span><strong>{preview.summary[key]}</strong></article>)}</section>
-      <section className="file-results"><div className="result-heading"><div><em>预览结果</em><h2>识别到的资料</h2></div></div>{files.map((file)=><article className="file-card" key={file.name}><div className="file-row"><div className="file-mark">XL</div><div><strong>{file.name}</strong><p>{file.type.label} · 工作表 {file.sheetName} · {file.rows.length} 笔</p></div></div><div className="preview-grid"><b>{file.headers.slice(0,6).join(' · ')}</b><small>预览已送到后台与现有 SQLite 比对</small></div></article>)}</section>
-      {preview.errors.length>0&&<section className="relationship-report"><em>导入问题</em><h2>{preview.errors.length} 项需要核对</h2><div className="relation-items">{preview.errors.slice(0,50).map((e,i)=><div key={`${e.code}-${i}`}><b>{e.externalId||e.file||'—'}</b><span>{e.message}<small>Excel 第 {e.rowNumber||'—'} 行 · {e.code}</small></span></div>)}</div></section>}
-      <div className="commit-bar"><span>{preview.canCommit?'预览完成，可以确认写入 SQLite':'存在重要错误，请修正 Excel 后重新预览'}</span><button onClick={commit} disabled={busy||!preview.canCommit||preview.committed}>{preview.committed?'已导入':'确认导入'}</button></div></>}
+    {preview&&<><section className="import-summary">{[['import.total','total'],['import.new','new'],['import.updated','update'],['import.unchanged','unchanged'],['import.errors','error'],['import.unmatched','unmatched']].map(([labelKey,key])=><article key={key}><span>{t(labelKey)}</span><strong>{preview.summary[key]}</strong></article>)}</section>
+      <section className="file-results"><div className="result-heading"><div><em>{t('import.preview')}</em><h2>{t('import.detected')}</h2></div></div>{files.map((file)=><article className="file-card" key={file.name}><div className="file-row"><div className="file-mark">XL</div><div><strong data-i18n-raw>{file.name}</strong><p><span data-i18n-raw>{file.type.label}</span> · {t('import.worksheet')} <span data-i18n-raw>{file.sheetName}</span> · {t('import.rows',{count:file.rows.length})}</p></div></div><div className="preview-grid"><b data-i18n-raw>{file.headers.slice(0,6).join(' · ')}</b><small>{t('import.compare')}</small></div></article>)}</section>
+      {preview.errors.length>0&&<section className="relationship-report"><em>{t('import.issues')}</em><h2>{t('import.issueCount',{count:preview.errors.length})}</h2><div className="relation-items">{preview.errors.slice(0,50).map((e,i)=><div key={`${e.code}-${i}`}><b data-i18n-raw>{e.externalId||e.file||'—'}</b><span>{e.message}<small>{t('import.row',{row:e.rowNumber||'—'})} · <span data-i18n-raw>{e.code}</span></small></span></div>)}</div></section>}
+      <div className="commit-bar"><span>{t(preview.canCommit?'import.ready':'import.blocked')}</span><button onClick={commit} disabled={busy||!preview.canCommit||preview.committed}>{t(preview.committed?'import.imported':'import.confirm')}</button></div></>}
   </div>
 }

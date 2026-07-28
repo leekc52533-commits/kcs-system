@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-28 — Production route i18n acceptance follow-up
+
+- Removed remaining Chinese route labels, placeholders, empty states and status text from English and Bahasa Melayu rendering across Special Requests, Customer/Branch, Schedules, Data Quality, GPS recommendations, Employee, Vehicle, Location/Zone, GPS migration and Jodoo import surfaces.
+- Added route-surface regression matrices for English and Bahasa Melayu, including the acceptance examples missed by the earlier key-only coverage.
+- Replaced the unreliable browser `prompt()` used by Zone Rename with an accessible application Modal supporting translated validation, CJK place-name rejection, busy/error states, cancel and refresh-after-save.
+- Kept all Customer, Branch, address, Area, Operational Location and Zone database values raw and unchanged. Schema remains v19; no migration or AWS data operation is included.
+
 ## 2026-07-28 — Three-language interface
 
 - Expanded English, Bahasa Melayu and Chinese module dictionaries.

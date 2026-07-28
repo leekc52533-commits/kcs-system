@@ -19,8 +19,35 @@ test('三种语言模块key数量一致且关键操作完整',()=>{
 })
 
 test('English和Bahasa Melayu关键上线界面翻译不包含CJK',()=>{
-  const sources=['客户与分店','员工、车辆、地点与区域','收货排程','GPS 与资料完整度','新增','关闭','保存','载入中…','查看详情','未设置','Materials & Prices','Vehicle Master','Special Collection Requests','Weekly Dispatch Planner']
+  const sources=[
+    '客户与分店','员工、车辆、地点与区域','收货排程','GPS 与资料完整度','新增','关闭','保存','载入中…','查看详情','未设置',
+    'Materials & Prices','Vehicle Master','Special Collection Requests','Weekly Dispatch Planner','导出资料 XLSX','无电话','无备注',
+    '搜索编号、名称、电话或地址','已有排程且已有 GPS','Branch 找不到','选择 Excel 文件','搜索 Branch / BranchID / 地址',
+    'Polygon 外','全部置信度','只看重叠冲突','Recommendation only · 不会自动修改正式归属','先预览，确认后才写入 SQLite',
+    '正式车辆按 Lorry Number — Registration Number 显示；Sold 车辆只保留历史，不参加派车或提醒。','Vehicle Number，例如 Lorry 7',
+    '搜索 Area / AreaID / Zone','全部 GPS 状态','至少一个正式 GPS','包含缺 GPS Branch','这个 Area 暂时没有分店。'
+  ]
   for(const language of ['en','ms'])for(const source of sources)assert.equal(containsCjk(translateSource(language,source)),false,`${language}: ${source}`)
+})
+
+test('实际上线路由表面、placeholder及空状态三语渲染契约完整',()=>{
+  const routeSurfaces={
+    specialRequests:['Special Collection Requests','建立临时请求','请求清单'],
+    customers:['客户与分店','导出资料 XLSX','搜索编号、名称、电话或地址','无电话','无备注'],
+    schedules:['收货排程','Branch 找不到','所有排程'],
+    dataQuality:['GPS 与资料完整度','已有排程且已有 GPS','已有排程但缺 GPS','有 GPS 但没有排程','没有 GPS 也没有排程'],
+    gpsRecommendation:['GPS Zone 建议与边界管理','搜索 Branch / BranchID / 地址','Polygon 外','全部置信度','只看重叠冲突'],
+    employees:['Employee Directory','没有符合筛选条件的员工。','新增员工'],
+    vehicles:['Vehicle Master','正式车辆按 Lorry Number — Registration Number 显示；Sold 车辆只保留历史，不参加派车或提醒。'],
+    locationsZones:['Zone Area Confirmation','搜索 Area / AreaID / Zone','全部 GPS 状态','这个 Area 暂时没有分店。'],
+    gpsMigration:['Jodoo 旧 GPS 迁移','先预览，确认后才写入 SQLite','分类','决定'],
+    import:['Excel 正式导入','选择 Excel 文件','导入问题']
+  }
+  for(const language of ['en','ms'])for(const [route,sources] of Object.entries(routeSurfaces)){
+    const rendered=sources.map(source=>translateSource(language,source)).join(' | ')
+    assert.equal(containsCjk(rendered),false,`${language} ${route}: ${rendered}`)
+  }
+  for(const sources of Object.values(routeSurfaces))for(const source of sources)assert.notEqual(translateSource('zh',source),'',source)
 })
 
 test('缺少翻译key安全回退English并在开发环境保留稳定key',()=>{
@@ -53,7 +80,15 @@ test('旧DispatchPage已删除且当前上线页面存在',()=>{
 })
 
 test('390px手机布局有响应式保护且不设全局固定最小宽度',()=>{
-  const css=fs.readFileSync(new URL('../src/App.css',import.meta.url),'utf8')+fs.readFileSync(new URL('../src/index.css',import.meta.url),'utf8')
+  const css=fs.readFileSync(new URL('../src/App.css',import.meta.url),'utf8')+fs.readFileSync(new URL('../src/index.css',import.meta.url),'utf8')+fs.readFileSync(new URL('../src/ZoneGroupManager.css',import.meta.url),'utf8')
   assert.match(css,/@media\s*\([^)]*max-width\s*:\s*(?:560|640|720|768|820|900)px/)
   assert.doesNotMatch(css,/(?:html|body|#root)\s*\{[^}]*min-width\s*:\s*[4-9]\d{2}px/s)
+  assert.match(css,/zone-rename-modal\{width:min\(480px,100%\)/)
+})
+
+test('Zone Rename使用应用内Modal并覆盖取消、验证、成功与错误状态',()=>{
+  const source=fs.readFileSync(new URL('../src/ZoneGroupManager.jsx',import.meta.url),'utf8')
+  assert.doesNotMatch(source,/prompt\(['"]Zone Group Name/)
+  for(const contract of ['role="dialog"','aria-modal="true"',"t('zone.currentName')","t('zone.newName')","t('zone.renameSave')","t('common.cancel')",'validateZoneRename(name,t)','renameSaving','pageError','if(ok)closeRename()'])assert.match(source,new RegExp(contract.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')))
+  for(const language of ['en','ms','zh'])for(const key of ['zone.renameTitle','zone.currentName','zone.newName','zone.renameEmpty','zone.renameHelp','zone.renameSuccess'])assert.notEqual(translate(language,key),key)
 })

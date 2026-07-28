@@ -188,7 +188,163 @@ const moduleMessages={
   }
 }
 
-for(const language of Object.keys(moduleMessages))Object.assign(messages[language],moduleMessages[language])
+const routeMessages={
+  en:{
+    'common.noPhone':'No phone','common.noNotes':'No notes','common.records':'records','common.items':'items','common.branches':'branches','common.rename':'Rename','common.saving':'Saving…',
+    'common.loadingData':'Loading data…','common.waitingReview':'Pending review','common.unassignedArea':'Unassigned area','common.notNamedBranch':'Unnamed branch',
+    'common.unmatchedCustomer':'Unmatched customer','common.noAddress':'No address','common.notProvided':'Not provided','common.exportXlsx':'Export XLSX',
+    'customer.masterTitle':'Customer Master','customer.retentionHelp':'Historical records are not physically deleted. Use Pause, Resume or Close to manage status.',
+    'customer.exportMapping':'Export Area-Zone Mapping XLSX','customer.exportData':'Export data XLSX','customer.searchMaster':'Search ID, name, phone or address',
+    'customer.allSchedules':'All schedules','customer.totalBranches':'{count} branches','customer.noPayment':'Payment type not set',
+    'branch.gpsStatus':'GPS Status','branch.scheduleStatus':'Schedule Status','branch.weekday':'Weekday','branch.notCompleted':'Incomplete',
+    'branch.scheduleCount':'{count} schedules','branch.totalCount':'{count} branches','branch.details':'View details',
+    'schedule.flag':'Flag','schedule.gpsComplete':'GPS available','schedule.gpsMissing':'GPS missing','schedule.allSchedules':'All schedules',
+    'schedule.scheduled':'Scheduled','schedule.noSchedule':'No schedule','schedule.qualityScheduledGps':'Scheduled with GPS',
+    'schedule.qualityScheduledMissingGps':'Scheduled but GPS missing','schedule.qualityGpsWithoutSchedule':'GPS available but no schedule',
+    'schedule.qualityMissingBoth':'No GPS and no schedule','schedule.qualityInvalidGps':'Invalid GPS format',
+    'schedule.qualityUnmatchedBranch':'Schedule BranchID not found','schedule.qualityMissingArea':'AreaID not found',
+    'specialRequest.deduplicated':'The same request already exists; no duplicate was created.','specialRequest.created':'Special collection request created.',
+    'specialRequest.scheduleDate':'Schedule date (YYYY-MM-DD)','specialRequest.scheduledMessage':'The request was added to the selected date draft. Reapproval is required if that day was already approved.',
+    'specialRequest.adoptWarning':'Adopted as official GPS, but it is more than 500 m from the previous GPS. Please verify again.',
+    'specialRequest.adopted':'The supervisor adopted it as official GPS.','specialRequest.openPlanner':'View weekly dispatch',
+    'specialRequest.contact':'Contact person','specialRequest.phone':'Phone','specialRequest.locationSource':'Location source',
+    'specialRequest.tempLatitude':'Temporary Latitude','specialRequest.tempLongitude':'Temporary Longitude','specialRequest.address':'Address',
+    'specialRequest.locationLink':'Google Maps / Location Link','specialRequest.createdSource':'Registration source',
+    'specialRequest.general':'General request','specialRequest.promisedLabel':'Customer promise','specialRequest.pendingGps':'On-site GPS pending supervisor review',
+    'specialRequest.adoptOfficial':'Adopt as official GPS','specialRequest.changeToNew':'Change to new customer','specialRequest.missingLocation':'Address or Location missing',
+    'specialRequest.statusNew':'New request','specialRequest.statusAwaitingSupervisor':'Awaiting supervisor','specialRequest.statusAwaitingAccount':'Awaiting customer account',
+    'specialRequest.statusScheduled':'Scheduled','specialRequest.statusApproved':'Approved','specialRequest.statusPublished':'Published',
+    'specialRequest.statusCompleted':'Completed','specialRequest.statusRejected':'Rejected','specialRequest.statusCancelled':'Cancelled',
+    'import.notXlsx':'{file} is not an .xlsx file','import.unrecognized':'{file} could not be identified from its worksheet and columns',
+    'import.systemRecognition':'The system identifies Customer List, Customer Branch, BranchSchedule, AreaInfo and Customer Location Update from worksheet names and columns.',
+    'import.selectFile':'Select Excel files','import.total':'Total','import.new':'New','import.updated':'Updated','import.unchanged':'Unchanged','import.errors':'Errors',
+    'import.unmatched':'Unmatched','import.worksheet':'Worksheet','import.rows':'{count} records','import.compare':'The preview was sent to the API for comparison with existing SQLite data.',
+    'import.issueCount':'{count} items require review','import.row':'Excel row {row}','import.ready':'Preview completed. You can confirm writing to SQLite.',
+    'import.blocked':'Important errors exist. Correct the Excel file and preview it again.','import.imported':'Imported',
+    'zone.currentName':'Current Zone Name','zone.newName':'New Zone Name','zone.renameTitle':'Rename Zone Group','zone.renameSave':'Save new name',
+    'zone.renameEmpty':'Enter a new Zone name.','zone.renameSuccess':'Zone name updated.','zone.renameDialog':'Rename {name}',
+    'zone.renameHelp':'Official Zone names must use English or Bahasa Melayu. Area assignments and dispatch history are unchanged.',
+    'gps.searchBranchAddress':'Search Branch / BranchID / address','gps.outsidePolygon':'Outside polygon','gps.allConfidence':'All confidence levels','gps.overlapOnly':'Boundary conflicts only',
+    'gps.batchHigh':'Confirm High confidence in bulk','gps.recommendationOnly':'Recommendation only · Official assignments are not changed automatically',
+    'gps.currentArea':'Current Area','gps.currentZone':'Current Zone','gps.suggestedArea':'Suggested Area','gps.suggestedZone':'Suggested Zone','gps.referenceDistance':'Reference distance',
+    'gps.boundaryConflict':'Boundary conflict','gps.reason':'Recommendation reason','gps.category':'Category','gps.decision':'Decision',
+    'gps.migrationPreview':'Preview first; data is written to SQLite only after confirmation.',
+    'resource.vehicleHelp':'Official vehicles are shown as Lorry Number — Registration Number. Sold vehicles remain in history and are excluded from dispatch and reminders.',
+    'resource.vehicleNumberPlaceholder':'Vehicle Number, for example Lorry 7','resource.jobHelp':'Job Role and System Role are stored separately. Only Active employees qualified as Driver / Attendant appear in dispatch selectors.',
+    'resource.locationHelp':'Used for employee and vehicle Default Base, and route start and end locations.','resource.accountHelp':'Account permissions and job roles are separate. Sensitive-data access must be explicitly granted by an Admin.',
+    'zone.search':'Search Area / AreaID / Zone','zone.allGps':'All GPS statuses','zone.withGps':'At least one official GPS','zone.missingGpsBranch':'Includes Branch with missing GPS',
+    'zone.areaSort':'Sort by Area name','zone.customerDesc':'Customer count: high to low','zone.customerAsc':'Customer count: low to high',
+    'zone.selectFiltered':'Select current filtered results','zone.clearSelection':'Clear selection','zone.bulkMove':'Move selected Areas (pending confirmation)',
+    'zone.statistics':'Statistics details','zone.searchDetails':'Search Area, customer name or BranchID','zone.noFixedSchedule':'No fixed schedule',
+    'zone.noAreaBranches':'This Area currently has no branches.','zone.adjacentAreas':'Adjacent Areas (estimated from existing official GPS)','zone.insufficientGps':'Existing GPS data is insufficient to calculate this.',
+    'zone.sortOrder':'Order','zone.allZones':'All Zones','zone.unconfirm':'Revoke confirmation','employee.searchDirectory':'Search name, Employee Code, phone or last IC digits',
+    'employee.noCode':'No employee code','employee.noAccount':'No account','customer.exportDataShort':'Export data'
+  },
+  ms:{
+    'common.noPhone':'Tiada telefon','common.noNotes':'Tiada catatan','common.records':'rekod','common.items':'item','common.branches':'cawangan','common.rename':'Tukar nama','common.saving':'Menyimpan…',
+    'common.loadingData':'Memuatkan data…','common.waitingReview':'Menunggu semakan','common.unassignedArea':'Kawasan belum ditetapkan','common.notNamedBranch':'Cawangan tanpa nama',
+    'common.unmatchedCustomer':'Pelanggan tidak sepadan','common.noAddress':'Tiada alamat','common.notProvided':'Belum diisi','common.exportXlsx':'Eksport XLSX',
+    'customer.masterTitle':'Induk Pelanggan','customer.retentionHelp':'Rekod sejarah tidak dipadam secara fizikal. Gunakan Jeda, Sambung atau Tutup untuk mengurus status.',
+    'customer.exportMapping':'Eksport Pemetaan Area-Zone XLSX','customer.exportData':'Eksport data XLSX','customer.searchMaster':'Cari ID, nama, telefon atau alamat',
+    'customer.allSchedules':'Semua jadual','customer.totalBranches':'{count} cawangan','customer.noPayment':'Jenis bayaran belum ditetapkan',
+    'branch.gpsStatus':'Status GPS','branch.scheduleStatus':'Status Jadual','branch.weekday':'Hari Minggu','branch.notCompleted':'Belum lengkap',
+    'branch.scheduleCount':'{count} jadual','branch.totalCount':'{count} cawangan','branch.details':'Lihat butiran',
+    'schedule.flag':'Penanda','schedule.gpsComplete':'GPS tersedia','schedule.gpsMissing':'GPS tiada','schedule.allSchedules':'Semua jadual',
+    'schedule.scheduled':'Berjadual','schedule.noSchedule':'Tiada jadual','schedule.qualityScheduledGps':'Berjadual dan mempunyai GPS',
+    'schedule.qualityScheduledMissingGps':'Berjadual tetapi GPS tiada','schedule.qualityGpsWithoutSchedule':'Mempunyai GPS tetapi tiada jadual',
+    'schedule.qualityMissingBoth':'Tiada GPS dan tiada jadual','schedule.qualityInvalidGps':'Format GPS tidak sah',
+    'schedule.qualityUnmatchedBranch':'Schedule BranchID tidak ditemui','schedule.qualityMissingArea':'AreaID tidak ditemui',
+    'specialRequest.deduplicated':'Permintaan sama telah wujud; rekod pendua tidak dicipta.','specialRequest.created':'Permintaan kutipan khas telah dicipta.',
+    'specialRequest.scheduleDate':'Tarikh jadual (YYYY-MM-DD)','specialRequest.scheduledMessage':'Permintaan ditambah ke draf tarikh dipilih. Kelulusan semula diperlukan jika hari itu telah diluluskan.',
+    'specialRequest.adoptWarning':'Digunakan sebagai GPS rasmi, tetapi jaraknya melebihi 500 m daripada GPS lama. Sila semak semula.',
+    'specialRequest.adopted':'Supervisor telah menggunakannya sebagai GPS rasmi.','specialRequest.openPlanner':'Lihat penghantaran mingguan',
+    'specialRequest.contact':'Orang untuk dihubungi','specialRequest.phone':'Telefon','specialRequest.locationSource':'Sumber lokasi',
+    'specialRequest.tempLatitude':'Latitud sementara','specialRequest.tempLongitude':'Longitud sementara','specialRequest.address':'Alamat',
+    'specialRequest.locationLink':'Google Maps / Pautan Lokasi','specialRequest.createdSource':'Sumber pendaftaran',
+    'specialRequest.general':'Permintaan biasa','specialRequest.promisedLabel':'Janji pelanggan','specialRequest.pendingGps':'GPS tapak menunggu semakan Supervisor',
+    'specialRequest.adoptOfficial':'Gunakan sebagai GPS rasmi','specialRequest.changeToNew':'Tukar kepada pelanggan baharu','specialRequest.missingLocation':'Alamat atau Lokasi tiada',
+    'specialRequest.statusNew':'Permintaan baharu','specialRequest.statusAwaitingSupervisor':'Menunggu Supervisor','specialRequest.statusAwaitingAccount':'Menunggu akaun pelanggan',
+    'specialRequest.statusScheduled':'Berjadual','specialRequest.statusApproved':'Diluluskan','specialRequest.statusPublished':'Diterbitkan',
+    'specialRequest.statusCompleted':'Selesai','specialRequest.statusRejected':'Ditolak','specialRequest.statusCancelled':'Dibatalkan',
+    'import.notXlsx':'{file} bukan fail .xlsx','import.unrecognized':'{file} tidak dapat dikenal pasti daripada lembaran kerja dan lajurnya',
+    'import.systemRecognition':'Sistem mengenal pasti Customer List, Customer Branch, BranchSchedule, AreaInfo dan Customer Location Update melalui nama lembaran kerja dan lajur.',
+    'import.selectFile':'Pilih fail Excel','import.total':'Jumlah','import.new':'Baharu','import.updated':'Dikemas kini','import.unchanged':'Tiada perubahan','import.errors':'Ralat',
+    'import.unmatched':'Tidak sepadan','import.worksheet':'Lembaran kerja','import.rows':'{count} rekod','import.compare':'Pratonton dihantar ke API untuk dibandingkan dengan data SQLite sedia ada.',
+    'import.issueCount':'{count} item perlu disemak','import.row':'Baris Excel {row}','import.ready':'Pratonton selesai. Anda boleh mengesahkan penulisan ke SQLite.',
+    'import.blocked':'Terdapat ralat penting. Betulkan fail Excel dan pratonton semula.','import.imported':'Telah diimport',
+    'zone.currentName':'Nama Zon Semasa','zone.newName':'Nama Zon Baharu','zone.renameTitle':'Tukar Nama Kumpulan Zon','zone.renameSave':'Simpan nama baharu',
+    'zone.renameEmpty':'Masukkan nama Zon baharu.','zone.renameSuccess':'Nama Zon telah dikemas kini.','zone.renameDialog':'Tukar nama {name}',
+    'zone.renameHelp':'Nama Zon rasmi mesti menggunakan English atau Bahasa Melayu. Tugasan Area dan sejarah penghantaran tidak berubah.',
+    'gps.searchBranchAddress':'Cari Cawangan / BranchID / alamat','gps.outsidePolygon':'Di luar polygon','gps.allConfidence':'Semua tahap keyakinan','gps.overlapOnly':'Konflik sempadan sahaja',
+    'gps.batchHigh':'Sahkan keyakinan High secara pukal','gps.recommendationOnly':'Cadangan sahaja · Tugasan rasmi tidak diubah secara automatik',
+    'gps.currentArea':'Area semasa','gps.currentZone':'Zon semasa','gps.suggestedArea':'Area dicadangkan','gps.suggestedZone':'Zon dicadangkan','gps.referenceDistance':'Jarak rujukan',
+    'gps.boundaryConflict':'Konflik sempadan','gps.reason':'Sebab cadangan','gps.category':'Kategori','gps.decision':'Keputusan',
+    'gps.migrationPreview':'Pratonton dahulu; data hanya ditulis ke SQLite selepas pengesahan.',
+    'resource.vehicleHelp':'Kenderaan rasmi dipaparkan sebagai Lorry Number — Registration Number. Kenderaan Sold kekal dalam sejarah dan tidak disertakan dalam penghantaran atau peringatan.',
+    'resource.vehicleNumberPlaceholder':'Vehicle Number, contohnya Lorry 7','resource.jobHelp':'Job Role dan System Role disimpan berasingan. Hanya pekerja Active yang layak sebagai Driver / Attendant dipaparkan dalam pemilih penghantaran.',
+    'resource.locationHelp':'Digunakan untuk Default Base pekerja dan kenderaan serta lokasi mula dan tamat laluan.','resource.accountHelp':'Kebenaran akaun dan jawatan kerja adalah berasingan. Akses data sensitif mesti diberikan secara jelas oleh Admin.',
+    'zone.search':'Cari Area / AreaID / Zone','zone.allGps':'Semua status GPS','zone.withGps':'Sekurang-kurangnya satu GPS rasmi','zone.missingGpsBranch':'Termasuk Branch tanpa GPS',
+    'zone.areaSort':'Susun mengikut nama Area','zone.customerDesc':'Bilangan pelanggan: banyak ke sedikit','zone.customerAsc':'Bilangan pelanggan: sedikit ke banyak',
+    'zone.selectFiltered':'Pilih hasil tapisan semasa','zone.clearSelection':'Kosongkan pilihan','zone.bulkMove':'Pindahkan Area dipilih (menunggu pengesahan)',
+    'zone.statistics':'Butiran statistik','zone.searchDetails':'Cari Area, nama pelanggan atau BranchID','zone.noFixedSchedule':'Tiada jadual tetap',
+    'zone.noAreaBranches':'Area ini belum mempunyai cawangan.','zone.adjacentAreas':'Area bersebelahan (anggaran daripada GPS rasmi sedia ada)','zone.insufficientGps':'Data GPS sedia ada tidak mencukupi untuk pengiraan.',
+    'zone.sortOrder':'Susunan','zone.allZones':'Semua Zon','zone.unconfirm':'Batalkan pengesahan','employee.searchDirectory':'Cari nama, Employee Code, telefon atau digit akhir IC',
+    'employee.noCode':'Tiada kod pekerja','employee.noAccount':'Tiada akaun','customer.exportDataShort':'Eksport data'
+  },
+  zh:{
+    'common.noPhone':'无电话','common.noNotes':'无备注','common.records':'笔','common.items':'项','common.branches':'间分店','common.rename':'改名','common.saving':'保存中…',
+    'common.loadingData':'资料载入中…','common.waitingReview':'等待核对','common.unassignedArea':'未分区','common.notNamedBranch':'未命名分店',
+    'common.unmatchedCustomer':'未匹配客户','common.noAddress':'无地址','common.notProvided':'未填写','common.exportXlsx':'导出XLSX',
+    'customer.masterTitle':'客户主档','customer.retentionHelp':'不物理删除历史资料；使用暂停、恢复或关闭管理状态。',
+    'customer.exportMapping':'导出Area-Zone Mapping XLSX','customer.exportData':'导出资料XLSX','customer.searchMaster':'搜索编号、名称、电话或地址',
+    'customer.allSchedules':'所有排程','customer.totalBranches':'共{count}间分店','customer.noPayment':'未设付款方式',
+    'branch.gpsStatus':'GPS状态','branch.scheduleStatus':'排程状态','branch.weekday':'星期','branch.notCompleted':'未完成',
+    'branch.scheduleCount':'{count}条','branch.totalCount':'共{count}间分店','branch.details':'查看详情',
+    'schedule.flag':'标识','schedule.gpsComplete':'已有GPS','schedule.gpsMissing':'缺GPS','schedule.allSchedules':'全部排程',
+    'schedule.scheduled':'已有排程','schedule.noSchedule':'没有排程','schedule.qualityScheduledGps':'已有排程且已有GPS',
+    'schedule.qualityScheduledMissingGps':'已有排程但缺GPS','schedule.qualityGpsWithoutSchedule':'有GPS但没有排程',
+    'schedule.qualityMissingBoth':'没有GPS也没有排程','schedule.qualityInvalidGps':'GPS格式异常',
+    'schedule.qualityUnmatchedBranch':'Schedule BranchID找不到','schedule.qualityMissingArea':'AreaID找不到',
+    'specialRequest.deduplicated':'相同请求已经存在，未重复建立。','specialRequest.created':'临时收货请求已建立。',
+    'specialRequest.scheduleDate':'安排日期（YYYY-MM-DD）','specialRequest.scheduledMessage':'请求已加入指定日期草稿；如果该日已批准，系统已要求重新批准。',
+    'specialRequest.adoptWarning':'已采用为正式GPS，但与原GPS相距超过500m，请再次核对。',
+    'specialRequest.adopted':'已由主管采用为正式GPS。','specialRequest.openPlanner':'查看一周派车',
+    'specialRequest.contact':'联系人','specialRequest.phone':'电话','specialRequest.locationSource':'Location来源',
+    'specialRequest.tempLatitude':'临时Latitude','specialRequest.tempLongitude':'临时Longitude','specialRequest.address':'地址',
+    'specialRequest.locationLink':'Google Maps / Location Link','specialRequest.createdSource':'登记来源',
+    'specialRequest.general':'一般请求','specialRequest.promisedLabel':'客户承诺','specialRequest.pendingGps':'现场GPS待主管确认',
+    'specialRequest.adoptOfficial':'采用为正式GPS','specialRequest.changeToNew':'改为新客户','specialRequest.missingLocation':'缺地址或Location',
+    'specialRequest.statusNew':'新请求','specialRequest.statusAwaitingSupervisor':'等待主管','specialRequest.statusAwaitingAccount':'等待建立账号',
+    'specialRequest.statusScheduled':'已排车','specialRequest.statusApproved':'已批准','specialRequest.statusPublished':'已发布',
+    'specialRequest.statusCompleted':'已完成','specialRequest.statusRejected':'已拒绝','specialRequest.statusCancelled':'已取消',
+    'import.notXlsx':'{file}不是.xlsx文件','import.unrecognized':'{file}无法根据工作表与栏位识别',
+    'import.systemRecognition':'系统根据工作表名称和栏位识别Customer List、Customer Branch、BranchSchedule、AreaInfo及Customer Location Update。',
+    'import.selectFile':'选择Excel文件','import.total':'总笔数','import.new':'新增','import.updated':'更新','import.unchanged':'没有变化','import.errors':'错误',
+    'import.unmatched':'无法匹配','import.worksheet':'工作表','import.rows':'{count}笔','import.compare':'预览已送到后台与现有SQLite比对。',
+    'import.issueCount':'{count}项需要核对','import.row':'Excel第{row}行','import.ready':'预览完成，可以确认写入SQLite。',
+    'import.blocked':'存在重要错误，请修正Excel后重新预览。','import.imported':'已导入',
+    'zone.currentName':'当前Zone名称','zone.newName':'新Zone名称','zone.renameTitle':'Zone Group改名','zone.renameSave':'保存新名称',
+    'zone.renameEmpty':'请输入新的Zone名称。','zone.renameSuccess':'Zone名称已更新。','zone.renameDialog':'修改{name}',
+    'zone.renameHelp':'正式Zone名称必须使用English或Bahasa Melayu；Area归属及派车历史不会改变。',
+    'gps.searchBranchAddress':'搜索Branch / BranchID / 地址','gps.outsidePolygon':'Polygon外','gps.allConfidence':'全部置信度','gps.overlapOnly':'只看重叠冲突',
+    'gps.batchHigh':'批量确认High','gps.recommendationOnly':'仅供建议 · 不会自动修改正式归属',
+    'gps.currentArea':'当前Area','gps.currentZone':'当前Zone','gps.suggestedArea':'建议Area','gps.suggestedZone':'建议Zone','gps.referenceDistance':'参考距离',
+    'gps.boundaryConflict':'与边界冲突','gps.reason':'建议原因','gps.category':'分类','gps.decision':'决定',
+    'gps.migrationPreview':'先预览，确认后才写入SQLite。',
+    'resource.vehicleHelp':'正式车辆按Lorry Number — Registration Number显示；Sold车辆只保留历史，不参加派车或提醒。',
+    'resource.vehicleNumberPlaceholder':'Vehicle Number，例如Lorry 7','resource.jobHelp':'Job Role与System Role分开保存；只有Active且具备Driver / Attendant资格的员工进入派车选择器。',
+    'resource.locationHelp':'用于车辆与员工Default Base，以及路线出发与结束地点。','resource.accountHelp':'账号权限与工作岗位分开；敏感资料权限只可由Admin明确授权。',
+    'zone.search':'搜索Area / AreaID / Zone','zone.allGps':'全部GPS状态','zone.withGps':'至少一个正式GPS','zone.missingGpsBranch':'包含缺GPS Branch',
+    'zone.areaSort':'Area名称排序','zone.customerDesc':'客户数量：多到少','zone.customerAsc':'客户数量：少到多',
+    'zone.selectFiltered':'勾选当前筛选结果','zone.clearSelection':'清除勾选','zone.bulkMove':'批量移动（保持待确认）',
+    'zone.statistics':'统计明细','zone.searchDetails':'搜索Area、客户名称、BranchID','zone.noFixedSchedule':'没有固定排程',
+    'zone.noAreaBranches':'这个Area暂时没有分店。','zone.adjacentAreas':'相邻Area（按现有正式GPS估算）','zone.insufficientGps':'现有GPS资料不足，暂时无法计算。',
+    'zone.sortOrder':'顺序','zone.allZones':'全部Zone','zone.unconfirm':'撤销确认','employee.searchDirectory':'搜索姓名、Employee Code、电话或IC后几位',
+    'employee.noCode':'无员工编号','employee.noAccount':'无账号','customer.exportDataShort':'导出资料'
+  }
+}
+
+for(const language of Object.keys(moduleMessages))Object.assign(messages[language],moduleMessages[language],routeMessages[language])
 
 const sourceAliases=new Map()
 for(const language of Object.keys(messages)){
@@ -249,13 +405,40 @@ for(const[source,key]of Object.entries({
   '新增 Zone Group':'zone.add','改名':'zone.rename','合并':'zone.merge','拆分勾选 Area':'zone.split','只看待确认':'zone.pending','只看已确认':'zone.confirmed',
   '查看明细 →':'zone.viewDetails','选择目标 Zone':'zone.selectTarget','移动到指定 Zone':'zone.move','填写移动原因（必填）':'zone.moveReason',
   '资料载入中…':'common.loading','没有符合筛选条件的资料。':'common.noData','只有 Supervisor 可以批量移动 Area。':'apiError.permission_denied'
+  ,'导出资料 XLSX':'customer.exportData','Branch 找不到':'schedule.notFound','选择 Excel 文件':'import.selectFile',
+  '已有排程且已有 GPS':'schedule.qualityScheduledGps','已有排程但缺 GPS':'schedule.qualityScheduledMissingGps','有 GPS 但没有排程':'schedule.qualityGpsWithoutSchedule','没有 GPS 也没有排程':'schedule.qualityMissingBoth',
+  '搜索 Branch / BranchID / 地址':'gps.searchBranchAddress','Polygon 外':'gps.outsidePolygon','全部置信度':'gps.allConfidence','只看重叠冲突':'gps.overlapOnly',
+  '批量确认 High':'gps.batchHigh','Recommendation only · 不会自动修改正式归属':'gps.recommendationOnly','当前 Area':'gps.currentArea','当前 Zone':'gps.currentZone',
+  '建议 Area':'gps.suggestedArea','建议 Zone':'gps.suggestedZone','参考距离':'gps.referenceDistance','与边界冲突':'gps.boundaryConflict','建议原因':'gps.reason',
+  '分类':'gps.category','决定':'gps.decision','先预览，确认后才写入 SQLite':'gps.migrationPreview',
+  '正式车辆按 Lorry Number — Registration Number 显示；Sold 车辆只保留历史，不参加派车或提醒。':'resource.vehicleHelp',
+  'Vehicle Number，例如 Lorry 7':'resource.vehicleNumberPlaceholder',
+  'Job Role 与 System Role 分开保存；只有 Active 且具备 Driver / Attendant 资格的员工进入派车选择器。':'resource.jobHelp',
+  '用于车辆与员工 Default Base，以及路线出发与结束地点。':'resource.locationHelp',
+  '账号权限与工作岗位分开；敏感资料权限只可由Admin明确授权。':'resource.accountHelp',
+  '搜索 Area / AreaID / Zone':'zone.search','全部 GPS 状态':'zone.allGps','至少一个正式 GPS':'zone.withGps','包含缺 GPS Branch':'zone.missingGpsBranch',
+  'Area 名称排序':'zone.areaSort','客户数量：多到少':'zone.customerDesc','客户数量：少到多':'zone.customerAsc',
+  '勾选当前筛选结果':'zone.selectFiltered','清除勾选':'zone.clearSelection','批量移动（保持待确认）':'zone.bulkMove',
+  '统计明细':'zone.statistics','搜索 Area、客户名称、BranchID':'zone.searchDetails','没有固定排程':'zone.noFixedSchedule',
+  '这个 Area 暂时没有分店。':'zone.noAreaBranches','相邻 Area（按现有正式 GPS 估算）':'zone.adjacentAreas','现有 GPS 资料不足，暂时无法计算。':'zone.insufficientGps'
+  ,'顺序':'zone.sortOrder','全部 Zone':'zone.allZones','撤销确认':'zone.unconfirm','搜索姓名、Employee Code、电话或IC后几位':'employee.searchDirectory',
+  '无员工编号':'employee.noCode','无账号':'employee.noAccount','导出资料':'customer.exportDataShort'
 }))sourceAliases.set(source,key)
 
 export function translateSource(language,value){
   const source=String(value??''),trimmed=source.trim(),key=sourceAliases.get(trimmed)
-  if(!key)return source
-  const translated=translate(language,key)
-  return source.replace(trimmed,translated)
+  if(key){
+    const translated=translate(language,key)
+    return source.replace(trimmed,translated)
+  }
+  let translated=source
+  for(const fragmentKey of ['common.noPhone','common.noNotes']){
+    for(const sourceLanguage of Object.keys(messages)){
+      const fragment=messages[sourceLanguage][fragmentKey]
+      if(fragment&&translated.includes(fragment))translated=translated.replaceAll(fragment,translate(language,fragmentKey))
+    }
+  }
+  return translated
 }
 
 export function translate(language,key,variables={}){
