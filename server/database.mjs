@@ -190,13 +190,13 @@ if (currentVersion === 0) {
         zone_group_name_snapshot=(SELECT z.name FROM branches b LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN zone_groups z ON z.id=a.zone_group_id WHERE b.id=dispatch_stops.branch_id),
         area_name_snapshot=(SELECT a.name FROM branches b LEFT JOIN areas a ON a.id=b.area_id WHERE b.id=dispatch_stops.branch_id)
       WHERE zone_group_name_snapshot IS NULL;
-      UPDATE zone_groups SET code='KUCHING-A',name='古晋 A区',sort_order=1,is_active=1 WHERE id=1;
-      UPDATE zone_groups SET code='KUCHING-B',name='古晋 B区',sort_order=2,is_active=1 WHERE id=2;
-      UPDATE zone_groups SET code='SERIAN-A',name='西连 A区',sort_order=3,is_active=1 WHERE id=3;
-      UPDATE zone_groups SET code='SERIAN-B',name='西连 B区',sort_order=4,is_active=1 WHERE id=4;
-      UPDATE zone_groups SET code='SAMARAHAN-A',name='Samarahan A区',sort_order=5,is_active=1 WHERE id=5;
-      INSERT OR IGNORE INTO zone_groups(code,name,sort_order,is_active) VALUES('SAMARAHAN-B','Samarahan B区',6,1);
-      INSERT OR IGNORE INTO zone_groups(code,name,sort_order,is_active) VALUES('LUNDU-BAU','伦乐 / 石隆门区',7,1);
+      UPDATE zone_groups SET code='KUCHING-A',name='Kuching A — BDC',sort_order=1,is_active=1 WHERE id=1;
+      UPDATE zone_groups SET code='KUCHING-B',name='Kuching B — Matang',sort_order=2,is_active=1 WHERE id=2;
+      UPDATE zone_groups SET code='SERIAN-A',name='Serian A',sort_order=3,is_active=1 WHERE id=3;
+      UPDATE zone_groups SET code='SERIAN-B',name='Serian B — Penrissen',sort_order=4,is_active=1 WHERE id=4;
+      UPDATE zone_groups SET code='SAMARAHAN-A',name='Samarahan A',sort_order=5,is_active=1 WHERE id=5;
+      INSERT OR IGNORE INTO zone_groups(code,name,sort_order,is_active) VALUES('SAMARAHAN-B','Samarahan B',6,1);
+      INSERT OR IGNORE INTO zone_groups(code,name,sort_order,is_active) VALUES('LUNDU-BAU','Lundu / Bau',7,1);
       UPDATE areas SET zone_assignment_status='pending_confirmation';
       UPDATE areas SET zone_group_id=(SELECT id FROM zone_groups WHERE code='LUNDU-BAU'),zone_assignment_status='confirmed',updated_at=CURRENT_TIMESTAMP
       WHERE UPPER(name) LIKE '%LUNDU%' OR UPPER(name)='BAU';

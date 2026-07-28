@@ -4,8 +4,8 @@ import PasswordInput from './PasswordInput.jsx'
 import AccountProfileMenu from './AccountProfileMenu.jsx'
 import FieldError from './FieldError.jsx'
 import {clearFieldError,fieldAccessibility,passwordMessage,requiredMessage} from './formValidation.js'
+import {apiRequest as api} from './apiClient.js'
 
-const api=async(path,options={})=>{const response=await fetch(path,{headers:{'Content-Type':'application/json',...(options.headers||{})},...options}),data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||'Operation failed');return data}
 const fileData=file=>new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve({name:file.name,dataUrl:reader.result});reader.onerror=reject;reader.readAsDataURL(file)})
 
 export function LoginPage({onLogin,startupError=''}){

@@ -3,6 +3,7 @@ import { db as defaultDb } from './database.mjs'
 import { createCustomer, updateCustomer, createBranch, updateBranch, saveBuyer, saveOperationalLocation, captureBranchGps } from './customerMasterService.mjs'
 import { invalidateDispatchDay } from './dispatchService.mjs'
 import { createEmployee, updateEmployee } from './resourceService.mjs'
+import {assertLocationFields} from '../shared/locationText.js'
 
 const text=value=>String(value??'').trim()
 const lower=value=>text(value).toLowerCase().replace(/[\s_./-]+/g,'')
@@ -41,6 +42,9 @@ export function previewMasterImport(payload,database=defaultDb){
 
 function audit(database,module,key,type,before,after,actor,reason='Master import'){database.prepare(`INSERT INTO master_change_history(entity_type,entity_id,change_type,before_json,after_json,reason,changed_by) VALUES(?,?,?,?,?,?,?)`).run(module,String(key),type,JSON.stringify(before),JSON.stringify(after),reason,actor)}
 function commitOne(module,item,actor,database){
+  if(module==='zone'||module==='area')assertLocationFields(item,['name'])
+  if(module==='buyer')assertLocationFields(item,['locationName','address'])
+  if(module==='operational_location')assertLocationFields(item,['name','address'])
   const current=currentFor(module,item[transferModules[module].key],database)
   if(module==='employee'){const payload={...item,changedBy:actor,reason:'Employee master import'};delete payload.defaultBaseName;delete payload.usualAreaCodes;return current?updateEmployee(current.id,payload,database):createEmployee(payload,database)}
   if(module==='customer')return current?updateCustomer(item.customerId,{...item,changedBy:actor,reason:'Master import'},database):createCustomer({...item,changedBy:actor,reason:'Master import'},database)

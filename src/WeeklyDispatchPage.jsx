@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import './Planner.css'
 import {addCalendarDays,kuchingDate,shortcutForDate} from '../shared/kuchingTime.js'
 import {useI18n} from './i18n.jsx'
+import {apiRequest as request} from './apiClient.js'
 
-const request=async(url,options={})=>{const response=await fetch(url,{headers:{'Content-Type':'application/json'},...options});const data=await response.json();if(!response.ok)throw new Error(data.error||'操作失败');return data}
 const localDate=kuchingDate
 const addDays=addCalendarDays
 const labels={draft:'草稿',pending_approval:'等待批准',approved:'已批准',published:'已发布',in_progress:'进行中',completed:'已完成',reapproval_required:'需要重新批准'}

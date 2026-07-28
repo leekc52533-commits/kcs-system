@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-28 — Three-language interface
+
+- Expanded English, Bahasa Melayu and Chinese module dictionaries.
+- Added client API error localisation and stable server error codes.
+- Added validation preventing CJK characters in new or edited addresses and official place names.
+- Changed new-database Zone initialization and fixtures to English/Bahasa Melayu names.
+- Preserved existing v19 databases; no migration or production data change is included.
+- Removed unused `DispatchPage.jsx` after confirming it was absent from App, tests and production routing.
+
 ## Unreleased — Schema v19
 
 - Added explicit `removedMaterialIds` handling for Customer Material Pricing. Unused pricing is safely deactivated and audited; referenced pricing and cross-Customer removal are rejected or ignored without dangling references.

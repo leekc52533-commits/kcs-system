@@ -2,6 +2,7 @@ import { db as defaultDb } from './database.mjs'
 import { invalidateDispatchDay } from './dispatchService.mjs'
 import { addTemporaryLocation, adoptTemporaryLocation } from './specialRequestService.mjs'
 import { listBranchMaterials, listCustomerMaterialPricing, normalizeCollectionSettings, replaceBranchMaterialSelections, saveCustomerMaterialPricing } from './materialPriceService.mjs'
+import {assertLocationFields} from '../shared/locationText.js'
 
 const text = value => String(value ?? '').trim()
 const nullable = value => text(value) || null
@@ -59,6 +60,7 @@ export function getCustomer(customerId,database=defaultDb){
 }
 
 export function createCustomer(payload,database=defaultDb){
+  assertLocationFields(payload,['billingAddress'])
   const customerId=text(payload.customerId),name=text(payload.customerName||payload.name);if(!customerId||!name)throw new Error('Customer ID and Customer Name are required')
   const status=statusValue(payload.status),payment=paymentValue(payload.defaultPaymentType??payload.paymentType),actor=text(payload.changedBy||payload.createdBy)||'Supervisor'
   database.exec('SAVEPOINT create_customer');try{
@@ -70,6 +72,7 @@ export function createCustomer(payload,database=defaultDb){
 }
 
 export function updateCustomer(customerId,payload,database=defaultDb){
+  assertLocationFields(payload,['billingAddress'])
   const before=database.prepare('SELECT * FROM customers WHERE jodoo_customer_id=?').get(customerId);if(!before)throw new Error('Customer not found')
   if(payload.customerId&&text(payload.customerId)!==customerId)throw new Error('Customer ID cannot be changed after creation')
   const status=statusValue(payload.status??before.status),payment=paymentValue(payload.defaultPaymentType??payload.paymentType??before.default_payment_type??before.payment_type),actor=text(payload.changedBy)||'Supervisor'
@@ -124,6 +127,7 @@ export function getBranch(branchId,database=defaultDb){
 }
 
 export function createBranch(payload,database=defaultDb){
+  assertLocationFields(payload,['address'])
   const branchId=text(payload.branchId),customerId=text(payload.customerId),name=text(payload.branchName);if(!branchId||!customerId||!name)throw new Error('Branch ID, Customer ID and Branch Name are required')
   const customer=database.prepare('SELECT id FROM customers WHERE jodoo_customer_id=?').get(customerId);if(!customer)throw new Error('Customer ID was not found')
   const area=payload.areaId?database.prepare('SELECT id FROM areas WHERE jodoo_area_id=? OR id=?').get(text(payload.areaId),Number(payload.areaId)||-1):null;if(payload.areaId&&!area)throw new Error('Area ID was not found')
@@ -137,6 +141,7 @@ export function createBranch(payload,database=defaultDb){
 }
 
 export function updateBranch(branchId,payload,database=defaultDb){
+  assertLocationFields(payload,['address'])
   const before=database.prepare('SELECT * FROM branches WHERE jodoo_branch_id=?').get(branchId);if(!before)throw new Error('Branch not found')
   if(payload.branchId&&text(payload.branchId)!==branchId)throw new Error('Branch ID cannot be changed after creation')
   const customer=payload.customerId?database.prepare('SELECT id FROM customers WHERE jodoo_customer_id=?').get(text(payload.customerId)):null;if(payload.customerId&&!customer)throw new Error('Customer ID was not found')

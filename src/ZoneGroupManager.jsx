@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import './ZoneGroupManager.css'
+import {apiRequest} from './apiClient.js'
 
-const request=async url=>{const response=await fetch(url),data=await response.json();if(!response.ok)throw new Error(data.error||'资料载入失败');return data}
+const request=url=>apiRequest(url)
 const gpsText=branch=>Number.isFinite(branch.latitude)&&Number.isFinite(branch.longitude)&&!(branch.latitude===0&&branch.longitude===0)?`${branch.latitude}, ${branch.longitude}`:'缺少正式 GPS'
 
 export default function ZoneGroupManager({groups,areas,save,currentUser}){

@@ -1,6 +1,7 @@
 import { db as defaultDb } from './database.mjs'
 import { invalidateDispatchDay } from './dispatchService.mjs'
 import { kuchingDate } from '../shared/kuchingTime.js'
+import {assertLocationFields} from '../shared/locationText.js'
 
 const text = (value) => String(value ?? '').trim()
 const idOrNull = (value) => value ? Number(value) : null
@@ -180,6 +181,7 @@ export function getAreaConfirmationDetail(id,database=defaultDb){
 }
 
 export function createZoneGroup(payload,database=defaultDb){
+  assertLocationFields(payload,['name'])
   const name=text(payload.name);if(!name)throw new Error('Zone Group Name is required')
   const next=database.prepare('SELECT COALESCE(MAX(id),0)+1 value FROM zone_groups').get().value,code=text(payload.code)||`ZONE-${next}`,sortOrder=Number(payload.sortOrder??database.prepare('SELECT COALESCE(MAX(sort_order),0)+1 value FROM zone_groups').get().value)
   const result=database.prepare('INSERT INTO zone_groups(code,name,sort_order,is_active) VALUES(?,?,?,1)').run(code,name,sortOrder)
@@ -187,6 +189,7 @@ export function createZoneGroup(payload,database=defaultDb){
 }
 
 export function updateZoneGroup(id, payload, database = defaultDb) {
+  assertLocationFields(payload,['name'])
   const before=database.prepare('SELECT * FROM zone_groups WHERE id=?').get(id);if(!before)throw new Error('Zone Group not found')
   if(!text(payload.name??before.name))throw new Error('Zone Group Name is required')
   database.prepare('UPDATE zone_groups SET name=?,code=?,sort_order=?,is_active=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(text(payload.name??before.name),text(payload.code??before.code),Number(payload.sortOrder??before.sort_order),payload.isActive===undefined?before.is_active:Number(Boolean(payload.isActive)),id)
@@ -353,12 +356,14 @@ export function endEmployeeEmployment(id,payload,database=defaultDb){const statu
 export function rehireEmployee(id,payload,database=defaultDb){const before=database.prepare('SELECT * FROM employees WHERE id=?').get(id);if(!before)throw new Error('Employee not found');if(!text(payload.reason))throw new Error('Rehire reason is required');const actor=text(payload.changedBy)||'Admin',primaryRole=normalizeJobRole(payload.jobRole??before.job_role),type=normalizeEmploymentType(payload.employmentType??before.employment_type),roles=payload.additionalRoles||[],startDate=payload.employmentStartDate||kuchingDate();database.exec('SAVEPOINT employee_rehire');try{database.prepare(`UPDATE employees SET job_role=?,employment_status='active',employment_detail_status='active',employment_type=?,employment_start_date=?,employment_end_date=NULL,last_working_day=NULL,resignation_termination_reason=NULL,default_base_location_id=?,is_active=1,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(primaryRole,type,startDate,payload.defaultBaseLocationId===undefined?before.default_base_location_id:idOrNull(payload.defaultBaseLocationId),id);replaceEmployeeRoles(database,id,primaryRole,roles,actor,payload.reason,database.prepare('SELECT role FROM employee_job_roles WHERE employee_id=?').all(id).map(row=>row.role));replaceEmployeeFamiliarAreas(database,id,payload.usualAreaIds,actor);database.prepare(`INSERT INTO employee_employment_history(employee_id,start_date,employment_status,employment_type,primary_job_role,secondary_job_roles,rehire_flag,created_by) VALUES(?,?,'active',?,?,?,?,?)`).run(id,startDate,type,primaryRole,roles.join('|')||null,1,actor);database.prepare(`INSERT INTO employee_change_history(employee_id,field_name,old_value,new_value,reason,changed_by) VALUES(?, 'rehire',?,?,?,?)`).run(id,before.employment_detail_status,'active',text(payload.reason),actor);if(payload.reactivateAccount)database.prepare('UPDATE auth_accounts SET is_active=1,disabled_at=NULL,updated_at=CURRENT_TIMESTAMP WHERE employee_id=?').run(id);database.exec('RELEASE employee_rehire');return employeeRows(database).find(item=>item.id===Number(id))}catch(error){database.exec('ROLLBACK TO employee_rehire; RELEASE employee_rehire');throw error}}
 
 export function createLocation(payload, database = defaultDb) {
+  assertLocationFields(payload,['name','address'])
   if (!text(payload.name)) throw new Error('Location Name is required')
   const result = database.prepare(`INSERT INTO operational_locations(name,location_type,address,latitude,longitude,can_start,can_end,is_active) VALUES(?,?,?,?,?,?,?,?)`).run(text(payload.name), payload.locationType || 'other', text(payload.address) || null, payload.latitude ?? null, payload.longitude ?? null, payload.canStart ? 1 : 0, payload.canEnd ? 1 : 0, payload.isActive === false ? 0 : 1)
   return database.prepare('SELECT * FROM operational_locations WHERE id=?').get(result.lastInsertRowid)
 }
 
 export function updateLocation(id, payload, database = defaultDb) {
+  assertLocationFields(payload,['name','address'])
   const before = database.prepare('SELECT * FROM operational_locations WHERE id=?').get(id)
   if (!before) throw new Error('Location not found')
   database.prepare(`UPDATE operational_locations SET name=?,location_type=?,address=?,latitude=?,longitude=?,can_start=?,can_end=?,is_active=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(text(payload.name ?? before.name), payload.locationType ?? before.location_type, payload.address === undefined ? before.address : text(payload.address) || null, payload.latitude === undefined ? before.latitude : payload.latitude, payload.longitude === undefined ? before.longitude : payload.longitude, payload.canStart === undefined ? before.can_start : Number(Boolean(payload.canStart)), payload.canEnd === undefined ? before.can_end : Number(Boolean(payload.canEnd)), payload.isActive === undefined ? before.is_active : Number(Boolean(payload.isActive)), id)

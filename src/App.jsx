@@ -15,6 +15,8 @@ import BackButton from './BackButton.jsx'
 import {confirmNavigation,hasUnsavedNavigation} from './navigation.js'
 import AccountManagementPage from './AccountManagementPage.jsx'
 import AccountProfileMenu from './AccountProfileMenu.jsx'
+import {apiErrorMessage,apiRequest} from './apiClient.js'
+import {translate} from './translations.js'
 
 const navigation=[['dashboard','⌂','nav.dashboard'],['dispatch','↗','nav.dispatch'],['special','＋','nav.special'],['customers','◎','nav.customers'],['schedule','▷','nav.schedule'],['data','⌖','nav.data'],['gps-zone','◉','nav.gpsZone'],['resources','◇','nav.resources'],['accounts','♙','nav.accounts'],['gps-migration','⇄','nav.gpsMigration'],['sync','↻','nav.sync']]
 const modules=[['dispatch','↗','一周派车','按日期、车辆和趟次安排路线，每天独立批准并发布。','打开周计划','green'],['special','＋','临时收货请求','登记老客户临时加收或潜在新客户，并保护客户承诺。','建立请求','rose'],['customers','◎','客户与分店','查询真实客户、分店、付款方式、价格、GPS 与排程。','查看客户资料','blue'],['schedule','▷','收货排程','按星期、Frequency、BranchID 和 Area 查询所有排程。','管理排程','orange'],['data','⌖','GPS 与资料完整度','分组追踪缺少 GPS、排程或关联主档的资料。','检查资料','violet'],['gps-zone','◉','GPS Zone 建议','绘制 Zone 边界，并由主管确认 official GPS 的 Area 与 Zone 建议。','检查建议','green'],['resources','◇','员工、车辆、地点与区域','管理资源主档、动态 Zone Group 和详细 Area 归属。','管理资源','cyan'],['sync','↻','Jodoo 资料同步','预览并正式导入最新五类 Jodoo Excel。','准备导入','rose']]
@@ -22,18 +24,18 @@ class AppErrorBoundary extends Component {
   state={error:null}
   static getDerivedStateFromError(error){return{error}}
   componentDidCatch(error,info){console.error('KCS UI error',error,info)}
-  render(){if(this.state.error)return <main className="auth-page"><section className="auth-card"><div className="auth-logo">!</div><h1>KCS 页面发生错误</h1><p>系统没有继续显示空白画面。请重新载入；若问题持续，请关闭启动窗口后再打开系统。</p><div className="auth-error">{this.state.error.message||'未知页面错误'}</div><button onClick={()=>window.location.reload()}>重新载入</button></section></main>;return this.props.children}
+  render(){const language=localStorage.getItem('kcs_language')||'en';if(this.state.error)return <main className="auth-page"><section className="auth-card"><div className="auth-logo">!</div><h1>{translate(language,'app.pageError')}</h1><p>{translate(language,'app.pageErrorHelp')}</p><div className="auth-error">{translate(language,'app.unknownPageError')}</div><button onClick={()=>window.location.reload()}>{translate(language,'app.reload')}</button></section></main>;return this.props.children}
 }
 
 function AppContent(){
   const[account,setAccount]=useState(undefined),[changing,setChanging]=useState(false),[startupError,setStartupError]=useState('')
   const[guestLanguage,setGuestLanguage]=useState(()=>localStorage.getItem('kcs_language')||'en')
   const applyAccount=next=>{setAccount(next);if(next?.preferredLanguage){localStorage.setItem('kcs_language',next.preferredLanguage);setGuestLanguage(next.preferredLanguage)}}
-  const refresh=async()=>{try{const response=await fetch('/api/auth/session'),data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||`Auth API response ${response.status}`);setStartupError('');applyAccount(data.account||null)}catch(error){setStartupError(error.message);setAccount(null)}}
+  const refresh=async()=>{try{const response=await fetch('/api/auth/session'),data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(apiErrorMessage(data));setStartupError('');applyAccount(data.account||null)}catch(error){setStartupError(error.message);setAccount(null)}}
   useEffect(()=>{void refresh()},[])
   const logout=()=>fetch('/api/auth/logout',{method:'POST'}).finally(()=>{setChanging(false);setAccount(null)})
   const selectedLanguage=guestLanguage
-  const setLanguage=async value=>{const previous=guestLanguage;localStorage.setItem('kcs_language',value);setGuestLanguage(value);if(account){try{const response=await fetch('/api/auth/preferences',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({preferredLanguage:value})}),data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||'Language preference could not be saved');setAccount(data.account)}catch(error){localStorage.setItem('kcs_language',previous);setGuestLanguage(previous);console.error(error)}}}
+  const setLanguage=async value=>{const previous=guestLanguage;localStorage.setItem('kcs_language',value);setGuestLanguage(value);if(account){try{setAccount((await apiRequest('/api/auth/preferences',{method:'PATCH',body:JSON.stringify({preferredLanguage:value})})).account)}catch{localStorage.setItem('kcs_language',previous);setGuestLanguage(previous)}}}
   let content
   if(account===undefined)content=<LoadingScreen/>
   else if(!account)content=<LoginPage onLogin={applyAccount} startupError={startupError?`Login service: ${startupError}`:''}/>

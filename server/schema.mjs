@@ -1109,13 +1109,13 @@ CREATE INDEX IF NOT EXISTS branch_material_price_selections_branch_idx ON branch
 CREATE INDEX IF NOT EXISTS branch_material_price_selections_pricing_idx ON branch_material_price_selections(customer_material_pricing_id,price_type);
 
 INSERT OR IGNORE INTO zone_groups(id,code,name,sort_order) VALUES
-  (1,'KUCHING-A','古晋 A区',1),
-  (2,'KUCHING-B','古晋 B区',2),
-  (3,'SERIAN-A','西连 A区',3),
-  (4,'SERIAN-B','西连 B区',4),
-  (5,'SAMARAHAN-A','Samarahan A区',5),
-  (6,'SAMARAHAN-B','Samarahan B区',6),
-  (7,'LUNDU-BAU','伦乐 / 石隆门区',7);
+  (1,'KUCHING-A','Kuching A — BDC',1),
+  (2,'KUCHING-B','Kuching B — Matang',2),
+  (3,'SERIAN-A','Serian A',3),
+  (4,'SERIAN-B','Serian B — Penrissen',4),
+  (5,'SAMARAHAN-A','Samarahan A',5),
+  (6,'SAMARAHAN-B','Samarahan B',6),
+  (7,'LUNDU-BAU','Lundu / Bau',7);
 
 CREATE TRIGGER IF NOT EXISTS sold_vehicle_no_delete BEFORE DELETE ON vehicles
 WHEN OLD.operational_status='sold' BEGIN SELECT RAISE(ABORT,'Sold vehicle history cannot be deleted'); END;

@@ -1,5 +1,15 @@
 # KCS Change Log
 
+## 2026-07-28 — Three-language interface
+
+- Added stable module translation namespaces for English, Bahasa Melayu and Chinese.
+- Added stable API error-code localisation with a safe generic fallback.
+- Kept addresses and official place names identical across interface languages.
+- Rejected CJK characters in newly created or edited Zone, Area, Operational Location and address fields.
+- Updated source initialization and fixtures to `Lundu / Bau`, Kuching, Serian and Samarahan English names.
+- Deleted the unused legacy `DispatchPage.jsx` prototype.
+- Schema remains v19; no migration and no production database correction were performed.
+
 ## Branch主动清空与Customer Pricing安全移除
 
 - Branch提交从实际HTML表单收集可选字段，避免受React state事件批次或自动填表行为影响。

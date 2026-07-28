@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import './VehicleDetailPage.css'
+import {apiRequest as api} from './apiClient.js'
 
-const api=async(url,options={})=>{const response=await fetch(url,{headers:{'Content-Type':'application/json'},...options}),data=await response.json();if(!response.ok)throw new Error(data.error||'操作失败');return data}
 const filePayload=file=>new Promise((resolve,reject)=>{if(!file)return resolve(null);const reader=new FileReader();reader.onload=()=>resolve({name:file.name,dataUrl:reader.result});reader.onerror=reject;reader.readAsDataURL(file)})
 const money=value=>value==null?'—':`RM ${Number(value).toFixed(2)}`
 const value=value=>value==null||value===''?'—':value

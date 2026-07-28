@@ -3,8 +3,8 @@ import './ResourcePage.css'
 import VehicleDetailPage from './VehicleDetailPage.jsx'
 import ZoneGroupManager from './ZoneGroupManager.jsx'
 import EmployeeMasterPage from './EmployeeMasterPage.jsx'
+import {apiRequest as api} from './apiClient.js'
 
-const api=async(url,options={})=>{const response=await fetch(url,{headers:{'Content-Type':'application/json'},...options});const data=await response.json();if(!response.ok)throw new Error(data.error||'操作失败');return data}
 const selectedIds=(event)=>[...event.target.selectedOptions].map(option=>Number(option.value))
 
 export default function ResourcePage({currentUser}){

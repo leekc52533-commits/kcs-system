@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import readXlsxFile from 'read-excel-file/browser'
 import { identifyFile } from './importRules.js'
+import {apiRequest} from './apiClient.js'
 
 export default function ImportPage({ onBack }) {
   const inputRef = useRef(null)
@@ -22,14 +23,13 @@ export default function ImportPage({ onBack }) {
         parsed.push({name:file.name,sheetName:matched.sheet.sheet,headers:matched.headers,rows,type:matched.type})
       }
       setFiles(parsed)
-      const response=await fetch('/api/import/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({files:parsed.map(({type:_type,...file})=>file)})})
-      const result=await response.json(); if(!response.ok) throw new Error(result.error||'预览失败')
+      const result=await apiRequest('/api/import/preview',{method:'POST',body:JSON.stringify({files:parsed.map(({type:_type,...file})=>file)})})
       setPreview(result)
     } catch(error){setFiles([]);setMessage(error.message)} finally {setBusy(false)}
   }
   const commit=async()=>{
     setBusy(true);setMessage('')
-    try{const response=await fetch('/api/import/commit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({batchId:preview.batchId})});const result=await response.json();if(!response.ok)throw new Error(result.error||'导入失败');setMessage(`导入完成：新增 ${result.summary.new}，更新 ${result.summary.update}，无变化 ${result.summary.unchanged}，无法匹配 ${result.summary.unmatched}`);setPreview({...preview,committed:true})}catch(error){setMessage(error.message)}finally{setBusy(false)}
+    try{const result=await apiRequest('/api/import/commit',{method:'POST',body:JSON.stringify({batchId:preview.batchId})});setMessage(`导入完成：新增 ${result.summary.new}，更新 ${result.summary.update}，无变化 ${result.summary.unchanged}，无法匹配 ${result.summary.unmatched}`);setPreview({...preview,committed:true})}catch(error){setMessage(error.message)}finally{setBusy(false)}
   }
   return <div className="page import-page">
     <button className="import-back" onClick={onBack}>← 返回总览</button>

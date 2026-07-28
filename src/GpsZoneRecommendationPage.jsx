@@ -3,8 +3,8 @@ import { CircleMarker, MapContainer, Polygon, Popup, TileLayer, useMapEvents } f
 import 'leaflet/dist/leaflet.css'
 import './GpsZoneRecommendationPage.css'
 import {kuchingDate} from '../shared/kuchingTime.js'
+import {apiRequest as api} from './apiClient.js'
 
-const api=async(url,options={})=>{const response=await fetch(url,{headers:{'Content-Type':'application/json'},...options}),data=await response.json();if(!response.ok)throw new Error(data.error||'操作失败');return data}
 const colors=['#16866f','#3277ad','#c87a32','#745bb7','#a45161','#287d89','#8b6b35','#516d7d','#b14e42']
 const today=kuchingDate
 

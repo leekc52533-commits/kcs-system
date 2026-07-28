@@ -2,8 +2,8 @@ import {useCallback,useEffect,useMemo,useRef,useState} from 'react'
 import {downloadSpreadsheet,readSpreadsheet} from './spreadsheetFiles.js'
 import {createEmployeeSelectionGuard,employeeDetailDraft,employeeMatchesDirectory,terminalEmploymentStatuses} from './employeeMasterState.js'
 import {kuchingDate} from '../shared/kuchingTime.js'
+import {apiRequest as api} from './apiClient.js'
 
-const api=async(url,options={})=>{const response=await fetch(url,{headers:{'Content-Type':'application/json'},...options}),data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||'操作失败');return data}
 const roles=['Driver','Attendant / Crew','Supervisor','Office','Admin','Mechanic / Workshop','Other']
 const employmentTypes=['Permanent','Contractor','Part-time','Temporary']
 const directoryStatuses=['active','resigned','terminated','contract_end','suspended','inactive','on_leave','rehired']

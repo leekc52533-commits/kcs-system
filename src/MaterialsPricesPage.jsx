@@ -1,6 +1,6 @@
 import {useCallback,useEffect,useState} from 'react'
+import {apiRequest as api} from './apiClient.js'
 
-const api=async(url,options={})=>{const response=await fetch(url,{headers:{'Content-Type':'application/json'},...options}),data=await response.json();if(!response.ok)throw new Error(data.error||'操作失败');return data}
 const money=value=>`RM${Number(value).toFixed(2)}/kg`
 
 export default function MaterialsPricesPage({currentUser,notify,fail}){

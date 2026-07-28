@@ -18,11 +18,14 @@ import { commitGpsMigration, getGpsMigrationBatch, gpsMigrationTemplate, listGps
 import { addEmployeeDocument, employeeDetail, employeeDocumentFile, revealEmployeeField, sensitiveAccessLogs, sensitiveEmployeeExport } from './employeeSensitiveService.mjs'
 import { bulkUpdatePriceLevel, createMaterial, createPriceLevel, getMaterial, listMaterials, setPriceLevelStatus } from './materialPriceService.mjs'
 import {kuchingDate} from '../shared/kuchingTime.js'
+import {publicError} from './errorCodes.mjs'
+import {assertLocationFields} from '../shared/locationText.js'
 
 const port = Number(process.env.KCS_API_PORT || 8787)
 const host = process.env.KCS_API_HOST || '0.0.0.0'
 
 function sendJson(response, status, value) {
+  if(status>=400&&value?.error&&!value.errorCode)value={...value,...publicError(value.error)}
   response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' })
   response.end(JSON.stringify(value))
 }
@@ -111,11 +114,11 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && /^\/api\/gps-collector\/\d+\/adopt$/.test(url.pathname)) {const payload=(await readJson(request)).payload;return sendJson(response,200,adoptBranchGps(Number(url.pathname.split('/')[3]),{...payload,adoptedBy:session.employeeName,changedBy:session.employeeName}))}
     if (request.method === 'POST' && /^\/api\/gps-collector\/\d+\/review$/.test(url.pathname)) {const payload=(await readJson(request)).payload;return sendJson(response,200,reviewTemporaryLocation(Number(url.pathname.split('/')[3]),{...payload,reviewedBy:session.employeeName,reviewedByAccountId:session.id}))}
     if (request.method === 'GET' && url.pathname === '/api/buyers') return sendJson(response,200,{items:listBuyers(Object.fromEntries(url.searchParams))})
-    if (request.method === 'POST' && url.pathname === '/api/buyers') return sendJson(response,201,saveBuyer((await readJson(request)).payload))
-    if (request.method === 'PATCH' && /^\/api\/buyers\/\d+$/.test(url.pathname)) return sendJson(response,200,saveBuyer((await readJson(request)).payload,Number(url.pathname.split('/').at(-1))))
+    if (request.method === 'POST' && url.pathname === '/api/buyers') {const payload=(await readJson(request)).payload;assertLocationFields(payload,['locationName','address']);return sendJson(response,201,saveBuyer(payload))}
+    if (request.method === 'PATCH' && /^\/api\/buyers\/\d+$/.test(url.pathname)) {const payload=(await readJson(request)).payload;assertLocationFields(payload,['locationName','address']);return sendJson(response,200,saveBuyer(payload,Number(url.pathname.split('/').at(-1))))}
     if (request.method === 'GET' && url.pathname === '/api/operational-locations') return sendJson(response,200,{items:listOperationalLocations(Object.fromEntries(url.searchParams))})
-    if (request.method === 'POST' && url.pathname === '/api/operational-locations') return sendJson(response,201,saveOperationalLocation((await readJson(request)).payload))
-    if (request.method === 'PATCH' && /^\/api\/operational-locations\/\d+$/.test(url.pathname)) return sendJson(response,200,saveOperationalLocation((await readJson(request)).payload,Number(url.pathname.split('/').at(-1))))
+    if (request.method === 'POST' && url.pathname === '/api/operational-locations') {const payload=(await readJson(request)).payload;assertLocationFields(payload,['name','address']);return sendJson(response,201,saveOperationalLocation(payload))}
+    if (request.method === 'PATCH' && /^\/api\/operational-locations\/\d+$/.test(url.pathname)) {const payload=(await readJson(request)).payload;assertLocationFields(payload,['name','address']);return sendJson(response,200,saveOperationalLocation(payload,Number(url.pathname.split('/').at(-1))))}
     if (request.method === 'GET' && /^\/api\/master-transfer\/[^/]+\/template$/.test(url.pathname)) return sendJson(response,200,masterTemplate(url.pathname.split('/')[3]))
     if (request.method === 'GET' && /^\/api\/master-transfer\/[^/]+\/export$/.test(url.pathname)) return sendJson(response,200,masterExport(url.pathname.split('/')[3],{...Object.fromEntries(url.searchParams),changedBy:session.employeeName}))
     if (request.method === 'GET' && url.pathname === '/api/master-transfer/logs') return sendJson(response,200,{items:listTransferLogs()})
@@ -220,7 +223,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && url.pathname === '/api/import/commit') return sendJson(response, 200, commitImport((await readJson(request)).payload.batchId))
     return sendJson(response, 404, { error: 'Not found' })
   } catch (error) {
-    return sendJson(response, error.statusCode || (error instanceof SyntaxError ? 400 : 500), { error: error.message })
+    return sendJson(response, error.statusCode || (error instanceof SyntaxError ? 400 : 500), publicError(error))
   }
 })
 

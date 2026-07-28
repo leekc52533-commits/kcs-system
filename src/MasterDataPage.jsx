@@ -19,8 +19,8 @@ import {
   validateCustomerPricing,
 } from './branchEditorState.js'
 import './MasterDataPage.css'
+import {apiRequest as api} from './apiClient.js'
 
-const api=async(url,options={})=>{const response=await fetch(url,{headers:{'Content-Type':'application/json'},...options}),data=await response.json();if(!response.ok)throw new Error(data.error||'操作失败');return data}
 const modules=[['customer','Customer'],['branch','Customer Branch'],['zone','Zone'],['area','Area'],['gps','GPS'],['buyer','Buyer'],['operational_location','Operational Location']]
 const customerFields=[['customerId','Customer ID','text',true],['customerName','Customer Name','text',true],['legalName','Legal Name'],['registrationNumber','Registration Number'],['billingAddress','Billing Address','textarea'],['contactPerson','Contact Person'],['phone','Phone'],['whatsapp','WhatsApp'],['email','Email','email'],['defaultPaymentType','Default Payment Type','select',['','Cash','Credit']],['creditTerms','Credit Terms'],['status','Status','select',['active','paused','closed']],['notes','Notes','textarea']]
 const branchFields=[['branchId','Branch ID','text',true],['customerId','Customer ID','text',true],['branchName','Branch Name','text',true],['address','Address','textarea'],['zoneGroup','Zone Group（由 Area 决定）','readonly'],['areaId','Area ID'],['officialLatitude','Official Latitude','readonly'],['officialLongitude','Official Longitude','readonly'],['temporaryLatitude','Latest Temporary Latitude','readonly'],['temporaryLongitude','Latest Temporary Longitude','readonly'],['gpsVerificationStatus','GPS Verification Status','readonly'],['contactPerson','Contact Person'],['phone','Phone'],['collectionTimeConstraint','Collection Time Constraint'],['paymentType','Payment Type','select',['','Cash','Credit']],['proofRequirements','Proof Requirements','textarea'],['vehicleRestriction','Vehicle Restriction'],['status','Status','select',['active','paused','closed']],['notes','Notes','textarea']]

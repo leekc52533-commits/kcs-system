@@ -1,8 +1,8 @@
 import {useEffect,useState} from 'react'
 import {downloadSpreadsheet,readSpreadsheet} from './spreadsheetFiles.js'
+import {apiRequest as api} from './apiClient.js'
 
 const labels={new:'New',unchanged:'Unchanged',conflict:'Conflict',branch_not_found:'Branch Not Found',invalid_gps:'Invalid GPS',duplicate_source:'Duplicate Source'}
-const api=async(path,options={})=>{const response=await fetch(path,{headers:{'Content-Type':'application/json'},...options}),data=await response.json();if(!response.ok)throw new Error(data.error||'操作失败');return data}
 
 export default function GpsMigrationPage(){
   const[batch,setBatch]=useState(null),[batches,setBatches]=useState([]),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState('')

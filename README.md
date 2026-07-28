@@ -1,5 +1,11 @@
 # KCS Dispatch System
 
+## Three-language interface
+
+KCS supports English, Bahasa Melayu and Chinese per account. Translation keys use stable module namespaces and fall back safely to English. API failures use stable error codes and are translated by the client without exposing internal SQL, stack traces or server paths.
+
+Addresses, Area names, Operational Location names and Zone Group names are business data and are never translated. New values must use English or Bahasa Melayu. See [Three-language maintenance](docs/I18N.md).
+
 KCS 司机派送与回收作业系统。当前版本包含司机顺序流程、Jodoo Excel 正式导入、SQLite 客户/分店/排程/GPS 主档、资料质量页面、主管一周派车、临时收货请求、GPS-Based Zone Recommendation V1，以及 Jodoo（简道云）连接的后台骨架。
 
 ## 运行环境
