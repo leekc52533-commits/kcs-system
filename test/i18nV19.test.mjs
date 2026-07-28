@@ -109,6 +109,9 @@ test('四个正式验收页面的动态文字按语言渲染且数据库原值�
   const gpsRecommendations=fs.readFileSync(new URL('../src/GpsZoneRecommendationPage.jsx',import.meta.url),'utf8')
   assert.match(gpsRecommendations,/t\('gps\.itemsShown',\{count:items\.length\}\)/)
   assert.doesNotMatch(gpsRecommendations,/<span>显示 \{items\.length\} 项<\/span>/)
+  const zoneManager=fs.readFileSync(new URL('../src/ZoneGroupManager.jsx',import.meta.url),'utf8')
+  assert.match(zoneManager,/t\('zone\.counts',\{shown:filtered\.length,selected:selected\.length\}\)/)
+  assert.doesNotMatch(zoneManager,/<span>显示 \{filtered\.length\} 个 · 已勾选 \{selected\.length\} 个<\/span>/)
 })
 
 test('Zone Rename空值和CJK验证不会发出保存请求',()=>{
