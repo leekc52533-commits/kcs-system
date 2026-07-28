@@ -7,7 +7,7 @@ import {JSDOM} from 'jsdom'
 import {readdirSync,readFileSync} from 'node:fs'
 import {dirname,join,relative} from 'node:path'
 import {fileURLToPath} from 'node:url'
-import {translate} from '../src/translations.js'
+import {translate,translateSource} from '../src/translations.js'
 
 const dom=new JSDOM('<!doctype html><html><body></body></html>',{url:'http://localhost/'})
 globalThis.window=dom.window
@@ -99,6 +99,27 @@ test('数据库动态原值明确标记为raw且不参与CJK界面断言',()=>{
   }))
   assert.match(html,/data-i18n-raw/)
   assert.doesNotThrow(()=>assertNoCjk('dynamic database values','ms',html))
+})
+
+test('Buyer、Operational Location及Customer Branch三语实际Modal包含本地化标题、字段、placeholder及按钮',()=>{
+  const specs=[
+    ['Buyer Master','master.buyer',masterModule.buyerFields,{buyerId:'',buyerName:'',status:'active'}],
+    ['Operational Location','master.operationalLocation',masterModule.locationFields,{locationId:'',name:'',status:'active'}],
+    ['Customer Branch','master.branch',masterModule.branchFields,{branchId:'',customerId:'',branchName:'',status:'active'}],
+  ]
+  for(const [page,entityKey,fields,initial] of specs)for(const language of ['en','ms','zh']){
+    const title=translate(language,'master.addEntity',{entity:translate(language,entityKey)})
+    const html=htmlText(wrap(language,React.createElement(masterModule.Editor,{title,fields,initial,lockId:false,onClose:noop,onSave:noop})))
+    assert.match(html,new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')),`${page} ${language}: modal title`)
+    for(const source of ['Location Name','Contact Person']){
+      if(!fields.some(([,label])=>label===source))continue
+      const localized=translateSource(language,source)
+      assert.notEqual(localized,'',`${page} ${language}: ${source}`)
+      if(language!=='en')assert.notEqual(localized,source,`${page} ${language}: English fallback ${source}`)
+      assert.match(html,new RegExp(`placeholder="${source}"`),`${page} ${language}: placeholder source contract ${source}`)
+    }
+    for(const key of ['common.cancel','common.save'])assert.match(html,new RegExp(translate(language,key)),`${page} ${language}: ${key}`)
+  }
 })
 
 test('车辆与Operational Location实际主档组件在English与BM不显示CJK界面文字',()=>{

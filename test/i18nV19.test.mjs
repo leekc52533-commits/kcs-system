@@ -126,3 +126,40 @@ test('Zone Rename空值和CJK验证不会发出保存请求',()=>{
     assert.equal(saveCount,1)
   }
 })
+
+test('Customer Branch、Buyer及Operational Location三语界面词汇完整且key集合一致',()=>{
+  const surfaces={
+    customerBranch:['Customer Branch Master','Location Name','Contact Person','Branch ID','Customer ID','Branch Name','Save Customer Branch'],
+    buyer:['Buyer Master','Location Name','Contact Person','Buyer ID','Buyer Name','Material Accepted','Operating Hours'],
+    operationalLocation:['Operational Location Master','Location Name','Contact Person','Location ID','Location Type','Company Yard','Fuel Station'],
+  }
+  for(const [page,words] of Object.entries(surfaces))for(const language of ['en','ms','zh'])for(const word of words){
+    const rendered=translateSource(language,word)
+    assert.notEqual(rendered,'',`${page} ${language}: empty translation for ${word}`)
+    if(language!=='en')assert.notEqual(rendered,word,`${page} ${language}: English fallback remains: ${word}`)
+  }
+  const keySets=['en','ms','zh'].map(language=>Object.keys(messages[language]).sort())
+  assert.deepEqual(keySets[1],keySets[0],'Bahasa Melayu translation keys differ from English')
+  assert.deepEqual(keySets[2],keySets[0],'Chinese translation keys differ from English')
+})
+
+test('三个主档页面动态数据库值保持raw保护且表单提供可本地化placeholder',()=>{
+  const source=fs.readFileSync(new URL('../src/MasterDataPage.jsx',import.meta.url),'utf8')
+  for(const value of ['item.branchName','item.customerName','item.locationName','item.materialAccepted','item.locationType','item.address'])assert.match(source,new RegExp(value.replace('.','\\.')),value)
+  assert.match(source,/data-i18n-raw/)
+  assert.match(source,/document\.querySelectorAll\('\.master-modal \.editor-fields>label'\)/)
+  assert.match(source,/<textarea placeholder=\{label\}/)
+  assert.match(source,/<input placeholder=\{label\}/)
+})
+
+test('GPS Collector在375px和390px为单栏且桌面保留双栏，并限制子项宽度',()=>{
+  const css=fs.readFileSync(new URL('../src/MasterDataPage.css',import.meta.url),'utf8')
+  assert.match(css,/\.gps-collector>form\{display:grid;grid-template-columns:2fr 2fr 1fr 1fr 1\.2fr auto/)
+  assert.match(css,/@media\(max-width:600px\)\{\s*\.gps-collector>form\{grid-template-columns:minmax\(0,1fr\)\}/)
+  for(const width of [375,390]){
+    assert.ok(width<=600,`GPS Collector ${width}px did not enter the single-column breakpoint`)
+    assert.match(css,/\.gps-collector input,.gps-collector select,.gps-collector button\{min-width:0;width:100%;max-width:100%;box-sizing:border-box\}/)
+    assert.match(css,/\.master-nav\{max-width:100%;min-width:0;overscroll-behavior-inline:contain\}/)
+  }
+  assert.doesNotMatch(css,/(?:html|body|#root)[^{]*\{[^}]*overflow-x\s*:\s*hidden/s)
+})
