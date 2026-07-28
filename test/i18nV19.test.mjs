@@ -106,6 +106,9 @@ test('四个正式验收页面的动态文字按语言渲染且数据库原值�
   for(const value of ['古晋 A区 BDC','伦乐 / 石隆门区','Lot 376, Jalan Petanak, Sarawak, 马来西亚'])assert.equal(translateSource('en',value),value)
   const master=fs.readFileSync(new URL('../src/MasterDataPage.jsx',import.meta.url),'utf8')
   assert.match(master,/data-i18n-raw/)
+  const gpsRecommendations=fs.readFileSync(new URL('../src/GpsZoneRecommendationPage.jsx',import.meta.url),'utf8')
+  assert.match(gpsRecommendations,/t\('gps\.itemsShown',\{count:items\.length\}\)/)
+  assert.doesNotMatch(gpsRecommendations,/<span>显示 \{items\.length\} 项<\/span>/)
 })
 
 test('Zone Rename空值和CJK验证不会发出保存请求',()=>{
