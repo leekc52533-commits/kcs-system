@@ -1,14 +1,14 @@
 export const REQUIRED_STEPS = [
-  { id: 'gps', label: 'GPS 到达验证' },
-  { id: 'jodooSync', label: 'Jodoo 作业资料同步' },
-  { id: 'invoicePhoto', label: '账单／单据照片' },
-  { id: 'sitePhoto', label: '现场照片' },
-  { id: 'paymentProof', label: '付款证明' },
+  { id: 'gps', label: 'GPS arrival verification' },
+  { id: 'jodooSync', label: 'Jodoo job data sync' },
+  { id: 'invoicePhoto', label: 'Invoice / document photo' },
+  { id: 'sitePhoto', label: 'Site photo' },
+  { id: 'paymentProof', label: 'Payment proof' },
 ]
 
 export const NO_COLLECTION_STEPS = [
-  { id: 'noCollectionDetails', label: '无收货原因' },
-  { id: 'noCollectionEvidence', label: '无收货证据' },
+  { id: 'noCollectionDetails', label: 'No-collection reason' },
+  { id: 'noCollectionEvidence', label: 'No-collection evidence' },
 ]
 
 export function requiredStepsForStop(stop) {

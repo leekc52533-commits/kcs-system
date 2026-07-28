@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-28 — Final production CJK source cleanup
+
+- Replaced the remaining hard-coded Chinese in production JSX, fallbacks, prompts, placeholders, status text and import/export surfaces with translated or English-canonical source text.
+- Added actual React component rendering through Vite SSR and JSDOM for Customer Branch, GPS Collector, Buyer, Operational Location and Excel/CSV Import & Export in English and Bahasa Melayu.
+- Added a production-source CJK gate that reports the exact file, line and source text. Chinese is now limited to translation resources, tests and validation logic; dynamic business values are explicitly marked `data-i18n-raw`.
+- No database, schema, migration or AWS operation is part of this change.
+
 ## 2026-07-28 — Production route i18n acceptance follow-up
 
 - Removed remaining Chinese route labels, placeholders, empty states and status text from English and Bahasa Melayu rendering across Special Requests, Customer/Branch, Schedules, Data Quality, GPS recommendations, Employee, Vehicle, Location/Zone, GPS migration and Jodoo import surfaces.
