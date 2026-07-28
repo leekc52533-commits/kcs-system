@@ -163,3 +163,13 @@ test('GPS Collector在375px和390px为单栏且桌面保留双栏，并限制子
   }
   assert.doesNotMatch(css,/(?:html|body|#root)[^{]*\{[^}]*overflow-x\s*:\s*hidden/s)
 })
+
+test('1024px使用局部三栏摘要和双栏GPS表单，1440px保留六栏且导航自行滚动',()=>{
+  const css=fs.readFileSync(new URL('../src/MasterDataPage.css',import.meta.url),'utf8')
+  assert.match(css,/@media\(max-width:1100px\)\{\s*\.area-closeout\{grid-template-columns:repeat\(3,minmax\(0,1fr\)\)\}/)
+  assert.match(css,/@media\(max-width:1100px\)[\s\S]*?\.gps-collector>form\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)\}/)
+  assert.match(css,/\.area-closeout>\*,\.area-closeout \.export-buttons\{min-width:0;max-width:100%;box-sizing:border-box\}/)
+  assert.match(css,/\.gps-collector>form\{display:grid;grid-template-columns:2fr 2fr 1fr 1fr 1\.2fr auto/)
+  assert.match(css,/\.master-nav\{max-width:100%;min-width:0;overscroll-behavior-inline:contain\}/)
+  assert.doesNotMatch(css,/(?:html|body|#root)[^{]*\{[^}]*overflow-x\s*:\s*hidden/s)
+})

@@ -122,6 +122,43 @@ test('Buyer、Operational Location及Customer Branch三语实际Modal包含本�
   }
 })
 
+test('Buyer与Operational Location明确区分loading、API错误及三语零资料状态',()=>{
+  const specs=[
+    ['buyer','/api/buyers','master.noBuyers'],
+    ['operational_location','/api/operational-locations','master.noOperationalLocations'],
+  ]
+  for(const [type,endpoint,emptyKey] of specs)for(const language of ['en','ms','zh']){
+    const fields=type==='buyer'?masterModule.buyerFields:masterModule.locationFields
+    const base={type,endpoint,fields,reload:noop,notify:noop,fail:noop,actor,initialItems:[]}
+    const empty=htmlText(wrap(language,React.createElement(masterModule.EntityManager,{...base,initialLoading:false})))
+    assert.match(empty,new RegExp(translate(language,emptyKey)),`${type} ${language}: empty state`)
+    const loading=htmlText(wrap(language,React.createElement(masterModule.EntityManager,{...base,initialLoading:true})))
+    assert.match(loading,new RegExp(translate(language,'common.loadingData')),`${type} ${language}: loading state`)
+    assert.doesNotMatch(loading,new RegExp(translate(language,emptyKey)),`${type} ${language}: empty shown while loading`)
+    const failed=htmlText(wrap(language,React.createElement(masterModule.EntityManager,{...base,initialLoading:false,initialLoadFailed:true})))
+    assert.doesNotMatch(failed,new RegExp(translate(language,emptyKey)),`${type} ${language}: empty shown after API error`)
+    assert.doesNotMatch(failed,new RegExp(translate(language,'common.loadingData')),`${type} ${language}: loading shown after API error`)
+  }
+})
+
+test('Operational Location坐标及GPS Collector来源选项三语显示正确且内部value稳定',()=>{
+  const sourceValues=['Driver Captured','Customer WhatsApp','Customer Phone','Manual Entry','Supervisor Confirmed']
+  const sourceKeys=['gps.source.driverCaptured','gps.source.customerWhatsApp','gps.source.customerPhone','gps.source.manualEntry','gps.source.supervisorConfirmed']
+  for(const language of ['en','ms','zh']){
+    for(const [source,key] of [['Latitude','master.latitude'],['Longitude','master.longitude']]){
+      const localized=translateSource(language,source)
+      assert.equal(localized,translate(language,key),`Operational Location ${language}: ${source}`)
+      if(language!=='en')assert.notEqual(localized,source,`Operational Location ${language}: English fallback ${source}`)
+    }
+    const gps=htmlText(wrap(language,React.createElement(masterModule.GpsCollector,{reload:0,refresh:noop,notify:noop,fail:noop,actor})))
+    for(const key of ['gps.latitude','gps.longitude','gps.latitudePlaceholder','gps.longitudePlaceholder',...sourceKeys])assert.match(gps,new RegExp(translate(language,key).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')),`GPS Collector ${language}: ${key}`)
+    sourceValues.forEach((value,index)=>{
+      assert.match(gps,new RegExp(`value="${value}"[^>]*>${translate(language,sourceKeys[index]).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}</option>`),`GPS Collector ${language}: stable value ${value}`)
+      if(language!=='en')assert.notEqual(translate(language,sourceKeys[index]),value,`GPS Collector ${language}: English source fallback ${value}`)
+    })
+  }
+})
+
 test('车辆与Operational Location实际主档组件在English与BM不显示CJK界面文字',()=>{
   for(const language of ['en','ms']){
     const vehicle=renderMasterSurface(language,'Vehicle Master loaded state',React.createElement(resourceModule.VehicleMaster,{
