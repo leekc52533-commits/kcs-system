@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import {messages,translate,translateSource} from '../src/translations.js'
 import {assertLocationFields,assertLocationText,containsCjk} from '../shared/locationText.js'
 import {errorCodeFor,publicError} from '../server/errorCodes.mjs'
+import {validateZoneRename} from '../src/zoneRenameValidation.js'
 
 const currentPages=[
   'App.jsx','AccountManagementPage.jsx','AuthPages.jsx','DataPages.jsx','EmployeeMasterPage.jsx',
@@ -89,6 +90,33 @@ test('390px手机布局有响应式保护且不设全局固定最小宽度',()=>
 test('Zone Rename使用应用内Modal并覆盖取消、验证、成功与错误状态',()=>{
   const source=fs.readFileSync(new URL('../src/ZoneGroupManager.jsx',import.meta.url),'utf8')
   assert.doesNotMatch(source,/prompt\(['"]Zone Group Name/)
-  for(const contract of ['role="dialog"','aria-modal="true"',"t('zone.currentName')","t('zone.newName')","t('zone.renameSave')","t('common.cancel')",'validateZoneRename(name,t)','renameSaving','pageError','if(ok)closeRename()'])assert.match(source,new RegExp(contract.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')))
+  for(const contract of ['role="dialog"','aria-modal="true"',"t('zone.currentName')","t('zone.newName')","t('zone.renameSave')","t('common.cancel')",'validateZoneRename(name,t)','onInput={event=>onNameChange(event.currentTarget.value)}','renameSaving','pageError','if(ok)closeRename()'])assert.match(source,new RegExp(contract.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')))
   for(const language of ['en','ms','zh'])for(const key of ['zone.renameTitle','zone.currentName','zone.newName','zone.renameEmpty','zone.renameHelp','zone.renameSuccess'])assert.notEqual(translate(language,key),key)
+})
+
+test('四个正式验收页面的动态文字按语言渲染且数据库原值保持raw',()=>{
+  const surfaces=[
+    '导出 Area-Zone Mapping','不物理删除历史资料；使用 Pause、Resume 或 Close 管理状态。',
+    '显示 118 项','未填写名称/品牌 · 未填写载重 · Base 未设置',
+    '新 Zone 名称','有正式 GPS','停用','显示 9 个 · 已勾选 0 个'
+  ]
+  for(const language of ['en','ms'])for(const source of surfaces)assert.equal(containsCjk(translateSource(language,source)),false,`${language}: ${source}`)
+  assert.equal(translateSource('en','显示 118 项'),'Showing 118 items')
+  assert.equal(translateSource('ms','显示 118 项'),'Memaparkan 118 item')
+  for(const value of ['古晋 A区 BDC','伦乐 / 石隆门区','Lot 376, Jalan Petanak, Sarawak, 马来西亚'])assert.equal(translateSource('en',value),value)
+  const master=fs.readFileSync(new URL('../src/MasterDataPage.jsx',import.meta.url),'utf8')
+  assert.match(master,/data-i18n-raw/)
+})
+
+test('Zone Rename空值和CJK验证不会发出保存请求',()=>{
+  for(const language of ['en','ms','zh']){
+    let saveCount=0
+    const attempt=value=>{const error=validateZoneRename(value,(key)=>translate(language,key));if(!error)saveCount+=1;return error}
+    assert.equal(attempt(''),translate(language,'zone.renameEmpty'))
+    assert.equal(attempt('   '),translate(language,'zone.renameEmpty'))
+    assert.equal(attempt('测试 Zone'),translate(language,'apiError.invalid_location_text'))
+    assert.equal(saveCount,0)
+    assert.equal(attempt('Kuching A — BDC'),'')
+    assert.equal(saveCount,1)
+  }
 })
