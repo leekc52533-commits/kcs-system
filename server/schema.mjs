@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 19
+export const SCHEMA_VERSION = 20
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -161,6 +161,8 @@ CREATE TABLE IF NOT EXISTS employees (
   bank_account_holder_name TEXT,
   epf_number TEXT,
   socso_number TEXT,
+  driving_licence_expiry_date TEXT,
+  gdl_expiry_date TEXT,
   default_base_location_id INTEGER REFERENCES operational_locations(id),
   default_area_id INTEGER REFERENCES areas(id),
   is_active INTEGER NOT NULL DEFAULT 1,

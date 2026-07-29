@@ -11,6 +11,8 @@ export function employeeDetailDraft(employee) {
     employmentType: employee.employmentType || 'Permanent',
     employmentStatus: employee.employmentStatus || 'active',
     employmentStartDate: employee.employmentStartDate || '',
+    drivingLicenceExpiryDate: employee.drivingLicenceExpiryDate || '',
+    gdlExpiryDate: employee.gdlExpiryDate || '',
     defaultBaseLocationId: employee.defaultBaseLocationId || '',
     usualAreaIds: [...(employee.usualAreaIds || [])],
   }

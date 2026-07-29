@@ -7,6 +7,7 @@ import { SCHEMA_VERSION, schemaSql } from './schema.mjs'
 import { applyV17Migration } from './migrationV17.mjs'
 import { applyV18Migration, syncLegacyOccPrices } from './migrationV18.mjs'
 import { applyV19Migration, syncV18BranchPricesToV19 } from './migrationV19.mjs'
+import { applyV20Migration } from './migrationV20.mjs'
 
 const serverDir = path.dirname(fileURLToPath(import.meta.url))
 const projectDir = path.resolve(serverDir, '..')
@@ -240,6 +241,7 @@ if (currentVersion === 0) {
   if (currentVersion < 17) applyV17Migration(db)
   if (currentVersion < 18) applyV18Migration(db)
   if (currentVersion < 19) applyV19Migration(db)
+  if (currentVersion < 20) applyV20Migration(db)
 }
 syncLegacyOccPrices(db)
 syncV18BranchPricesToV19(db)
