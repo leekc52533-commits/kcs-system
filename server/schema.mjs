@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 20
+export const SCHEMA_VERSION = 21
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -1006,6 +1006,8 @@ CREATE TABLE IF NOT EXISTS dispatch_stop_material_prices (
   price_source TEXT NOT NULL CHECK(price_source IN ('price_level','special_price')),
   price_level_id_snapshot INTEGER,
   effective_date_snapshot TEXT,
+  occ_price_group_id_snapshot INTEGER,
+  item_code_snapshot TEXT,
   captured_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(dispatch_stop_id,material_id)
 );
@@ -1073,6 +1075,38 @@ CREATE TABLE IF NOT EXISTS branch_material_price_selection_history (
   changed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS occ_price_groups (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  material_id INTEGER NOT NULL REFERENCES materials(id),
+  item_code TEXT NOT NULL UNIQUE,
+  price_amount REAL NOT NULL CHECK(price_amount>=0),
+  is_fixed INTEGER NOT NULL DEFAULT 1 CHECK(is_fixed IN (0,1)),
+  status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','inactive')),
+  reason TEXT,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(material_id,price_amount)
+);
+
+CREATE TABLE IF NOT EXISTS branch_occ_price_assignments (
+  branch_id INTEGER PRIMARY KEY REFERENCES branches(id) ON DELETE CASCADE,
+  occ_price_group_id INTEGER NOT NULL REFERENCES occ_price_groups(id),
+  assigned_by TEXT NOT NULL,
+  assigned_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS branch_occ_price_assignment_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  branch_id INTEGER NOT NULL REFERENCES branches(id),
+  old_occ_price_group_id INTEGER REFERENCES occ_price_groups(id),
+  new_occ_price_group_id INTEGER NOT NULL REFERENCES occ_price_groups(id),
+  reason TEXT NOT NULL,
+  changed_by TEXT NOT NULL,
+  changed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS branches_customer_idx ON branches(customer_id);
 CREATE INDEX IF NOT EXISTS branches_area_idx ON branches(area_id);
 CREATE INDEX IF NOT EXISTS schedules_branch_idx ON branch_schedules(branch_id);
@@ -1109,6 +1143,8 @@ CREATE INDEX IF NOT EXISTS customer_material_pricing_material_idx ON customer_ma
 CREATE INDEX IF NOT EXISTS customer_material_pricing_history_customer_idx ON customer_material_pricing_history(customer_id,changed_at DESC);
 CREATE INDEX IF NOT EXISTS branch_material_price_selections_branch_idx ON branch_material_price_selections(branch_id);
 CREATE INDEX IF NOT EXISTS branch_material_price_selections_pricing_idx ON branch_material_price_selections(customer_material_pricing_id,price_type);
+CREATE INDEX IF NOT EXISTS occ_price_groups_material_idx ON occ_price_groups(material_id,price_amount);
+CREATE INDEX IF NOT EXISTS branch_occ_price_group_idx ON branch_occ_price_assignments(occ_price_group_id,branch_id);
 
 INSERT OR IGNORE INTO zone_groups(id,code,name,sort_order) VALUES
   (1,'KUCHING-A','Kuching A — BDC',1),

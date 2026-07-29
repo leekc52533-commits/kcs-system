@@ -22,7 +22,8 @@
     "migrate:kcs": "node scripts/migrate.mjs",
     "migrate:v18": "node scripts/migrate-v18.mjs",
     "migrate:v19": "node scripts/migrate-v19.mjs"
-    ,"migrate:v20": "node scripts/migrate-v20.mjs"
+    ,"migrate:v20": "node scripts/migrate-v20.mjs",
+    "migrate:v21": "node scripts/migrate-v21.mjs"
   },
   "dependencies": {
     "exceljs": "^4.4.0",

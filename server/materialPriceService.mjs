@@ -18,7 +18,7 @@ const specialPriceAmount=value=>{
 }
 
 export function listBranchMaterials(branchId,database=defaultDb){
-  return database.prepare(`SELECT s.id,s.branch_id branchInternalId,m.id materialId,m.material_code materialCode,m.material_name materialName,m.unit,
+  const items=database.prepare(`SELECT s.id,s.branch_id branchInternalId,m.id materialId,m.material_code materialCode,m.material_name materialName,m.unit,
     s.price_type priceType,s.customer_material_pricing_id customerMaterialPricingId,s.uses_legacy_price usesLegacyPrice,
     CASE WHEN s.uses_legacy_price=1 THEN s.legacy_price_level_id WHEN s.price_type='outstation' THEN cmp.outstation_price_level_id ELSE cmp.standard_price_level_id END priceLevelId,
     CASE WHEN s.uses_legacy_price=1 THEN s.legacy_special_price WHEN s.price_type='outstation' THEN cmp.outstation_special_price ELSE cmp.standard_special_price END specialPrice,
@@ -38,6 +38,9 @@ export function listBranchMaterials(branchId,database=defaultDb){
     FROM branch_material_prices bmp JOIN materials m ON m.id=bmp.material_id LEFT JOIN material_price_levels pl ON pl.id=bmp.price_level_id
     WHERE bmp.branch_id=? AND NOT EXISTS(SELECT 1 FROM branch_material_price_selections s WHERE s.branch_id=bmp.branch_id AND s.material_id=bmp.material_id)
     ORDER BY materialName`).all(branchId,branchId).map(item=>({...item,usesLegacyPrice:Boolean(item.usesLegacyPrice)}))
+  const group=database.prepare(`SELECT g.id occPriceGroupId,g.item_code itemCode,g.price_amount currentPrice,g.updated_at effectiveDate FROM branch_occ_price_assignments a JOIN occ_price_groups g ON g.id=a.occ_price_group_id WHERE a.branch_id=? AND g.status='active'`).get(branchId)
+  if(group){const occ=items.find(item=>item.materialCode==='OCC');if(occ)Object.assign(occ,group,{priceSource:'occ_price_group',priceLevelId:null,specialPrice:null,usesLegacyPrice:false})}
+  return items
 }
 
 export function listCustomerMaterialPricing(customerId,database=defaultDb){
@@ -229,7 +232,7 @@ export function bulkUpdatePriceLevel(priceLevelId,payload,database=defaultDb){
 
 export function captureDispatchStopPriceSnapshot(stopId,database=defaultDb){
   const stop=database.prepare('SELECT branch_id FROM dispatch_stops WHERE id=?').get(stopId);if(!stop)throw new Error('Dispatch Stop not found')
-  const prices=listBranchMaterials(stop.branch_id,database),insert=database.prepare(`INSERT OR IGNORE INTO dispatch_stop_material_prices(dispatch_stop_id,material_id,material_name_snapshot,unit_snapshot,price_snapshot,price_source,price_level_id_snapshot,effective_date_snapshot) VALUES(?,?,?,?,?,?,?,?)`)
-  for(const item of prices)insert.run(stopId,item.materialId,item.materialName,item.unit,item.currentPrice,item.specialPrice!=null?'special_price':'price_level',item.priceLevelId,item.effectiveDate)
+  const prices=listBranchMaterials(stop.branch_id,database),insert=database.prepare(`INSERT OR IGNORE INTO dispatch_stop_material_prices(dispatch_stop_id,material_id,material_name_snapshot,unit_snapshot,price_snapshot,price_source,price_level_id_snapshot,effective_date_snapshot,occ_price_group_id_snapshot,item_code_snapshot) VALUES(?,?,?,?,?,?,?,?,?,?)`)
+  for(const item of prices)insert.run(stopId,item.materialId,item.materialName,item.unit,item.currentPrice,item.specialPrice!=null?'special_price':'price_level',item.priceLevelId,item.effectiveDate,item.occPriceGroupId||null,item.itemCode||null)
   return database.prepare('SELECT * FROM dispatch_stop_material_prices WHERE dispatch_stop_id=? ORDER BY material_id').all(stopId)
 }

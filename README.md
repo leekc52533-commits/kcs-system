@@ -68,7 +68,7 @@ npm run verify:data   # 核对schema、完整性及核心资料数量
 - `GET /api/import-batches`、`GET /api/import-batches/:id/errors`
 - `POST /api/import/preview`、`POST /api/import/commit`
 
-SQLite schema 目前为 v19。`branches` 保留现有架构，同时保存原始 CustomerID/AreaID，方便显示未匹配关联并保证重复导入幂等。v10 增加完整车辆资料；v11-v13 增加动态 Zone、派车快照及 GPS 推荐；v14-v16 增加 Customer/Employee Master、敏感资料审计与多段 Employment Period；v17 增加兼容式 `system_role`、账号语言偏好及账号身份变更历史；v18 增加通用 Materials、共享 Price Levels、Branch Price List、Special Price、调价审计及派车价格快照；v19 增加 Customer Standard / Outstation Price 与 Branch 价格类型选择。升级不会删除既有周计划、Trip、站点、账号或密码哈希。Route Ready 规则集中在 `shared/importRules.js`。
+SQLite schema 目前为 v21。`branches` 保留现有架构，同时保存原始 CustomerID/AreaID，方便显示未匹配关联并保证重复导入幂等。v20 增加员工驾驶执照/GDL到期日并修正Owner Admin员工管理权限；v21增加幂等的OCC固定价格组、Branch层级指派、批量转移审计及历史价格快照。v21迁移不会转换或清理任何现有顾客价格资料。升级不会删除既有周计划、Trip、站点、账号或密码哈希。Route Ready 规则集中在 `shared/importRules.js`。
 
 ## Schema v18：Materials、Prices 与收货规则
 
