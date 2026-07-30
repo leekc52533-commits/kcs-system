@@ -4,6 +4,7 @@ import {
   COLLECTION_WEEKDAYS,
   normalizeCollectionSettings,
 } from '../shared/collectionSettings.js'
+import {sortMaterials} from '../shared/materialOrder.js'
 
 export {COLLECTION_FREQUENCIES, normalizeCollectionSettings}
 export const WEEKDAYS=COLLECTION_WEEKDAYS
@@ -40,7 +41,7 @@ export function listBranchMaterials(branchId,database=defaultDb){
     ORDER BY materialName`).all(branchId,branchId).map(item=>({...item,usesLegacyPrice:Boolean(item.usesLegacyPrice)}))
   const group=database.prepare(`SELECT g.id occPriceGroupId,g.item_code itemCode,g.price_amount currentPrice,g.updated_at effectiveDate FROM branch_occ_price_assignments a JOIN occ_price_groups g ON g.id=a.occ_price_group_id WHERE a.branch_id=? AND g.status='active'`).get(branchId)
   if(group){const occ=items.find(item=>item.materialCode==='OCC');if(occ)Object.assign(occ,group,{priceSource:'occ_price_group',priceLevelId:null,specialPrice:null,usesLegacyPrice:false})}
-  return items
+  return sortMaterials(items)
 }
 
 export function listCustomerMaterialPricing(customerId,database=defaultDb){
@@ -59,7 +60,7 @@ export function listCustomerMaterialPricing(customerId,database=defaultDb){
     item.standardBranches=database.prepare(`SELECT b.jodoo_branch_id branchId,b.branch_name branchName FROM branch_material_price_selections s JOIN branches b ON b.id=s.branch_id WHERE s.customer_material_pricing_id=? AND s.price_type='standard' ORDER BY b.branch_name`).all(item.id)
     item.outstationBranches=database.prepare(`SELECT b.jodoo_branch_id branchId,b.branch_name branchName FROM branch_material_price_selections s JOIN branches b ON b.id=s.branch_id WHERE s.customer_material_pricing_id=? AND s.price_type='outstation' ORDER BY b.branch_name`).all(item.id)
   }
-  return{...customer,items}
+  return{...customer,items:sortMaterials(items)}
 }
 
 const priceChoice=(item,prefix,database)=>{
@@ -172,10 +173,10 @@ export function replaceBranchMaterials(branchId,items,{changedBy='Supervisor',re
 }
 
 export function listMaterials({includeInactive=false}={},database=defaultDb){
-  return database.prepare(`SELECT m.id,m.material_code materialCode,m.material_name materialName,m.unit,m.status,
+  return sortMaterials(database.prepare(`SELECT m.id,m.material_code materialCode,m.material_name materialName,m.unit,m.status,
     COUNT(DISTINCT pl.id) priceLevelCount,COUNT(DISTINCT COALESCE(s.branch_id,bmp.branch_id)) branchCount
     FROM materials m LEFT JOIN material_price_levels pl ON pl.material_id=m.id LEFT JOIN branch_material_price_selections s ON s.material_id=m.id LEFT JOIN branch_material_prices bmp ON bmp.material_id=m.id AND bmp.status='active'
-    WHERE (?=1 OR m.status='active') GROUP BY m.id ORDER BY m.material_name`).all(includeInactive?1:0)
+    WHERE (?=1 OR m.status='active') GROUP BY m.id`).all(includeInactive?1:0))
 }
 
 export function getMaterial(materialId,database=defaultDb){
