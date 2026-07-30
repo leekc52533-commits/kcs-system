@@ -9,6 +9,7 @@ import { applyV18Migration, syncLegacyOccPrices } from './migrationV18.mjs'
 import { applyV19Migration, syncV18BranchPricesToV19 } from './migrationV19.mjs'
 import { applyV20Migration } from './migrationV20.mjs'
 import { applyV21Migration, seedFixedOccPriceGroups } from './migrationV21.mjs'
+import { applyV22Migration, seedV22MasterData } from './migrationV22.mjs'
 
 const serverDir = path.dirname(fileURLToPath(import.meta.url))
 const projectDir = path.resolve(serverDir, '..')
@@ -244,10 +245,12 @@ if (currentVersion === 0) {
   if (currentVersion < 19) applyV19Migration(db)
   if (currentVersion < 20) applyV20Migration(db)
   if (currentVersion < 21) applyV21Migration(db)
+  if (currentVersion < 22) applyV22Migration(db)
 }
 syncLegacyOccPrices(db)
 syncV18BranchPricesToV19(db)
 seedFixedOccPriceGroups(db)
+seedV22MasterData(db)
 
 const officialVehicles = [
   ['Lorry 1','QAV3468','available',0,null],
@@ -294,7 +297,7 @@ const integrityResult = db.prepare('PRAGMA integrity_check').get()
 if (integrityResult.integrity_check !== 'ok') throw new Error(`Database integrity check failed: ${integrityResult.integrity_check}`)
 
 export function getSystemStatus() {
-  const tableNames = ['materials','material_price_levels','branch_material_prices','material_price_history','branch_material_price_history','dispatch_stop_material_prices','customer_material_pricing','customer_material_pricing_history','branch_material_price_selections','branch_material_price_selection_history','users','auth_accounts','auth_sessions','auth_audit_logs','auth_account_change_history','auth_account_permissions','customers','branches','branch_schedules','zone_groups','areas','zone_boundaries','gps_zone_recommendations','gps_zone_decisions','employees','employee_employment_history','employee_change_history','employee_documents','employee_sensitive_access_logs','vehicles','vehicle_documents','vehicle_maintenance_records','vehicle_fuel_records','vehicle_tyre_records','vehicle_compliance_reminders','vehicle_status_history','vehicle_usage_history','buyers','operational_locations','master_change_history','data_transfer_logs','dispatches','dispatch_stops','dispatch_days','dispatch_trips','special_collection_requests','schedule_exceptions','temporary_locations','gps_migration_batches','gps_migration_rows','stop_documents','import_batches','import_errors','jodoo_sync_events','jodoo_outbox_jobs']
+  const tableNames = ['materials','material_products','material_price_levels','branch_product_availability','customer_product_pricing','legacy_item_product_mappings','branch_material_prices','material_price_history','branch_material_price_history','dispatch_stop_material_prices','customer_material_pricing','customer_material_pricing_history','branch_material_price_selections','branch_material_price_selection_history','users','auth_accounts','auth_sessions','auth_audit_logs','auth_account_change_history','auth_account_permissions','customers','branches','branch_schedules','zone_groups','areas','zone_boundaries','gps_zone_recommendations','gps_zone_decisions','employees','employee_employment_history','employee_change_history','employee_documents','employee_sensitive_access_logs','vehicles','vehicle_documents','vehicle_maintenance_records','vehicle_fuel_records','vehicle_tyre_records','vehicle_compliance_reminders','vehicle_status_history','vehicle_usage_history','buyers','operational_locations','master_change_history','data_transfer_logs','dispatches','dispatch_stops','dispatch_days','dispatch_trips','special_collection_requests','schedule_exceptions','temporary_locations','gps_migration_batches','gps_migration_rows','stop_documents','import_batches','import_errors','jodoo_sync_events','jodoo_outbox_jobs']
   const counts = Object.fromEntries(tableNames.map((table) => [table, db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get().count]))
   return { database: 'connected', schemaVersion: SCHEMA_VERSION, counts }
 }

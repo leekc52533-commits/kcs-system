@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-30 — Schema v22 Material Products
+
+- Added `Material → Product → Price Group`; G1 and G2 are separate Products under the existing Iron Material.
+- Added Full Name, Short Form, controlled Unit, fixed product Price Groups, Legacy Item mapping and future invoice snapshot fields.
+- Added idempotent five-product Branch availability for OCC, MIX PLASTIC, SALI/TIN, G1 and G2 without inventing prices.
+- Added a default dry-run conversion program, transactional explicit apply, unresolved-mapping safety gate and a read-only material issue report.
+- No AWS deployment or production conversion is included.
+
 ## 2026-07-28 — Final production CJK source cleanup
 
 - Replaced the remaining hard-coded Chinese in production JSX, fallbacks, prompts, placeholders, status text and import/export surfaces with translated or English-canonical source text.

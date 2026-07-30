@@ -172,27 +172,37 @@ export function replaceBranchMaterials(branchId,items,{changedBy='Supervisor',re
   return{changed:JSON.stringify(before)!==JSON.stringify(after),items:after,before}
 }
 
+const tableExists=(database,name)=>Boolean(database.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name))
+const materialNameColumns=database=>{
+  const names=new Set(database.prepare('PRAGMA table_info(materials)').all().map(row=>row.name))
+  return{full:names.has('full_name')?'COALESCE(m.full_name,m.material_name)':'m.material_name',short:names.has('short_form')?'m.short_form':'NULL'}
+}
+
 export function listMaterials({includeInactive=false}={},database=defaultDb){
-  return sortMaterials(database.prepare(`SELECT m.id,m.material_code materialCode,m.material_name materialName,m.unit,m.status,
+  const names=materialNameColumns(database)
+  return sortMaterials(database.prepare(`SELECT m.id,m.material_code materialCode,m.material_name materialName,${names.full} fullName,${names.short} shortForm,m.unit,m.status,
     COUNT(DISTINCT pl.id) priceLevelCount,COUNT(DISTINCT COALESCE(s.branch_id,bmp.branch_id)) branchCount
     FROM materials m LEFT JOIN material_price_levels pl ON pl.material_id=m.id LEFT JOIN branch_material_price_selections s ON s.material_id=m.id LEFT JOIN branch_material_prices bmp ON bmp.material_id=m.id AND bmp.status='active'
     WHERE (?=1 OR m.status='active') GROUP BY m.id`).all(includeInactive?1:0))
 }
 
 export function getMaterial(materialId,database=defaultDb){
-  const material=database.prepare('SELECT id,material_code materialCode,material_name materialName,unit,status,created_by createdBy,created_at createdAt,updated_at updatedAt FROM materials WHERE id=?').get(materialId)
+  const names=materialNameColumns(database)
+  const material=database.prepare(`SELECT m.id,m.material_code materialCode,m.material_name materialName,${names.full} fullName,${names.short} shortForm,m.unit,m.status,m.created_by createdBy,m.created_at createdAt,m.updated_at updatedAt FROM materials m WHERE m.id=?`).get(materialId)
   if(!material)return null
   material.priceLevels=database.prepare(`SELECT pl.id,pl.price_amount priceAmount,pl.effective_date effectiveDate,pl.status,pl.reason,pl.created_by createdBy,pl.created_at createdAt,pl.updated_at updatedAt,
     COUNT(DISTINCT bmp.branch_id) affectedBranchCount FROM material_price_levels pl LEFT JOIN branch_material_prices bmp ON bmp.price_level_id=pl.id AND bmp.status='active' WHERE pl.material_id=? GROUP BY pl.id ORDER BY pl.status='active' DESC,pl.price_amount,pl.effective_date DESC`).all(materialId)
   material.branches=database.prepare(`SELECT b.id internalId,b.jodoo_branch_id branchId,c.name customerName,b.branch_name branchName FROM branches b LEFT JOIN customers c ON c.id=b.customer_id WHERE EXISTS(SELECT 1 FROM branch_material_price_selections s WHERE s.branch_id=b.id AND s.material_id=?) OR EXISTS(SELECT 1 FROM branch_material_prices bmp WHERE bmp.branch_id=b.id AND bmp.material_id=? AND bmp.status='active') ORDER BY c.name,b.branch_name`).all(materialId,materialId).map(branch=>({...branch,...listBranchMaterials(branch.internalId,database).find(item=>item.materialId===Number(materialId))}))
   material.history=database.prepare(`SELECT h.*,pl.material_id materialId FROM material_price_history h JOIN material_price_levels pl ON pl.id=h.price_level_id WHERE pl.material_id=? ORDER BY h.id DESC`).all(materialId)
+  material.products=tableExists(database,'material_products')?database.prepare(`SELECT id,product_code productCode,full_name fullName,short_form shortForm,unit,status FROM material_products WHERE material_id=? ORDER BY full_name`).all(materialId):[]
   return material
 }
 
 export function createMaterial(payload,database=defaultDb){
-  const code=text(payload.materialCode).toUpperCase().replace(/[^A-Z0-9]+/g,'_'),name=text(payload.materialName),unit=text(payload.unit)||'kg'
+  const code=text(payload.materialCode).toUpperCase().replace(/[^A-Z0-9]+/g,'_'),name=text(payload.fullName||payload.materialName),shortForm=text(payload.shortForm)||null,unit=text(payload.unit)||'kg'
   if(!code||!name)throw new Error('Material Code and Material Name are required')
-  const result=database.prepare("INSERT INTO materials(material_code,material_name,unit,status,created_by) VALUES(?,?,?,'active',?)").run(code,name,unit,payload.changedBy||'Administrator')
+  if(!['kg','piece'].includes(unit))throw new Error('Unit must be kg or piece')
+  const result=database.prepare("INSERT INTO materials(material_code,material_name,full_name,short_form,unit,status,created_by) VALUES(?,?,?,?,?,'active',?)").run(code,name,name,shortForm,unit,payload.changedBy||'Administrator')
   return getMaterial(Number(result.lastInsertRowid),database)
 }
 

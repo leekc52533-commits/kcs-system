@@ -17,6 +17,7 @@ import { accountCan, bootstrapAccount, changePassword, createAccount, getSession
 import { commitGpsMigration, getGpsMigrationBatch, gpsMigrationTemplate, listGpsMigrationBatches, previewGpsMigration, resolveGpsMigrationRow } from './gpsMigrationService.mjs'
 import { addEmployeeDocument, employeeDetail, employeeDocumentFile, revealEmployeeField, sensitiveAccessLogs, sensitiveEmployeeExport } from './employeeSensitiveService.mjs'
 import { bulkUpdatePriceLevel, createMaterial, createPriceLevel, getMaterial, listMaterials, setPriceLevelStatus } from './materialPriceService.mjs'
+import {listBranchProducts,materialIssueReport} from './materialProductService.mjs'
 import {assignBranchesToOccPriceGroup,bulkTransferOccBranches,createOccPriceGroup,listOccPriceGroups,setOccPriceGroupStatus} from './occPriceGroupService.mjs'
 import {kuchingDate} from '../shared/kuchingTime.js'
 import {publicError} from './errorCodes.mjs'
@@ -94,6 +95,8 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'GET' && url.pathname === '/api/integrations/jodoo/status') return sendJson(response, 200, getJodooIntegrationStatus())
     if (request.method === 'GET' && url.pathname === '/api/dashboard/summary') return sendJson(response, 200, dashboardSummary())
     if (request.method === 'GET' && url.pathname === '/api/materials') return sendJson(response,200,{items:listMaterials({includeInactive:url.searchParams.get('includeInactive')==='true'})})
+    if (request.method === 'GET' && url.pathname === '/api/material-issues') return sendJson(response,200,materialIssueReport(db))
+    if (request.method === 'GET' && /^\/api\/branch-products\/[^/]+$/.test(url.pathname)) return sendJson(response,200,{items:listBranchProducts(decodeURIComponent(url.pathname.split('/').at(-1)),db)})
     if (request.method === 'GET' && /^\/api\/materials\/\d+$/.test(url.pathname)) {const item=getMaterial(Number(url.pathname.split('/').at(-1)));return item?sendJson(response,200,item):sendJson(response,404,{error:'Material not found'})}
     if (request.method === 'POST' && url.pathname === '/api/materials') {if(!accountCan(session,'price_manage'))return sendJson(response,403,{error:'没有 Material 管理权限'});return sendJson(response,201,createMaterial((await readJson(request)).payload))}
     if (request.method === 'POST' && /^\/api\/materials\/\d+\/price-levels$/.test(url.pathname)) {if(!accountCan(session,'price_manage'))return sendJson(response,403,{error:'没有 Price Level 管理权限'});return sendJson(response,201,createPriceLevel(Number(url.pathname.split('/')[3]),(await readJson(request)).payload))}

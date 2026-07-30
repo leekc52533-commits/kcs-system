@@ -201,6 +201,12 @@ public/    网站公开静态资源
 
 运行期间产生的数据保存在本机 `data/` 目录，不进入公开仓库。`.gitignore` 也排除 `uploads/`、`*.sqlite`、`*.sqlite3`、`.env` 和 `01_Source_Data/`。生产使用前应配置备份、访问控制、HTTPS，并完成 Jodoo 测试环境的端到端验证。
 
+## Material Products（Schema v22）
+
+材料价格采用 `Material → Product → Price Group`。Iron 是顶层 Material，G1（Scrap Iron G1）与 G2（Scrap Iron G2）是两个独立 Product，各自拥有价格。每个 Branch 可选择 OCC、MIX PLASTIC、SALI/TIN、G1、G2；可选择与有价格分开，缺价显示 `Price Not Set`，不会自动写入 RM0.00。
+
+v22 转换器默认只做 dry-run，只有显式 `--apply` 才在单一 transaction 写入；未解决映射会阻止 apply。部署、临时副本试跑、历史保护及材料问题报告见 [Material Products v22](docs/MATERIAL_PRODUCTS_V22.md)。
+
 ## Customer Master & Operational Location Foundation V1
 
 KCS 现在是新 Customer、Customer Branch、official/temporary GPS、Buyer 与 Operational Location 的主要维护入口；Jodoo 暂时只继续用于开单。左侧“客户与营运地点”包含：
