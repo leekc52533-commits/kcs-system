@@ -18,28 +18,65 @@ function uniqueOccGroup(database,price){
   return rows[0].id
 }
 
-function resolvedNonOcc(assignments,database){
-  const grouped=new Map(),conflicts=[]
-  for(const row of assignments){
+function customerMappingMap(customerMappings){
+  const map=new Map()
+  for(const item of customerMappings){
+    const legacy=String(item.legacyCustomerId||'').trim(),target=String(item.targetCustomerId||'').trim()
+    if(!legacy||!target)throw new Error('Customer mapping requires legacyCustomerId and targetCustomerId')
+    if(map.has(legacy)&&map.get(legacy)!==target)throw new Error(`Conflicting Customer mappings for ${legacy}`)
+    map.set(legacy,target)
+  }
+  return map
+}
+
+function resolvedNonOcc(assignments,database,mappings){
+  const grouped=new Map(),conflicts=[],auditSources=[]
+  for(const [sourceIndex,row] of assignments.entries()){
     if(!row.customerId||!row.legacyItemId)continue
     const mapping=database.prepare(`SELECT lm.*,p.product_code productCode FROM legacy_item_product_mappings lm
       JOIN material_products p ON p.id=lm.product_id WHERE lm.legacy_item_id=?`).get(String(row.legacyItemId))
     if(!mapping){conflicts.push({...row,reason:'LEGACY_ITEM_NOT_MAPPED'});continue}
-    const customer=database.prepare('SELECT id FROM customers WHERE jodoo_customer_id=?').get(String(row.customerId))
-    if(!customer){conflicts.push({...row,productCode:mapping.productCode,reason:'CUSTOMER_NOT_FOUND'});continue}
+    const legacyCustomerId=String(row.customerId),targetExternalCustomerId=mappings.get(legacyCustomerId)||legacyCustomerId
+    const customer=database.prepare('SELECT id FROM customers WHERE jodoo_customer_id=?').get(targetExternalCustomerId)
+    if(!customer){conflicts.push({...row,productCode:mapping.productCode,targetCustomerId:targetExternalCustomerId,reason:'CUSTOMER_NOT_FOUND'});continue}
     const level=database.prepare(`SELECT id FROM material_price_levels WHERE product_id=? AND price_cents=? AND is_fixed=1`).all(mapping.product_id,cents(row.price))
     if(level.length!==1)throw new Error(`Expected one fixed Price Group for ${mapping.productCode} RM${Number(row.price).toFixed(2)}; found ${level.length}`)
-    const key=`${customer.id}:${mapping.product_id}`,candidate={customerId:customer.id,externalCustomerId:String(row.customerId),productId:mapping.product_id,productCode:mapping.productCode,priceLevelId:level[0].id,price:Number(row.price),legacyItemId:String(row.legacyItemId),legacyName:row.legacyName,preferred:Boolean(mapping.preferred_for_product)}
+    const source={sourceRowId:String(row.sourceRowId||row.dataId||`${legacyCustomerId}:${row.legacyItemId}:${row.price}:${sourceIndex}`),legacyCustomerId,targetCustomerId:targetExternalCustomerId,legacyItemId:String(row.legacyItemId),legacyName:row.legacyName,price:Number(row.price),productCode:mapping.productCode}
+    auditSources.push(source)
+    const key=`${customer.id}:${mapping.product_id}`,candidate={customerId:customer.id,externalCustomerId:targetExternalCustomerId,legacyCustomerId,customerMapped:legacyCustomerId!==targetExternalCustomerId,productId:mapping.product_id,productCode:mapping.productCode,priceLevelId:level[0].id,price:Number(row.price),legacyItemId:String(row.legacyItemId),legacyName:row.legacyName,preferred:Boolean(mapping.preferred_for_product),sources:[source]}
     const existing=grouped.get(key)
     if(!existing||(!existing.preferred&&candidate.preferred))grouped.set(key,candidate)
     else if(existing.preferred===candidate.preferred&&existing.priceLevelId!==candidate.priceLevelId)throw new Error(`Ambiguous current Price Group for Customer ${row.customerId} Product ${mapping.productCode}`)
+    if(existing){
+      const selected=grouped.get(key)
+      if(selected===candidate)selected.sources=[...existing.sources,...candidate.sources]
+      else selected.sources.push(source)
+    }
   }
-  return{rows:[...grouped.values()],conflicts}
+  return{rows:[...grouped.values()],conflicts,auditSources}
 }
 
-export function runMaterialConversion(database,{occPlan=[],nonOccAssignments=[],apply=false,actor='Material conversion v22'}={}){
+function resolveCustomerLinks(database,mappings){
+  const rows=[],conflicts=[]
+  for(const [legacyCustomerId,targetCustomerId] of mappings){
+    const target=database.prepare('SELECT id,jodoo_customer_id,name FROM customers WHERE jodoo_customer_id=?').get(targetCustomerId)
+    if(!target){conflicts.push({legacyCustomerId,targetCustomerId,reason:'TARGET_CUSTOMER_NOT_FOUND'});continue}
+    for(const branch of database.prepare(`SELECT id,jodoo_branch_id branchId,branch_name branchName,customer_id customerId,source_customer_id sourceCustomerId
+      FROM branches WHERE source_customer_id=?`).all(legacyCustomerId)){
+      if(branch.customerId!=null&&branch.customerId!==target.id){
+        conflicts.push({legacyCustomerId,targetCustomerId,branchId:branch.branchId,reason:'BRANCH_LINKED_TO_DIFFERENT_CUSTOMER'})
+        continue
+      }
+      rows.push({...branch,legacyCustomerId,targetCustomerId,targetCustomerInternalId:target.id,targetCustomerName:target.name,requiresUpdate:branch.customerId!==target.id})
+    }
+  }
+  return{rows,conflicts}
+}
+
+export function runMaterialConversion(database,{occPlan=[],nonOccAssignments=[],customerMappings=[],apply=false,actor='Material conversion v22'}={}){
   validate(database)
   const runId=crypto.randomUUID()
+  const mappings=customerMappingMap(customerMappings),customerLinks=resolveCustomerLinks(database,mappings)
   const before={
     occAssignments:tableCount(database,'branch_occ_price_assignments'),
     customerProductPricing:tableCount(database,'customer_product_pricing'),
@@ -52,12 +89,25 @@ export function runMaterialConversion(database,{occPlan=[],nonOccAssignments=[],
       if(!branch)throw new Error(`Branch not found: ${row.branchId}`)
       return{branchId:branch.id,externalBranchId:String(row.branchId),price:Number(row.selectedPrice),groupId:uniqueOccGroup(database,row.selectedPrice)}
     })
-  const nonOccResolution=resolvedNonOcc(nonOccAssignments,database),nonOccRows=nonOccResolution.rows
-  if(apply&&nonOccResolution.conflicts.length)throw new Error(`Conversion blocked by ${nonOccResolution.conflicts.length} unresolved non-OCC mapping conflict(s)`)
-  const changes={occ:0,nonOcc:0,availability:0,audit:0}
+  const nonOccResolution=resolvedNonOcc(nonOccAssignments,database,mappings),nonOccRows=nonOccResolution.rows
+  const blockingConflicts=[...customerLinks.conflicts,...nonOccResolution.conflicts]
+  if(apply&&blockingConflicts.length)throw new Error(`Conversion blocked by ${blockingConflicts.length} unresolved mapping conflict(s)`)
+  const changes={customerLinks:0,occ:0,nonOcc:0,availability:0,legacyAudits:0,audit:0}
   if(apply){
     database.exec('BEGIN IMMEDIATE')
     try{
+      for(const row of customerLinks.rows){
+        if(!row.requiresUpdate)continue
+        database.prepare('UPDATE branches SET customer_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(row.targetCustomerInternalId,row.id)
+        database.prepare(`INSERT INTO material_conversion_audit(run_id,action,entity_type,entity_id,before_json,after_json,changed_by)
+          VALUES(?,'link','branch_customer',?,?,?,?)`).run(runId,String(row.branchId),JSON.stringify({customerId:row.customerId,sourceCustomerId:row.sourceCustomerId}),JSON.stringify({customerId:row.targetCustomerInternalId,targetCustomerId:row.targetCustomerId,legacyCustomerId:row.legacyCustomerId}),actor)
+        changes.customerLinks+=1;changes.audit+=1
+      }
+      for(const source of nonOccResolution.auditSources){
+        const inserted=database.prepare(`INSERT OR IGNORE INTO material_conversion_audit(run_id,action,entity_type,entity_id,before_json,after_json,changed_by)
+          VALUES(?,'preserve','legacy_item_assignment',?,NULL,?,?)`).run(runId,source.sourceRowId,JSON.stringify(source),actor)
+        if(Number(inserted.changes)){changes.legacyAudits+=1;changes.audit+=1}
+      }
       for(const row of occRows){
         const old=database.prepare('SELECT occ_price_group_id id FROM branch_occ_price_assignments WHERE branch_id=?').get(row.branchId)
         if(old?.id===row.groupId)continue
@@ -73,7 +123,7 @@ export function runMaterialConversion(database,{occPlan=[],nonOccAssignments=[],
         database.prepare(`INSERT INTO customer_product_pricing(customer_id,product_id,standard_price_level_id,outstation_enabled,outstation_price_level_id,status,legacy_source_json,updated_by)
           VALUES(?,?,?,0,NULL,'active',?,?)
           ON CONFLICT(customer_id,product_id) DO UPDATE SET standard_price_level_id=excluded.standard_price_level_id,status='active',legacy_source_json=excluded.legacy_source_json,updated_by=excluded.updated_by,updated_at=CURRENT_TIMESTAMP`)
-          .run(row.customerId,row.productId,row.priceLevelId,JSON.stringify({legacyItemId:row.legacyItemId,legacyName:row.legacyName}),actor)
+          .run(row.customerId,row.productId,row.priceLevelId,JSON.stringify({legacyCustomerId:row.legacyCustomerId,targetCustomerId:row.externalCustomerId,legacyItemId:row.legacyItemId,legacyName:row.legacyName,sources:row.sources}),actor)
         database.prepare(`INSERT INTO material_conversion_audit(run_id,action,entity_type,entity_id,before_json,after_json,changed_by)
           VALUES(?,'upsert','customer_product_pricing',?,?,?,?)`).run(runId,`${row.customerId}:${row.productId}`,old?JSON.stringify(old):null,JSON.stringify(row),actor)
         changes.nonOcc+=1;changes.audit+=1
@@ -98,7 +148,20 @@ export function runMaterialConversion(database,{occPlan=[],nonOccAssignments=[],
   if(historicalModified)throw new Error('Historical records changed during conversion')
   return{
     runId,mode:apply?'APPLY':'DRY_RUN',occPreviewCount:occRows.length,nonOccLegacyRows:nonOccAssignments.filter(row=>row.customerId&&row.legacyItemId).length,
-    nonOccCurrentConnections:nonOccRows.length,nonOccConflicts:nonOccResolution.conflicts,changes,before,after,historicalModified,
-    databaseWrites:apply?changes.occ+changes.nonOcc+changes.availability+changes.audit:0,
+    nonOccCurrentConnections:nonOccRows.length,nonOccConflicts:nonOccResolution.conflicts,
+    nonOccReconciliation:{
+      legacySources:nonOccResolution.auditSources.length,
+      uniqueConnections:nonOccRows.length,
+      merges:nonOccRows.filter(row=>row.sources.length>1).map(row=>({
+        targetCustomerId:row.externalCustomerId,
+        productCode:row.productCode,
+        legacySourceCount:row.sources.length,
+        reduction:row.sources.length-1,
+        sources:row.sources,
+      })),
+    },
+    customerMappingPlan:customerLinks.rows.map(row=>({legacyCustomerId:row.legacyCustomerId,targetCustomerId:row.targetCustomerId,branchId:row.branchId,requiresUpdate:row.requiresUpdate})),
+    customerMappingConflicts:customerLinks.conflicts,changes,before,after,historicalModified,
+    databaseWrites:apply?changes.customerLinks+changes.occ+changes.nonOcc+changes.availability+changes.audit:0,
   }
 }

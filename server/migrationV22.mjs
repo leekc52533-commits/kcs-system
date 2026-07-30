@@ -113,6 +113,9 @@ export function ensureV22Tables(database){
       ON branch_product_availability(branch_id,product_id);
     CREATE INDEX IF NOT EXISTS customer_product_pricing_customer_idx
       ON customer_product_pricing(customer_id,product_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS material_conversion_legacy_source_unique
+      ON material_conversion_audit(entity_type,entity_id,action)
+      WHERE entity_type='legacy_item_assignment' AND action='preserve';
   `)
 }
 

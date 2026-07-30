@@ -113,43 +113,60 @@ test('display names use full form for management and short form for compact prin
 test('converter dry-run writes nothing; apply preserves history and second apply is idempotent',()=>{
   const database=fixture({branchCount:2})
   applyV22Migration(database)
+  database.prepare("UPDATE branches SET customer_id=NULL,source_customer_id='LEGACY-C' WHERE jodoo_branch_id='10001'").run()
   database.prepare(`INSERT INTO dispatches(dispatch_date,status) VALUES('2026-07-30','draft')`).run()
   const occPlan=[
     {branchId:'10001',selectedPrice:.18,category:'LATEST_DATED'},
     {branchId:'10002',selectedPrice:null,category:'MANUAL_REQUIRED'},
   ]
   const nonOccAssignments=[
-    {customerId:'C-FIXTURE',legacyItemId:'10024',legacyName:'ALUMININUM ANGLE',price:3.8},
-    {customerId:'C-FIXTURE',legacyItemId:'10029',legacyName:'ALUMINIUM ANGLE',price:5},
-    {customerId:'C-FIXTURE',legacyItemId:'10003',legacyName:'G1',price:.5},
+    {sourceRowId:'SRC-1',customerId:'C-FIXTURE',legacyItemId:'10024',legacyName:'ALUMININUM ANGLE',price:3.8},
+    {sourceRowId:'SRC-2',customerId:'C-FIXTURE',legacyItemId:'10029',legacyName:'ALUMINIUM ANGLE',price:5},
+    {sourceRowId:'SRC-3',customerId:'C-FIXTURE',legacyItemId:'10003',legacyName:'G1',price:.5},
   ]
   const before=JSON.stringify({
     occ:database.prepare('SELECT COUNT(*) count FROM branch_occ_price_assignments').get().count,
     pricing:database.prepare('SELECT COUNT(*) count FROM customer_product_pricing').get().count,
     history:database.prepare('SELECT COUNT(*) count FROM dispatches').get().count,
   })
-  const preview=runMaterialConversion(database,{occPlan,nonOccAssignments})
+  const customerMappings=[{legacyCustomerId:'LEGACY-C',targetCustomerId:'C-FIXTURE'}]
+  nonOccAssignments[0].customerId='LEGACY-C'
+  nonOccAssignments[1].customerId='LEGACY-C'
+  const preview=runMaterialConversion(database,{occPlan,nonOccAssignments,customerMappings})
   assert.equal(preview.mode,'DRY_RUN')
   assert.equal(preview.occPreviewCount,1)
   assert.equal(preview.nonOccLegacyRows,3)
   assert.equal(preview.nonOccCurrentConnections,2)
+  assert.equal(preview.nonOccReconciliation.legacySources,3)
+  assert.equal(preview.nonOccReconciliation.merges.length,1)
+  assert.equal(preview.nonOccReconciliation.merges[0].productCode,'ALUMINIUM_ANGLE')
+  assert.equal(preview.nonOccReconciliation.merges[0].reduction,1)
+  assert.deepEqual(preview.customerMappingPlan,[{legacyCustomerId:'LEGACY-C',targetCustomerId:'C-FIXTURE',branchId:'10001',requiresUpdate:true}])
   assert.equal(preview.databaseWrites,0)
   assert.equal(JSON.stringify({
     occ:database.prepare('SELECT COUNT(*) count FROM branch_occ_price_assignments').get().count,
     pricing:database.prepare('SELECT COUNT(*) count FROM customer_product_pricing').get().count,
     history:database.prepare('SELECT COUNT(*) count FROM dispatches').get().count,
   }),before)
-  const first=runMaterialConversion(database,{occPlan,nonOccAssignments,apply:true})
+  const first=runMaterialConversion(database,{occPlan,nonOccAssignments,customerMappings,apply:true})
+  assert.equal(first.changes.customerLinks,1)
   assert.equal(first.changes.occ,1)
   assert.equal(first.changes.nonOcc,2)
+  assert.equal(first.changes.legacyAudits,3)
   assert.equal(first.historicalModified,0)
   const angle=database.prepare(`SELECT pl.price_cents FROM customer_product_pricing cpp
     JOIN material_products p ON p.id=cpp.product_id JOIN material_price_levels pl ON pl.id=cpp.standard_price_level_id
     WHERE p.product_code='ALUMINIUM_ANGLE'`).get()
   assert.equal(angle.price_cents,500)
-  const second=runMaterialConversion(database,{occPlan,nonOccAssignments,apply:true})
-  assert.deepEqual(second.changes,{occ:0,nonOcc:0,availability:0,audit:0})
+  const source=JSON.parse(database.prepare(`SELECT legacy_source_json source FROM customer_product_pricing cpp
+    JOIN material_products p ON p.id=cpp.product_id WHERE p.product_code='ALUMINIUM_ANGLE'`).get().source)
+  assert.equal(source.legacyCustomerId,'LEGACY-C')
+  assert.equal(source.targetCustomerId,'C-FIXTURE')
+  assert.equal(database.prepare("SELECT customer_id FROM branches WHERE jodoo_branch_id='10001'").get().customer_id,1)
+  const second=runMaterialConversion(database,{occPlan,nonOccAssignments,customerMappings,apply:true})
+  assert.deepEqual(second.changes,{customerLinks:0,occ:0,nonOcc:0,availability:0,legacyAudits:0,audit:0})
   assert.equal(second.databaseWrites,0)
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM material_conversion_audit WHERE entity_type='legacy_item_assignment'").get().count,3)
   assert.equal(database.prepare('SELECT COUNT(*) count FROM dispatches').get().count,1)
   assert.equal(database.prepare('PRAGMA integrity_check').get().integrity_check,'ok')
 })
@@ -164,4 +181,34 @@ test('apply refuses unresolved legacy Customer mappings without partial writes',
   assert.throws(()=>runMaterialConversion(database,{nonOccAssignments:assignments,apply:true}),/blocked by 1 unresolved/)
   assert.equal(database.prepare('SELECT COUNT(*) count FROM customer_product_pricing').get().count,0)
   assert.equal(database.prepare('SELECT COUNT(*) count FROM material_conversion_audit').get().count,0)
+})
+
+test('approved Customer mapping preserves both All Scrapped sources while creating one current connection',()=>{
+  const database=fixture({branchCount:2})
+  applyV22Migration(database)
+  database.prepare("UPDATE branches SET customer_id=NULL,source_customer_id='LEGACY-C' WHERE jodoo_branch_id='10002'").run()
+  const assignments=[
+    {sourceRowId:'ANGLE-OLD',customerId:'C-FIXTURE',legacyItemId:'10024',legacyName:'ALUMININUM ANGLE',price:3.8},
+    {sourceRowId:'ANGLE-CURRENT',customerId:'C-FIXTURE',legacyItemId:'10029',legacyName:'ALUMINIUM ANGLE',price:5},
+    {sourceRowId:'SCRAP-LEGACY',customerId:'LEGACY-C',legacyItemId:'10040',legacyName:'OLD SCRAPPED',price:.1},
+    {sourceRowId:'SCRAP-CURRENT',customerId:'C-FIXTURE',legacyItemId:'10040',legacyName:'OLD SCRAPPED',price:.1},
+  ]
+  const customerMappings=[{legacyCustomerId:'LEGACY-C',targetCustomerId:'C-FIXTURE'}]
+  const preview=runMaterialConversion(database,{nonOccAssignments:assignments,customerMappings})
+  assert.equal(preview.nonOccReconciliation.legacySources,4)
+  assert.equal(preview.nonOccReconciliation.uniqueConnections,2)
+  assert.deepEqual(preview.nonOccReconciliation.merges.map(item=>[item.productCode,item.reduction]).sort(),[
+    ['ALL_SCRAPPED',1],['ALUMINIUM_ANGLE',1],
+  ])
+  const applied=runMaterialConversion(database,{nonOccAssignments:assignments,customerMappings,apply:true})
+  assert.equal(applied.changes.legacyAudits,4)
+  assert.equal(applied.changes.nonOcc,2)
+  assert.equal(database.prepare(`SELECT COUNT(*) count FROM customer_product_pricing cpp
+    JOIN material_products p ON p.id=cpp.product_id WHERE cpp.customer_id=1 AND p.product_code='ALL_SCRAPPED'`).get().count,1)
+  const allScrappedSource=JSON.parse(database.prepare(`SELECT cpp.legacy_source_json source FROM customer_product_pricing cpp
+    JOIN material_products p ON p.id=cpp.product_id WHERE cpp.customer_id=1 AND p.product_code='ALL_SCRAPPED'`).get().source)
+  assert.equal(allScrappedSource.sources.length,2)
+  assert.deepEqual(allScrappedSource.sources.map(item=>item.sourceRowId).sort(),['SCRAP-CURRENT','SCRAP-LEGACY'])
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM material_conversion_audit WHERE entity_type='legacy_item_assignment'").get().count,4)
+  assert.equal(database.prepare("SELECT customer_id FROM branches WHERE jodoo_branch_id='10002'").get().customer_id,1)
 })

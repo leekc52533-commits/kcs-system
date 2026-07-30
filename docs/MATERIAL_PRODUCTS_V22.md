@@ -30,10 +30,13 @@ npm run migrate:v22
 npm run convert:materials -- --db 'C:\explicit\copy.db' `
   --occ-plan 'C:\explicit\occ-plan.json' `
   --item-master 'C:\explicit\Item_Price.xlsx' `
-  --customer-items 'C:\explicit\customer_Item_Price.xlsx'
+  --customer-items 'C:\explicit\customer_Item_Price.xlsx' `
+  --customer-map 'LEGACY_CUSTOMER_ID:CURRENT_CUSTOMER_ID'
 ```
 
-转换器默认 `DRY_RUN`。只有明确加入 `--apply` 才写入；apply 使用单一 transaction。存在未解决的 Legacy Customer/Item 映射时，apply 会停止，不会部分转换。
+转换器默认 `DRY_RUN`。只有明确加入 `--apply` 才写入；apply 使用单一 transaction。经主管确认的Legacy Customer映射必须通过明确的`--customer-map`提供，Legacy ID、目标ID、Item ID和旧名称会保存在审计资料。存在未解决的 Legacy Customer/Item 映射时，apply 会停止，不会部分转换。
+
+当前核准的非OCC对账为27条Legacy来源、25条唯一`Customer + Product`连接：Aluminium Angle的两个旧Item合并一条，Customer映射后相同的All Scrapped来源再合并一条。两组合并都只影响当前唯一连接；27条Legacy来源仍各自写入幂等审计，不删除或覆盖来源记录。
 
 正式执行必须先停止写入、checkpoint WAL、建立已验证备份，并对正式库和备份运行 `PRAGMA integrity_check`。Price Group 按执行数据库自己的 `Product + price_cents` 查找，不写死 ID。
 
@@ -44,4 +47,3 @@ npm run convert:materials -- --db 'C:\explicit\copy.db' `
 ## 历史保护
 
 转换不会删除 Legacy Item、PO、购买、账单、旧价格或 Dispatch snapshot。Full Name、Short Form 与 Unit 只服务当前主档和未来单据；旧单据名称和成交价格保持不变。
-

@@ -19,11 +19,16 @@ const itemById=new Map(itemRows.map(row=>[String(row.ItemID),row]))
 const nonOccAssignments=assignmentRows.map(row=>{
   const item=itemById.get(String(row.ItemID))
   if(!item||/^OCC(?:\s|$)/i.test(String(item.ItemType||'')))return null
-  return{customerId:String(row.CompanyID||''),customerName:row['Company Name'],legacyItemId:String(row.ItemID||''),legacyName:row.Item,price:Number(item.Price)}
+  return{sourceRowId:String(row.data_id||''),customerId:String(row.CompanyID||''),customerName:row['Company Name'],legacyItemId:String(row.ItemID||''),legacyName:row.Item,price:Number(item.Price)}
 }).filter(Boolean)
 const occPlan=JSON.parse(fs.readFileSync(occPlanPath,'utf8')).results
+const customerMappings=[]
+for(let index=0;index<args.length;index+=1)if(args[index]==='--customer-map'){
+  const [legacyCustomerId,targetCustomerId]=String(args[index+1]||'').split(':')
+  customerMappings.push({legacyCustomerId,targetCustomerId})
+}
 const database=new DatabaseSync(dbPath);database.exec('PRAGMA foreign_keys=ON;PRAGMA busy_timeout=5000')
-const result=runMaterialConversion(database,{occPlan,nonOccAssignments,apply})
+const result=runMaterialConversion(database,{occPlan,nonOccAssignments,customerMappings,apply})
 const report=materialIssueReport(database)
 console.log(JSON.stringify({...result,materialIssues:report.summary,coverage:report.coverage},null,2))
 database.close()
