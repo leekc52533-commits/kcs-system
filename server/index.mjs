@@ -18,7 +18,7 @@ import { commitGpsMigration, getGpsMigrationBatch, gpsMigrationTemplate, listGps
 import { addEmployeeDocument, employeeDetail, employeeDocumentFile, revealEmployeeField, sensitiveAccessLogs, sensitiveEmployeeExport } from './employeeSensitiveService.mjs'
 import { bulkUpdatePriceLevel, createMaterial, createPriceLevel, getMaterial, listMaterials, setPriceLevelStatus } from './materialPriceService.mjs'
 import {listBranchProducts,materialIssueReport} from './materialProductService.mjs'
-import {assignBranchesToOccPriceGroup,bulkTransferOccBranches,createOccPriceGroup,listOccPriceGroups,setOccPriceGroupStatus} from './occPriceGroupService.mjs'
+import {assignBranchesToOccPriceGroup,bulkTransferOccBranches,createOccPriceGroup,listOccPriceGroups,setOccPriceGroupStatus,updateOccPriceGroup} from './occPriceGroupService.mjs'
 import {kuchingDate} from '../shared/kuchingTime.js'
 import {publicError} from './errorCodes.mjs'
 import {assertLocationFields} from '../shared/locationText.js'
@@ -105,6 +105,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'GET' && url.pathname === '/api/occ-price-groups') return sendJson(response,200,listOccPriceGroups())
     if (request.method === 'POST' && url.pathname === '/api/occ-price-groups') {if(!accountCan(session,'price_manage'))return sendJson(response,403,{error:'没有OCC价格组管理权限'});return sendJson(response,201,createOccPriceGroup((await readJson(request)).payload))}
     if (request.method === 'PATCH' && /^\/api\/occ-price-groups\/\d+\/status$/.test(url.pathname)) {if(!accountCan(session,'price_manage'))return sendJson(response,403,{error:'没有OCC价格组管理权限'});const payload=(await readJson(request)).payload;return sendJson(response,200,setOccPriceGroupStatus(Number(url.pathname.split('/')[3]),payload.status,payload))}
+    if (request.method === 'PATCH' && /^\/api\/occ-price-groups\/\d+\/price$/.test(url.pathname)) {if(!accountCan(session,'price_manage'))return sendJson(response,403,{error:'没有OCC价格组管理权限'});const payload=(await readJson(request)).payload;return sendJson(response,200,updateOccPriceGroup(Number(url.pathname.split('/')[3]),{...payload,changedBy:session.employeeName}))}
     if (request.method === 'POST' && /^\/api\/occ-price-groups\/\d+\/assign$/.test(url.pathname)) {if(!accountCan(session,'price_manage'))return sendJson(response,403,{error:'没有OCC价格组管理权限'});const payload=(await readJson(request)).payload;return sendJson(response,200,assignBranchesToOccPriceGroup(Number(url.pathname.split('/')[3]),payload.branchIds,payload))}
     if (request.method === 'POST' && url.pathname === '/api/occ-price-groups/bulk-transfer') {if(!accountCan(session,'price_manage'))return sendJson(response,403,{error:'没有OCC批量转移权限'});const payload=(await readJson(request)).payload;return sendJson(response,200,bulkTransferOccBranches(payload.sourceGroupId,payload.targetGroupId,payload.branchIds,payload))}
     if (request.method === 'GET' && url.pathname === '/api/master/area-closeout') return sendJson(response,200,areaCloseout())

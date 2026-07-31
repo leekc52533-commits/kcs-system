@@ -10,6 +10,7 @@ import { applyV19Migration, syncV18BranchPricesToV19 } from './migrationV19.mjs'
 import { applyV20Migration } from './migrationV20.mjs'
 import { applyV21Migration, seedFixedOccPriceGroups } from './migrationV21.mjs'
 import { applyV22Migration, seedV22MasterData } from './migrationV22.mjs'
+import { applyV23Migration } from './migrationV23.mjs'
 
 const serverDir = path.dirname(fileURLToPath(import.meta.url))
 const projectDir = path.resolve(serverDir, '..')
@@ -246,6 +247,7 @@ if (currentVersion === 0) {
   if (currentVersion < 20) applyV20Migration(db)
   if (currentVersion < 21) applyV21Migration(db)
   if (currentVersion < 22) applyV22Migration(db)
+  if (currentVersion < 23) applyV23Migration(db)
 }
 syncLegacyOccPrices(db)
 syncV18BranchPricesToV19(db)
