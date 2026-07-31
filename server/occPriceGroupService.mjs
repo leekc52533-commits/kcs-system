@@ -4,6 +4,7 @@ import {ensureV23Tables} from './migrationV23.mjs'
 
 const text=value=>String(value??'').trim()
 const price=value=>{const number=Number(value);if(!Number.isFinite(number)||number<0)throw new Error('OCC price must be zero or greater');return Math.round(number*100)/100}
+const occError=(code,message,statusCode=400)=>{const error=new Error(message);error.code=code;error.statusCode=statusCode;return error}
 const groupRow=(database,id)=>{ensureV23Tables(database);return database.prepare(`SELECT g.id,g.item_code itemCode,g.group_name groupName,g.price_amount priceAmount,g.previous_price_amount previousPriceAmount,g.pending_price_amount pendingPriceAmount,g.pending_effective_date pendingEffectiveDate,g.is_fixed isFixed,g.status,g.reason,g.created_by createdBy,g.created_at createdAt,g.updated_at updatedAt,COUNT(a.branch_id) branchCount FROM occ_price_groups g LEFT JOIN branch_occ_price_assignments a ON a.occ_price_group_id=g.id WHERE g.id=? GROUP BY g.id`).get(id)}
 
 export function listOccPriceGroups(database=defaultDb){
@@ -69,9 +70,25 @@ export function assignBranchesToOccPriceGroup(groupId,branchIds,payload={},datab
 }
 
 export function bulkTransferOccBranches(sourceGroupId,targetGroupId,branchIds,payload={},database=defaultDb){
-  if(Number(sourceGroupId)===Number(targetGroupId))throw new Error('Source and target OCC Price Groups must be different')
-  const source=groupRow(database,sourceGroupId),target=groupRow(database,targetGroupId);if(!source||!target)throw new Error('Source or target OCC Price Group not found');if(target.status!=='active')throw new Error('Target OCC Price Group is not active')
-  const ids=[...new Set((branchIds||[]).map(Number).filter(Boolean))];if(!ids.length)throw new Error('Select at least one Branch')
-  for(const id of ids)if(!database.prepare('SELECT 1 FROM branch_occ_price_assignments WHERE branch_id=? AND occ_price_group_id=?').get(id,sourceGroupId))throw new Error(`Branch ${id} is not assigned to the source OCC Price Group`)
-  return{sourceGroup:source,...assignBranchesToOccPriceGroup(targetGroupId,ids,payload,database)}
+  const sourceId=Number(sourceGroupId),targetId=Number(targetGroupId),ids=[...new Set((branchIds||[]).map(Number).filter(Boolean))],reason=text(payload.reason),actor=text(payload.changedBy)||'Owner Admin'
+  if(!ids.length)throw occError('OCC_NO_BRANCHES_SELECTED','No branches were selected.')
+  if(!reason)throw occError('OCC_MOVE_REASON_REQUIRED','A move reason is required.')
+  if(sourceId===targetId)throw occError('OCC_SAME_GROUP','Source and target price groups cannot be the same.')
+  database.exec('BEGIN IMMEDIATE')
+  try{
+    const source=groupRow(database,sourceId),target=groupRow(database,targetId)
+    if(!source||!target)throw occError('OCC_GROUP_NOT_FOUND','Source or target OCC Price Group not found.',404)
+    if(target.status!=='active')throw occError('OCC_TARGET_INACTIVE','Target OCC Price Group is not active.')
+    const changed=[]
+    for(const branchId of ids){
+      const assigned=database.prepare('SELECT occ_price_group_id groupId FROM branch_occ_price_assignments WHERE branch_id=?').get(branchId)
+      if(Number(assigned?.groupId)!==sourceId)throw occError('OCC_BRANCH_SOURCE_CHANGED','One or more branches no longer belong to the source OCC Price Group. Refresh and try again.',409)
+      const branch=assertOccBranch(database,branchId)
+      database.prepare('UPDATE branch_occ_price_assignments SET occ_price_group_id=?,assigned_by=?,updated_at=CURRENT_TIMESTAMP WHERE branch_id=?').run(targetId,actor,branchId)
+      database.prepare('INSERT INTO branch_occ_price_assignment_history(branch_id,old_occ_price_group_id,new_occ_price_group_id,reason,changed_by) VALUES(?,?,?,?,?)').run(branchId,sourceId,targetId,reason,actor)
+      changed.push(branch)
+    }
+    database.exec('COMMIT')
+    return{sourceGroup:groupRow(database,sourceId),targetGroup:groupRow(database,targetId),changedCount:changed.length,branches:changed}
+  }catch(error){database.exec('ROLLBACK');throw error}
 }

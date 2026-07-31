@@ -9,9 +9,9 @@ import {captureDispatchStopPriceSnapshot,createPriceLevel,listBranchMaterials,re
 const database=()=>{const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON;'+schemaSql);seedFixedOccPriceGroups(db);return db}
 const branchWithOcc=db=>{
   db.prepare("INSERT INTO customers(jodoo_customer_id,name) VALUES('C1','Customer')").run()
-  db.prepare("INSERT INTO branches(jodoo_branch_id,customer_id,branch_name) VALUES('B1',1,'Branch 1'),('B2',1,'Branch 2'),('B3',1,'Branch 3')").run()
+  db.prepare("INSERT INTO branches(jodoo_branch_id,customer_id,branch_name) VALUES('B1',1,'Branch 1'),('B2',1,'Branch 2'),('B3',1,'Branch 3'),('B4',1,'Branch 4'),('B5',1,'Branch 5')").run()
   const occ=db.prepare("SELECT id FROM materials WHERE material_code='OCC'").get(),level=createPriceLevel(occ.id,{priceAmount:.2,effectiveDate:'2026-01-01',reason:'Test'},db)
-  for(const id of [1,2,3])replaceBranchMaterials(id,[{materialId:occ.id,priceLevelId:level.id}],{},db)
+  for(const id of [1,2,3,4,5])replaceBranchMaterials(id,[{materialId:occ.id,priceLevelId:level.id}],{},db)
   return{occ,level}
 }
 
@@ -44,11 +44,35 @@ test('selected Branches transfer between groups atomically with audit and desele
   assert.equal(audit.length,2);assert.equal(audit[0].old_occ_price_group_id,source.id);assert.equal(audit[0].new_occ_price_group_id,target.id);assert.equal(audit[0].changed_by,'Owner')
 })
 
+test('five Branches move to an existing stable Group ID and counts refresh from the database',()=>{
+  const db=database();branchWithOcc(db);const groups=listOccPriceGroups(db).items,source=groups.find(item=>item.priceAmount===.15),target=groups.find(item=>item.priceAmount===.16)
+  assignBranchesToOccPriceGroup(source.id,[1,2,3,4,5],{reason:'Initial assignment',changedBy:'Owner'},db)
+  const result=bulkTransferOccBranches(source.id,target.id,[1,2,3,4,5],{reason:'Approved five Branch move',changedBy:'Kc Lee'},db),reloaded=listOccPriceGroups(db).items
+  assert.equal(result.changedCount,5)
+  assert.equal(reloaded.find(item=>item.id===source.id).branchCount,0)
+  assert.equal(reloaded.find(item=>item.id===target.id).branchCount,5)
+  assert.equal(db.prepare('SELECT COUNT(*) count FROM branch_occ_price_assignments WHERE occ_price_group_id=?').get(target.id).count,5)
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM branch_occ_price_assignment_history WHERE reason='Approved five Branch move' AND changed_by='Kc Lee'").get().count,5)
+  assert.equal(db.prepare('SELECT COUNT(*) count FROM occ_price_groups WHERE id=?').get(source.id).count,1)
+})
+
+test('bulk move validation returns stable codes and stale membership rolls back the entire batch',()=>{
+  const db=database();branchWithOcc(db);const groups=listOccPriceGroups(db).items,source=groups.find(item=>item.priceAmount===.15),target=groups.find(item=>item.priceAmount===.16)
+  assignBranchesToOccPriceGroup(source.id,[1,2],{reason:'Initial assignment',changedBy:'Owner'},db)
+  assert.throws(()=>bulkTransferOccBranches(source.id,target.id,[],{reason:'Move',changedBy:'Owner'},db),error=>error.code==='OCC_NO_BRANCHES_SELECTED')
+  assert.throws(()=>bulkTransferOccBranches(source.id,source.id,[1],{reason:'Move',changedBy:'Owner'},db),error=>error.code==='OCC_SAME_GROUP')
+  assert.throws(()=>bulkTransferOccBranches(source.id,target.id,[1],{reason:'',changedBy:'Owner'},db),error=>error.code==='OCC_MOVE_REASON_REQUIRED')
+  db.prepare('UPDATE branch_occ_price_assignments SET occ_price_group_id=? WHERE branch_id=2').run(target.id)
+  assert.throws(()=>bulkTransferOccBranches(source.id,target.id,[1,2],{reason:'Stale page',changedBy:'Owner'},db),error=>error.code==='OCC_BRANCH_SOURCE_CHANGED'&&error.statusCode===409)
+  assert.equal(db.prepare('SELECT occ_price_group_id id FROM branch_occ_price_assignments WHERE branch_id=1').get().id,source.id)
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM branch_occ_price_assignment_history WHERE reason='Stale page'").get().count,0)
+})
+
 test('used group cannot be hidden and invalid source transfer rolls back',()=>{
   const db=database();branchWithOcc(db);const groups=listOccPriceGroups(db).items,source=groups.find(item=>item.priceAmount===.2),target=groups.find(item=>item.priceAmount===.3)
   assignBranchesToOccPriceGroup(source.id,[1],{reason:'Use group',changedBy:'Owner'},db)
   assert.throws(()=>setOccPriceGroupStatus(source.id,'inactive',{reason:'Hide'},db),/cannot be hidden/)
-  assert.throws(()=>bulkTransferOccBranches(source.id,target.id,[1,2],{reason:'Invalid mixed transfer',changedBy:'Owner'},db),/not assigned/)
+  assert.throws(()=>bulkTransferOccBranches(source.id,target.id,[1,2],{reason:'Invalid mixed transfer',changedBy:'Owner'},db),/no longer belong/)
   assert.equal(db.prepare('SELECT occ_price_group_id id FROM branch_occ_price_assignments WHERE branch_id=1').get().id,source.id)
 })
 

@@ -6,6 +6,8 @@ import {seedFixedOccPriceGroups} from '../server/migrationV21.mjs'
 import {applyV23Migration} from '../server/migrationV23.mjs'
 import {assignBranchesToOccPriceGroup,createOccPriceGroup,listOccPriceGroups,updateOccPriceGroup} from '../server/occPriceGroupService.mjs'
 import {createPriceLevel,replaceBranchMaterials} from '../server/materialPriceService.mjs'
+import {accountCan,roleCan} from '../server/authService.mjs'
+import {apiErrorMessage,setApiLanguage} from '../src/apiClient.js'
 
 const fixture=()=>{
   const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON;'+schemaSql)
@@ -58,9 +60,29 @@ test('UI sources use used-group cards, branch detail management and modal master
   assert.match(materials,/Show unused price groups/)
   assert.match(materials,/Search Customer Code \/ Customer \/ Branch/)
   assert.match(materials,/Price Not Set/)
+  assert.match(materials,/>Preview Move</)
+  assert.match(materials,/Confirm Move/)
+  assert.match(materials,/OCC Branch move preview/)
+  assert.doesNotMatch(materials,/Preview \/ Confirm Move/)
+  assert.doesNotMatch(materials,/confirm\(`Move \$\{selected\.length\}/)
   assert.match(employees,/showCreate&&<div className="employee-detail-backdrop"/)
   assert.match(employees,/EmployeeCreateDetail/)
   assert.match(zones,/showCreate&&<div className="zone-rename-backdrop"/)
   assert.doesNotMatch(master,/area-closeout/)
   assert.doesNotMatch(master,/\['transfer','master\.importExport'\]/)
+})
+
+test('OCC move permission remains server-authorized and API errors are specific in all languages',async()=>{
+  assert.equal(roleCan('owner_admin','price_manage'),true)
+  assert.equal(roleCan('office','price_manage'),false)
+  const db=fixture();db.prepare("INSERT INTO employees(employee_code,name,job_role) VALUES('SUP-OCC','OCC Supervisor','Supervisor')").run();const account=db.prepare("INSERT INTO auth_accounts(employee_id,username,password_hash,role) VALUES(1,'supervisor-test','hash','supervisor')").run()
+  assert.equal(accountCan({id:Number(account.lastInsertRowid),role:'supervisor'},'price_manage',db),false)
+  const routes=(await import('node:fs')).readFileSync(new URL('../server/index.mjs',import.meta.url),'utf8')
+  assert.match(routes,/occ-price-groups\/bulk-transfer[\s\S]*accountCan\(session,'price_manage'\)/)
+  assert.match(routes,/bulkTransferOccBranches\([\s\S]*changedBy:session\.employeeName/)
+  for(const language of ['en','ms','zh']){
+    setApiLanguage(language)
+    assert.notEqual(apiErrorMessage({errorCode:'OCC_BRANCH_SOURCE_CHANGED'}),'apiError.occ_branch_source_changed')
+    assert.notEqual(apiErrorMessage({errorCode:'OCC_NO_BRANCHES_SELECTED'}),'apiError.occ_no_branches_selected')
+  }
 })
