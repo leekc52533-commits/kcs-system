@@ -1,4 +1,5 @@
 import http from 'node:http'
+import crypto from 'node:crypto'
 import os from 'node:os'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -55,6 +56,8 @@ async function readJson(request, maxBytes = 15_000_000) {
 }
 
 const server = http.createServer(async (request, response) => {
+  const requestId=crypto.randomUUID()
+  response.setHeader('X-Request-ID',requestId)
   try {
     const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`)
     if (request.method === 'OPTIONS') {
@@ -107,7 +110,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'PATCH' && /^\/api\/occ-price-groups\/\d+\/status$/.test(url.pathname)) {if(!accountCan(session,'price_manage'))return sendJson(response,403,{error:'没有OCC价格组管理权限'});const payload=(await readJson(request)).payload;return sendJson(response,200,setOccPriceGroupStatus(Number(url.pathname.split('/')[3]),payload.status,payload))}
     if (request.method === 'PATCH' && /^\/api\/occ-price-groups\/\d+\/price$/.test(url.pathname)) {if(!accountCan(session,'price_manage'))return sendJson(response,403,{error:'没有OCC价格组管理权限'});const payload=(await readJson(request)).payload;return sendJson(response,200,updateOccPriceGroup(Number(url.pathname.split('/')[3]),{...payload,changedBy:session.employeeName}))}
     if (request.method === 'POST' && /^\/api\/occ-price-groups\/\d+\/assign$/.test(url.pathname)) {if(!accountCan(session,'price_manage'))return sendJson(response,403,{error:'没有OCC价格组管理权限'});const payload=(await readJson(request)).payload;return sendJson(response,200,assignBranchesToOccPriceGroup(Number(url.pathname.split('/')[3]),payload.branchIds,payload))}
-    if (request.method === 'POST' && url.pathname === '/api/occ-price-groups/bulk-transfer') {if(!accountCan(session,'price_manage'))return sendJson(response,403,{error:'没有OCC批量转移权限'});const payload=(await readJson(request)).payload;return sendJson(response,200,bulkTransferOccBranches(payload.sourceGroupId,payload.targetGroupId,payload.branchIds,{...payload,changedBy:session.employeeName}))}
+    if (request.method === 'POST' && url.pathname === '/api/occ-price-groups/bulk-transfer') {if(!accountCan(session,'price_manage'))return sendJson(response,403,{error:'没有OCC批量转移权限'});const payload=(await readJson(request)).payload;request.kcsDiagnostic={operation:'occ_bulk_transfer',sourceGroupId:Number(payload.sourceGroupId)||null,targetGroupId:Number(payload.targetGroupId)||null,branchCount:Array.isArray(payload.branchIds)?payload.branchIds.length:0};return sendJson(response,200,bulkTransferOccBranches(payload.sourceGroupId,payload.targetGroupId,payload.branchIds,{...payload,changedBy:session.employeeName}))}
     if (request.method === 'GET' && url.pathname === '/api/master/area-closeout') return sendJson(response,200,areaCloseout())
     if (request.method === 'GET' && url.pathname === '/api/master/audit') return sendJson(response,200,{items:listMasterAudit(Object.fromEntries(url.searchParams))})
     if (request.method === 'GET' && url.pathname === '/api/customers') return sendJson(response,200,listCustomers(Object.fromEntries(url.searchParams)))
@@ -233,7 +236,9 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && url.pathname === '/api/import/commit') return sendJson(response, 200, commitImport((await readJson(request)).payload.batchId))
     return sendJson(response, 404, { error: 'Not found' })
   } catch (error) {
-    return sendJson(response, error.statusCode || (error instanceof SyntaxError ? 400 : 500), publicError(error))
+    const status=error.statusCode || (error instanceof SyntaxError ? 400 : 500),body={...publicError(error),requestId}
+    console.error(JSON.stringify({event:'api_error',requestId,method:request.method,path:String(request.url||'').split('?')[0],status,errorCode:body.errorCode,message:String(error?.message||error),diagnostic:request.kcsDiagnostic||null}))
+    return sendJson(response,status,body)
   }
 })
 

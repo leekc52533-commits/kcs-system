@@ -56,6 +56,33 @@ test('five Branches move to an existing stable Group ID and counts refresh from 
   assert.equal(db.prepare('SELECT COUNT(*) count FROM occ_price_groups WHERE id=?').get(source.id).count,1)
 })
 
+test('v22 converted Branches move by stable OCC assignment without a legacy price-list row',()=>{
+  const db=database()
+  db.prepare("INSERT INTO customers(jodoo_customer_id,name) VALUES('C-CONVERTED','Converted Customer')").run()
+  db.prepare("INSERT INTO branches(jodoo_branch_id,customer_id,branch_name) VALUES('10380',1,'LANDEH'),('10381',1,'WELLNESS SARADISE'),('10382',1,'SEKOLAH'),('10383',1,'GOLD PALM OIL TEMATU'),('10384',1,'KIAN KWONG BAU')").run()
+  const groups=listOccPriceGroups(db).items,source=groups.find(item=>item.priceAmount===.15),target=groups.find(item=>item.priceAmount===.16)
+  for(const branchId of [1,2,3,4,5])db.prepare("INSERT INTO branch_occ_price_assignments(branch_id,occ_price_group_id,assigned_by) VALUES(?,?, 'Material conversion v22')").run(branchId,source.id)
+  assert.equal(db.prepare('SELECT COUNT(*) count FROM branch_material_price_selections').get().count,0)
+  assert.equal(db.prepare('SELECT COUNT(*) count FROM branch_material_prices').get().count,0)
+  const result=bulkTransferOccBranches(source.id,target.id,[1,2,3,4,5],{reason:'Production-shape transfer',changedBy:'Kc Lee'},db)
+  assert.equal(result.changedCount,5)
+  assert.equal(result.sourceGroup.branchCount,0)
+  assert.equal(result.targetGroup.branchCount,5)
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM branch_occ_price_assignment_history WHERE reason='Production-shape transfer'").get().count,5)
+})
+
+test('audit insertion failure rolls back every converted Branch assignment',()=>{
+  const db=database()
+  db.prepare("INSERT INTO customers(jodoo_customer_id,name) VALUES('C-ROLLBACK','Rollback Customer')").run()
+  db.prepare("INSERT INTO branches(jodoo_branch_id,customer_id,branch_name) VALUES('RB1',1,'One'),('RB2',1,'Two')").run()
+  const groups=listOccPriceGroups(db).items,source=groups.find(item=>item.priceAmount===.15),target=groups.find(item=>item.priceAmount===.16)
+  for(const branchId of [1,2])db.prepare("INSERT INTO branch_occ_price_assignments(branch_id,occ_price_group_id,assigned_by) VALUES(?,?, 'Material conversion v22')").run(branchId,source.id)
+  db.exec("CREATE TRIGGER reject_occ_audit BEFORE INSERT ON branch_occ_price_assignment_history BEGIN SELECT RAISE(ABORT,'audit unavailable'); END")
+  assert.throws(()=>bulkTransferOccBranches(source.id,target.id,[1,2],{reason:'Must roll back',changedBy:'Kc Lee'},db),/audit unavailable/)
+  assert.equal(db.prepare('SELECT COUNT(*) count FROM branch_occ_price_assignments WHERE occ_price_group_id=?').get(source.id).count,2)
+  assert.equal(db.prepare('SELECT COUNT(*) count FROM branch_occ_price_assignments WHERE occ_price_group_id=?').get(target.id).count,0)
+})
+
 test('bulk move validation returns stable codes and stale membership rolls back the entire batch',()=>{
   const db=database();branchWithOcc(db);const groups=listOccPriceGroups(db).items,source=groups.find(item=>item.priceAmount===.15),target=groups.find(item=>item.priceAmount===.16)
   assignBranchesToOccPriceGroup(source.id,[1,2],{reason:'Initial assignment',changedBy:'Owner'},db)

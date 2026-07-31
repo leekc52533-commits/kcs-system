@@ -7,7 +7,7 @@ import {applyV23Migration} from '../server/migrationV23.mjs'
 import {assignBranchesToOccPriceGroup,createOccPriceGroup,listOccPriceGroups,updateOccPriceGroup} from '../server/occPriceGroupService.mjs'
 import {createPriceLevel,replaceBranchMaterials} from '../server/materialPriceService.mjs'
 import {accountCan,roleCan} from '../server/authService.mjs'
-import {apiErrorMessage,setApiLanguage} from '../src/apiClient.js'
+import {apiErrorMessage,apiRequest,setApiLanguage} from '../src/apiClient.js'
 
 const fixture=()=>{
   const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON;'+schemaSql)
@@ -80,9 +80,21 @@ test('OCC move permission remains server-authorized and API errors are specific 
   const routes=(await import('node:fs')).readFileSync(new URL('../server/index.mjs',import.meta.url),'utf8')
   assert.match(routes,/occ-price-groups\/bulk-transfer[\s\S]*accountCan\(session,'price_manage'\)/)
   assert.match(routes,/bulkTransferOccBranches\([\s\S]*changedBy:session\.employeeName/)
+  assert.match(routes,/X-Request-ID/)
+  assert.match(routes,/event:'api_error'/)
   for(const language of ['en','ms','zh']){
     setApiLanguage(language)
     assert.notEqual(apiErrorMessage({errorCode:'OCC_BRANCH_SOURCE_CHANGED'}),'apiError.occ_branch_source_changed')
     assert.notEqual(apiErrorMessage({errorCode:'OCC_NO_BRANCHES_SELECTED'}),'apiError.occ_no_branches_selected')
+    assert.notEqual(apiErrorMessage({errorCode:'OCC_BRANCH_NOT_FOUND'}),'apiError.occ_branch_not_found')
   }
+})
+
+test('API failures retain specific status and expose a safe correlation reference',async()=>{
+  const original=globalThis.fetch
+  try{
+    globalThis.fetch=async()=>new Response(JSON.stringify({errorCode:'OCC_BRANCH_SOURCE_CHANGED',requestId:'req-safe-123'}),{status:409,headers:{'Content-Type':'application/json','X-Request-ID':'req-safe-123'}})
+    setApiLanguage('en')
+    await assert.rejects(()=>apiRequest('/api/occ-price-groups/bulk-transfer',{method:'POST'}),error=>error.status===409&&error.code==='OCC_BRANCH_SOURCE_CHANGED'&&error.requestId==='req-safe-123'&&/Reference: req-safe-123/.test(error.message))
+  }finally{globalThis.fetch=original}
 })

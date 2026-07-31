@@ -58,6 +58,12 @@ const assertOccBranch=(database,branchId)=>{
   return branch
 }
 
+const assertAssignedOccBranch=(database,branchId)=>{
+  const branch=database.prepare(`SELECT b.id,b.jodoo_branch_id branchId,b.branch_name branchName,c.name customerName FROM branches b LEFT JOIN customers c ON c.id=b.customer_id WHERE b.id=?`).get(branchId)
+  if(!branch)throw occError('OCC_BRANCH_NOT_FOUND',`Branch not found: ${branchId}`,404)
+  return branch
+}
+
 export function assignBranchesToOccPriceGroup(groupId,branchIds,payload={},database=defaultDb){
   const group=groupRow(database,groupId);if(!group||group.status!=='active')throw new Error('Target OCC Price Group is not active')
   const ids=[...new Set((branchIds||[]).map(Number).filter(Boolean))],reason=text(payload.reason);if(!ids.length)throw new Error('Select at least one Branch');if(!reason)throw new Error('Reason is required')
@@ -83,7 +89,11 @@ export function bulkTransferOccBranches(sourceGroupId,targetGroupId,branchIds,pa
     for(const branchId of ids){
       const assigned=database.prepare('SELECT occ_price_group_id groupId FROM branch_occ_price_assignments WHERE branch_id=?').get(branchId)
       if(Number(assigned?.groupId)!==sourceId)throw occError('OCC_BRANCH_SOURCE_CHANGED','One or more branches no longer belong to the source OCC Price Group. Refresh and try again.',409)
-      const branch=assertOccBranch(database,branchId)
+      // A stable OCC group assignment is the source of truth for a transfer.
+      // v22 converted assignments intentionally do not require a legacy
+      // branch_material_prices/selection row, so the old eligibility check
+      // must not reject them here.
+      const branch=assertAssignedOccBranch(database,branchId)
       database.prepare('UPDATE branch_occ_price_assignments SET occ_price_group_id=?,assigned_by=?,updated_at=CURRENT_TIMESTAMP WHERE branch_id=?').run(targetId,actor,branchId)
       database.prepare('INSERT INTO branch_occ_price_assignment_history(branch_id,old_occ_price_group_id,new_occ_price_group_id,reason,changed_by) VALUES(?,?,?,?,?)').run(branchId,sourceId,targetId,reason,actor)
       changed.push(branch)
