@@ -11,11 +11,14 @@
 .gps-collector input,.gps-collector select,.gps-collector button{min-width:0;width:100%;max-width:100%;box-sizing:border-box}
 .master-nav{max-width:100%;min-width:0;overscroll-behavior-inline:contain}
 .master-empty-state{padding:28px;border:1px dashed #bfd5ce;border-radius:12px;background:#f7faf9;color:#687873;text-align:center}
+.occ-group-detail{min-width:0;overflow:visible}.occ-group-detail>header{margin:12px 0}.occ-group-price-form,.occ-branch-filters,.occ-transfer-panel{display:grid;grid-template-columns:minmax(150px,.8fr) minmax(160px,.9fr) minmax(240px,1.5fr) auto;gap:10px;align-items:end;margin:14px 0;padding:14px;border:1px solid #dce7e3;border-radius:12px;background:#f7faf9}.occ-group-price-form label,.occ-transfer-panel label{display:grid;gap:5px;font-size:12px;font-weight:700}.occ-group-price-form input,.occ-group-price-form select,.occ-group-price-form button,.occ-branch-filters input,.occ-branch-filters select,.occ-branch-filters button,.occ-transfer-panel input,.occ-transfer-panel select,.occ-transfer-panel button{height:42px;min-width:0;box-sizing:border-box;padding:0 12px;border:1px solid #cad9d4;border-radius:8px;background:#fff;font:inherit}.occ-group-price-form button,.occ-transfer-panel button{border-color:#176b5b;background:#176b5b;color:#fff;font-weight:800}.occ-branch-filters{grid-template-columns:minmax(280px,2fr) minmax(170px,1fr) auto}.occ-branch-table{width:100%;max-width:100%;overflow-x:auto;overscroll-behavior-inline:contain;border:1px solid #dce7e3;border-radius:10px}.occ-branch-table table{width:100%;min-width:820px;border-collapse:collapse}.occ-branch-table th,.occ-branch-table td{padding:9px 10px;border-bottom:1px solid #edf1ef;text-align:left;white-space:nowrap}.occ-branch-table th{background:#f4f8f7}.occ-transfer-panel{grid-template-columns:minmax(260px,1.5fr) minmax(150px,.7fr) minmax(240px,1.2fr) auto}
 @media(max-width:1100px){
   .area-closeout{grid-template-columns:repeat(3,minmax(0,1fr))}
   .area-closeout aside,.area-closeout .export-buttons{grid-column:1/-1}
   .gps-collector>form{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .occ-group-price-form,.occ-transfer-panel{grid-template-columns:repeat(2,minmax(0,1fr))}.occ-branch-filters{grid-template-columns:minmax(0,1fr) minmax(150px,.5fr)}
 }
 @media(max-width:600px){
   .gps-collector>form{grid-template-columns:minmax(0,1fr)}
+  .occ-group-price-form,.occ-transfer-panel,.occ-branch-filters{grid-template-columns:minmax(0,1fr)}
 }

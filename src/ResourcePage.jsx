@@ -8,9 +8,9 @@ import {useI18n} from './i18n.jsx'
 
 const selectedIds=(event)=>[...event.target.selectedOptions].map(option=>Number(option.value))
 
-export default function ResourcePage({currentUser}){
+export default function ResourcePage({currentUser,initialTab='vehicles',fixedTab=false,embedded=false}){
   const{t}=useI18n()
-  const[data,setData]=useState(null),[tab,setTab]=useState('vehicles'),[error,setError]=useState(''),[message,setMessage]=useState(''),[vehicleDetailId,setVehicleDetailId]=useState(null)
+  const[data,setData]=useState(null),[tab,setTab]=useState(initialTab),[error,setError]=useState(''),[message,setMessage]=useState(''),[vehicleDetailId,setVehicleDetailId]=useState(null)
   const[vehicle,setVehicle]=useState({vehicleCode:'',vehicleName:'',registrationNumber:'',capacityKg:'',defaultBaseLocationId:'',preferredAreaIds:[]})
   const[location,setLocation]=useState({name:'',locationType:'depot',address:'',canStart:true,canEnd:true})
   const load=useCallback(()=>api('/api/resources').then(setData).catch(item=>setError(item.message)),[]);useEffect(()=>{load()},[load])
@@ -20,8 +20,8 @@ export default function ResourcePage({currentUser}){
   const editVehicle=(item)=>{const vehicleName=prompt('Vehicle Name',item.vehicleName||'');if(vehicleName===null)return;const registrationNumber=prompt('Registration Number',item.registrationNumber||'');if(registrationNumber===null)return;const capacityKg=prompt('Capacity kg',item.capacityKg||'');if(capacityKg===null)return;save(`/api/vehicles/${item.id}`,'PATCH',{vehicleName,registrationNumber,capacityKg:capacityKg?Number(capacityKg):null})}
   const editLocation=(item)=>{const name=prompt('Location Name',item.name);if(name!=null)save(`/api/locations/${item.id}`,'PATCH',{name})}
   if(vehicleDetailId)return <VehicleDetailPage vehicleId={vehicleDetailId} resources={data} currentUser={currentUser} onBack={()=>{setVehicleDetailId(null);load()}}/>
-  return <div className="page resource-page"><div className="data-title"><em>MASTER DATA</em><h1>{t('nav.resources')}</h1><p>{t('zone.description')}</p></div>{message&&<div className="planner-message">✓ {message}</div>}{error&&<div className="data-error">{error}</div>}
-    <div className="resource-tabs"><button className={tab==='vehicles'?'active':''} onClick={()=>setTab('vehicles')}>{t('resource.vehicleMaster')}</button><button className={tab==='employees'?'active':''} onClick={()=>setTab('employees')}>{t('resource.employeeMaster')}</button><button className={tab==='locations'?'active':''} onClick={()=>setTab('locations')}>{t('resource.locationMaster')}</button><button className={tab==='zones'?'active':''} onClick={()=>setTab('zones')}>{t('resource.zoneGroup')}</button></div>
+  return <div className={embedded?'resource-page embedded':'page resource-page'}>{!embedded&&<div className="data-title"><em>MASTER DATA</em><h1>{t('nav.resources')}</h1><p>{t('zone.description')}</p></div>}{message&&<div className="planner-message">✓ {message}</div>}{error&&<div className="data-error">{error}</div>}
+    {!fixedTab&&<div className="resource-tabs"><button className={tab==='vehicles'?'active':''} onClick={()=>setTab('vehicles')}>{t('resource.vehicleMaster')}</button><button className={tab==='employees'?'active':''} onClick={()=>setTab('employees')}>{t('resource.employeeMaster')}</button><button className={tab==='locations'?'active':''} onClick={()=>setTab('locations')}>{t('resource.locationMaster')}</button><button className={tab==='zones'?'active':''} onClick={()=>setTab('zones')}>{t('resource.zoneGroup')}</button></div>}
     {!data?<div className="data-loading">{t('common.loadingData')}</div>:tab==='vehicles'?<VehicleMaster items={data.vehicles} locations={data.locations} areas={data.areas} form={vehicle} setForm={setVehicle} add={addVehicle} save={save} edit={editVehicle} openDetail={setVehicleDetailId}/>:tab==='employees'?<EmployeeMasterPage resources={data} currentUser={currentUser} reload={load}/>:tab==='locations'?<LocationMaster items={data.locations} form={location} setForm={setLocation} add={addLocation} save={save} edit={editLocation}/>:<ZoneGroupManager groups={data.zoneGroups} areas={data.areas} save={save} currentUser={currentUser} pageError={error}/>}</div>
 }
 

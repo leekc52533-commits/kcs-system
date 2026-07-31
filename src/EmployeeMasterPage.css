@@ -1,0 +1,8 @@
+.employee-toolbar-actions{display:flex;gap:8px;align-items:center}
+.employee-toolbar-actions button{height:42px;padding:0 15px;border-radius:10px;font:800 13px/1 system-ui}
+.employee-toolbar-actions .secondary{border:1px solid #cbd8d3;background:#fff;color:#31534a}
+.employee-detail-actions{position:sticky;bottom:0;z-index:4;display:flex;justify-content:flex-end;gap:9px;padding:12px;border-top:1px solid #dbe4e7;background:#fff;box-shadow:0 -6px 18px rgba(16,30,38,.08)}
+.employee-detail-actions button{min-height:42px;padding:0 16px;border:1px solid #cbd8d3;border-radius:9px;background:#fff;font-weight:800}
+.employee-create-help{margin:0;padding:14px;color:#64748b}
+.employee-create-mode input[readonly]{background:#f1f5f4;color:#60706b}
+@media(max-width:560px){.employee-toolbar-actions{width:100%}.employee-toolbar-actions button{flex:1}}

@@ -1,25 +1,22 @@
 import { Component, useEffect, useState } from 'react'
 import './App.css'
 import ImportPage from './ImportPage.jsx'
-import WeeklyDispatchPage from './WeeklyDispatchPage.jsx'
 import SpecialRequestsPage from './SpecialRequestsPage.jsx'
 import ResourcePage from './ResourcePage.jsx'
-import GpsZoneRecommendationPage from './GpsZoneRecommendationPage.jsx'
 import MasterDataPage from './MasterDataPage.jsx'
-import { DataQualityPage, SchedulesPage } from './DataPages.jsx'
 import {ChangePasswordPage,LoginPage,MobileApp} from './AuthPages.jsx'
-import GpsMigrationPage from './GpsMigrationPage.jsx'
 import {kuchingDateLabel} from '../shared/kuchingTime.js'
 import {I18nProvider,useI18n} from './i18n.jsx'
 import BackButton from './BackButton.jsx'
 import {confirmNavigation,hasUnsavedNavigation} from './navigation.js'
-import AccountManagementPage from './AccountManagementPage.jsx'
 import AccountProfileMenu from './AccountProfileMenu.jsx'
 import {apiErrorMessage,apiRequest} from './apiClient.js'
 import {translate} from './translations.js'
+import {CustomerBranchHub,DispatchScheduleHub,LocationGpsZoneHub,StaffAccountHub} from './WorkspaceHub.jsx'
 
-const navigation=[['dashboard','⌂','nav.dashboard'],['dispatch','↗','nav.dispatch'],['special','＋','nav.special'],['customers','◎','nav.customers'],['schedule','▷','nav.schedule'],['data','⌖','nav.data'],['gps-zone','◉','nav.gpsZone'],['resources','◇','nav.resources'],['accounts','♙','nav.accounts'],['gps-migration','⇄','nav.gpsMigration'],['sync','↻','nav.sync']]
-const modules=[['dispatch','↗','Weekly Dispatch','Plan routes by date, vehicle and trip, with independent daily approval and publishing.','Open weekly planner','green'],['special','＋','Special Collection Requests','Register extra collections or potential new customers and protect customer promises.','Create request','rose'],['customers','◎','Customers & Branches','Search customers, branches, payment, pricing, GPS and schedules.','View customer data','blue'],['schedule','▷','Collection Schedules','Search schedules by weekday, frequency, BranchID and Area.','Manage schedules','orange'],['data','⌖','GPS & Data Quality','Track missing GPS, schedules and linked master data.','Check data','violet'],['gps-zone','◉','GPS Zone Recommendations','Manage Zone boundaries and supervisor review of official GPS recommendations.','Review recommendations','green'],['resources','◇','Employees, Vehicles, Locations & Zones','Manage resource masters, Zone Groups and Area ownership.','Manage resources','cyan'],['sync','↻','Jodoo Data Sync','Preview and import the five supported Jodoo Excel exports.','Prepare import','rose']]
+const navigation=[['dashboard','⌂','nav.dashboard'],['operations','↗','nav.dispatchSchedule'],['special','＋','nav.special'],['customers','◎','nav.customers'],['location-zone','⌖','nav.locationGpsZone'],['vehicles','◇','nav.vehicles'],['materials','▦','nav.materials'],['staff','♙','nav.staffAccounts']]
+const modules=[['operations','↗','','','','green'],['special','＋','','','','rose'],['customers','◎','','','','blue'],['location-zone','⌖','','','','violet'],['vehicles','◇','','','','cyan'],['materials','▦','','','','orange'],['staff','♙','','','','green']]
+const legacyPages={dispatch:['operations','weekly'],schedule:['operations','schedules'],data:['location-zone','data-quality'],'gps-zone':['location-zone','recommendations'],resources:['vehicles','vehicles'],accounts:['staff','accounts'],'gps-migration':['location-zone','legacy-gps']}
 class AppErrorBoundary extends Component {
   state={error:null}
   static getDerivedStateFromError(error){return{error}}
@@ -51,19 +48,21 @@ export default function App(){return <AppErrorBoundary><AppContent/></AppErrorBo
 
 function DesktopApp({account,onLogout,onChangePassword}){
   const{t,language}=useI18n()
-  const[page,setPage]=useState(()=>window.history.state?.kcsPage||'dashboard'),[menuOpen,setMenuOpen]=useState(false)
+  const initial=()=>{const query=new URLSearchParams(window.location.search),raw=query.get('page')||window.history.state?.kcsPage||'dashboard',mapped=legacyPages[raw];return{page:mapped?.[0]||raw,tab:query.get('tab')||mapped?.[1]||''}}
+  const start=initial(),[page,setPage]=useState(start.page),[pageTab,setPageTab]=useState(start.tab),[menuOpen,setMenuOpen]=useState(false)
   const[systemStatus,setSystemStatus]=useState({connected:false,label:t('system.connecting')})
   useEffect(()=>{let active=true;fetch('/api/system/status').then(r=>{if(!r.ok)throw new Error();return r.json()}).then(s=>active&&setSystemStatus({connected:s.database==='connected',label:t('system.database',{version:s.schemaVersion,jodoo:t(s.integrations?.jodoo?.configured?'system.configured':'system.awaiting')})})).catch(()=>active&&setSystemStatus({connected:false,label:t('system.offline')}));return()=>{active=false}},[t])
   useEffect(()=>{
-    if(!window.history.state?.kcsPage)window.history.replaceState({kcsPage:'dashboard'},'')
-    const onPop=event=>{if(hasUnsavedNavigation()&&!confirmNavigation(t('common.unsaved'))){window.history.pushState({kcsPage:page},'');return}setPage(event.state?.kcsPage||'dashboard')}
+    if(!window.history.state?.kcsPage)window.history.replaceState({kcsPage:page},'',`?page=${page}${pageTab?`&tab=${pageTab}`:''}`)
+    const onPop=event=>{if(hasUnsavedNavigation()&&!confirmNavigation(t('common.unsaved'))){window.history.pushState({kcsPage:page},'',`?page=${page}${pageTab?`&tab=${pageTab}`:''}`);return}const query=new URLSearchParams(window.location.search),raw=query.get('page')||event.state?.kcsPage||'dashboard',mapped=legacyPages[raw];setPage(mapped?.[0]||raw);setPageTab(query.get('tab')||mapped?.[1]||'')}
     window.addEventListener('popstate',onPop)
     return()=>window.removeEventListener('popstate',onPop)
-  },[page,t])
-  const go=id=>{if(id===page){setMenuOpen(false);return}if(!confirmNavigation(t('common.unsaved')))return;window.history.pushState({kcsPage:id},'');setPage(id);setMenuOpen(false)}
+  },[page,pageTab,t])
+  const go=(id,tab='')=>{const mapped=legacyPages[id],next=mapped?.[0]||id,nextTab=tab||mapped?.[1]||'';if(next===page&&nextTab===pageTab){setMenuOpen(false);return}if(!confirmNavigation(t('common.unsaved')))return;window.history.pushState({kcsPage:next},'',`?page=${next}${nextTab?`&tab=${nextTab}`:''}`);setPage(next);setPageTab(nextTab);setMenuOpen(false)}
+  const changeTab=tab=>{window.history.replaceState({kcsPage:page},'',`?page=${page}&tab=${tab}`);setPageTab(tab)}
   const title=t(navigation.find(x=>x[0]===page)?.[2]||'nav.dashboard'),currentUser={name:account.employeeName,role:account.role==='owner_admin'?'admin':account.role==='operations_admin'?'supervisor':account.role,systemRole:account.role}
   const dateLabel=kuchingDateLabel(new Date(),language==='zh'?'zh-MY':language==='ms'?'ms-MY':'en-MY')
-  return <div className="shell"><aside className={menuOpen?'sidebar open':'sidebar'}><div className="brand"><b>K</b><div><strong>KCS Dispatch</strong><span>LEE SAI KER ENTERPRISE</span></div></div><nav><small>{t('nav.workspace')}</small>{navigation.filter(item=>item[0]!=='accounts'||['owner_admin','operations_admin'].includes(account.role)).map(x=><button key={x[0]} className={page===x[0]?'active':''} onClick={()=>go(x[0])}><i>{x[1]}</i>{t(x[2])}</button>)}</nav><footer><div><i className={systemStatus.connected?'':'offline'}/><span><strong>{t(systemStatus.connected?'system.running':'system.waiting')}</strong><small>{systemStatus.label}</small></span></div><p>LEE SAI KER ENTERPRISE</p></footer></aside>{menuOpen&&<button className="shade" aria-label="Close menu" onClick={()=>setMenuOpen(false)}/>}<main><header className="topbar"><button className="menu" aria-label="Menu" onClick={()=>setMenuOpen(true)}>☰</button><div><small>KCS DISPATCH SYSTEM</small><strong>{title}</strong></div><span>{dateLabel}</span><AccountProfileMenu account={account} onChangePassword={onChangePassword} onAccountManagement={()=>go('accounts')} onLogout={onLogout}/></header>{page!=='dashboard'&&<BackButton fallback={()=>go('dashboard')}/>} {page==='dashboard'?<Dashboard go={go}/>:page==='sync'?<ImportPage onBack={()=>go('dashboard')}/>:page==='gps-migration'?<GpsMigrationPage/>:page==='dispatch'?<WeeklyDispatchPage onOpenSpecial={()=>go('special')} currentUser={currentUser}/>:page==='special'?<SpecialRequestsPage onOpenPlanner={()=>go('dispatch')} currentUser={currentUser}/>:page==='customers'?<MasterDataPage currentUser={currentUser}/>:page==='schedule'?<SchedulesPage/>:page==='data'?<DataQualityPage/>:page==='gps-zone'?<GpsZoneRecommendationPage currentUser={currentUser}/>:page==='resources'?<ResourcePage currentUser={currentUser}/>:page==='accounts'?<AccountManagementPage account={account}/>:<Placeholder page={page} go={go}/>}</main></div>
+  return <div className="shell"><aside className={menuOpen?'sidebar open':'sidebar'}><div className="brand"><b>K</b><div><strong>KCS Dispatch</strong><span>LEE SAI KER ENTERPRISE</span></div></div><nav><small>{t('nav.workspace')}</small>{navigation.map(x=><button key={x[0]} className={page===x[0]?'active':''} onClick={()=>go(x[0])}><i>{x[1]}</i>{t(x[2])}</button>)}</nav><footer><div><i className={systemStatus.connected?'':'offline'}/><span><strong>{t(systemStatus.connected?'system.running':'system.waiting')}</strong><small>{systemStatus.label}</small></span></div><p>LEE SAI KER ENTERPRISE</p></footer></aside>{menuOpen&&<button className="shade" aria-label="Close menu" onClick={()=>setMenuOpen(false)}/>}<main><header className="topbar"><button className="menu" aria-label="Menu" onClick={()=>setMenuOpen(true)}>☰</button><div><small>KCS DISPATCH SYSTEM</small><strong>{title}</strong></div><span>{dateLabel}</span><AccountProfileMenu account={account} onChangePassword={onChangePassword} onAccountManagement={()=>go('staff','accounts')} onLogout={onLogout}/></header>{page!=='dashboard'&&<BackButton fallback={()=>go('dashboard')}/>} {page==='dashboard'?<Dashboard go={go}/>:page==='special'?<SpecialRequestsPage onOpenPlanner={()=>go('operations','weekly')} currentUser={currentUser}/>:page==='operations'?<DispatchScheduleHub initialTab={pageTab||'weekly'} onTabChange={changeTab} onOpenSpecial={()=>go('special')} currentUser={currentUser}/>:page==='customers'?<CustomerBranchHub initialTab={pageTab||'customers'} onTabChange={changeTab} currentUser={currentUser}/>:page==='location-zone'?<LocationGpsZoneHub initialTab={pageTab||'locations'} onTabChange={changeTab} currentUser={currentUser}/>:page==='vehicles'?<ResourcePage fixedTab initialTab="vehicles" currentUser={currentUser}/>:page==='materials'?<MasterDataPage currentUser={currentUser} initialTab="materials" allowedTabs={['materials']}/>:page==='staff'?<StaffAccountHub initialTab={pageTab||'employees'} onTabChange={changeTab} currentUser={currentUser} account={account}/>:page==='sync'?<ImportPage onBack={()=>go('dashboard')}/>:<Placeholder page={page} go={go}/>}</main></div>
 }
 
 function Dashboard({go}){
