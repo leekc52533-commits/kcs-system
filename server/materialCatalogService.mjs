@@ -14,8 +14,29 @@ export function listCategories(database=defaultDb){
 }
 export function getCategory(id,database=defaultDb){
   const category=categoryRow(database,id);if(!category)fail('MATERIAL_CATEGORY_NOT_FOUND','Material Category was not found.',404)
-  category.products=database.prepare(`SELECT p.*,COUNT(DISTINCT l.id) price_group_count,COUNT(DISTINCT a.branch_id) branch_count FROM material_products p LEFT JOIN material_price_levels l ON l.product_id=p.id AND l.visibility_status<>'hidden' LEFT JOIN branch_product_price_assignments a ON a.price_level_id=l.id WHERE p.category_id=? AND p.visibility_status<>'hidden' GROUP BY p.id ORDER BY p.full_name`).all(id)
+  category.products=database.prepare(`SELECT p.*,COALESCE((SELECT CAST(json_extract(ma.after_json,'$.sortOrder') AS INTEGER) FROM material_master_audit ma WHERE ma.entity_type='product' AND ma.entity_id=p.id AND ma.action='create' ORDER BY ma.id DESC LIMIT 1),100) sort_order,COUNT(DISTINCT l.id) price_group_count,COUNT(DISTINCT a.branch_id) branch_count FROM material_products p LEFT JOIN material_price_levels l ON l.product_id=p.id AND l.visibility_status<>'hidden' LEFT JOIN branch_product_price_assignments a ON a.price_level_id=l.id WHERE p.category_id=? AND p.visibility_status<>'hidden' GROUP BY p.id ORDER BY sort_order,p.full_name`).all(id)
   return category
+}
+export function createProduct(categoryId,payload={},database=defaultDb){
+  const category=categoryRow(database,Number(categoryId)),name=clean(payload.productName),code=clean(payload.productCode).toUpperCase(),unit=clean(payload.unit)||'kg',status=clean(payload.status)||'active',sort=Number(payload.sortOrder),why=reason(payload),who=actor(payload)
+  if(!category)fail('MATERIAL_CATEGORY_NOT_FOUND','Material Category was not found.',404)
+  if(!name)fail('MATERIAL_PRODUCT_NAME_REQUIRED','Product Name is required.')
+  if(!code)fail('MATERIAL_PRODUCT_CODE_REQUIRED','Product Code is required.')
+  if(!['kg','piece'].includes(unit))fail('MATERIAL_PRODUCT_UNIT_INVALID','Unit must be kg or piece.')
+  if(!['active','inactive'].includes(status))fail('MATERIAL_PRODUCT_STATUS_INVALID','Status must be Active or Inactive.')
+  if(!Number.isInteger(sort))fail('MATERIAL_PRODUCT_SORT_INVALID','Sort Order must be a whole number.')
+  if(database.prepare('SELECT id FROM material_products WHERE LOWER(TRIM(full_name))=LOWER(?)').get(name))fail('MATERIAL_PRODUCT_NAME_DUPLICATE','A Product with this name already exists.',409)
+  if(database.prepare('SELECT id FROM material_products WHERE LOWER(TRIM(product_code))=LOWER(?)').get(code))fail('MATERIAL_PRODUCT_CODE_DUPLICATE','A Product with this code already exists.',409)
+  database.exec('BEGIN IMMEDIATE')
+  try{
+    const materialCode=`PRODUCT_${code}`,materialName=`Product: ${name}`
+    if(database.prepare('SELECT id FROM materials WHERE LOWER(material_code)=LOWER(?) OR LOWER(material_name)=LOWER(?)').get(materialCode,materialName))fail('MATERIAL_PRODUCT_LEGACY_DUPLICATE','A compatibility Material already exists for this Product.',409)
+    const materialId=Number(database.prepare('INSERT INTO materials(material_code,material_name,unit,status,created_by) VALUES(?,?,?,?,?)').run(materialCode,materialName,unit,status,who).lastInsertRowid)
+    const id=Number(database.prepare('INSERT INTO material_products(material_id,product_code,full_name,short_form,unit,status,created_by,category_id) VALUES(?,?,?,?,?,?,?,?)').run(materialId,code,name,code,unit,status,who,category.id).lastInsertRowid)
+    database.prepare('INSERT INTO material_master_audit(entity_type,entity_id,action,after_json,reason,changed_by) VALUES(?,?,?,?,?,?)').run('product',id,'create',JSON.stringify({categoryId:category.id,productName:name,productCode:code,unit,status,sortOrder:sort,materialId}),why,who)
+    database.exec('COMMIT')
+    return productRow(database,id)
+  }catch(error){database.exec('ROLLBACK');if(String(error.message).includes('UNIQUE'))fail('MATERIAL_PRODUCT_DUPLICATE','A Product with this name or code already exists.',409);throw error}
 }
 export function getProduct(id,database=defaultDb){
   const product=productRow(database,id);if(!product)fail('MATERIAL_PRODUCT_NOT_FOUND','Product was not found.',404)
