@@ -1,5 +1,12 @@
 # Changelog
 
+## Schema v24
+
+- Added stable Material Categories with approved Paper, Aluminium and Scrap Iron mappings; all other Products remain Uncategorized.
+- Added generic non-OCC Branch Price Group assignment, whole-group repricing, Branch moves, audit/history, and guarded Delete/Merge/Archive/Hide management.
+- Preserved all existing Product, Price Level, OCC Group and historical snapshot identifiers and values.
+- Changed the Materials workspace to Category → Product → Price Group → Branch detail navigation with a single hierarchy back control.
+
 ## 2026-07-30 — Schema v22 Material Products
 
 - Added `Material → Product → Price Group`; G1 and G2 are separate Products under the existing Iron Material.

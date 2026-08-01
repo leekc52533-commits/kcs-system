@@ -1,5 +1,7 @@
 # KCS Dispatch System
 
+Schema v24 introduces the audited Material Category → Product / Grade → Price Group → Branch Assignment hierarchy. See [MATERIAL_CATALOG_V24.md](MATERIAL_CATALOG_V24.md) for migration, operations and rollback rules.
+
 ## Three-language interface
 
 KCS supports English, Bahasa Melayu and Chinese per account. Translation keys use stable module namespaces and fall back safely to English. API failures use stable error codes and are translated by the client without exposing internal SQL, stack traces or server paths.
