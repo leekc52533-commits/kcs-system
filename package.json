@@ -27,6 +27,7 @@
     "migrate:v22": "node scripts/migrate-v22.mjs",
     "migrate:v23": "node scripts/migrate-v23.mjs",
     "migrate:v24": "node scripts/migrate-v24.mjs",
+    "migrate:v25": "node scripts/migrate-v25.mjs",
     "convert:materials": "node scripts/convert-material-prices.mjs"
   },
   "dependencies": {

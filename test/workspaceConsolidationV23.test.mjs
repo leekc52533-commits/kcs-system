@@ -7,7 +7,7 @@ const read=name=>fs.readFileSync(new URL(`../src/${name}`,import.meta.url),'utf8
 test('OCC detail has one price-group return and no legacy OCC cards',()=>{
   const source=read('MaterialsPricesPage.jsx')
   assert.match(source,/← OCC Price Groups/)
-  assert.match(source,/isOcc\?<OccPriceGroups/)
+  assert.match(source,/product\?\.usesOccEngine\)return/)
   assert.match(source,/Select current results \(\$\{filtered\.length\}\)/)
   assert.match(source,/All \$\{filtered\.length\} selected/)
   assert.doesNotMatch(source,/<span>\{selected\.length\} selected<\/span>/)

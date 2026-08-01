@@ -1,5 +1,7 @@
 # KCS Dispatch System
 
+Current database schema: **v25**. Material catalogue administration uses `Category → Product / Grade → Price Group`; see [MATERIAL_CATEGORY_V25.md](MATERIAL_CATEGORY_V25.md) for migration and safety details.
+
 Schema v24 introduces the audited Material Category → Product / Grade → Price Group → Branch Assignment hierarchy. See [MATERIAL_CATALOG_V24.md](MATERIAL_CATALOG_V24.md) for migration, operations and rollback rules.
 
 ## Three-language interface

@@ -12,6 +12,7 @@ import { applyV21Migration, seedFixedOccPriceGroups } from './migrationV21.mjs'
 import { applyV22Migration, seedV22MasterData } from './migrationV22.mjs'
 import { applyV23Migration } from './migrationV23.mjs'
 import { applyV24Migration, seedV24Data } from './migrationV24.mjs'
+import { applyV25Migration } from './migrationV25.mjs'
 
 const serverDir = path.dirname(fileURLToPath(import.meta.url))
 const projectDir = path.resolve(serverDir, '..')
@@ -250,13 +251,17 @@ if (currentVersion === 0) {
   if (currentVersion < 22) applyV22Migration(db)
   if (currentVersion < 23) applyV23Migration(db)
   if (currentVersion < 24) applyV24Migration(db)
+  if (currentVersion < 25) applyV25Migration(db)
 }
 syncLegacyOccPrices(db)
 syncV18BranchPricesToV19(db)
 seedFixedOccPriceGroups(db)
 seedV22MasterData(db)
-if(Number(db.prepare('SELECT COALESCE(MAX(version),0) version FROM schema_meta').get().version)<24)applyV24Migration(db)
-else seedV24Data(db)
+const materialSchemaVersion=Number(db.prepare('SELECT COALESCE(MAX(version),0) version FROM schema_meta').get().version)
+const hasMaterialCategories=Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='material_categories'").get())
+if(materialSchemaVersion<24)applyV24Migration(db)
+else if(!hasMaterialCategories||materialSchemaVersion===24)seedV24Data(db)
+if(!hasMaterialCategories||Number(db.prepare('SELECT COALESCE(MAX(version),0) version FROM schema_meta').get().version)<25)applyV25Migration(db)
 
 const officialVehicles = [
   ['Lorry 1','QAV3468','available',0,null],

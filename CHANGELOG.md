@@ -65,3 +65,9 @@
 - Fixed Account/Profile outside-click and Escape closing.
 - Made the sidebar independently scrollable and safe above the operating-system taskbar.
 - Added v18 migration, test, backup, deployment and rollback documentation. AWS was not deployed.
+# Schema v25 — Material Category management
+
+- Added an independent OCC Category, ordered before Paper; Paper now contains the remaining three Products.
+- Preserved OCC Product, Price Group, Branch assignment, pricing and history IDs during migration.
+- Added audited Category create/edit, Product reassignment, and safe empty-Category deletion with Preview → Confirm workflows.
+- Improved Confirm Group Price Change layout for desktop and single-column mobile use.

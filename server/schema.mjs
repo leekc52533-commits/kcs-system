@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 24
+export const SCHEMA_VERSION = 25
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
