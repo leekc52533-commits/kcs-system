@@ -172,7 +172,8 @@ function dayView(database, day) {
   const weightedStops=stops.filter(stop=>stop.estimatedWeightKg!=null),missingGpsCount=stops.filter(stop=>!Number.isFinite(stop.latitude)||!Number.isFinite(stop.longitude)||stop.latitude===0||stop.longitude===0).length,timeRestrictionCount=stops.filter(stop=>Boolean(String(stop.timeRestriction||'').trim())).length,missingWeightCount=stops.length-weightedStops.length
   const warningCount=missingGpsCount+missingWeightCount+timeRestrictionCount+vehicleBoards.filter(board=>board.customerCount>0&&!board.driverId).length+specials.filter(x=>x.requestType==='potential_new'&&newCustomerMissing(x).length).length
   const previewSummary={stopCount:stops.length,estimatedWeightKg:weightedStops.reduce((sum,stop)=>sum+Number(stop.estimatedWeightKg),0),weightedStopCount:weightedStops.length,missingWeightCount,missingGpsCount,timeRestrictionCount,unassignedCount:unassignedStops.length,warningCount}
-  return {...day,stops,trips:assignedTrips,vehicleBoards,unassignedStops,unassignedGroups,unassignedZones,specialRequests:specials,warningCount,previewSummary,legacyUnassignedTripCount:allTrips.filter(item=>!item.vehicleId).length}
+  const approval=database.prepare("SELECT actor approvedBy,created_at approvedAt,reason approvalReason FROM dispatch_approvals WHERE dispatch_day_id=? AND action IN ('approve','reapprove') ORDER BY id DESC LIMIT 1").get(day.id)||{}
+  return {...day,...approval,stops,trips:assignedTrips,vehicleBoards,unassignedStops,unassignedGroups,unassignedZones,specialRequests:specials,warningCount,previewSummary,legacyUnassignedTripCount:allTrips.filter(item=>!item.vehicleId).length}
 }
 
 const resourceOptions=(database)=>({
@@ -227,11 +228,45 @@ export function publicationCheck(date,database=defaultDb){
   return {ok:issues.length===0,issues,promised:promisedCheck(date,database)}
 }
 
-export function approveDay(date,{approvedBy='Supervisor'}={},database=defaultDb){
-  const day=dayByDate(database,iso(date));if(!day)throw new Error('Dispatch day not found')
-  database.prepare("UPDATE dispatch_days SET status='approved',approved_revision=revision,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(day.id)
-  database.prepare("INSERT INTO dispatch_approvals(dispatch_day_id,action,revision,actor) VALUES(?,?,?,?)").run(day.id,day.status==='reapproval_required'?'reapprove':'approve',day.revision,actor(approvedBy))
-  return getDispatchDay(date,database)
+export function dailyApprovalCheck(date,database=defaultDb){
+  const serviceDate=iso(date),day=dayByDate(database,serviceDate);if(!day)return{ok:false,date:serviceDate,issues:[{code:'DAY_NOT_FOUND',message:'Dispatch day not found.'}],warnings:[]}
+  const rows=database.prepare(`SELECT ds.id stopId,ds.branch_id branchId,ds.stop_sequence sequence,ds.status stopStatus,ds.estimated_weight_kg estimatedWeightKg,
+    ds.source_schedule_id sourceScheduleId,b.jodoo_branch_id branchCode,b.branch_name branchName,b.is_active branchActive,b.status branchStatus,b.latitude,b.longitude,b.time_restriction timeRestriction,
+    dt.id tripId,dt.trip_number tripNumber,d.id dispatchId,d.status dispatchStatus,d.vehicle_id vehicleId,v.vehicle_code vehicleCode,v.operational_status vehicleOperationalStatus,v.status vehicleStatus,
+    COALESCE(s.is_active,1) scheduleActive FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id JOIN dispatches d ON d.id=ds.dispatch_id
+    JOIN branches b ON b.id=ds.branch_id LEFT JOIN vehicles v ON v.id=d.vehicle_id LEFT JOIN branch_schedules s ON s.id=ds.source_schedule_id
+    WHERE dt.dispatch_day_id=? AND ds.status<>'cancelled' ORDER BY d.vehicle_id,dt.trip_number,ds.stop_sequence,ds.id`).all(day.id)
+  const issues=[],warnings=[]
+  if(!['draft','reapproval_required'].includes(day.status))issues.push({code:'DAY_NOT_DRAFT',message:`The route is ${day.status} and cannot be approved.`})
+  if(!rows.length)issues.push({code:'NO_DRAFT_STOPS',message:'At least one active Draft Stop is required.'})
+  for(const row of rows){
+    if(!row.vehicleId)issues.push({code:'UNASSIGNED_STOP',stopId:row.stopId,message:`Stop ${row.stopId} is still Unassigned.`})
+    else if(!['available','active'].includes(row.vehicleOperationalStatus)||!['available','assigned'].includes(row.vehicleStatus))issues.push({code:'VEHICLE_INACTIVE',stopId:row.stopId,vehicleId:row.vehicleId,message:`Stop ${row.stopId} does not use an Active vehicle.`})
+    if(![1,2,3].includes(Number(row.tripNumber)))issues.push({code:'TRIP_INVALID',stopId:row.stopId,message:`Stop ${row.stopId} has an invalid Trip.`})
+    if(row.branchActive!==1||String(row.branchStatus).toLowerCase()!=='active')issues.push({code:'BRANCH_INACTIVE',stopId:row.stopId,branchId:row.branchCode,message:`${row.branchName||row.branchCode} is inactive.`})
+    if(row.sourceScheduleId&&row.scheduleActive!==1)issues.push({code:'SCHEDULE_SUPERSEDED',stopId:row.stopId,scheduleId:row.sourceScheduleId,message:`Stop ${row.stopId} belongs to a Superseded Schedule.`})
+    if(row.dispatchStatus!=='draft')issues.push({code:'DISPATCH_PROTECTED',stopId:row.stopId,dispatchId:row.dispatchId,message:`Dispatch ${row.dispatchId} is ${row.dispatchStatus}.`})
+    if(!Number.isFinite(row.latitude)||!Number.isFinite(row.longitude)||row.latitude===0||row.longitude===0)warnings.push({code:'GPS_MISSING',stopId:row.stopId,message:`${row.branchName||row.branchCode}: GPS missing.`})
+    if(row.estimatedWeightKg==null)warnings.push({code:'WEIGHT_MISSING',stopId:row.stopId,message:`${row.branchName||row.branchCode}: estimated weight not set.`})
+    if(String(row.timeRestriction||'').trim())warnings.push({code:'TIME_RESTRICTION',stopId:row.stopId,message:`${row.branchName||row.branchCode}: time restriction applies.`})
+  }
+  const tripGroups=new Map()
+  for(const row of rows.filter(item=>item.vehicleId)){const key=`${row.vehicleId}:${row.tripId}`,group=tripGroups.get(key)||[];group.push(row);tripGroups.set(key,group)}
+  for(const group of tripGroups.values()){const sequences=group.map(item=>Number(item.sequence)).sort((a,b)=>a-b),expected=sequences.map((_,index)=>index+1);if(sequences.some((value,index)=>value!==expected[index]))issues.push({code:'SEQUENCE_INVALID',vehicleId:group[0].vehicleId,tripId:group[0].tripId,stopIds:group.map(item=>item.stopId),message:`Vehicle ${group[0].vehicleCode} Trip ${group[0].tripNumber} sequence must be continuous from 1.`})}
+  const duplicates=database.prepare(`SELECT ds.branch_id branchId,COUNT(*) count,GROUP_CONCAT(ds.id) stopIds FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id
+    WHERE dt.dispatch_day_id=? AND ds.status IN ('locked','available','active','completed','overridden') GROUP BY ds.branch_id HAVING COUNT(*)>1`).all(day.id)
+  for(const duplicate of duplicates)issues.push({code:'DUPLICATE_BRANCH_SERVICE_DATE',branchId:duplicate.branchId,stopIds:String(duplicate.stopIds).split(',').map(Number),message:`Duplicate Branch Service Date for Stops ${duplicate.stopIds}.`})
+  const vehicleIds=[...new Set(rows.map(row=>row.vehicleId).filter(Boolean))],weighted=rows.filter(row=>row.estimatedWeightKg!=null)
+  return{ok:issues.length===0,date:serviceDate,dayId:day.id,status:day.status,issues,warnings,summary:{stopCount:rows.length,assignedCount:rows.filter(row=>row.vehicleId).length,unassignedCount:rows.filter(row=>!row.vehicleId).length,vehicleCount:vehicleIds.length,vehicleIds,estimatedWeightKg:weighted.reduce((sum,row)=>sum+Number(row.estimatedWeightKg),0),weightedStopCount:weighted.length,missingWeightCount:rows.length-weighted.length,missingGpsCount:warnings.filter(item=>item.code==='GPS_MISSING').length,timeRestrictionCount:warnings.filter(item=>item.code==='TIME_RESTRICTION').length,trips:[...tripGroups.values()].map(group=>({vehicleId:group[0].vehicleId,vehicle:group[0].vehicleCode,tripNumber:group[0].tripNumber,stopCount:group.length,estimatedWeightKg:group.filter(row=>row.estimatedWeightKg!=null).reduce((sum,row)=>sum+Number(row.estimatedWeightKg),0),missingWeightCount:group.filter(row=>row.estimatedWeightKg==null).length}))}}
+}
+
+export function approveDay(date,{approvedBy='Supervisor',reason=''}={},database=defaultDb){
+  const approvalReason=String(reason||'').trim();if(!approvalReason)throw new Error('Approval reason is required.')
+  return withImmediateTransaction(database,()=>{const check=dailyApprovalCheck(date,database);if(!check.ok){const error=new Error(check.issues.map(item=>item.message).join(' '));error.code='DAY_APPROVAL_VALIDATION_FAILED';error.issues=check.issues;throw error}const day=dayByDate(database,iso(date)),before={...day}
+    database.prepare("UPDATE dispatch_days SET status='approved',approved_revision=revision,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(day.id)
+    database.prepare("INSERT INTO dispatch_approvals(dispatch_day_id,action,revision,actor,reason) VALUES(?,?,?,?,?)").run(day.id,day.status==='reapproval_required'?'reapprove':'approve',day.revision,actor(approvedBy),approvalReason)
+    database.prepare(`INSERT INTO dispatch_change_logs(dispatch_day_id,actor,change_type,entity_type,entity_id,before_json,after_json,requires_reapproval) VALUES(?,?,'day_approved','dispatch_day',?,?,?,0)`).run(day.id,actor(approvedBy),String(day.id),json(before),json({...day,status:'approved',approvedRevision:day.revision,reason:approvalReason}))
+    return getDispatchDay(date,database)})
 }
 export function publishDay(date,{publishedBy='Supervisor',promisedExceptionReason=''}={},database=defaultDb){
   const day=dayByDate(database,iso(date));if(!day)throw new Error('Dispatch day not found')
@@ -245,10 +280,13 @@ export function publishDay(date,{publishedBy='Supervisor',promisedExceptionReaso
   return getDispatchDay(date,database)
 }
 export function reopenDay(date,{reopenedBy='Supervisor',reason=''}={},database=defaultDb){
-  const day=dayByDate(database,iso(date));if(!day)throw new Error('Dispatch day not found')
-  database.prepare("UPDATE dispatch_days SET status='draft',revision=revision+1,approved_revision=NULL,published_at=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(day.id)
-  database.prepare("INSERT INTO dispatch_approvals(dispatch_day_id,action,revision,actor,reason) VALUES(?,'reopen',?,?,?)").run(day.id,day.revision+1,actor(reopenedBy),reason||null)
-  return getDispatchDay(date,database)
+  const withdrawalReason=String(reason||'').trim();if(!withdrawalReason)throw new Error('Withdrawal reason is required.')
+  return withImmediateTransaction(database,()=>{const day=dayByDate(database,iso(date));if(!day)throw new Error('Dispatch day not found');if(day.status!=='approved')throw new Error(`Only an Approved route can be withdrawn; current status is ${day.status}.`);const before={...day}
+    const protectedDispatch=database.prepare("SELECT id,status FROM dispatches WHERE id IN(SELECT dispatch_id FROM dispatch_trips WHERE dispatch_day_id=?) AND status IN ('released','in_progress','completed') LIMIT 1").get(day.id);if(protectedDispatch)throw new Error(`Dispatch ${protectedDispatch.id} is ${protectedDispatch.status} and cannot be withdrawn.`)
+    database.prepare("UPDATE dispatch_days SET status='draft',revision=revision+1,approved_revision=NULL,published_at=NULL,published_by=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(day.id)
+    database.prepare("INSERT INTO dispatch_approvals(dispatch_day_id,action,revision,actor,reason) VALUES(?,'reopen',?,?,?)").run(day.id,day.revision+1,actor(reopenedBy),withdrawalReason)
+    database.prepare(`INSERT INTO dispatch_change_logs(dispatch_day_id,actor,change_type,entity_type,entity_id,before_json,after_json,requires_reapproval) VALUES(?,?,'day_approval_withdrawn','dispatch_day',?,?,?,0)`).run(day.id,actor(reopenedBy),String(day.id),json(before),json({...day,status:'draft',revision:day.revision+1,reason:withdrawalReason}))
+    return getDispatchDay(date,database)})
 }
 
 export function createStop(payload,database=defaultDb){

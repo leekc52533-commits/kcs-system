@@ -1,0 +1,33 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import {DatabaseSync} from 'node:sqlite'
+import {mkdtempSync} from 'node:fs'
+import {tmpdir} from 'node:os'
+import {join} from 'node:path'
+import {schemaSql} from '../server/schema.mjs'
+import {approveDay,dailyApprovalCheck,generateWeek,reopenDay,saveDraftAdjustments} from '../server/dispatchService.mjs'
+
+function fixture(path=':memory:'){
+  const db=new DatabaseSync(path);db.exec('PRAGMA foreign_keys=ON;'+schemaSql)
+  db.prepare("INSERT INTO areas(jodoo_area_id,name) VALUES('A1','North')").run()
+  db.prepare("INSERT INTO customers(jodoo_customer_id,name) VALUES('C1','Alpha')").run()
+  db.prepare("INSERT INTO branches(jodoo_branch_id,customer_id,area_id,branch_name,address,latitude,longitude) VALUES('B1',1,1,'Alpha One','One',NULL,NULL),('B2',1,1,'Alpha Two','Two',3.1,101.6)").run()
+  db.prepare("INSERT INTO branch_schedules(jodoo_schedule_id,branch_id,source_branch_id,frequency,days_of_week) VALUES('S1',1,'B1','Weekly','Monday'),('S2',2,'B2','Weekly','Monday')").run()
+  db.prepare("INSERT INTO vehicles(vehicle_code,registration_number,status,operational_status) VALUES('V1','ABC1','available','available')").run()
+  generateWeek({startDate:'2026-07-20'},db);return db
+}
+const ids=db=>db.prepare("SELECT id FROM dispatch_stops WHERE service_date='2026-07-20' ORDER BY id").all().map(row=>row.id)
+const assignAll=db=>saveDraftAdjustments({adjustments:ids(db).map(stopId=>({stopId,vehicleId:1,tripNumber:1})),reason:'Prepare route',changedBy:'Planner'},db)
+const approve=db=>approveDay('2026-07-20',{approvedBy:'Supervisor One',reason:'Route checked and ready'},db)
+
+test('fully assigned service date approves with summary, warnings, actor and reason',()=>{const db=fixture();assignAll(db);const check=dailyApprovalCheck('2026-07-20',db);assert.equal(check.ok,true);assert.equal(check.summary.stopCount,2);assert.equal(check.summary.unassignedCount,0);assert.equal(check.summary.missingGpsCount,1);assert.equal(check.summary.missingWeightCount,2);const result=approve(db);assert.equal(result.status,'approved');assert.equal(result.approvedBy,'Supervisor One');assert.equal(db.prepare("SELECT reason FROM dispatch_approvals WHERE action='approve'").get().reason,'Route checked and ready');assert.equal(db.prepare('SELECT COUNT(*) n FROM dispatch_stops WHERE estimated_weight_kg IS NULL').get().n,2)})
+test('unassigned Stop blocks approval with related Stop',()=>{const db=fixture(),check=dailyApprovalCheck('2026-07-20',db);assert.equal(check.ok,false);assert.equal(check.issues.filter(item=>item.code==='UNASSIGNED_STOP').length,2);assert.throws(()=>approve(db),/Unassigned/)})
+test('non-continuous or duplicate sequence blocks approval',()=>{const db=fixture();assignAll(db);db.prepare('UPDATE dispatch_stops SET stop_sequence=3 WHERE id=?').run(ids(db)[1]);const check=dailyApprovalCheck('2026-07-20',db);assert.equal(check.issues.some(item=>item.code==='SEQUENCE_INVALID'),true);assert.throws(()=>approve(db),/sequence/)})
+test('inactive Branch and superseded Schedule block approval',()=>{const db=fixture();assignAll(db);db.prepare("UPDATE branches SET is_active=0,status='inactive' WHERE id=1").run();db.prepare('UPDATE branch_schedules SET is_active=0 WHERE id=2').run();const codes=dailyApprovalCheck('2026-07-20',db).issues.map(item=>item.code);assert.ok(codes.includes('BRANCH_INACTIVE'));assert.ok(codes.includes('SCHEDULE_SUPERSEDED'))})
+test('Cancelled Stop is excluded from the route being approved',()=>{const db=fixture();assignAll(db);db.prepare("UPDATE dispatch_stops SET status='cancelled' WHERE id=?").run(ids(db)[1]);const check=dailyApprovalCheck('2026-07-20',db);assert.equal(check.summary.stopCount,1);assert.equal(check.ok,true);assert.equal(approve(db).status,'approved')})
+test('duplicate Branch and service date blocks approval',()=>{const db=fixture();assignAll(db);db.prepare('UPDATE dispatch_stops SET branch_id=1 WHERE id=?').run(ids(db)[1]);const check=dailyApprovalCheck('2026-07-20',db);assert.equal(check.issues.some(item=>item.code==='DUPLICATE_BRANCH_SERVICE_DATE'),true)})
+test('Approved date rejects Draft adjustment and can be withdrawn as one day',()=>{const db=fixture();assignAll(db);const stopId=ids(db)[0];approve(db);assert.throws(()=>saveDraftAdjustments({adjustments:[{stopId,unassigned:true}],reason:'Try edit'},db),/protected/);const reopened=reopenDay('2026-07-20',{reopenedBy:'Supervisor Two',reason:'Vehicle plan needs correction'},db);assert.equal(reopened.status,'draft');assert.equal(db.prepare("SELECT COUNT(*) n FROM dispatch_approvals WHERE action='reopen'").get().n,1);assert.equal(db.prepare("SELECT COUNT(*) n FROM dispatch_change_logs WHERE change_type IN ('day_approved','day_approval_withdrawn')").get().n,2)})
+test('In Progress and Completed Dispatch cannot be withdrawn',()=>{for(const status of ['in_progress','completed']){const db=fixture();assignAll(db);approve(db);db.prepare('UPDATE dispatches SET status=?').run(status);assert.throws(()=>reopenDay('2026-07-20',{reason:'Not allowed'},db),new RegExp(status));assert.equal(db.prepare("SELECT status FROM dispatch_days WHERE dispatch_date='2026-07-20'").get().status,'approved')}})
+test('approval Audit failure rolls back the whole transaction',()=>{const db=fixture();assignAll(db);db.exec("CREATE TRIGGER fail_day_audit BEFORE INSERT ON dispatch_change_logs WHEN NEW.change_type='day_approved' BEGIN SELECT RAISE(ABORT,'audit failed'); END");assert.throws(()=>approve(db),/audit failed/);assert.equal(db.prepare("SELECT status FROM dispatch_days WHERE dispatch_date='2026-07-20'").get().status,'draft');assert.equal(db.prepare("SELECT COUNT(*) n FROM dispatch_approvals WHERE action='approve'").get().n,0)})
+test('withdrawal Audit failure leaves the whole date Approved',()=>{const db=fixture();assignAll(db);approve(db);db.exec("CREATE TRIGGER fail_withdraw_audit BEFORE INSERT ON dispatch_change_logs WHEN NEW.change_type='day_approval_withdrawn' BEGIN SELECT RAISE(ABORT,'withdraw audit failed'); END");assert.throws(()=>reopenDay('2026-07-20',{reason:'Needs changes'},db),/withdraw audit failed/);assert.equal(db.prepare("SELECT status FROM dispatch_days WHERE dispatch_date='2026-07-20'").get().status,'approved');assert.equal(db.prepare("SELECT COUNT(*) n FROM dispatch_approvals WHERE action='reopen'").get().n,0)})
+test('fresh local database remains integral after approval validation',()=>{const directory=mkdtempSync(join(tmpdir(),'kcs-daily-approval-')),path=join(directory,'approval.sqlite'),db=fixture(path);assignAll(db);approve(db);assert.equal(db.prepare('PRAGMA integrity_check').get().integrity_check,'ok');db.close()})

@@ -7,7 +7,7 @@ import { db, databasePath, getSystemStatus, uploadsDir } from './database.mjs'
 import { getJodooIntegrationStatus, recordJodooWebhook, verifyJodooWebhookToken } from './jodoo.mjs'
 import { commitImport, previewImport } from './importService.mjs'
 import { customerBranchDetail, customerBranches, dashboardSummary, dataQualitySummary, importBatches, importErrors, schedules } from './queryService.mjs'
-import { approveDay, assignAreaStops, assignVehicleDay, createScheduleException, createStop, createTrip, deleteStop, driverToday, generateDay, generateWeek, getDispatchDay, getDispatchWeek, promisedCheck, publishDay, reopenDay, saveDraftAdjustments, transferVehicleDay, updateStop, updateTrip } from './dispatchService.mjs'
+import { approveDay, assignAreaStops, assignVehicleDay, createScheduleException, createStop, createTrip, dailyApprovalCheck, deleteStop, driverToday, generateDay, generateWeek, getDispatchDay, getDispatchWeek, promisedCheck, publishDay, reopenDay, saveDraftAdjustments, transferVehicleDay, updateStop, updateTrip } from './dispatchService.mjs'
 import { addTemporaryLocation, adoptTemporaryLocation, convertToExisting, createSpecialRequest, linkNewAccount, listSpecialRequests, listTemporaryLocations, reviewTemporaryLocation, scheduleSpecialRequest, searchCustomerBranches, updateSpecialRequest } from './specialRequestService.mjs'
 import { assertEmployeePayloadId, assignAreaZone, createEmployee, createLocation, createTemporaryVehicle, createVehicle, createZoneGroup, endEmployeeEmployment, getAreaConfirmationDetail, getNextEmployeeCode, getZoneGroupMetricDetails, listResources, listZoneGroups, mergeZoneGroups, rehireEmployee, setAreasConfirmation, setZoneActive, splitZoneGroup, supervisorMoveAreasToZone, updateEmployee, updateLocation, updateVehicle, updateZoneGroup } from './resourceService.mjs'
 import { addFuelRecord, addMaintenanceRecord, addTyreRecord, addUsageRecord, addVehicleDocument, getVehicleDetail, updateVehicleCompliance } from './vehicleService.mjs'
@@ -170,12 +170,14 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && url.pathname === '/api/dispatch/generate-week') {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});return sendJson(response,200,generateWeek({...((await readJson(request)).payload),generatedBy:session.employeeName}))}
     if (request.method === 'POST' && url.pathname === '/api/dispatch/generate-day') {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});return sendJson(response,200,generateDay({...((await readJson(request)).payload),generatedBy:session.employeeName}))}
     if (request.method === 'POST' && url.pathname === '/api/dispatch/draft-adjustments') {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});return sendJson(response,200,saveDraftAdjustments({...((await readJson(request)).payload),changedBy:session.employeeName}))}
+    if (request.method === 'GET' && /^\/api\/dispatch\/day\/[^/]+\/approval-check$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});return sendJson(response,200,dailyApprovalCheck(decodeURIComponent(url.pathname.split('/')[4])))}
     if (request.method === 'GET' && url.pathname.startsWith('/api/dispatch/day/')) {
       const item=getDispatchDay(decodeURIComponent(url.pathname.slice('/api/dispatch/day/'.length)))
       return item?sendJson(response,200,item):sendJson(response,404,{error:'Dispatch day not found'})
     }
     if (request.method === 'POST' && /^\/api\/dispatch\/day\/[^/]+\/(approve|publish|reopen)$/.test(url.pathname)) {
       const parts=url.pathname.split('/'),date=decodeURIComponent(parts[4]),action=parts[5],payload=(await readJson(request)).payload
+      if(['approve','reopen'].includes(action)&&!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'})
       return sendJson(response,200,action==='approve'?approveDay(date,payload):action==='publish'?publishDay(date,payload):reopenDay(date,payload))
     }
     if (request.method === 'GET' && url.pathname.startsWith('/api/dispatch/promised-check/')) return sendJson(response,200,promisedCheck(decodeURIComponent(url.pathname.slice('/api/dispatch/promised-check/'.length))))
