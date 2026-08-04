@@ -486,22 +486,22 @@ export function driverToday({employeeId,role,today=kuchingDate()}={},database=de
   if(!isDriver&&!isCrew)throw driverRouteForbidden('You do not have permission to view a driver route.')
   const date=iso(today),weekday=new Date(`${date}T00:00:00Z`).toLocaleDateString('en-US',{weekday:'long',timeZone:'UTC'}),day=dayByDate(database,date)
   const empty=reason=>({date,weekday,status:day?.status||null,approved:false,routeAvailable:false,reason,trips:[],vehicles:[],totalStops:0,completedStops:0,pendingStops:0})
-  if(!day||day.status!=='approved')return empty('NO_APPROVED_ROUTE')
+  if(!day||!['approved','in_progress'].includes(day.status))return empty('NO_APPROVED_ROUTE')
   const assignment=isDriver?'d.driver_id=?':`(d.assistant_id=? OR EXISTS(SELECT 1 FROM dispatch_vehicle_assistants dva WHERE dva.dispatch_day_id=dt.dispatch_day_id AND dva.vehicle_id=d.vehicle_id AND dva.employee_id=?))`
   const params=isDriver?[day.id,Number(employeeId)]:[day.id,Number(employeeId),Number(employeeId)]
-  const trips=database.prepare(`SELECT dt.id,dt.trip_number tripNumber,d.vehicle_id vehicleId,v.vehicle_code vehicleCode,v.vehicle_name vehicleName,v.registration_number registrationNumber
+  const trips=database.prepare(`SELECT dt.id,dt.trip_number tripNumber,dt.execution_status executionStatus,dt.started_at startedAt,d.vehicle_id vehicleId,v.vehicle_code vehicleCode,v.vehicle_name vehicleName,v.registration_number registrationNumber
     FROM dispatch_trips dt JOIN dispatches d ON d.id=dt.dispatch_id JOIN vehicles v ON v.id=d.vehicle_id
     WHERE dt.dispatch_day_id=? AND ${assignment} AND v.operational_status IN ('available','active') AND v.status IN ('available','assigned')
       AND EXISTS(SELECT 1 FROM dispatch_stops ds JOIN branches bx ON bx.id=ds.branch_id WHERE ds.dispatch_trip_id=dt.id AND ds.status<>'cancelled' AND lower(COALESCE(bx.status,'active'))='active')
     ORDER BY v.vehicle_code,dt.trip_number,dt.id`).all(...params).map(trip=>({...trip,stops:database.prepare(`SELECT ds.id,ds.stop_sequence stopSequence,ds.status,b.jodoo_branch_id branchId,b.branch_name branchName,c.name customerName,b.address,
-      COALESCE(ds.area_name_snapshot,a.name) area,b.time_restriction timeRestriction,ds.estimated_weight_kg estimatedWeightKg,
+      COALESCE(ds.area_name_snapshot,a.name) area,b.time_restriction timeRestriction,ds.estimated_weight_kg estimatedWeightKg,ds.arrived_at arrivedAt,ds.arrival_distance_m arrivalDistanceMeters,
       CASE WHEN b.latitude IS NOT NULL AND b.longitude IS NOT NULL THEN 1 ELSE 0 END gpsAvailable
       FROM dispatch_stops ds JOIN branches b ON b.id=ds.branch_id LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas a ON a.id=b.area_id
       WHERE ds.dispatch_trip_id=? AND ds.status<>'cancelled' AND lower(COALESCE(b.status,'active'))='active'
-      ORDER BY ds.stop_sequence,ds.id`).all(trip.id).map(stop=>({...stop,gpsAvailable:Boolean(stop.gpsAvailable)}))}))
+      ORDER BY ds.stop_sequence,ds.id`).all(trip.id).map(stop=>({...stop,gpsAvailable:Boolean(stop.gpsAvailable)}))})).map((trip,index,trips)=>{const current=trip.executionStatus==='in_progress'?trip.stops.find(stop=>!['completed','cancelled'].includes(stop.status)):null,earlierOpen=trips.some(other=>other.vehicleId===trip.vehicleId&&other.tripNumber<trip.tripNumber&&other.stops.length&&other.executionStatus!=='completed');return{...trip,canStart:['approved','in_progress'].includes(day.status)&&trip.executionStatus==='not_started'&&!earlierOpen,currentStopId:current?.id||null,stops:trip.stops.map(stop=>({...stop,canArrive:Boolean(current&&current.id===stop.id&&!stop.arrivedAt)}))}})
   if(!trips.length)return empty('NO_VEHICLE_ASSIGNED')
   const stops=trips.flatMap(trip=>trip.stops),vehicles=[...new Map(trips.map(trip=>[trip.vehicleId,{id:trip.vehicleId,vehicleCode:trip.vehicleCode,vehicleName:trip.vehicleName,registrationNumber:trip.registrationNumber}])).values()]
-  return{date,weekday,status:'approved',approved:true,routeAvailable:true,trips,vehicles,totalStops:stops.length,completedStops:stops.filter(stop=>stop.status==='completed').length,pendingStops:stops.filter(stop=>stop.status!=='completed').length}
+  return{date,weekday,status:day.status,approved:true,routeAvailable:true,trips,vehicles,totalStops:stops.length,completedStops:stops.filter(stop=>stop.status==='completed').length,pendingStops:stops.filter(stop=>stop.status!=='completed').length}
 }
 
 export function createScheduleException(payload,database=defaultDb){

@@ -25,6 +25,7 @@ import {kuchingDate} from '../shared/kuchingTime.js'
 import {publicError} from './errorCodes.mjs'
 import {assertLocationFields} from '../shared/locationText.js'
 import {configureScheduleRecurrence,getScheduleRecurrence} from './scheduleRecurrenceService.mjs'
+import {arriveAtStop,startDriverTrip} from './driverExecutionService.mjs'
 
 const port = Number(process.env.KCS_API_PORT || 8787)
 const host = process.env.KCS_API_HOST || '0.0.0.0'
@@ -88,6 +89,8 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'GET' && url.pathname === '/api/auth/audit') return sendJson(response,200,{items:listAuthAudit(Object.fromEntries(url.searchParams))})
     if (request.method === 'GET' && url.pathname === '/api/system/network') return sendJson(response,200,{host,apiPort:port,lanUrls:networkUrls(),httpsRequiredForGps:true})
     if (request.method === 'GET' && url.pathname === '/api/mobile/today') return sendJson(response,200,driverToday({employeeId:session.employeeId,role:session.role}))
+    if (request.method === 'POST' && /^\/api\/mobile\/trips\/\d+\/start$/.test(url.pathname)) return sendJson(response,200,startDriverTrip(Number(url.pathname.split('/')[4]),{employeeId:session.employeeId,role:session.role}))
+    if (request.method === 'POST' && /^\/api\/mobile\/stops\/\d+\/arrive$/.test(url.pathname)) return sendJson(response,200,arriveAtStop(Number(url.pathname.split('/')[4]),(await readJson(request)).payload,{employeeId:session.employeeId,role:session.role}))
     if (request.method === 'GET' && url.pathname === '/api/mobile/branch-search') {const search=String(url.searchParams.get('search')||'').trim(),q=`%${search}%`;const items=db.prepare(`SELECT b.jodoo_branch_id branchId,b.branch_name branchName,c.name customerName,b.address,CASE WHEN b.latitude BETWEEN -90 AND 90 AND b.longitude BETWEEN -180 AND 180 AND NOT(b.latitude=0 AND b.longitude=0) THEN 1 ELSE 0 END hasOfficialGps,(SELECT verification_status FROM temporary_locations t WHERE t.branch_id=b.id ORDER BY t.id DESC LIMIT 1) temporaryGpsStatus FROM branches b LEFT JOIN customers c ON c.id=b.customer_id WHERE ?<>'' AND (b.jodoo_branch_id LIKE ? OR b.branch_name LIKE ? OR c.name LIKE ?) ORDER BY c.name,b.branch_name LIMIT 30`).all(search,q,q,q);return sendJson(response,200,{items})}
     if (request.method === 'GET' && url.pathname === '/api/mobile/submissions') return sendJson(response,200,{items:listTemporaryLocations({employeeId:session.employeeId})})
     if (request.method === 'POST' && url.pathname === '/api/mobile/temporary-customers') {const payload=(await readJson(request)).payload;return sendJson(response,201,createSpecialRequest({...payload,employeeId:session.employeeId,requestType:'potential_new',createdBy:session.employeeName,requestedCollectionDate:payload.requestedCollectionDate||kuchingDate(),status:'awaiting_supervisor'}))}
@@ -261,7 +264,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && url.pathname === '/api/import/commit') return sendJson(response, 200, commitImport((await readJson(request)).payload.batchId))
     return sendJson(response, 404, { error: 'Not found' })
   } catch (error) {
-    const status=error.statusCode || (error instanceof SyntaxError ? 400 : 500),body={...publicError(error),requestId}
+    const status=error.statusCode || (error instanceof SyntaxError ? 400 : 500),body={...publicError(error),...(error.publicDetails||{}),requestId}
     console.error(JSON.stringify({event:'api_error',requestId,method:request.method,path:String(request.url||'').split('?')[0],status,errorCode:body.errorCode,message:String(error?.message||error),diagnostic:request.kcsDiagnostic||null}))
     return sendJson(response,status,body)
   }

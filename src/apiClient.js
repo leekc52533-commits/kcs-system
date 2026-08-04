@@ -10,7 +10,7 @@ export function apiErrorMessage(payload,fallbackKey='apiError.generic'){
   const code=payload?.errorCode||payload?.code
   if(code){
     const key=`apiError.${String(code).toLowerCase()}`
-    const translated=translate(activeLanguage,key)
+    const translated=translate(activeLanguage,key,payload)
     if(translated!==key)return translated
   }
   return translate(activeLanguage,fallbackKey)

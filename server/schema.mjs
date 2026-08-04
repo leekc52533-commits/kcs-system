@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 26
+export const SCHEMA_VERSION = 27
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -411,6 +411,12 @@ CREATE TABLE IF NOT EXISTS dispatch_stops (
   stop_sequence INTEGER NOT NULL,
   status TEXT NOT NULL DEFAULT 'locked' CHECK (status IN ('locked','available','active','completed','overridden','cancelled')),
   arrived_at TEXT,
+  arrival_latitude REAL,
+  arrival_longitude REAL,
+  arrival_accuracy_m REAL,
+  arrival_distance_m REAL,
+  arrival_captured_at TEXT,
+  arrived_by_employee_id INTEGER REFERENCES employees(id),
   completed_at TEXT,
   collected_weight_kg REAL,
   invoice_number TEXT,
@@ -586,6 +592,9 @@ CREATE TABLE IF NOT EXISTS dispatch_trips (
   area_id INTEGER REFERENCES areas(id),
   estimated_weight_kg REAL,
   warning_count INTEGER NOT NULL DEFAULT 0,
+  execution_status TEXT NOT NULL DEFAULT 'not_started',
+  started_at TEXT,
+  started_by_employee_id INTEGER REFERENCES employees(id),
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
