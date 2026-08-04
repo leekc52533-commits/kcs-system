@@ -4,6 +4,9 @@ export const COLLECTION_FREQUENCIES = [
   '3 times a week',
   '4 times a week',
   'Daily',
+  'Every 2 Weeks',
+  'Every 3 Weeks',
+  'Monthly',
   'On Call',
   'Paused',
 ]
@@ -24,6 +27,9 @@ export const EXPECTED_COLLECTION_DAYS = {
   '3 times a week': 3,
   '4 times a week': 4,
   Daily: 7,
+  'Every 2 Weeks': 1,
+  'Every 3 Weeks': 1,
+  Monthly: 1,
 }
 
 const frequencyAliases = new Map([
@@ -43,6 +49,10 @@ const frequencyAliases = new Map([
   ['4 times per week', '4 times a week'],
   ['every day', 'Daily'],
   ['everyday', 'Daily'],
+  ['2 weeks', 'Every 2 Weeks'],
+  ['biweekly', 'Every 2 Weeks'],
+  ['fortnightly', 'Every 2 Weeks'],
+  ['3 weeks', 'Every 3 Weeks'],
   ['on-call', 'On Call'],
   ['on demand', 'On Call'],
   ['as requested', 'On Call'],

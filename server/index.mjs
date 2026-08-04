@@ -24,6 +24,7 @@ import {assignProductBranches,changeProductGroupPrice,createCategory,createProdu
 import {kuchingDate} from '../shared/kuchingTime.js'
 import {publicError} from './errorCodes.mjs'
 import {assertLocationFields} from '../shared/locationText.js'
+import {configureScheduleRecurrence,getScheduleRecurrence} from './scheduleRecurrenceService.mjs'
 
 const port = Number(process.env.KCS_API_PORT || 8787)
 const host = process.env.KCS_API_HOST || '0.0.0.0'
@@ -40,6 +41,7 @@ const sessionCookie=(token,maxAge)=>`kcs_session=${encodeURIComponent(token||'')
 const networkUrls=()=>Object.values(os.networkInterfaces()).flat().filter(item=>item&&item.family==='IPv4'&&!item.internal).map(item=>`http://${item.address}:5175`)
 function permissionFor(pathname){if(pathname.startsWith('/api/mobile/'))return'mobile';if(/^\/api\/gps-collector\/branch\//.test(pathname))return'gps_capture';if(pathname==='/api/gps-collector'||/^\/api\/gps-collector\/\d+\/(adopt|review|photo)$/.test(pathname)||/^\/api\/temporary-locations\/\d+\/adopt$/.test(pathname))return'gps_review';if(pathname.startsWith('/api/auth/accounts')||pathname==='/api/auth/audit')return'accounts';if(/^\/api\/gps-migration\/(?:batches\/\d+\/commit|rows\/\d+\/resolve)$/.test(pathname))return'gps_migration_approve';if(pathname.startsWith('/api/gps-migration'))return'gps_migration';return'desktop'}
 const canManageEmployees=session=>accountCan(session,'employee_manage')||session.role==='supervisor'
+const canManageSchedules=session=>accountCan(session,'schedule_manage')||['owner_admin','supervisor'].includes(session.role)
 const canViewIdentity=session=>accountCan(session,'sensitive_data')||accountCan(session,'employee_identity_sensitive')
 const canViewPayroll=session=>accountCan(session,'sensitive_data')||accountCan(session,'employee_payroll_sensitive')
 
@@ -163,6 +165,8 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'GET' && url.pathname === '/api/schedules') return sendJson(response, 200, schedules(Object.fromEntries(url.searchParams)))
     if (request.method === 'GET' && url.pathname === '/api/data-quality/summary') return sendJson(response, 200, dataQualitySummary())
     if (request.method === 'GET' && url.pathname === '/api/dispatch/week') return sendJson(response, 200, getDispatchWeek(Object.fromEntries(url.searchParams)))
+    if (request.method === 'GET' && /^\/api\/schedules\/\d+\/recurrence$/.test(url.pathname)) return sendJson(response,200,getScheduleRecurrence(Number(url.pathname.split('/')[3])))
+    if (request.method === 'PATCH' && /^\/api\/schedules\/\d+\/recurrence$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});return sendJson(response,200,configureScheduleRecurrence(Number(url.pathname.split('/')[3]),{...((await readJson(request)).payload),changedBy:session.employeeName}))}
     if (request.method === 'POST' && url.pathname === '/api/dispatch/generate-week') return sendJson(response, 200, generateWeek((await readJson(request)).payload))
     if (request.method === 'POST' && url.pathname === '/api/dispatch/generate-day') return sendJson(response, 200, generateDay((await readJson(request)).payload))
     if (request.method === 'GET' && url.pathname.startsWith('/api/dispatch/day/')) {

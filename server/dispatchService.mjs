@@ -1,27 +1,13 @@
 import { createHash } from 'node:crypto'
 import { db as defaultDb } from './database.mjs'
 import {addCalendarDays,kuchingDate} from '../shared/kuchingTime.js'
+import {nextCollectionDate,scheduleMatchesDate} from '../shared/scheduleRecurrence.js'
 
-const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
 const iso = (value = new Date()) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : kuchingDate(value)
 const addDays = addCalendarDays
 const json = (value) => value == null ? null : JSON.stringify(value)
 const actor = (value) => String(value || 'Supervisor')
 const currentEmploymentPeriod=(database,employeeId)=>employeeId?database.prepare('SELECT id FROM employee_employment_history WHERE employee_id=? ORDER BY id DESC LIMIT 1').get(employeeId)?.id||null:null
-const dayName = (date) => DAY_NAMES[new Date(`${date}T00:00:00Z`).getUTCDay()]
-const scheduleMatches = (schedule, date) => {
-  const frequency=String(schedule.frequency||'').toLowerCase()
-  if(frequency==='call'||frequency.includes('on call'))return false
-  const matchesDay=String(schedule.days_of_week || '').split(/[,;/]/).map(x=>x.trim()).includes(dayName(date))
-  if(!matchesDay)return false
-  if(frequency.includes('2 week')||frequency.includes('fortnight')){
-    const anchor=schedule.next_take_date||schedule.take_date
-    if(!anchor)return true
-    const elapsed=Math.round((new Date(`${date}T00:00:00`)-new Date(`${anchor}T00:00:00`))/86400000)
-    return elapsed%14===0
-  }
-  return true
-}
 
 function dayByDate(database, date) {
   return database.prepare('SELECT * FROM dispatch_days WHERE dispatch_date=?').get(date)
@@ -65,15 +51,19 @@ function ensureVehicleTrip(database,day,vehicleId,tripNumber){
   return database.prepare('SELECT * FROM dispatch_trips WHERE id=?').get(result.lastInsertRowid)
 }
 
-function addScheduledStop(database, day, schedule) {
+function addScheduledStop(database, day, schedule, occurrenceSource='recurrence') {
   if (!schedule.branch_id) return false
   const exists = database.prepare(`SELECT id FROM dispatch_stops WHERE dispatch_trip_id IN (SELECT id FROM dispatch_trips WHERE dispatch_day_id=?) AND source_schedule_id=?`).get(day.id,schedule.id)
   if (exists) return false
+  const occurrence=database.prepare('INSERT OR IGNORE INTO schedule_occurrences(schedule_id,planned_date,occurrence_source) VALUES(?,?,?)').run(schedule.id,day.dispatch_date,occurrenceSource)
+  if(!occurrence.changes)return false
   const trip=ensureUnassignedTrip(database,day)
   const sequence=database.prepare('SELECT COALESCE(MAX(stop_sequence),0)+1 value FROM dispatch_stops WHERE dispatch_id=?').get(trip.dispatch_id).value
   const snapshot=branchZoneSnapshot(database,schedule.branch_id)
-  database.prepare(`INSERT INTO dispatch_stops(dispatch_id,branch_id,stop_sequence,status,dispatch_trip_id,source_schedule_id,zone_group_id_snapshot,zone_group_name_snapshot,area_name_snapshot)
+  const stop=database.prepare(`INSERT INTO dispatch_stops(dispatch_id,branch_id,stop_sequence,status,dispatch_trip_id,source_schedule_id,zone_group_id_snapshot,zone_group_name_snapshot,area_name_snapshot)
     VALUES(?,?,?,'locked',?,?,?,?,?)`).run(trip.dispatch_id,schedule.branch_id,sequence,trip.id,schedule.id,snapshot.zoneGroupId??null,snapshot.zoneGroupName??'待确认',snapshot.areaName??'未分区')
+  database.prepare("UPDATE schedule_occurrences SET dispatch_stop_id=?,status='generated',updated_at=CURRENT_TIMESTAMP WHERE schedule_id=? AND planned_date=?").run(stop.lastInsertRowid,schedule.id,day.dispatch_date)
+  if(schedule.recurrence_type)database.prepare('UPDATE branch_schedules SET next_collection_date=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(nextCollectionDate(schedule,addDays(day.dispatch_date,1)),schedule.id)
   return true
 }
 
@@ -89,11 +79,14 @@ function generateRange({startDate=iso(),generatedBy='Supervisor',count=7}={}, da
       database.prepare(`INSERT OR IGNORE INTO dispatch_days(weekly_plan_id,dispatch_date) VALUES(?,?)`).run(plan.id,date)
       const day=dayByDate(database,date)
       const schedules=database.prepare(`SELECT s.*,b.area_id FROM branch_schedules s JOIN branches b ON b.id=s.branch_id LEFT JOIN customers c ON c.id=b.customer_id WHERE s.is_active=1 AND b.is_active=1 AND COALESCE(c.is_active,1)=1 AND LOWER(TRIM(COALESCE(b.collection_frequency,''))) NOT IN ('on call','paused')`).all()
-      for(const schedule of schedules) if(scheduleMatches(schedule,date)) createdStops+=Number(addScheduledStop(database,day,schedule))
+      for(const schedule of schedules) if(scheduleMatchesDate(schedule,date)) createdStops+=Number(addScheduledStop(database,day,schedule))
       const additions=database.prepare(`SELECT s.*,b.area_id FROM schedule_exceptions e JOIN branch_schedules s ON s.id=e.schedule_id LEFT JOIN branches b ON b.id=s.branch_id WHERE e.target_date=? AND e.exception_type IN ('move_date','add_extra_collection','customer_request')`).all(date)
-      for(const schedule of additions) createdStops+=Number(addScheduledStop(database,day,schedule))
+      for(const schedule of additions) createdStops+=Number(addScheduledStop(database,day,schedule,'exception'))
       const removals=database.prepare(`SELECT schedule_id FROM schedule_exceptions WHERE original_date=? AND exception_type IN ('move_date','cancel_date','pause_once')`).all(date)
-      for(const item of removals) database.prepare(`DELETE FROM dispatch_stops WHERE source_schedule_id=? AND dispatch_trip_id IN(SELECT id FROM dispatch_trips WHERE dispatch_day_id=?)`).run(item.schedule_id,day.id)
+      for(const item of removals){
+        database.prepare("UPDATE schedule_occurrences SET dispatch_stop_id=NULL,status='cancelled',updated_at=CURRENT_TIMESTAMP WHERE schedule_id=? AND planned_date=?").run(item.schedule_id,date)
+        database.prepare(`DELETE FROM dispatch_stops WHERE source_schedule_id=? AND dispatch_trip_id IN(SELECT id FROM dispatch_trips WHERE dispatch_day_id=?)`).run(item.schedule_id,day.id)
+      }
     }
     database.exec('COMMIT')
     return {weekStart:start,dayCount:count,createdStops,...(count===1?{day:getDispatchDay(start,database)}:getDispatchWeek({startDate:start},database))}

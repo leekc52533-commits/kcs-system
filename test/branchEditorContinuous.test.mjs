@@ -68,6 +68,9 @@ test('Collection Frequency uses one canonical frontend/backend contract and give
     '3 times a week',
     '4 times a week',
     'Daily',
+    'Every 2 Weeks',
+    'Every 3 Weeks',
+    'Monthly',
     'On Call',
     'Paused',
   ])

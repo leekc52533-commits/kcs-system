@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 25
+export const SCHEMA_VERSION = 26
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -113,9 +113,28 @@ CREATE TABLE IF NOT EXISTS branch_schedules (
   days_of_week TEXT,
   take_date TEXT,
   next_take_date TEXT,
+  recurrence_type TEXT,
+  interval_weeks INTEGER,
+  anchor_date TEXT,
+  effective_date TEXT,
+  monthly_occurrence INTEGER,
+  fixed_weekday TEXT,
+  next_collection_date TEXT,
   is_active INTEGER NOT NULL DEFAULT 1,
   source_updated_at TEXT,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS schedule_occurrences (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  schedule_id INTEGER NOT NULL REFERENCES branch_schedules(id),
+  planned_date TEXT NOT NULL,
+  occurrence_source TEXT NOT NULL DEFAULT 'recurrence',
+  status TEXT NOT NULL DEFAULT 'planned',
+  dispatch_stop_id INTEGER REFERENCES dispatch_stops(id),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(schedule_id,planned_date)
 );
 
 CREATE TABLE IF NOT EXISTS operational_locations (
@@ -1110,6 +1129,7 @@ CREATE TABLE IF NOT EXISTS branch_occ_price_assignment_history (
 CREATE INDEX IF NOT EXISTS branches_customer_idx ON branches(customer_id);
 CREATE INDEX IF NOT EXISTS branches_area_idx ON branches(area_id);
 CREATE INDEX IF NOT EXISTS schedules_branch_idx ON branch_schedules(branch_id);
+CREATE INDEX IF NOT EXISTS schedule_occurrences_date_idx ON schedule_occurrences(planned_date,status);
 CREATE INDEX IF NOT EXISTS dispatches_date_idx ON dispatches(dispatch_date);
 CREATE INDEX IF NOT EXISTS stops_dispatch_idx ON dispatch_stops(dispatch_id, stop_sequence);
 CREATE INDEX IF NOT EXISTS sync_status_idx ON jodoo_sync_events(status, received_at);

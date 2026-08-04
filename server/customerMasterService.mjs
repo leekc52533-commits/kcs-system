@@ -122,7 +122,7 @@ export function getBranch(branchId,database=defaultDb){
   item.frequencyNormalizationWarning=storedFrequency&&!settings.collectionFrequency
     ? `Stored Collection Frequency "${storedFrequency}" is not recognized. It will remain unchanged until a valid value is selected.`
     : null
-  item.schedules=database.prepare('SELECT jodoo_schedule_id scheduleId,frequency,days_of_week assignedWeekdays,take_date takeDate,next_take_date nextTakeDate,is_active isActive FROM branch_schedules WHERE branch_id=? ORDER BY id').all(item.internalId)
+  item.schedules=database.prepare('SELECT jodoo_schedule_id scheduleId,frequency,days_of_week assignedWeekdays,take_date takeDate,next_take_date nextTakeDate,recurrence_type recurrenceType,interval_weeks intervalWeeks,anchor_date anchorDate,effective_date effectiveDate,monthly_occurrence monthlyOccurrence,fixed_weekday fixedWeekday,next_collection_date nextCollectionDate,is_active isActive FROM branch_schedules WHERE branch_id=? ORDER BY id').all(item.internalId)
   item.audit=listMasterAudit({entityType:'branch',entityId:branchId},database);return item
 }
 

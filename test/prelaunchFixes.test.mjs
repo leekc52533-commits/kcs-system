@@ -136,11 +136,11 @@ test('back navigation guard prompts only for unsaved state',()=>{
   setNavigationDirty(false)
 })
 
-test('password visibility control exists and schema is v25',()=>{
+test('password visibility control exists and schema is v26',()=>{
   const source=fs.readFileSync(new URL('../src/PasswordInput.jsx',import.meta.url),'utf8')
   assert.match(source,/type=\{visible\?'text':'password'\}/)
   assert.match(source,/auth\.showPassword/)
-  assert.equal(SCHEMA_VERSION,25)
+  assert.equal(SCHEMA_VERSION,26)
 })
 
 test('account name opens Profile menu and voluntary password change is cancellable',()=>{
