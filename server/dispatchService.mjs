@@ -296,7 +296,7 @@ export function updateStop(id,payload,database=defaultDb){
     }
     database.prepare(`UPDATE dispatch_stops SET dispatch_id=?,dispatch_trip_id=?,stop_sequence=?,service_date=?,dedupe_enforced=1,sequence_locked=COALESCE(?,sequence_locked),estimated_weight_kg=COALESCE(?,estimated_weight_kg) WHERE id=?`).run(tripRow.dispatch_id,trip,wanted,targetDate,payload.sequenceLocked==null?null:Number(Boolean(payload.sequenceLocked)),payload.estimatedWeightKg??null,id)
     if(targetDate!==before.dispatch_date){const snapshot=branchZoneSnapshot(database,before.branch_id);database.prepare('UPDATE dispatch_stops SET zone_group_id_snapshot=?,zone_group_name_snapshot=?,area_name_snapshot=? WHERE id=?').run(snapshot.zoneGroupId??null,snapshot.zoneGroupName??'待确认',snapshot.areaName??'未分区',id)}
-    if(targetDate!==before.dispatch_date&&before.source_schedule_id&&!database.prepare("SELECT id FROM schedule_exceptions WHERE schedule_id=? AND exception_type='move_date' AND original_date=? AND target_date=? AND permanent=0").get(before.source_schedule_id,before.dispatch_date,targetDate))database.prepare(`INSERT INTO schedule_exceptions(branch_id,schedule_id,exception_type,original_date,target_date,permanent,reason,created_by) VALUES(?,?,'move_date',?,?,0,?,?)`).run(before.branch_id,before.source_schedule_id,before.dispatch_date,targetDate,payload.reason||'Weekly planner drag-and-drop',actor(payload.changedBy))
+    if(targetDate!==before.dispatch_date&&!payload.suppressException&&before.source_schedule_id&&!database.prepare("SELECT id FROM schedule_exceptions WHERE schedule_id=? AND exception_type='move_date' AND original_date=? AND target_date=? AND permanent=0").get(before.source_schedule_id,before.dispatch_date,targetDate))database.prepare(`INSERT INTO schedule_exceptions(branch_id,schedule_id,exception_type,original_date,target_date,permanent,reason,created_by) VALUES(?,?,'move_date',?,?,0,?,?)`).run(before.branch_id,before.source_schedule_id,before.dispatch_date,targetDate,payload.reason||'Weekly planner drag-and-drop',actor(payload.changedBy))
     invalidateDispatchDay(database,before.dispatch_date,'stop_updated','dispatch_stop',id,before,payload,payload.changedBy)
     if(targetDate!==before.dispatch_date)invalidateDispatchDay(database,targetDate,'stop_moved_in','dispatch_stop',id,null,payload,payload.changedBy)
     return database.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(id)
@@ -377,6 +377,62 @@ export function assignAreaStops(date,payload,database=defaultDb){
   }catch(error){database.exec('ROLLBACK');throw error}
 }
 
+const draftStopById=(database,id)=>database.prepare(`SELECT ds.*,dd.id dispatch_day_id,dd.dispatch_date,dd.status day_status,d.status dispatch_status,
+  dt.trip_number,d.vehicle_id,s.jodoo_schedule_id,s.days_of_week schedule_days
+  FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id JOIN dispatch_days dd ON dd.id=dt.dispatch_day_id
+  JOIN dispatches d ON d.id=ds.dispatch_id LEFT JOIN branch_schedules s ON s.id=ds.source_schedule_id WHERE ds.id=?`).get(Number(id))
+
+function assertDraftStopEditable(stop){
+  if(!stop)throw new Error('Draft Stop not found.')
+  if(stop.day_status!=='draft'||stop.dispatch_status!=='draft'||stop.status==='cancelled')throw new Error(`Stop ${stop.id} is protected and cannot be adjusted.`)
+}
+
+function normalizeTripSequences(database,tripIds){
+  const update=database.prepare('UPDATE dispatch_stops SET stop_sequence=? WHERE id=?')
+  for(const tripId of new Set(tripIds.map(Number).filter(Boolean))){
+    const rows=database.prepare("SELECT id FROM dispatch_stops WHERE dispatch_trip_id=? AND status<>'cancelled' ORDER BY stop_sequence,id").all(tripId)
+    rows.forEach((row,index)=>update.run(index+1,row.id))
+  }
+}
+
+/** Saves the supervisor's staged seven-day draft edits as one all-or-nothing change set. */
+export function saveDraftAdjustments(payload={},database=defaultDb){
+  const adjustments=Array.isArray(payload.adjustments)?payload.adjustments:[]
+  const reason=String(payload.reason||'').trim(),changedBy=actor(payload.changedBy)
+  if(!adjustments.length)throw new Error('No draft changes were submitted.')
+  if(!reason)throw new Error('Reason is required.')
+  return withImmediateTransaction(database,()=>{
+    const touchedTrips=[],results=[]
+    for(const change of adjustments){
+      const before=draftStopById(database,change.stopId);assertDraftStopEditable(before)
+      const targetDate=iso(change.serviceDate||before.dispatch_date),targetDay=dayByDate(database,targetDate)
+      if(!targetDay)throw new Error(`Target dispatch day ${targetDate} was not generated.`)
+      const targetProtection=protectedDayReason(database,targetDay);if(targetProtection)throw new Error(`Target date is protected: ${targetProtection}.`)
+      const duplicate=findBranchServiceDateStop(database,before.branch_id,targetDate,{excludeStopId:before.id})
+      if(duplicate&&Number(duplicate.id)!==Number(before.id))throw new Error(`Duplicate Branch Service Date: existing Stop ${duplicate.id}.`)
+      const dateMode=change.dateMode==='recurring'?'recurring':'occurrence'
+      if(targetDate!==before.dispatch_date&&dateMode==='recurring'){
+        if(!before.source_schedule_id||!before.jodoo_schedule_id)throw new Error(`Stop ${before.id} has no Active Schedule to change.`)
+        const weekday=new Date(`${targetDate}T00:00:00Z`).toLocaleDateString('en-US',{weekday:'long',timeZone:'UTC'})
+        createScheduleException({scheduleId:before.jodoo_schedule_id,type:'move_date',originalDate:before.dispatch_date,targetDate,permanent:true,dayOfWeek:weekday,reason,createdBy:changedBy},database)
+        const delta=Math.round((new Date(`${targetDate}T00:00:00Z`)-new Date(`${before.dispatch_date}T00:00:00Z`))/86400000)
+        const selectedIds=new Set(adjustments.map(item=>Number(item.stopId)))
+        const future=database.prepare(`SELECT ds.id FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id JOIN dispatch_days dd ON dd.id=dt.dispatch_day_id JOIN dispatches d ON d.id=ds.dispatch_id
+          WHERE ds.source_schedule_id=? AND ds.id<>? AND ds.status<>'cancelled' AND dd.dispatch_date>? AND dd.status='draft' AND d.status='draft' ORDER BY dd.dispatch_date`).all(before.source_schedule_id,before.id,before.dispatch_date)
+        for(const row of future){if(selectedIds.has(Number(row.id)))continue;const futureBefore=draftStopById(database,row.id),futureDate=addDays(futureBefore.dispatch_date,delta),futureDay=dayByDate(database,futureDate);if(!futureDay)continue;assertBranchServiceDateAvailable(database,futureBefore.branch_id,futureDate,{excludeStopId:futureBefore.id,attemptedScheduleId:futureBefore.source_schedule_id,entryPoint:'recurring_draft_move'});touchedTrips.push(futureBefore.dispatch_trip_id);const moved=updateStop(futureBefore.id,{date:futureDate,unassigned:true,suppressException:true,reason,changedBy},database);touchedTrips.push(moved.dispatch_trip_id)}
+      }
+      touchedTrips.push(before.dispatch_trip_id)
+      const updated=updateStop(before.id,{date:targetDate,vehicleId:change.unassigned?undefined:change.vehicleId,tripNumber:change.unassigned?undefined:change.tripNumber,unassigned:Boolean(change.unassigned),stopSequence:change.stopSequence,reason,changedBy},database)
+      touchedTrips.push(updated.dispatch_trip_id)
+      database.prepare(`INSERT INTO dispatch_change_logs(dispatch_day_id,actor,change_type,entity_type,entity_id,before_json,after_json,requires_reapproval)
+        VALUES(?,?,'supervisor_draft_adjustment','dispatch_stop',?,?,?,0)`).run(before.dispatch_day_id,changedBy,String(before.id),json(before),json({...updated,dateMode,reason}))
+      results.push({stopId:Number(before.id),dateMode,serviceDate:targetDate,unassigned:Boolean(change.unassigned)})
+    }
+    normalizeTripSequences(database,touchedTrips)
+    return{updated:results.length,results}
+  })
+}
+
 export function driverToday({driverId,employeeId=driverId,includeAssistant=false,date=iso()}={},database=defaultDb){
   const day=dayByDate(database,iso(date));if(!day||day.status!=='published')return{date:iso(date),published:false,trips:[]}
   const trips=database.prepare(`SELECT dt.id,dt.trip_number tripNumber,d.vehicle_id vehicleId,v.vehicle_code vehicle,d.driver_id driverId FROM dispatch_trips dt JOIN dispatches d ON d.id=dt.dispatch_id LEFT JOIN vehicles v ON v.id=d.vehicle_id WHERE dt.dispatch_day_id=? AND (d.driver_id=? OR (?=1 AND (d.assistant_id=? OR EXISTS(SELECT 1 FROM dispatch_vehicle_assistants dva WHERE dva.dispatch_day_id=dt.dispatch_day_id AND dva.vehicle_id=d.vehicle_id AND dva.employee_id=?)))) AND EXISTS(SELECT 1 FROM dispatch_stops ds WHERE ds.dispatch_trip_id=dt.id AND ds.status<>'cancelled')`).all(day.id,Number(employeeId),includeAssistant?1:0,Number(employeeId),Number(employeeId))
@@ -386,16 +442,17 @@ export function driverToday({driverId,employeeId=driverId,includeAssistant=false
 export function createScheduleException(payload,database=defaultDb){
   const schedule=database.prepare('SELECT * FROM branch_schedules WHERE jodoo_schedule_id=?').get(payload.scheduleId);if(!schedule)throw new Error('Schedule not found')
   const type=String(payload.type||'').trim().toLowerCase().replaceAll(' ','_')
-  database.exec('BEGIN IMMEDIATE');try{
+  return withImmediateTransaction(database,()=>{
     if(payload.permanent){
       if(!payload.dayOfWeek)throw new Error('Permanent schedule change requires dayOfWeek')
-      database.prepare('UPDATE branch_schedules SET days_of_week=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(payload.dayOfWeek,schedule.id)
+      const delta=payload.originalDate&&payload.targetDate?Math.round((new Date(`${payload.targetDate}T00:00:00Z`)-new Date(`${payload.originalDate}T00:00:00Z`))/86400000):0
+      database.prepare("UPDATE branch_schedules SET days_of_week=?,fixed_weekday=CASE WHEN fixed_weekday IS NULL THEN NULL ELSE ? END,anchor_date=CASE WHEN anchor_date IS NULL THEN NULL ELSE date(anchor_date,?) END,effective_date=CASE WHEN effective_date IS NULL THEN NULL ELSE date(effective_date,?) END,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(payload.dayOfWeek,payload.dayOfWeek,`${delta} days`,`${delta} days`,schedule.id)
     }
     const result=database.prepare(`INSERT INTO schedule_exceptions(branch_id,schedule_id,exception_type,original_date,target_date,permanent,reason,created_by) VALUES(?,?,?,?,?,?,?,?)`).run(schedule.branch_id,schedule.id,type,payload.originalDate||null,payload.targetDate||null,payload.permanent?1:0,payload.reason||null,actor(payload.createdBy))
     if(payload.originalDate)invalidateDispatchDay(database,payload.originalDate,payload.permanent?'schedule_permanent_change':'schedule_exception','schedule',schedule.id,schedule,payload,payload.createdBy)
     if(payload.targetDate&&payload.targetDate!==payload.originalDate)invalidateDispatchDay(database,payload.targetDate,'schedule_exception','schedule',schedule.id,null,payload,payload.createdBy)
-    database.exec('COMMIT');return database.prepare('SELECT * FROM schedule_exceptions WHERE id=?').get(result.lastInsertRowid)
-  }catch(error){database.exec('ROLLBACK');throw error}
+    return database.prepare('SELECT * FROM schedule_exceptions WHERE id=?').get(result.lastInsertRowid)
+  })
 }
 
 export function requestDedupeKey(payload){return createHash('sha256').update([payload.existingBranchId||'',payload.requestedCollectionDate||'',payload.phone||'',payload.temporaryCustomerName||''].map(x=>String(x).trim().toLowerCase()).join('|')).digest('hex')}
