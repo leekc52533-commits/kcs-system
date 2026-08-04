@@ -471,10 +471,37 @@ export function saveDraftAdjustments(payload={},database=defaultDb){
   })
 }
 
-export function driverToday({driverId,employeeId=driverId,includeAssistant=false,date=iso()}={},database=defaultDb){
-  const day=dayByDate(database,iso(date));if(!day||day.status!=='published')return{date:iso(date),published:false,trips:[]}
-  const trips=database.prepare(`SELECT dt.id,dt.trip_number tripNumber,d.vehicle_id vehicleId,v.vehicle_code vehicle,d.driver_id driverId FROM dispatch_trips dt JOIN dispatches d ON d.id=dt.dispatch_id LEFT JOIN vehicles v ON v.id=d.vehicle_id WHERE dt.dispatch_day_id=? AND (d.driver_id=? OR (?=1 AND (d.assistant_id=? OR EXISTS(SELECT 1 FROM dispatch_vehicle_assistants dva WHERE dva.dispatch_day_id=dt.dispatch_day_id AND dva.vehicle_id=d.vehicle_id AND dva.employee_id=?)))) AND EXISTS(SELECT 1 FROM dispatch_stops ds WHERE ds.dispatch_trip_id=dt.id AND ds.status<>'cancelled')`).all(day.id,Number(employeeId),includeAssistant?1:0,Number(employeeId),Number(employeeId))
-  return{date:day.dispatch_date,published:true,trips:trips.map(t=>({...t,assistants:database.prepare(`SELECT e.id,e.employee_code employeeCode,e.name FROM dispatch_vehicle_assistants dva JOIN employees e ON e.id=dva.employee_id WHERE dva.dispatch_day_id=? AND dva.vehicle_id=? ORDER BY e.name`).all(day.id,t.vehicleId),stops:database.prepare(`SELECT ds.id,ds.stop_sequence stopSequence,b.jodoo_branch_id branchId,b.branch_name branchName,c.name customerName,b.address,b.latitude,b.longitude,c.payment_type paymentType,c.occ_price occPrice FROM dispatch_stops ds JOIN branches b ON b.id=ds.branch_id LEFT JOIN customers c ON c.id=b.customer_id WHERE ds.dispatch_trip_id=? AND ds.status<>'cancelled' ORDER BY ds.stop_sequence`).all(t.id)}))}
+const driverRouteForbidden=message=>{const error=new Error(message);error.statusCode=403;error.code='PERMISSION_DENIED';return error}
+
+/** Read-only, session-scoped view of the authenticated employee's approved route for today. */
+export function driverToday({employeeId,role,today=kuchingDate()}={},database=defaultDb){
+  const employee=database.prepare(`SELECT e.id,e.job_role jobRole,e.employment_status employmentStatus,e.is_active isActive,
+    EXISTS(SELECT 1 FROM employee_job_roles r WHERE r.employee_id=e.id AND r.role='Driver' AND r.is_active=1) hasDriverRole,
+    EXISTS(SELECT 1 FROM employee_job_roles r WHERE r.employee_id=e.id AND r.role='Attendant / Crew' AND r.is_active=1) hasCrewRole
+    FROM employees e WHERE e.id=?`).get(Number(employeeId))
+  const accountRole=String(role||'').trim().toLowerCase(),jobRole=String(employee?.jobRole||'').trim().toLowerCase()
+  if(!employee||!employee.isActive||employee.employmentStatus!=='active')throw driverRouteForbidden('This employee is not active.')
+  const isDriver=accountRole==='driver'&&(jobRole==='driver'||Boolean(employee.hasDriverRole))
+  const isCrew=accountRole==='crew'&&(['assistant','crew','attendant / crew'].includes(jobRole)||Boolean(employee.hasCrewRole))
+  if(!isDriver&&!isCrew)throw driverRouteForbidden('You do not have permission to view a driver route.')
+  const date=iso(today),weekday=new Date(`${date}T00:00:00Z`).toLocaleDateString('en-US',{weekday:'long',timeZone:'UTC'}),day=dayByDate(database,date)
+  const empty=reason=>({date,weekday,status:day?.status||null,approved:false,routeAvailable:false,reason,trips:[],vehicles:[],totalStops:0,completedStops:0,pendingStops:0})
+  if(!day||day.status!=='approved')return empty('NO_APPROVED_ROUTE')
+  const assignment=isDriver?'d.driver_id=?':`(d.assistant_id=? OR EXISTS(SELECT 1 FROM dispatch_vehicle_assistants dva WHERE dva.dispatch_day_id=dt.dispatch_day_id AND dva.vehicle_id=d.vehicle_id AND dva.employee_id=?))`
+  const params=isDriver?[day.id,Number(employeeId)]:[day.id,Number(employeeId),Number(employeeId)]
+  const trips=database.prepare(`SELECT dt.id,dt.trip_number tripNumber,d.vehicle_id vehicleId,v.vehicle_code vehicleCode,v.vehicle_name vehicleName,v.registration_number registrationNumber
+    FROM dispatch_trips dt JOIN dispatches d ON d.id=dt.dispatch_id JOIN vehicles v ON v.id=d.vehicle_id
+    WHERE dt.dispatch_day_id=? AND ${assignment} AND v.operational_status IN ('available','active') AND v.status IN ('available','assigned')
+      AND EXISTS(SELECT 1 FROM dispatch_stops ds JOIN branches bx ON bx.id=ds.branch_id WHERE ds.dispatch_trip_id=dt.id AND ds.status<>'cancelled' AND lower(COALESCE(bx.status,'active'))='active')
+    ORDER BY v.vehicle_code,dt.trip_number,dt.id`).all(...params).map(trip=>({...trip,stops:database.prepare(`SELECT ds.id,ds.stop_sequence stopSequence,ds.status,b.jodoo_branch_id branchId,b.branch_name branchName,c.name customerName,b.address,
+      COALESCE(ds.area_name_snapshot,a.name) area,b.time_restriction timeRestriction,ds.estimated_weight_kg estimatedWeightKg,
+      CASE WHEN b.latitude IS NOT NULL AND b.longitude IS NOT NULL THEN 1 ELSE 0 END gpsAvailable
+      FROM dispatch_stops ds JOIN branches b ON b.id=ds.branch_id LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas a ON a.id=b.area_id
+      WHERE ds.dispatch_trip_id=? AND ds.status<>'cancelled' AND lower(COALESCE(b.status,'active'))='active'
+      ORDER BY ds.stop_sequence,ds.id`).all(trip.id).map(stop=>({...stop,gpsAvailable:Boolean(stop.gpsAvailable)}))}))
+  if(!trips.length)return empty('NO_VEHICLE_ASSIGNED')
+  const stops=trips.flatMap(trip=>trip.stops),vehicles=[...new Map(trips.map(trip=>[trip.vehicleId,{id:trip.vehicleId,vehicleCode:trip.vehicleCode,vehicleName:trip.vehicleName,registrationNumber:trip.registrationNumber}])).values()]
+  return{date,weekday,status:'approved',approved:true,routeAvailable:true,trips,vehicles,totalStops:stops.length,completedStops:stops.filter(stop=>stop.status==='completed').length,pendingStops:stops.filter(stop=>stop.status!=='completed').length}
 }
 
 export function createScheduleException(payload,database=defaultDb){
