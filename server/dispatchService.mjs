@@ -14,6 +14,21 @@ function dayByDate(database, date) {
   return database.prepare('SELECT * FROM dispatch_days WHERE dispatch_date=?').get(date)
 }
 
+const PROTECTED_DAY_STATUSES=new Set(['approved','published','in_progress','completed'])
+const PROTECTED_DISPATCH_STATUSES=new Set(['released','in_progress','completed'])
+function protectedDayReason(database,day){
+  if(!day)return null
+  if(PROTECTED_DAY_STATUSES.has(String(day.status||'').toLowerCase()))return`Dispatch day is ${day.status}`
+  const dispatch=database.prepare(`SELECT d.id,d.status FROM dispatch_trips dt JOIN dispatches d ON d.id=dt.dispatch_id WHERE dt.dispatch_day_id=? AND d.status IN ('released','in_progress','completed') ORDER BY d.id LIMIT 1`).get(day.id)
+  return dispatch&&PROTECTED_DISPATCH_STATUSES.has(String(dispatch.status||'').toLowerCase())?`Dispatch ${dispatch.id} is ${dispatch.status}`:null
+}
+
+function latestExistingEstimatedWeight(database,branchId){
+  return database.prepare(`SELECT estimated_weight_kg value FROM dispatch_stops
+    WHERE branch_id=? AND estimated_weight_kg IS NOT NULL AND estimated_weight_kg>=0
+    ORDER BY COALESCE(service_date,(SELECT dispatch_date FROM dispatches WHERE id=dispatch_stops.dispatch_id)) DESC,id DESC LIMIT 1`).get(branchId)?.value??null
+}
+
 export function invalidateDispatchDay(database, date, changeType, entityType, entityId, before, after, changedBy='Supervisor') {
   const day = dayByDate(database,date)
   if (!day) return null
@@ -66,8 +81,9 @@ function addScheduledStop(database, day, schedule, occurrenceSource='recurrence'
   const trip=ensureUnassignedTrip(database,day)
   const sequence=database.prepare('SELECT COALESCE(MAX(stop_sequence),0)+1 value FROM dispatch_stops WHERE dispatch_id=?').get(trip.dispatch_id).value
   const snapshot=branchZoneSnapshot(database,schedule.branch_id)
-  const stop=database.prepare(`INSERT INTO dispatch_stops(dispatch_id,branch_id,stop_sequence,status,dispatch_trip_id,source_schedule_id,service_date,dedupe_enforced,zone_group_id_snapshot,zone_group_name_snapshot,area_name_snapshot)
-    VALUES(?,?,?,'locked',?,?,?,1,?,?,?)`).run(trip.dispatch_id,schedule.branch_id,sequence,trip.id,schedule.id,day.dispatch_date,snapshot.zoneGroupId??null,snapshot.zoneGroupName??'待确认',snapshot.areaName??'未分区')
+  const estimatedWeightKg=latestExistingEstimatedWeight(database,schedule.branch_id)
+  const stop=database.prepare(`INSERT INTO dispatch_stops(dispatch_id,branch_id,stop_sequence,status,dispatch_trip_id,source_schedule_id,service_date,dedupe_enforced,estimated_weight_kg,zone_group_id_snapshot,zone_group_name_snapshot,area_name_snapshot)
+    VALUES(?,?,?,'locked',?,?,?,1,?,?,?,?)`).run(trip.dispatch_id,schedule.branch_id,sequence,trip.id,schedule.id,day.dispatch_date,estimatedWeightKg,snapshot.zoneGroupId??null,snapshot.zoneGroupName??'待确认',snapshot.areaName??'未分区')
   database.prepare("UPDATE schedule_occurrences SET dispatch_stop_id=?,status='generated',updated_at=CURRENT_TIMESTAMP WHERE schedule_id=? AND planned_date=?").run(stop.lastInsertRowid,schedule.id,day.dispatch_date)
   if(schedule.recurrence_type)database.prepare('UPDATE branch_schedules SET next_collection_date=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(nextCollectionDate(schedule,addDays(day.dispatch_date,1)),schedule.id)
   return {created:true,result:'Created',stopId:Number(stop.lastInsertRowid),scheduleId:schedule.id,branchId:schedule.branch_id,serviceDate:day.dispatch_date}
@@ -78,17 +94,19 @@ function generateRange({startDate=iso(),generatedBy='Supervisor',count=7}={}, da
   database.exec('BEGIN IMMEDIATE')
   try {
     assertRouteGenerationReady(database)
-    database.prepare(`INSERT INTO weekly_dispatch_plans(week_start,generated_by) VALUES(?,?) ON CONFLICT(week_start) DO UPDATE SET updated_at=CURRENT_TIMESTAMP`).run(start,actor(generatedBy))
+    database.prepare(`INSERT INTO weekly_dispatch_plans(week_start,generated_by) VALUES(?,?) ON CONFLICT(week_start) DO NOTHING`).run(start,actor(generatedBy))
     const plan=database.prepare('SELECT * FROM weekly_dispatch_plans WHERE week_start=?').get(start)
-    let createdStops=0,duplicateStops=[]
+    let createdStops=0,reusedStops=0,duplicateStops=[],protectedDays=[]
     for(let offset=0;offset<count;offset+=1){
       const date=addDays(start,offset)
       database.prepare(`INSERT OR IGNORE INTO dispatch_days(weekly_plan_id,dispatch_date) VALUES(?,?)`).run(plan.id,date)
       const day=dayByDate(database,date)
+      const protectedReason=protectedDayReason(database,day)
+      if(protectedReason){protectedDays.push({date,reason:protectedReason,status:day.status});continue}
       const schedules=database.prepare(`SELECT s.*,b.area_id FROM branch_schedules s JOIN branches b ON b.id=s.branch_id LEFT JOIN customers c ON c.id=b.customer_id WHERE s.is_active=1 AND b.is_active=1 AND COALESCE(c.is_active,1)=1 AND LOWER(TRIM(COALESCE(b.collection_frequency,''))) NOT IN ('on call','paused')`).all()
-      for(const schedule of schedules) if(scheduleMatchesDate(schedule,date)){const result=addScheduledStop(database,day,schedule);if(result.created)createdStops+=1;else if(result.code==='DUPLICATE_BRANCH_SERVICE_DATE')duplicateStops.push(result)}
+      for(const schedule of schedules) if(scheduleMatchesDate(schedule,date)){const result=addScheduledStop(database,day,schedule);if(result.created)createdStops+=1;else{reusedStops+=1;if(result.code==='DUPLICATE_BRANCH_SERVICE_DATE'&&Number(result.existingScheduleId)!==Number(result.attemptedScheduleId))duplicateStops.push(result)}}
       const additions=database.prepare(`SELECT s.*,b.area_id FROM schedule_exceptions e JOIN branch_schedules s ON s.id=e.schedule_id LEFT JOIN branches b ON b.id=s.branch_id WHERE e.target_date=? AND e.exception_type IN ('move_date','add_extra_collection','customer_request')`).all(date)
-      for(const schedule of additions){const result=addScheduledStop(database,day,schedule,'exception');if(result.created)createdStops+=1;else if(result.code==='DUPLICATE_BRANCH_SERVICE_DATE')duplicateStops.push(result)}
+      for(const schedule of additions){const result=addScheduledStop(database,day,schedule,'exception');if(result.created)createdStops+=1;else{reusedStops+=1;if(result.code==='DUPLICATE_BRANCH_SERVICE_DATE'&&Number(result.existingScheduleId)!==Number(result.attemptedScheduleId))duplicateStops.push(result)}}
       const removals=database.prepare(`SELECT schedule_id FROM schedule_exceptions WHERE original_date=? AND exception_type IN ('move_date','cancel_date','pause_once')`).all(date)
       for(const item of removals){
         database.prepare("UPDATE schedule_occurrences SET dispatch_stop_id=NULL,status='cancelled',updated_at=CURRENT_TIMESTAMP WHERE schedule_id=? AND planned_date=?").run(item.schedule_id,date)
@@ -96,7 +114,7 @@ function generateRange({startDate=iso(),generatedBy='Supervisor',count=7}={}, da
       }
     }
     database.exec('COMMIT')
-    return {weekStart:start,dayCount:count,createdStops,duplicateStops,...(count===1?{day:getDispatchDay(start,database)}:getDispatchWeek({startDate:start},database))}
+    return {weekStart:start,dayCount:count,createdStops,reusedStops,protectedDays,duplicateStops,...(count===1?{day:getDispatchDay(start,database)}:getDispatchWeek({startDate:start},database))}
   } catch(error){database.exec('ROLLBACK');throw error}
 }
 export function generateWeek(payload={},database=defaultDb){return generateRange({...payload,count:7},database)}
@@ -133,11 +151,11 @@ function dayView(database, day) {
   const boardVehicles=vehicles.filter(vehicle=>vehicle.isCommon||assignedTrips.some(item=>item.vehicleId===vehicle.id))
   const vehicleBoards=boardVehicles.map(vehicle=>{
     const vehicleTrips=assignedTrips.filter(item=>item.vehicleId===vehicle.id),basis=vehicleTrips.find(item=>item.driverId||item.assistantId||item.startLocationId||item.endLocationId)||vehicleTrips[0]||{}
-    const slots=[1,2,3].map(tripNumber=>{const trip=vehicleTrips.find(item=>item.tripNumber===tripNumber);return{tripNumber,tripId:trip?.id??null,stops:trip?stops.filter(stop=>stop.tripId===trip.id):[]}})
+    const slots=[1,2,3].map(tripNumber=>{const trip=vehicleTrips.find(item=>item.tripNumber===tripNumber),tripStops=trip?stops.filter(stop=>stop.tripId===trip.id):[],weighted=tripStops.filter(stop=>stop.estimatedWeightKg!=null);return{tripNumber,tripId:trip?.id??null,stops:tripStops,stopCount:tripStops.length,estimatedWeightKg:weighted.reduce((sum,stop)=>sum+Number(stop.estimatedWeightKg),0),weightedStopCount:weighted.length,missingWeightCount:tripStops.length-weighted.length}})
     const areas=[...new Set(slots.flatMap(slot=>slot.stops.map(stop=>stop.area).filter(Boolean)))]
     const assistants=assistantRows.filter(item=>item.vehicleId===vehicle.id)
     if(!assistants.length&&basis.assistantId)assistants.push({id:basis.assistantId,name:basis.assistant,employeeCode:null,vehicleId:vehicle.id})
-    return{...vehicle,driverId:basis.driverId??null,driver:basis.driver??null,assistantIds:assistants.map(item=>item.id),assistants,startLocationId:basis.startLocationId??null,startLocation:basis.startLocation??null,endLocationId:basis.endLocationId??null,endLocation:basis.endLocation??null,areas,slots,customerCount:slots.reduce((sum,slot)=>sum+slot.stops.length,0)}
+    return{...vehicle,driverId:basis.driverId??null,driver:basis.driver??null,assistantIds:assistants.map(item=>item.id),assistants,startLocationId:basis.startLocationId??null,startLocation:basis.startLocation??null,endLocationId:basis.endLocationId??null,endLocation:basis.endLocation??null,areas,slots,customerCount:slots.reduce((sum,slot)=>sum+slot.stopCount,0),estimatedWeightKg:slots.reduce((sum,slot)=>sum+slot.estimatedWeightKg,0),weightedStopCount:slots.reduce((sum,slot)=>sum+slot.weightedStopCount,0),missingWeightCount:slots.reduce((sum,slot)=>sum+slot.missingWeightCount,0)}
   })
   const unassignedStops=stops.filter(stop=>!stop.vehicleId||!availableIds.has(stop.vehicleId))
   const unassignedGroups=[...new Map(unassignedStops.map(stop=>[stop.areaId??'unassigned',{areaId:stop.areaId??null,areaName:stop.area||'未分区',zoneGroupId:stop.zoneGroupId??'pending',zoneGroupName:stop.zoneGroup||'待确认',zoneSortOrder:stop.zoneSortOrder??9999}])).values()].map(group=>{
@@ -151,8 +169,10 @@ function dayView(database, day) {
     return{...zone,areaCount:areas.length,customerCount:zoneStops.length,estimatedWeightKg:areas.reduce((sum,group)=>sum+group.estimatedWeightKg,0),weightedCustomerCount:areas.reduce((sum,group)=>sum+group.weightedCustomerCount,0),
       missingGpsCount:areas.reduce((sum,group)=>sum+group.missingGpsCount,0),timeRestrictionCount:areas.reduce((sum,group)=>sum+group.timeRestrictionCount,0),stops:zoneStops,areas}
   }).sort((a,b)=>a.zoneSortOrder-b.zoneSortOrder||String(a.zoneGroupName).localeCompare(String(b.zoneGroupName)))
-  const warningCount=unassignedStops.length+vehicleBoards.filter(board=>board.customerCount>0&&!board.driverId).length+specials.filter(x=>x.requestType==='potential_new'&&newCustomerMissing(x).length).length
-  return {...day,stops,trips:assignedTrips,vehicleBoards,unassignedStops,unassignedGroups,unassignedZones,specialRequests:specials,warningCount,legacyUnassignedTripCount:allTrips.filter(item=>!item.vehicleId).length}
+  const weightedStops=stops.filter(stop=>stop.estimatedWeightKg!=null),missingGpsCount=stops.filter(stop=>!Number.isFinite(stop.latitude)||!Number.isFinite(stop.longitude)||stop.latitude===0||stop.longitude===0).length,timeRestrictionCount=stops.filter(stop=>Boolean(String(stop.timeRestriction||'').trim())).length,missingWeightCount=stops.length-weightedStops.length
+  const warningCount=missingGpsCount+missingWeightCount+timeRestrictionCount+vehicleBoards.filter(board=>board.customerCount>0&&!board.driverId).length+specials.filter(x=>x.requestType==='potential_new'&&newCustomerMissing(x).length).length
+  const previewSummary={stopCount:stops.length,estimatedWeightKg:weightedStops.reduce((sum,stop)=>sum+Number(stop.estimatedWeightKg),0),weightedStopCount:weightedStops.length,missingWeightCount,missingGpsCount,timeRestrictionCount,unassignedCount:unassignedStops.length,warningCount}
+  return {...day,stops,trips:assignedTrips,vehicleBoards,unassignedStops,unassignedGroups,unassignedZones,specialRequests:specials,warningCount,previewSummary,legacyUnassignedTripCount:allTrips.filter(item=>!item.vehicleId).length}
 }
 
 const resourceOptions=(database)=>({

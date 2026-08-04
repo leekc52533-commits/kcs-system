@@ -167,8 +167,8 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'GET' && url.pathname === '/api/dispatch/week') return sendJson(response, 200, getDispatchWeek(Object.fromEntries(url.searchParams)))
     if (request.method === 'GET' && /^\/api\/schedules\/\d+\/recurrence$/.test(url.pathname)) return sendJson(response,200,getScheduleRecurrence(Number(url.pathname.split('/')[3])))
     if (request.method === 'PATCH' && /^\/api\/schedules\/\d+\/recurrence$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});return sendJson(response,200,configureScheduleRecurrence(Number(url.pathname.split('/')[3]),{...((await readJson(request)).payload),changedBy:session.employeeName}))}
-    if (request.method === 'POST' && url.pathname === '/api/dispatch/generate-week') return sendJson(response, 200, generateWeek((await readJson(request)).payload))
-    if (request.method === 'POST' && url.pathname === '/api/dispatch/generate-day') return sendJson(response, 200, generateDay((await readJson(request)).payload))
+    if (request.method === 'POST' && url.pathname === '/api/dispatch/generate-week') {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});return sendJson(response,200,generateWeek({...((await readJson(request)).payload),generatedBy:session.employeeName}))}
+    if (request.method === 'POST' && url.pathname === '/api/dispatch/generate-day') {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});return sendJson(response,200,generateDay({...((await readJson(request)).payload),generatedBy:session.employeeName}))}
     if (request.method === 'GET' && url.pathname.startsWith('/api/dispatch/day/')) {
       const item=getDispatchDay(decodeURIComponent(url.pathname.slice('/api/dispatch/day/'.length)))
       return item?sendJson(response,200,item):sendJson(response,404,{error:'Dispatch day not found'})
