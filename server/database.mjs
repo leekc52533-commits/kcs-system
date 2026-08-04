@@ -13,7 +13,7 @@ import { applyV22Migration, seedV22MasterData } from './migrationV22.mjs'
 import { applyV23Migration } from './migrationV23.mjs'
 import { applyV24Migration, seedV24Data } from './migrationV24.mjs'
 import { applyV25Migration } from './migrationV25.mjs'
-import { applyV26Migration } from './migrationV26.mjs'
+import { applyV26Migration, ensureV26Schema } from './migrationV26.mjs'
 
 const serverDir = path.dirname(fileURLToPath(import.meta.url))
 const projectDir = path.resolve(serverDir, '..')
@@ -78,6 +78,12 @@ ensureColumn('operational_locations', 'created_at', 'TEXT')
 ensureColumn('dispatch_stops', 'dispatch_trip_id', 'INTEGER REFERENCES dispatch_trips(id)')
 ensureColumn('dispatch_stops', 'source_schedule_id', 'INTEGER REFERENCES branch_schedules(id)')
 ensureColumn('dispatch_stops', 'source_special_request_id', 'INTEGER REFERENCES special_collection_requests(id)')
+ensureColumn('dispatch_stops', 'service_date', 'TEXT')
+ensureColumn('dispatch_stops', 'dedupe_enforced', 'INTEGER NOT NULL DEFAULT 0')
+ensureColumn('dispatch_stops', 'superseded_by_stop_id', 'INTEGER REFERENCES dispatch_stops(id)')
+ensureColumn('dispatch_stops', 'superseded_reason', 'TEXT')
+ensureColumn('dispatch_stops', 'superseded_at', 'TEXT')
+ensureColumn('dispatch_stops', 'superseded_by', 'TEXT')
 ensureColumn('dispatch_stops', 'estimated_weight_kg', 'REAL')
 ensureColumn('dispatch_stops', 'sequence_locked', 'INTEGER NOT NULL DEFAULT 0')
 ensureColumn('dispatch_stops', 'zone_group_id_snapshot', 'INTEGER')
@@ -265,6 +271,7 @@ if(materialSchemaVersion<24)applyV24Migration(db)
 else if(!hasMaterialCategories||materialSchemaVersion===24)seedV24Data(db)
 if(!hasMaterialCategories||Number(db.prepare('SELECT COALESCE(MAX(version),0) version FROM schema_meta').get().version)<25)applyV25Migration(db)
 if(Number(db.prepare('SELECT COALESCE(MAX(version),0) version FROM schema_meta').get().version)<26)applyV26Migration(db)
+else ensureV26Schema(db)
 
 const officialVehicles = [
   ['Lorry 1','QAV3468','available',0,null],

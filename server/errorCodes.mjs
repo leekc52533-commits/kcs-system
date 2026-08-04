@@ -1,4 +1,6 @@
 const rules=[
+  ['DUPLICATE_BRANCH_SERVICE_DATE',/duplicate branch service date/i],
+  ['ROUTE_GENERATION_DUPLICATES_UNRESOLVED',/route generation blocked.*duplicate/i],
   ['AUTH_REQUIRED',/请先登录|not authenticated/i],
   ['PERMISSION_DENIED',/没有权限|permission required|permission denied|not allowed/i],
   ['PASSWORD_CHANGE_REQUIRED',/首次登录必须先修改密码/i],

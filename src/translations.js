@@ -445,6 +445,19 @@ const routeMessages={
 
 for(const language of Object.keys(moduleMessages))Object.assign(messages[language],moduleMessages[language],routeMessages[language])
 
+Object.assign(messages.en,{
+  'apiError.duplicate_branch_service_date':'This branch already has an active collection stop on the selected service date.',
+  'apiError.route_generation_duplicates_unresolved':'Route generation is blocked until existing duplicate branch/date stops are resolved.'
+})
+Object.assign(messages.ms,{
+  'apiError.duplicate_branch_service_date':'Cawangan ini sudah mempunyai hentian kutipan aktif pada tarikh perkhidmatan yang dipilih.',
+  'apiError.route_generation_duplicates_unresolved':'Penjanaan laluan disekat sehingga hentian cawangan/tarikh yang berulang diselesaikan.'
+})
+Object.assign(messages.zh,{
+  'apiError.duplicate_branch_service_date':'该Branch在所选服务日期已有有效收货Stop。',
+  'apiError.route_generation_duplicates_unresolved':'现有Branch／日期重复Stop尚未处理，路线生成已被阻止。'
+})
+
 const sourceAliases=new Map()
 for(const language of Object.keys(messages)){
   for(const[key,value]of Object.entries(messages[language]))sourceAliases.set(String(value),key)

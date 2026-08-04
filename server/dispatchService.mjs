@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { db as defaultDb } from './database.mjs'
 import {addCalendarDays,kuchingDate} from '../shared/kuchingTime.js'
 import {nextCollectionDate,scheduleMatchesDate} from '../shared/scheduleRecurrence.js'
+import {assertBranchServiceDateAvailable,assertRouteGenerationReady,duplicateResult,findBranchServiceDateStop,recordDuplicateDiagnostic,withImmediateTransaction} from './branchServiceDateGuard.mjs'
 
 const iso = (value = new Date()) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : kuchingDate(value)
 const addDays = addCalendarDays
@@ -52,44 +53,50 @@ function ensureVehicleTrip(database,day,vehicleId,tripNumber){
 }
 
 function addScheduledStop(database, day, schedule, occurrenceSource='recurrence') {
-  if (!schedule.branch_id) return false
-  const exists = database.prepare(`SELECT id FROM dispatch_stops WHERE dispatch_trip_id IN (SELECT id FROM dispatch_trips WHERE dispatch_day_id=?) AND source_schedule_id=?`).get(day.id,schedule.id)
-  if (exists) return false
-  const occurrence=database.prepare('INSERT OR IGNORE INTO schedule_occurrences(schedule_id,planned_date,occurrence_source) VALUES(?,?,?)').run(schedule.id,day.dispatch_date,occurrenceSource)
-  if(!occurrence.changes)return false
+  if (!schedule.branch_id) return {created:false,result:'Skipped',code:'SCHEDULE_BRANCH_MISSING'}
+  const exists=findBranchServiceDateStop(database,schedule.branch_id,day.dispatch_date)
+  if(exists){if(Number(exists.source_schedule_id)!==Number(schedule.id))recordDuplicateDiagnostic(database,day,{existing:exists,branchId:schedule.branch_id,serviceDate:day.dispatch_date,attemptedScheduleId:schedule.id,entryPoint:occurrenceSource});return duplicateResult(exists,{branchId:schedule.branch_id,serviceDate:day.dispatch_date,attemptedScheduleId:schedule.id,entryPoint:occurrenceSource})}
+  const previousOccurrence=database.prepare('SELECT * FROM schedule_occurrences WHERE schedule_id=? AND planned_date=?').get(schedule.id,day.dispatch_date)
+  if(previousOccurrence?.status==='cancelled')database.prepare("UPDATE schedule_occurrences SET branch_id=?,occurrence_source=?,status='planned',dispatch_stop_id=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(schedule.branch_id,occurrenceSource,previousOccurrence.id)
+  else if(previousOccurrence)return{created:false,result:'Already Exists',code:'SCHEDULE_OCCURRENCE_EXISTS',existingOccurrenceId:previousOccurrence.id,existingStopId:previousOccurrence.dispatch_stop_id??null}
+  else{
+    const occurrence=database.prepare('INSERT OR IGNORE INTO schedule_occurrences(schedule_id,branch_id,planned_date,occurrence_source) VALUES(?,?,?,?)').run(schedule.id,schedule.branch_id,day.dispatch_date,occurrenceSource)
+    if(!occurrence.changes){const other=database.prepare("SELECT * FROM schedule_occurrences WHERE branch_id=? AND planned_date=? AND status<>'cancelled' ORDER BY id LIMIT 1").get(schedule.branch_id,day.dispatch_date);return{created:false,result:'Already Exists',code:'DUPLICATE_BRANCH_SERVICE_DATE',branchId:schedule.branch_id,serviceDate:day.dispatch_date,existingOccurrenceId:other?.id??null,existingScheduleId:other?.schedule_id??null,attemptedScheduleId:schedule.id}}
+  }
   const trip=ensureUnassignedTrip(database,day)
   const sequence=database.prepare('SELECT COALESCE(MAX(stop_sequence),0)+1 value FROM dispatch_stops WHERE dispatch_id=?').get(trip.dispatch_id).value
   const snapshot=branchZoneSnapshot(database,schedule.branch_id)
-  const stop=database.prepare(`INSERT INTO dispatch_stops(dispatch_id,branch_id,stop_sequence,status,dispatch_trip_id,source_schedule_id,zone_group_id_snapshot,zone_group_name_snapshot,area_name_snapshot)
-    VALUES(?,?,?,'locked',?,?,?,?,?)`).run(trip.dispatch_id,schedule.branch_id,sequence,trip.id,schedule.id,snapshot.zoneGroupId??null,snapshot.zoneGroupName??'待确认',snapshot.areaName??'未分区')
+  const stop=database.prepare(`INSERT INTO dispatch_stops(dispatch_id,branch_id,stop_sequence,status,dispatch_trip_id,source_schedule_id,service_date,dedupe_enforced,zone_group_id_snapshot,zone_group_name_snapshot,area_name_snapshot)
+    VALUES(?,?,?,'locked',?,?,?,1,?,?,?)`).run(trip.dispatch_id,schedule.branch_id,sequence,trip.id,schedule.id,day.dispatch_date,snapshot.zoneGroupId??null,snapshot.zoneGroupName??'待确认',snapshot.areaName??'未分区')
   database.prepare("UPDATE schedule_occurrences SET dispatch_stop_id=?,status='generated',updated_at=CURRENT_TIMESTAMP WHERE schedule_id=? AND planned_date=?").run(stop.lastInsertRowid,schedule.id,day.dispatch_date)
   if(schedule.recurrence_type)database.prepare('UPDATE branch_schedules SET next_collection_date=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(nextCollectionDate(schedule,addDays(day.dispatch_date,1)),schedule.id)
-  return true
+  return {created:true,result:'Created',stopId:Number(stop.lastInsertRowid),scheduleId:schedule.id,branchId:schedule.branch_id,serviceDate:day.dispatch_date}
 }
 
 function generateRange({startDate=iso(),generatedBy='Supervisor',count=7}={}, database=defaultDb) {
   const start=iso(startDate)
   database.exec('BEGIN IMMEDIATE')
   try {
+    assertRouteGenerationReady(database)
     database.prepare(`INSERT INTO weekly_dispatch_plans(week_start,generated_by) VALUES(?,?) ON CONFLICT(week_start) DO UPDATE SET updated_at=CURRENT_TIMESTAMP`).run(start,actor(generatedBy))
     const plan=database.prepare('SELECT * FROM weekly_dispatch_plans WHERE week_start=?').get(start)
-    let createdStops=0
+    let createdStops=0,duplicateStops=[]
     for(let offset=0;offset<count;offset+=1){
       const date=addDays(start,offset)
       database.prepare(`INSERT OR IGNORE INTO dispatch_days(weekly_plan_id,dispatch_date) VALUES(?,?)`).run(plan.id,date)
       const day=dayByDate(database,date)
       const schedules=database.prepare(`SELECT s.*,b.area_id FROM branch_schedules s JOIN branches b ON b.id=s.branch_id LEFT JOIN customers c ON c.id=b.customer_id WHERE s.is_active=1 AND b.is_active=1 AND COALESCE(c.is_active,1)=1 AND LOWER(TRIM(COALESCE(b.collection_frequency,''))) NOT IN ('on call','paused')`).all()
-      for(const schedule of schedules) if(scheduleMatchesDate(schedule,date)) createdStops+=Number(addScheduledStop(database,day,schedule))
+      for(const schedule of schedules) if(scheduleMatchesDate(schedule,date)){const result=addScheduledStop(database,day,schedule);if(result.created)createdStops+=1;else if(result.code==='DUPLICATE_BRANCH_SERVICE_DATE')duplicateStops.push(result)}
       const additions=database.prepare(`SELECT s.*,b.area_id FROM schedule_exceptions e JOIN branch_schedules s ON s.id=e.schedule_id LEFT JOIN branches b ON b.id=s.branch_id WHERE e.target_date=? AND e.exception_type IN ('move_date','add_extra_collection','customer_request')`).all(date)
-      for(const schedule of additions) createdStops+=Number(addScheduledStop(database,day,schedule,'exception'))
+      for(const schedule of additions){const result=addScheduledStop(database,day,schedule,'exception');if(result.created)createdStops+=1;else if(result.code==='DUPLICATE_BRANCH_SERVICE_DATE')duplicateStops.push(result)}
       const removals=database.prepare(`SELECT schedule_id FROM schedule_exceptions WHERE original_date=? AND exception_type IN ('move_date','cancel_date','pause_once')`).all(date)
       for(const item of removals){
         database.prepare("UPDATE schedule_occurrences SET dispatch_stop_id=NULL,status='cancelled',updated_at=CURRENT_TIMESTAMP WHERE schedule_id=? AND planned_date=?").run(item.schedule_id,date)
-        database.prepare(`DELETE FROM dispatch_stops WHERE source_schedule_id=? AND dispatch_trip_id IN(SELECT id FROM dispatch_trips WHERE dispatch_day_id=?)`).run(item.schedule_id,day.id)
+        database.prepare(`UPDATE dispatch_stops SET status='cancelled',superseded_reason='Schedule exception',superseded_at=CURRENT_TIMESTAMP,superseded_by='System' WHERE source_schedule_id=? AND dispatch_trip_id IN(SELECT id FROM dispatch_trips WHERE dispatch_day_id=?) AND status<>'completed'`).run(item.schedule_id,day.id)
       }
     }
     database.exec('COMMIT')
-    return {weekStart:start,dayCount:count,createdStops,...(count===1?{day:getDispatchDay(start,database)}:getDispatchWeek({startDate:start},database))}
+    return {weekStart:start,dayCount:count,createdStops,duplicateStops,...(count===1?{day:getDispatchDay(start,database)}:getDispatchWeek({startDate:start},database))}
   } catch(error){database.exec('ROLLBACK');throw error}
 }
 export function generateWeek(payload={},database=defaultDb){return generateRange({...payload,count:7},database)}
@@ -103,7 +110,7 @@ function stopRows(database, dayId) {
     FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id JOIN dispatches d ON d.id=dt.dispatch_id
     JOIN branches b ON b.id=ds.branch_id LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN zone_groups z ON z.id=a.zone_group_id
     LEFT JOIN vehicles v ON v.id=d.vehicle_id LEFT JOIN employees dr ON dr.id=d.driver_id LEFT JOIN employees asst ON asst.id=d.assistant_id
-    WHERE dt.dispatch_day_id=? ORDER BY dt.trip_number,ds.stop_sequence`).all(dayId)
+    WHERE dt.dispatch_day_id=? AND ds.status<>'cancelled' ORDER BY dt.trip_number,ds.stop_sequence`).all(dayId)
 }
 
 function dayView(database, day) {
@@ -225,16 +232,17 @@ export function reopenDay(date,{reopenedBy='Supervisor',reason=''}={},database=d
 }
 
 export function createStop(payload,database=defaultDb){
-  const day=dayByDate(database,iso(payload.date));if(!day)throw new Error('Dispatch day not found')
-  const branch=database.prepare('SELECT * FROM branches WHERE jodoo_branch_id=?').get(payload.branchId);if(!branch)throw new Error('Branch not found')
-  const trip=payload.tripId?database.prepare('SELECT * FROM dispatch_trips WHERE id=? AND dispatch_day_id=?').get(payload.tripId,day.id):payload.vehicleId?ensureVehicleTrip(database,day,Number(payload.vehicleId),Number(payload.tripNumber||1)):ensureUnassignedTrip(database,day)
-  if(!trip)throw new Error('Trip not found')
-  if(payload.specialRequestId){const duplicate=database.prepare('SELECT id FROM dispatch_stops WHERE source_special_request_id=? AND dispatch_trip_id=?').get(payload.specialRequestId,trip.id);if(duplicate)return database.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(duplicate.id)}
-  const sequence=Number(payload.stopSequence||database.prepare('SELECT COALESCE(MAX(stop_sequence),0)+1 value FROM dispatch_stops WHERE dispatch_id=?').get(trip.dispatch_id).value)
-  const snapshot=branchZoneSnapshot(database,branch.id)
-  const result=database.prepare(`INSERT INTO dispatch_stops(dispatch_id,branch_id,stop_sequence,status,dispatch_trip_id,source_special_request_id,estimated_weight_kg,sequence_locked,zone_group_id_snapshot,zone_group_name_snapshot,area_name_snapshot) VALUES(?,?,?,'locked',?,?,?,?,?,?,?)`).run(trip.dispatch_id,branch.id,sequence,trip.id,payload.specialRequestId||null,payload.estimatedWeightKg??null,payload.sequenceLocked?1:0,snapshot.zoneGroupId??null,snapshot.zoneGroupName??'待确认',snapshot.areaName??'未分区')
-  invalidateDispatchDay(database,day.dispatch_date,'stop_added','dispatch_stop',result.lastInsertRowid,null,payload,payload.changedBy)
-  return database.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(result.lastInsertRowid)
+  return withImmediateTransaction(database,()=>{
+    const serviceDate=iso(payload.date),day=dayByDate(database,serviceDate);if(!day)throw new Error('Dispatch day not found')
+    const branch=database.prepare('SELECT * FROM branches WHERE jodoo_branch_id=?').get(payload.branchId);if(!branch)throw new Error('Branch not found')
+    assertBranchServiceDateAvailable(database,branch.id,serviceDate,{entryPoint:payload.specialRequestId?'special_request':'manual_stop'})
+    const trip=payload.tripId?database.prepare('SELECT * FROM dispatch_trips WHERE id=? AND dispatch_day_id=?').get(payload.tripId,day.id):payload.vehicleId?ensureVehicleTrip(database,day,Number(payload.vehicleId),Number(payload.tripNumber||1)):ensureUnassignedTrip(database,day)
+    if(!trip)throw new Error('Trip not found')
+    const sequence=Number(payload.stopSequence||database.prepare('SELECT COALESCE(MAX(stop_sequence),0)+1 value FROM dispatch_stops WHERE dispatch_id=?').get(trip.dispatch_id).value),snapshot=branchZoneSnapshot(database,branch.id)
+    const result=database.prepare(`INSERT INTO dispatch_stops(dispatch_id,branch_id,stop_sequence,status,dispatch_trip_id,source_special_request_id,service_date,dedupe_enforced,estimated_weight_kg,sequence_locked,zone_group_id_snapshot,zone_group_name_snapshot,area_name_snapshot) VALUES(?,?,?,'locked',?,?,?,1,?,?,?,?,?)`).run(trip.dispatch_id,branch.id,sequence,trip.id,payload.specialRequestId||null,serviceDate,payload.estimatedWeightKg??null,payload.sequenceLocked?1:0,snapshot.zoneGroupId??null,snapshot.zoneGroupName??'待确认',snapshot.areaName??'未分区')
+    invalidateDispatchDay(database,day.dispatch_date,'stop_added','dispatch_stop',result.lastInsertRowid,null,payload,payload.changedBy)
+    return database.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(result.lastInsertRowid)
+  })
 }
 
 export function createTrip(payload,database=defaultDb){
@@ -249,15 +257,15 @@ export function updateStop(id,payload,database=defaultDb){
   const before=database.prepare(`SELECT ds.*,dd.dispatch_date FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id JOIN dispatch_days dd ON dd.id=dt.dispatch_day_id WHERE ds.id=?`).get(id);if(!before)throw new Error('Stop not found')
   if(before.sequence_locked&&(payload.tripId!==undefined||payload.vehicleId!==undefined||payload.tripNumber!==undefined||payload.date!==undefined||payload.stopSequence!==undefined||payload.unassigned)&&payload.sequenceLocked!==false)throw new Error('此客户顺序已锁定，请先解除锁定')
   const targetDate=payload.date?iso(payload.date):before.dispatch_date
-  let targetDay=dayByDate(database,targetDate);if(!targetDay)throw new Error('Target dispatch day not found')
-  let trip=before.dispatch_trip_id
-  if(payload.tripId)trip=Number(payload.tripId)
-  else if(payload.vehicleId)trip=ensureVehicleTrip(database,targetDay,Number(payload.vehicleId),Math.min(3,Math.max(1,Number(payload.tripNumber||1)))).id
-  else if(payload.unassigned)trip=ensureUnassignedTrip(database,targetDay).id
-  const tripRow=database.prepare('SELECT * FROM dispatch_trips WHERE id=?').get(trip);if(!tripRow)throw new Error('Trip not found')
-  const wanted=Number(payload.stopSequence??(trip===before.dispatch_trip_id?before.stop_sequence:database.prepare('SELECT COALESCE(MAX(stop_sequence),0)+1 value FROM dispatch_stops WHERE dispatch_id=?').get(tripRow.dispatch_id).value))
-  database.exec('BEGIN IMMEDIATE')
-  try{
+  return withImmediateTransaction(database,()=>{
+    const targetDay=dayByDate(database,targetDate);if(!targetDay)throw new Error('Target dispatch day not found')
+    assertBranchServiceDateAvailable(database,before.branch_id,targetDate,{excludeStopId:Number(id),attemptedScheduleId:before.source_schedule_id,entryPoint:'move_stop'})
+    let trip=before.dispatch_trip_id
+    if(payload.tripId)trip=Number(payload.tripId)
+    else if(payload.vehicleId)trip=ensureVehicleTrip(database,targetDay,Number(payload.vehicleId),Math.min(3,Math.max(1,Number(payload.tripNumber||1)))).id
+    else if(payload.unassigned)trip=ensureUnassignedTrip(database,targetDay).id
+    const tripRow=database.prepare('SELECT * FROM dispatch_trips WHERE id=?').get(trip);if(!tripRow)throw new Error('Trip not found')
+    const wanted=Number(payload.stopSequence??(trip===before.dispatch_trip_id?before.stop_sequence:database.prepare('SELECT COALESCE(MAX(stop_sequence),0)+1 value FROM dispatch_stops WHERE dispatch_id=?').get(tripRow.dispatch_id).value))
     database.prepare('UPDATE dispatch_stops SET stop_sequence=-1 WHERE id=?').run(id)
     if(before.dispatch_id===tripRow.dispatch_id){
       if(wanted<before.stop_sequence){database.prepare('UPDATE dispatch_stops SET stop_sequence=stop_sequence+100000 WHERE dispatch_id=? AND stop_sequence>=? AND stop_sequence<?').run(tripRow.dispatch_id,wanted,before.stop_sequence);database.prepare('UPDATE dispatch_stops SET stop_sequence=stop_sequence-99999 WHERE dispatch_id=? AND stop_sequence>=100000').run(tripRow.dispatch_id)}
@@ -266,14 +274,13 @@ export function updateStop(id,payload,database=defaultDb){
       database.prepare('UPDATE dispatch_stops SET stop_sequence=stop_sequence+100000 WHERE dispatch_id=? AND stop_sequence>?').run(before.dispatch_id,before.stop_sequence);database.prepare('UPDATE dispatch_stops SET stop_sequence=stop_sequence-100001 WHERE dispatch_id=? AND stop_sequence>=100000').run(before.dispatch_id)
       database.prepare('UPDATE dispatch_stops SET stop_sequence=stop_sequence+100000 WHERE dispatch_id=? AND stop_sequence>=?').run(tripRow.dispatch_id,wanted);database.prepare('UPDATE dispatch_stops SET stop_sequence=stop_sequence-99999 WHERE dispatch_id=? AND stop_sequence>=100000').run(tripRow.dispatch_id)
     }
-    database.prepare(`UPDATE dispatch_stops SET dispatch_id=?,dispatch_trip_id=?,stop_sequence=?,sequence_locked=COALESCE(?,sequence_locked),estimated_weight_kg=COALESCE(?,estimated_weight_kg) WHERE id=?`).run(tripRow.dispatch_id,trip,wanted,payload.sequenceLocked==null?null:Number(Boolean(payload.sequenceLocked)),payload.estimatedWeightKg??null,id)
+    database.prepare(`UPDATE dispatch_stops SET dispatch_id=?,dispatch_trip_id=?,stop_sequence=?,service_date=?,dedupe_enforced=1,sequence_locked=COALESCE(?,sequence_locked),estimated_weight_kg=COALESCE(?,estimated_weight_kg) WHERE id=?`).run(tripRow.dispatch_id,trip,wanted,targetDate,payload.sequenceLocked==null?null:Number(Boolean(payload.sequenceLocked)),payload.estimatedWeightKg??null,id)
     if(targetDate!==before.dispatch_date){const snapshot=branchZoneSnapshot(database,before.branch_id);database.prepare('UPDATE dispatch_stops SET zone_group_id_snapshot=?,zone_group_name_snapshot=?,area_name_snapshot=? WHERE id=?').run(snapshot.zoneGroupId??null,snapshot.zoneGroupName??'待确认',snapshot.areaName??'未分区',id)}
     if(targetDate!==before.dispatch_date&&before.source_schedule_id&&!database.prepare("SELECT id FROM schedule_exceptions WHERE schedule_id=? AND exception_type='move_date' AND original_date=? AND target_date=? AND permanent=0").get(before.source_schedule_id,before.dispatch_date,targetDate))database.prepare(`INSERT INTO schedule_exceptions(branch_id,schedule_id,exception_type,original_date,target_date,permanent,reason,created_by) VALUES(?,?,'move_date',?,?,0,?,?)`).run(before.branch_id,before.source_schedule_id,before.dispatch_date,targetDate,payload.reason||'Weekly planner drag-and-drop',actor(payload.changedBy))
     invalidateDispatchDay(database,before.dispatch_date,'stop_updated','dispatch_stop',id,before,payload,payload.changedBy)
     if(targetDate!==before.dispatch_date)invalidateDispatchDay(database,targetDate,'stop_moved_in','dispatch_stop',id,null,payload,payload.changedBy)
-    database.exec('COMMIT')
     return database.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(id)
-  }catch(error){database.exec('ROLLBACK');throw error}
+  })
 }
 export function deleteStop(id,{changedBy='Supervisor',reason='Weekly planner removal'}={},database=defaultDb){const before=database.prepare(`SELECT ds.*,dd.dispatch_date FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id JOIN dispatch_days dd ON dd.id=dt.dispatch_day_id WHERE ds.id=?`).get(id);if(!before)throw new Error('Stop not found');database.exec('BEGIN IMMEDIATE');try{if(before.source_schedule_id&&!database.prepare("SELECT id FROM schedule_exceptions WHERE schedule_id=? AND exception_type='cancel_date' AND original_date=? AND permanent=0").get(before.source_schedule_id,before.dispatch_date))database.prepare(`INSERT INTO schedule_exceptions(branch_id,schedule_id,exception_type,original_date,permanent,reason,created_by) VALUES(?,?,'cancel_date',?,0,?,?)`).run(before.branch_id,before.source_schedule_id,before.dispatch_date,reason,actor(changedBy));database.prepare('DELETE FROM dispatch_stops WHERE id=?').run(id);invalidateDispatchDay(database,before.dispatch_date,'stop_removed','dispatch_stop',id,before,null,changedBy);database.exec('COMMIT');return{deleted:true,id:Number(id)}}catch(error){database.exec('ROLLBACK');throw error}}
 
@@ -337,7 +344,7 @@ export function assignAreaStops(date,payload,database=defaultDb){
   const stopIds=[...new Set((payload.stopIds||[]).map(Number).filter(Boolean))];if(!stopIds.length)throw new Error('Area 没有可分配客户')
   const placeholders=stopIds.map(()=>'?').join(',')
   const eligible=database.prepare(`SELECT ds.id FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id JOIN dispatches d ON d.id=dt.dispatch_id
-    LEFT JOIN vehicles v ON v.id=d.vehicle_id WHERE dt.dispatch_day_id=? AND ds.id IN (${placeholders}) AND (d.vehicle_id IS NULL OR v.operational_status NOT IN ('available','active') OR v.status NOT IN ('available','assigned') OR (v.is_temporary=1 AND v.temporary_date<>?))`).all(day.id,...stopIds,day.dispatch_date)
+    LEFT JOIN vehicles v ON v.id=d.vehicle_id WHERE dt.dispatch_day_id=? AND ds.id IN (${placeholders}) AND ds.status<>'cancelled' AND (d.vehicle_id IS NULL OR v.operational_status NOT IN ('available','active') OR v.status NOT IN ('available','assigned') OR (v.is_temporary=1 AND v.temporary_date<>?))`).all(day.id,...stopIds,day.dispatch_date)
   if(eligible.length!==stopIds.length)throw new Error('Area 内有客户已被其他主管分配，请刷新后重试')
   database.exec('BEGIN IMMEDIATE')
   try{
@@ -352,8 +359,8 @@ export function assignAreaStops(date,payload,database=defaultDb){
 
 export function driverToday({driverId,employeeId=driverId,includeAssistant=false,date=iso()}={},database=defaultDb){
   const day=dayByDate(database,iso(date));if(!day||day.status!=='published')return{date:iso(date),published:false,trips:[]}
-  const trips=database.prepare(`SELECT dt.id,dt.trip_number tripNumber,d.vehicle_id vehicleId,v.vehicle_code vehicle,d.driver_id driverId FROM dispatch_trips dt JOIN dispatches d ON d.id=dt.dispatch_id LEFT JOIN vehicles v ON v.id=d.vehicle_id WHERE dt.dispatch_day_id=? AND (d.driver_id=? OR (?=1 AND (d.assistant_id=? OR EXISTS(SELECT 1 FROM dispatch_vehicle_assistants dva WHERE dva.dispatch_day_id=dt.dispatch_day_id AND dva.vehicle_id=d.vehicle_id AND dva.employee_id=?)))) AND EXISTS(SELECT 1 FROM dispatch_stops ds WHERE ds.dispatch_trip_id=dt.id)`).all(day.id,Number(employeeId),includeAssistant?1:0,Number(employeeId),Number(employeeId))
-  return{date:day.dispatch_date,published:true,trips:trips.map(t=>({...t,assistants:database.prepare(`SELECT e.id,e.employee_code employeeCode,e.name FROM dispatch_vehicle_assistants dva JOIN employees e ON e.id=dva.employee_id WHERE dva.dispatch_day_id=? AND dva.vehicle_id=? ORDER BY e.name`).all(day.id,t.vehicleId),stops:database.prepare(`SELECT ds.id,ds.stop_sequence stopSequence,b.jodoo_branch_id branchId,b.branch_name branchName,c.name customerName,b.address,b.latitude,b.longitude,c.payment_type paymentType,c.occ_price occPrice FROM dispatch_stops ds JOIN branches b ON b.id=ds.branch_id LEFT JOIN customers c ON c.id=b.customer_id WHERE ds.dispatch_trip_id=? ORDER BY ds.stop_sequence`).all(t.id)}))}
+  const trips=database.prepare(`SELECT dt.id,dt.trip_number tripNumber,d.vehicle_id vehicleId,v.vehicle_code vehicle,d.driver_id driverId FROM dispatch_trips dt JOIN dispatches d ON d.id=dt.dispatch_id LEFT JOIN vehicles v ON v.id=d.vehicle_id WHERE dt.dispatch_day_id=? AND (d.driver_id=? OR (?=1 AND (d.assistant_id=? OR EXISTS(SELECT 1 FROM dispatch_vehicle_assistants dva WHERE dva.dispatch_day_id=dt.dispatch_day_id AND dva.vehicle_id=d.vehicle_id AND dva.employee_id=?)))) AND EXISTS(SELECT 1 FROM dispatch_stops ds WHERE ds.dispatch_trip_id=dt.id AND ds.status<>'cancelled')`).all(day.id,Number(employeeId),includeAssistant?1:0,Number(employeeId),Number(employeeId))
+  return{date:day.dispatch_date,published:true,trips:trips.map(t=>({...t,assistants:database.prepare(`SELECT e.id,e.employee_code employeeCode,e.name FROM dispatch_vehicle_assistants dva JOIN employees e ON e.id=dva.employee_id WHERE dva.dispatch_day_id=? AND dva.vehicle_id=? ORDER BY e.name`).all(day.id,t.vehicleId),stops:database.prepare(`SELECT ds.id,ds.stop_sequence stopSequence,b.jodoo_branch_id branchId,b.branch_name branchName,c.name customerName,b.address,b.latitude,b.longitude,c.payment_type paymentType,c.occ_price occPrice FROM dispatch_stops ds JOIN branches b ON b.id=ds.branch_id LEFT JOIN customers c ON c.id=b.customer_id WHERE ds.dispatch_trip_id=? AND ds.status<>'cancelled' ORDER BY ds.stop_sequence`).all(t.id)}))}
 }
 
 export function createScheduleException(payload,database=defaultDb){

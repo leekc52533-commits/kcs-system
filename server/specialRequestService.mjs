@@ -5,6 +5,7 @@ import crypto from 'node:crypto'
 import { uploadsDir } from './database.mjs'
 import { recalculateRecommendations } from './gpsRecommendationService.mjs'
 import { createStop, invalidateDispatchDay, requestDedupeKey } from './dispatchService.mjs'
+import {DuplicateBranchServiceDateError,findBranchServiceDateStop,withImmediateTransaction} from './branchServiceDateGuard.mjs'
 
 const clean = (value) => String(value ?? '').trim()
 const rowView = (row) => row ? ({
@@ -82,23 +83,20 @@ export function updateSpecialRequest(id,payload,database=defaultDb){
 }
 
 export function scheduleSpecialRequest(id,payload,database=defaultDb){
-  const request=database.prepare('SELECT * FROM special_collection_requests WHERE id=?').get(id);if(!request)throw new Error('Special request not found')
-  const date=payload.date||request.requested_collection_date
-  database.prepare(`UPDATE special_collection_requests SET scheduled_date=?,vehicle_id=?,trip_number=?,status='scheduled',updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(date,payload.vehicleId??null,payload.tripNumber||1,id)
-  if(request.existing_branch_id){
-    const branch=database.prepare('SELECT jodoo_branch_id FROM branches WHERE id=?').get(request.existing_branch_id)
-    createStop({date,branchId:branch.jodoo_branch_id,tripId:payload.tripId,tripNumber:payload.tripNumber||1,specialRequestId:Number(id),estimatedWeightKg:request.estimated_weight_kg,changedBy:payload.scheduledBy},database)
-  }else invalidateDispatchDay(database,date,'special_request_scheduled','special_request',id,null,payload,payload.scheduledBy)
-  return rowView(database.prepare(`${SELECT} WHERE r.id=?`).get(id))
+  return withImmediateTransaction(database,()=>{const request=database.prepare('SELECT * FROM special_collection_requests WHERE id=?').get(id);if(!request)throw new Error('Special request not found');const date=payload.date||request.requested_collection_date
+    if(request.existing_branch_id){const branch=database.prepare('SELECT id,jodoo_branch_id FROM branches WHERE id=?').get(request.existing_branch_id),existing=findBranchServiceDateStop(database,branch.id,date);if(existing){if(existing.source_special_request_id!=null&&Number(existing.source_special_request_id)!==Number(id))throw new DuplicateBranchServiceDateError(existing,{branchId:branch.id,serviceDate:date,entryPoint:'special_request'});database.prepare('UPDATE dispatch_stops SET source_special_request_id=COALESCE(source_special_request_id,?),estimated_weight_kg=COALESCE(estimated_weight_kg,?) WHERE id=?').run(Number(id),request.estimated_weight_kg,existing.id)}else createStop({date,branchId:branch.jodoo_branch_id,tripId:payload.tripId,tripNumber:payload.tripNumber||1,specialRequestId:Number(id),estimatedWeightKg:request.estimated_weight_kg,changedBy:payload.scheduledBy},database)}
+    database.prepare(`UPDATE special_collection_requests SET scheduled_date=?,vehicle_id=?,trip_number=?,status='scheduled',updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(date,payload.vehicleId??null,payload.tripNumber||1,id)
+    if(!request.existing_branch_id)invalidateDispatchDay(database,date,'special_request_scheduled','special_request',id,null,payload,payload.scheduledBy)
+    return rowView(database.prepare(`${SELECT} WHERE r.id=?`).get(id))})
 }
 
 export function convertToExisting(id,payload,database=defaultDb){
-  const branch=database.prepare(`SELECT b.*,c.jodoo_customer_id customer_id,c.payment_type,c.occ_price FROM branches b LEFT JOIN customers c ON c.id=b.customer_id WHERE b.id=? OR b.jodoo_branch_id=?`).get(payload.branchId,payload.branchId);if(!branch)throw new Error('Existing Branch not found')
-  database.prepare(`UPDATE special_collection_requests SET request_type='existing',existing_branch_id=?,linked_customer_id=?,linked_branch_id=?,occ_price=?,payment_type=?,account_status='ready_for_dispatch',updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(branch.id,branch.customer_id,branch.jodoo_branch_id,branch.occ_price,branch.payment_type,id)
-  database.prepare('UPDATE temporary_locations SET branch_id=? WHERE special_request_id=? AND branch_id IS NULL').run(branch.id,id)
-  const request=database.prepare('SELECT * FROM special_collection_requests WHERE id=?').get(id)
-  if(request.scheduled_date)createStop({date:request.scheduled_date,branchId:branch.jodoo_branch_id,tripNumber:request.trip_number||1,specialRequestId:Number(id),estimatedWeightKg:request.estimated_weight_kg,changedBy:payload.changedBy},database)
-  return rowView(database.prepare(`${SELECT} WHERE r.id=?`).get(id))
+  return withImmediateTransaction(database,()=>{const branch=database.prepare(`SELECT b.*,c.jodoo_customer_id customer_id,c.payment_type,c.occ_price FROM branches b LEFT JOIN customers c ON c.id=b.customer_id WHERE b.id=? OR b.jodoo_branch_id=?`).get(payload.branchId,payload.branchId);if(!branch)throw new Error('Existing Branch not found')
+    const before=database.prepare('SELECT * FROM special_collection_requests WHERE id=?').get(id);if(!before)throw new Error('Special request not found')
+    if(before.scheduled_date)createStop({date:before.scheduled_date,branchId:branch.jodoo_branch_id,tripNumber:before.trip_number||1,specialRequestId:Number(id),estimatedWeightKg:before.estimated_weight_kg,changedBy:payload.changedBy},database)
+    database.prepare(`UPDATE special_collection_requests SET request_type='existing',existing_branch_id=?,linked_customer_id=?,linked_branch_id=?,occ_price=?,payment_type=?,account_status='ready_for_dispatch',updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(branch.id,branch.customer_id,branch.jodoo_branch_id,branch.occ_price,branch.payment_type,id)
+    database.prepare('UPDATE temporary_locations SET branch_id=? WHERE special_request_id=? AND branch_id IS NULL').run(branch.id,id)
+    return rowView(database.prepare(`${SELECT} WHERE r.id=?`).get(id))})
 }
 
 export function linkNewAccount(id,payload,database=defaultDb){
