@@ -62,3 +62,9 @@ test('Supervisor preview keeps week mode for a selected start date and renders r
   const css=readFileSync(new URL('../src/Planner.css',import.meta.url),'utf8');assert.match(css,/preview-metrics/);assert.match(css,/@media\(max-width:760px\)/)
   const routes=readFileSync(new URL('../server/index.mjs',import.meta.url),'utf8');assert.match(routes,/generate-week'\) \{if\(!canManageSchedules\(session\)\)/)
 })
+
+test('Supervisor daily planner treats a missing dispatch day as empty and exits loading after other failures',()=>{
+  const source=readFileSync(new URL('../src/WeeklyDispatchPage.jsx',import.meta.url),'utf8')
+  assert.match(source,/setData\(\{days:\[\],vehicles:\[\],employees:\[\],locations:\[\],areas:\[\]\}\);if\(!\(viewMode==='single'&&e\.status===404&&e\.code==='NOT_FOUND'\)\)setError\(e\.message\)/)
+  assert.doesNotMatch(source,/e\.message==='Dispatch day not found'/)
+})
