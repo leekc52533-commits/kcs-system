@@ -235,6 +235,7 @@ export function moveAreasToZone(areaIds,zoneGroupId,payload={},database=defaultD
   const ids=[...new Set((areaIds||[]).map(Number).filter(Boolean))];if(!ids.length)throw new Error('At least one Area is required')
   const zone=database.prepare('SELECT id,name FROM zone_groups WHERE id=? AND is_active=1').get(zoneGroupId);if(!zone)throw new Error('Zone Group not found or inactive')
   const marks=ids.map(()=>'?').join(','),beforeRows=database.prepare(`SELECT * FROM areas WHERE id IN (${marks})`).all(...ids);if(beforeRows.length!==ids.length)throw new Error('One or more Areas were not found')
+  if(beforeRows.some(area=>Number(area.zone_group_id)===Number(zoneGroupId)))throw new Error('One or more Areas already belong to the target Zone Group')
   const reason=text(payload.reason)||'Zone Area Confirmation adjustment',actor=text(payload.changedBy)||'Supervisor',zoneName=database.prepare('SELECT name FROM zone_groups WHERE id=?')
   database.exec('BEGIN IMMEDIATE');try{
     database.prepare(`UPDATE areas SET confirmed_zone_group_id=COALESCE(confirmed_zone_group_id,zone_group_id),zone_group_id=?,zone_assignment_status='pending_confirmation',updated_at=CURRENT_TIMESTAMP WHERE id IN (${marks})`).run(zoneGroupId,...ids)

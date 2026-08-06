@@ -213,8 +213,16 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && /^\/api\/zone-groups\/\d+\/(deactivate|reactivate)$/.test(url.pathname)) {const parts=url.pathname.split('/'),payload=(await readJson(request)).payload;return sendJson(response,200,setZoneActive(Number(parts[3]),parts[4]==='reactivate',payload))}
     if (request.method === 'PATCH' && /^\/api\/zone-groups\/\d+$/.test(url.pathname)) return sendJson(response,200,updateZoneGroup(Number(url.pathname.split('/').at(-1)),(await readJson(request)).payload))
     if (request.method === 'GET' && /^\/api\/areas\/\d+\/zone-confirmation$/.test(url.pathname)) return sendJson(response,200,getAreaConfirmationDetail(Number(url.pathname.split('/')[3])))
-    if (request.method === 'POST' && url.pathname === '/api/areas/bulk-zone-group') {const payload=(await readJson(request)).payload;return sendJson(response,200,{items:supervisorMoveAreasToZone(payload.areaIds,Number(payload.zoneGroupId),payload)})}
-    if (request.method === 'POST' && url.pathname === '/api/areas/bulk-confirmation') {const payload=(await readJson(request)).payload;return sendJson(response,200,{items:setAreasConfirmation(payload.areaIds,payload.confirmed!==false,payload)})}
+    if (request.method === 'POST' && url.pathname === '/api/areas/bulk-zone-group') {
+      if(!canManageSchedules(session))return sendJson(response,403,{error:'You do not have permission to move Areas'})
+      const payload=(await readJson(request)).payload
+      return sendJson(response,200,{items:supervisorMoveAreasToZone(payload.areaIds,Number(payload.zoneGroupId),{...payload,actorRole:'supervisor',changedBy:session.employeeName})})
+    }
+    if (request.method === 'POST' && url.pathname === '/api/areas/bulk-confirmation') {
+      if(!canManageSchedules(session))return sendJson(response,403,{error:'You do not have permission to confirm Areas'})
+      const payload=(await readJson(request)).payload
+      return sendJson(response,200,{items:setAreasConfirmation(payload.areaIds,payload.confirmed!==false,{...payload,changedBy:session.employeeName})})
+    }
     if (request.method === 'PATCH' && /^\/api\/areas\/\d+\/zone-group$/.test(url.pathname)) {const parts=url.pathname.split('/'),payload=(await readJson(request)).payload;return sendJson(response,200,assignAreaZone(Number(parts[3]),Number(payload.zoneGroupId),payload))}
     if (request.method === 'POST' && url.pathname === '/api/vehicles') return sendJson(response,201,createVehicle((await readJson(request)).payload))
     if (request.method === 'POST' && url.pathname === '/api/vehicles/temporary') return sendJson(response,201,createTemporaryVehicle((await readJson(request)).payload))
