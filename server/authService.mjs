@@ -89,7 +89,11 @@ export function createAccount(payload,actor,meta={},database=defaultDb){
   return publicAccount(database.prepare(`${accountSql} WHERE a.id=?`).get(result.lastInsertRowid))
 }
 
-export function listAccounts(database=defaultDb){return database.prepare(`${accountSql} ORDER BY e.name`).all().map(row=>withPermissions(publicAccount(row),database))}
+export function listAccounts(actor,database=defaultDb){
+  if(actor?.prepare){database=actor;actor={role:'owner_admin'}}
+  const accounts=database.prepare(`${accountSql} ORDER BY e.name`).all().map(row=>publicAccount(row))
+  return isOwner(actor)?accounts.map(row=>withPermissions(row,database)):accounts
+}
 
 export function updateAccount(id,payload,actor,meta={},database=defaultDb){
   const current=database.prepare(`${accountSql} WHERE a.id=?`).get(id)
@@ -107,18 +111,25 @@ export function updateAccount(id,payload,actor,meta={},database=defaultDb){
   const duplicate=database.prepare('SELECT id FROM auth_accounts WHERE username=? COLLATE NOCASE AND id<>?').get(requestedUsername,id)
   if(duplicate)throw new Error('用户名已经使用')
   const isActive=payload.isActive==null?current.is_active:(payload.isActive?1:0)
+  if(currentRole==='owner_admin'&&!isActive){
+    const activeOwners=database.prepare("SELECT COUNT(*) count FROM auth_accounts WHERE is_active=1 AND COALESCE(system_role,role) IN ('owner_admin','admin')").get().count
+    if(activeOwners<=1)throw new Error('不可停用最后一个 Owner Admin')
+  }
   database.exec('BEGIN IMMEDIATE')
   try{
     change(database,current,'username',current.username,requestedUsername,actor)
     change(database,current,'system_role',currentRole,requestedRole,actor)
+    change(database,current,'is_active',current.is_active,isActive,actor)
     database.prepare(`UPDATE auth_accounts SET username=?,role=?,system_role=?,is_active=?,disabled_at=CASE WHEN ?=0 THEN CURRENT_TIMESTAMP ELSE NULL END,failed_login_count=CASE WHEN ? THEN 0 ELSE failed_login_count END,locked_until=CASE WHEN ? THEN NULL ELSE locked_until END,updated_at=CURRENT_TIMESTAMP WHERE id=?`)
       .run(requestedUsername,legacyRole(requestedRole),requestedRole,isActive,isActive,payload.unlock?1:0,payload.unlock?1:0,id)
     if(payload.password)database.prepare(`UPDATE auth_accounts SET password_hash=?,must_change_password=1,password_changed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(hashPassword(payload.password),id)
     if(Array.isArray(payload.permissions)){
       if(!isOwner(actor))throw new Error('只有Owner Admin可以修改额外权限')
+      const previous=permissionsFor(id,database)
       database.prepare('DELETE FROM auth_account_permissions WHERE account_id=?').run(id)
       const insert=database.prepare('INSERT INTO auth_account_permissions(account_id,permission,granted_by) VALUES(?,?,?)')
       for(const permission of [...new Set(payload.permissions.map(text).filter(Boolean))])insert.run(id,permission,actor?.username||'Owner Admin')
+      change(database,current,'permissions',JSON.stringify(previous),JSON.stringify([...new Set(payload.permissions.map(text).filter(Boolean))]),actor)
     }
     audit(database,{accountId:id,employeeId:current.employee_id,username:requestedUsername,action:isActive?'account_updated':'account_disabled',success:true,...meta,actor:actor?.username,detail:{systemRole:requestedRole,isActive:Boolean(isActive),unlocked:Boolean(payload.unlock)}})
     database.exec('COMMIT')

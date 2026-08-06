@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import {DatabaseSync} from 'node:sqlite'
 import {schemaSql,SCHEMA_VERSION} from '../server/schema.mjs'
+import {V27_VERSION} from '../server/migrationV27.mjs'
 import {addCalendarDays,kuchingDate,shortcutForDate} from '../shared/kuchingTime.js'
 import {accountCan,bootstrapAccount,createAccount,login,roleCan,updateAccount,updateOwnPreferences} from '../server/authService.mjs'
 import {languageOptions,messages,translate} from '../src/translations.js'
@@ -136,11 +137,11 @@ test('back navigation guard prompts only for unsaved state',()=>{
   setNavigationDirty(false)
 })
 
-test('password visibility control exists and schema is v26',()=>{
+test('password visibility control exists and schema uses the current explicit migration baseline',()=>{
   const source=fs.readFileSync(new URL('../src/PasswordInput.jsx',import.meta.url),'utf8')
   assert.match(source,/type=\{visible\?'text':'password'\}/)
   assert.match(source,/auth\.showPassword/)
-  assert.equal(SCHEMA_VERSION,26)
+  assert.equal(SCHEMA_VERSION,V27_VERSION)
 })
 
 test('account name opens Profile menu and voluntary password change is cancellable',()=>{

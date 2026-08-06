@@ -1,4 +1,5 @@
 import { db } from './database.mjs'
+import {parseTypedId} from '../shared/typedIds.js'
 import {listBranchMaterials} from './materialPriceService.mjs'
 
 const routeReadySql = `EXISTS (SELECT 1 FROM branch_schedules s WHERE s.branch_id=b.id AND s.is_active=1) AND b.latitude BETWEEN -90 AND 90 AND b.longitude BETWEEN -180 AND 180 AND NOT (b.latitude=0 AND b.longitude=0) AND b.is_active=1`
@@ -33,6 +34,7 @@ export function customerBranches(params, database = db) {
 }
 
 export function customerBranchDetail(branchId, database = db) {
+  if(/^b\d+$/i.test(String(branchId).trim()))branchId=parseTypedId(branchId,'branch')
   const item = database.prepare(`SELECT b.id internalId,b.jodoo_branch_id branchId,c.jodoo_customer_id customerId,c.name customerName,c.tin_number tinNumber,COALESCE(b.payment_type,c.payment_type) paymentType,b.branch_name branchName,b.address,b.latitude,b.longitude,b.gps_status gpsStatus,b.gps_verified_at gpsVerifiedDate,b.parking_note parkingNote,b.truck_access truckAccess,b.gps_remark gpsRemark,z.name zoneGroup,a.jodoo_area_id areaId,a.name area,a.schedule_text areaSchedule FROM branches b LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN zone_groups z ON z.id=a.zone_group_id WHERE b.jodoo_branch_id=?`).get(branchId)
   if (!item) return null
   item.schedules = database.prepare(`SELECT jodoo_schedule_id scheduleId,frequency,days_of_week dayOfWeek,take_date takeDate,next_take_date nextTakeDate FROM branch_schedules WHERE source_branch_id=? ORDER BY days_of_week`).all(branchId)

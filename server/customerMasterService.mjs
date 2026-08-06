@@ -3,6 +3,7 @@ import { invalidateDispatchDay } from './dispatchService.mjs'
 import { addTemporaryLocation, adoptTemporaryLocation } from './specialRequestService.mjs'
 import { listBranchMaterials, listCustomerMaterialPricing, normalizeCollectionSettings, replaceBranchMaterialSelections, saveCustomerMaterialPricing } from './materialPriceService.mjs'
 import {assertLocationFields} from '../shared/locationText.js'
+import {parseTypedId} from '../shared/typedIds.js'
 
 const text = value => String(value ?? '').trim()
 const nullable = value => text(value) || null
@@ -43,7 +44,7 @@ const customerSelect = `SELECT c.jodoo_customer_id customerId,c.name customerNam
   c.created_by createdBy,c.created_at createdAt,c.updated_at updatedAt,COUNT(b.id) branchCount FROM customers c LEFT JOIN branches b ON b.customer_id=c.id`
 
 export function listCustomers(params={},database=defaultDb){
-  const where=['1=1'],args=[];if(params.search){const q=`%${params.search}%`;where.push('(c.jodoo_customer_id LIKE ? OR c.name LIKE ? OR c.legal_name LIKE ? OR c.phone LIKE ? OR c.whatsapp LIKE ?)');args.push(q,q,q,q,q)}
+  const where=['1=1'],args=[];if(params.search){let search=text(params.search);if(/^c\d+$/i.test(search))search=parseTypedId(search,'customer');const q=`%${search}%`;where.push('(c.jodoo_customer_id LIKE ? OR c.name LIKE ? OR c.legal_name LIKE ? OR c.phone LIKE ? OR c.whatsapp LIKE ?)');args.push(q,q,q,q,q)}
   if(params.status){where.push('c.status=?');args.push(params.status)}
   const page=Math.max(1,Number(params.page)||1),pageSize=Math.min(200,Math.max(1,Number(params.pageSize)||25))
   const total=database.prepare(`SELECT COUNT(*) total FROM customers c WHERE ${where.join(' AND ')}`).get(...args).total
@@ -104,8 +105,8 @@ const branchSelect=`SELECT b.id internalId,b.jodoo_branch_id branchId,c.jodoo_cu
   FROM branches b LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN zone_groups z ON z.id=COALESCE(a.confirmed_zone_group_id,a.zone_group_id) LEFT JOIN branch_schedules s ON s.branch_id=b.id`
 
 export function listBranches(params={},database=defaultDb){
-  const where=['1=1'],args=[];if(params.search){const q=`%${params.search}%`;where.push('(b.jodoo_branch_id LIKE ? OR b.branch_name LIKE ? OR c.name LIKE ? OR c.jodoo_customer_id LIKE ? OR b.phone LIKE ? OR b.address LIKE ?)');args.push(q,q,q,q,q,q)}
-  if(params.customerId){where.push('c.jodoo_customer_id=?');args.push(params.customerId)}if(params.status){where.push('b.status=?');args.push(params.status)}if(params.areaId){where.push('a.jodoo_area_id=?');args.push(params.areaId)}if(params.zoneGroupId){where.push('COALESCE(a.confirmed_zone_group_id,a.zone_group_id)=?');args.push(Number(params.zoneGroupId))}
+  const where=['1=1'],args=[];if(params.search){let search=text(params.search);if(/^b\d+$/i.test(search))search=parseTypedId(search,'branch');else if(/^c\d+$/i.test(search))search=parseTypedId(search,'customer');const q=`%${search}%`;where.push('(b.jodoo_branch_id LIKE ? OR b.branch_name LIKE ? OR c.name LIKE ? OR c.jodoo_customer_id LIKE ? OR b.phone LIKE ? OR b.address LIKE ?)');args.push(q,q,q,q,q,q)}
+  if(params.customerId){const raw=text(params.customerId),customerId=database.prepare('SELECT 1 FROM customers WHERE jodoo_customer_id=?').get(raw)?raw:parseTypedId(raw,'customer');where.push('c.jodoo_customer_id=?');args.push(customerId)}if(params.status){where.push('b.status=?');args.push(params.status)}if(params.areaId){where.push('a.jodoo_area_id=?');args.push(params.areaId)}if(params.zoneGroupId){where.push('COALESCE(a.confirmed_zone_group_id,a.zone_group_id)=?');args.push(Number(params.zoneGroupId))}
   const page=Math.max(1,Number(params.page)||1),pageSize=Math.min(500,Math.max(1,Number(params.pageSize)||25)),total=database.prepare(`SELECT COUNT(*) total FROM branches b LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas a ON a.id=b.area_id WHERE ${where.join(' AND ')}`).get(...args).total
   const items=database.prepare(`${branchSelect} WHERE ${where.join(' AND ')} GROUP BY b.id ORDER BY c.name,b.branch_name LIMIT ? OFFSET ?`).all(...args,pageSize,(page-1)*pageSize)
   return{items,pagination:{page,pageSize,total,pages:Math.ceil(total/pageSize)}}
