@@ -1,7 +1,8 @@
 import test,{after} from 'node:test'
 import assert from 'node:assert/strict'
-import React from 'react'
+import React,{act} from 'react'
 import {renderToStaticMarkup} from 'react-dom/server'
+import {createRoot} from 'react-dom/client'
 import {createServer} from 'vite'
 import {JSDOM} from 'jsdom'
 import {readdirSync,readFileSync} from 'node:fs'
@@ -16,16 +17,19 @@ Object.defineProperty(globalThis,'navigator',{value:dom.window.navigator,configu
 globalThis.Node=dom.window.Node
 globalThis.NodeFilter=dom.window.NodeFilter
 globalThis.HTMLElement=dom.window.HTMLElement
+globalThis.MutationObserver=dom.window.MutationObserver
+globalThis.IS_REACT_ACT_ENVIRONMENT=true
 globalThis.requestAnimationFrame=callback=>setTimeout(callback,0)
 globalThis.cancelAnimationFrame=id=>clearTimeout(id)
 
 const vite=await createServer({logLevel:'silent',server:{middlewareMode:true},appType:'custom'})
 after(()=>vite.close())
 
-const [{I18nProvider},masterModule,resourceModule]=await Promise.all([
+const [{I18nProvider},masterModule,resourceModule,backModule]=await Promise.all([
   vite.ssrLoadModule('/src/i18n.jsx'),
   vite.ssrLoadModule('/src/MasterDataPage.jsx'),
   vite.ssrLoadModule('/src/ResourcePage.jsx'),
+  vite.ssrLoadModule('/src/BackButton.jsx'),
 ])
 
 const noop=()=>{}
@@ -194,6 +198,22 @@ test('Vehicle导航、折叠新增表单、可点击清单与Sold历史状态保
   assert.match(app,/page!==['"]vehicles['"]&&<BackButton/)
   assert.match(detail,/className="vehicle-back" onClick=\{onBack\}>Back<\/button>/)
   assert.match(detail,/readOnly=\{!isOwnerAdmin\}/)
+})
+
+test('Vehicle Master显示单一白色Back并调用现有上一页导航',async()=>{
+  const source=readFileSync(join(projectRoot,'src','ResourcePage.jsx'),'utf8'),css=readFileSync(join(projectRoot,'src','VehicleDetailPage.css'),'utf8')
+  assert.match(source,/<BackButton className="vehicle-back" fallback=\{\(\)=>window\.history\.back\(\)\}\/>/)
+  assert.match(css,/\.vehicle-back\{[^}]*width:max-content/)
+  const container=document.createElement('div'),root=createRoot(container),originalBack=window.history.back
+  let calls=0
+  window.history.replaceState({kcsPage:'vehicles'},'',window.location.href)
+  window.history.back=()=>{calls++}
+  await act(async()=>root.render(React.createElement(I18nProvider,{language:'zh',setLanguage:noop},React.createElement(backModule.default,{className:'vehicle-back',fallback:()=>window.history.back()}))))
+  container.querySelector('button').click()
+  assert.equal(calls,1)
+  assert.equal(container.querySelectorAll('button.vehicle-back').length,1)
+  await act(async()=>root.unmount())
+  window.history.back=originalBack
 })
 
 test('当前生产路由初始组件在English与BM渲染时报告具体页面残留',async()=>{
