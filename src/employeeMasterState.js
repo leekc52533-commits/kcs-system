@@ -22,14 +22,49 @@ export function employeeMatchesDirectory(employee, filters) {
   const query = (filters.search || '').trim().toLowerCase()
   const searchable = `${employee.name || ''} ${employee.employeeCode || ''} ${employee.phone || ''} ${employee.nationalIdMasked || ''} ${employee.nationalIdSuffix || ''}`.toLowerCase()
   if (query && !searchable.includes(query)) return false
-  if (filters.status === 'rehired' && !(employee.employmentPeriods || []).some((period) => period.rehireFlag)) return false
-  if (filters.status && filters.status !== 'rehired' && employee.employmentStatus !== filters.status) return false
-  if (filters.jobRole && employee.jobRole !== filters.jobRole && !(employee.additionalRoles || []).includes(filters.jobRole)) return false
-  if (filters.employmentType && employee.employmentType !== filters.employmentType) return false
-  if (filters.accountStatus === 'active' && !employee.accountActive) return false
-  if (filters.accountStatus === 'disabled' && (!employee.accountId || employee.accountActive)) return false
-  if (filters.accountStatus === 'none' && employee.accountId) return false
+  const selected = (value) => Array.isArray(value) ? value : value ? [value] : []
+  const statuses = selected(filters.status)
+  const roles = selected(filters.jobRole)
+  const types = selected(filters.employmentType)
+  const accounts = selected(filters.accountStatus)
+  const isRehired = (employee.employmentPeriods || []).some((period) => period.rehireFlag)
+  if (statuses.length && !statuses.some((status) => status === 'rehired' ? isRehired : employee.employmentStatus === status)) return false
+  if (roles.length && !roles.some((role) => employee.jobRole === role || (employee.additionalRoles || []).includes(role))) return false
+  if (types.length && !types.includes(employee.employmentType)) return false
+  const accountStatus = employee.accountId ? (employee.accountActive ? 'active' : 'disabled') : 'none'
+  if (accounts.length && !accounts.includes(accountStatus)) return false
   return true
+}
+
+const currentPeriod = (employee) => [...(employee.employmentPeriods || [])].reverse().find((period) => !period.endDate) || employee.employmentPeriods?.at(-1)
+
+export function employeeDirectoryValue(employee, column) {
+  const period = currentPeriod(employee)
+  return ({
+    employeeCode: employee.employeeCode,
+    name: employee.name,
+    jobRole: employee.jobRole,
+    employmentType: employee.employmentType,
+    employmentStatus: employee.employmentStatus,
+    currentStartDate: period?.startDate,
+    lastWorkingDay: period?.lastWorkingDay,
+    employmentEndDate: period?.endDate,
+    accountStatus: employee.accountId ? (employee.accountActive ? 'active' : 'disabled') : 'none',
+    phone: employee.phone,
+  })[column] || ''
+}
+
+export function sortEmployeeDirectory(employees, sort) {
+  if (!sort?.column || !sort?.direction) return employees
+  return employees.map((employee, index) => ({employee, index})).sort((left, right) => {
+    const a = String(employeeDirectoryValue(left.employee, sort.column)).trim()
+    const b = String(employeeDirectoryValue(right.employee, sort.column)).trim()
+    if (!a && !b) return left.index - right.index
+    if (!a) return 1
+    if (!b) return -1
+    const result = a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'})
+    return result ? result * (sort.direction === 'desc' ? -1 : 1) : left.index - right.index
+  }).map(({employee}) => employee)
 }
 
 export function createEmployeeSelectionGuard() {
