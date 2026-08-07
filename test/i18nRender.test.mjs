@@ -168,12 +168,29 @@ test('车辆与Operational Location实际主档组件在English与BM不显示CJK
     }))
     assert.match(htmlText(vehicle),new RegExp(translate(language,'vehicle.missingNameBrand').replace('/','\\/')))
     assert.match(htmlText(vehicle),new RegExp(translate(language,'vehicle.missingCapacity')))
+    assert.match(htmlText(vehicle),new RegExp(translate(language,'vehicle.add')))
+    assert.doesNotMatch(vehicle,/placeholder="Registration Number \/ Plate"/)
 
     const location=renderMasterSurface(language,'Operational Location loaded state',React.createElement(resourceModule.LocationMaster,{
       items:[],form:{name:'',locationType:'depot',address:'',canStart:true,canEnd:true},setForm:noop,add:noop,save:noop,edit:noop,
     }))
     assert.match(htmlText(location),new RegExp(translate(language,'master.operationalLocation')))
   }
+})
+
+test('Vehicle导航、折叠新增表单、可点击清单与Sold历史状态保持明确',()=>{
+  const resource=readFileSync(join(projectRoot,'src','ResourcePage.jsx'),'utf8')
+  const app=readFileSync(join(projectRoot,'src','App.jsx'),'utf8')
+  const detail=readFileSync(join(projectRoot,'src','VehicleDetailPage.jsx'),'utf8')
+  assert.match(resource,/\[showAdd,setShowAdd\]=useState\(false\)/)
+  assert.match(resource,/showAdd&&<form className="vehicle-create-form"/)
+  assert.match(resource,/role="button" tabIndex="0"/)
+  assert.match(resource,/vehicle-list-status/)
+  assert.match(resource,/sold-vehicle/)
+  assert.match(app,/page==='vehicles'\?<BackButton label=\{t\('nav\.vehicles'\)\}/)
+  assert.match(app,/key=\{vehicleHomeKey\}/)
+  assert.match(detail,/className="vehicle-back" onClick=\{onBack\}>Back<\/button>/)
+  assert.match(detail,/readOnly=\{!isOwnerAdmin\}/)
 })
 
 test('当前生产路由初始组件在English与BM渲染时报告具体页面残留',async()=>{
