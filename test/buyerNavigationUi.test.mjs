@@ -9,10 +9,18 @@ const app=readFileSync(new URL('../src/App.jsx',import.meta.url),'utf8')
 
 test('Buyer Master is restored as an independent Location workspace tab',()=>{
   assert.match(workspace,/\['buyers',t\('hub\.buyerMaster'\)\]/)
-  assert.match(workspace,/tab==='buyers'\?<MasterDataPage embedded currentUser=\{currentUser\} initialTab="buyers" allowedTabs=\{\['buyers'\]\}/)
+  assert.match(workspace,/tab==='locations'\?<MasterDataPage key="locations" embedded currentUser=\{currentUser\} initialTab="gps" allowedTabs=\{\['gps','locations'\]\}/)
+  assert.match(workspace,/tab==='buyers'\?<MasterDataPage key="buyers" embedded currentUser=\{currentUser\} initialTab="buyers" allowedTabs=\{\['buyers'\]\}/)
   assert.match(master,/tab==='buyers'\?<EntityManager[^\n]*type="buyer" endpoint="\/api\/buyers"/)
   assert.match(master,/officialLatitude/)
   assert.match(master,/officialLongitude/)
+})
+
+test('Buyer and GPS remount independent MasterData content when switching',()=>{
+  assert.match(workspace,/<MasterDataPage key="locations"[^>]*initialTab="gps"/)
+  assert.match(workspace,/<MasterDataPage key="buyers"[^>]*initialTab="buyers"/)
+  assert.match(app,/const changeTab=tab=>\{window\.history\.replaceState[^\n]*setPageTab\(tab\)\}/)
+  assert.match(app,/initialTab=\{pageTab\|\|'locations'\}/)
 })
 
 test('Buyer navigation is limited to existing office and supervisor desktop roles',()=>{
