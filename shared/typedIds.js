@@ -1,10 +1,10 @@
-const TYPES={customer:{prefix:'C',label:'Customer'},branch:{prefix:'B',label:'Branch'},buyer:{prefix:'B',label:'Buyer'}}
+const TYPES={customer:{prefix:'C',label:'Customer'},branch:{prefix:'B',label:'Branch'},buyer:{prefix:'BY',label:'Buyer'}}
 const BUYER_ID_OFFSET=10000
 
 export function parseTypedId(value,expectedType){
   const type=TYPES[String(expectedType||'').toLowerCase()]
   if(!type)throw new Error('Unknown ID type')
-  const input=String(value??'').trim(),match=input.match(/^([A-Za-z]?)(\d+)$/)
+  const input=String(value??'').trim(),match=input.match(/^([A-Za-z]*)(\d+)$/)
   if(!match||match[1]&&match[1].toUpperCase()!==type.prefix)throw new Error(`${type.label} ID ${input||'(blank)'} is invalid`)
   if(String(expectedType).toLowerCase()==='buyer'){
     const number=Number(match[2])
@@ -17,4 +17,4 @@ export function parseTypedId(value,expectedType){
 const format=(value,type)=>{if(value==null||String(value).trim()==='')return '';const input=String(value).trim(),prefix=TYPES[type].prefix;try{return `${prefix}${parseTypedId(input,type)}`}catch{ return input.toUpperCase().startsWith(prefix)?input:`${prefix}${input}` }}
 export const formatCustomerId=value=>format(value,'customer')
 export const formatBranchId=value=>format(value,'branch')
-export const formatBuyerId=value=>{if(value==null||String(value).trim()==='')return '';const id=Number(value);return Number.isInteger(id)&&id>0?`B${BUYER_ID_OFFSET+id}`:String(value)}
+export const formatBuyerId=value=>{if(value==null||String(value).trim()==='')return '';const id=Number(value);return Number.isInteger(id)&&id>0?`BY${BUYER_ID_OFFSET+id}`:String(value)}

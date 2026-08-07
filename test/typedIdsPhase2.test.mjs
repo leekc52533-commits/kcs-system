@@ -6,18 +6,20 @@ import fs from 'node:fs'
 test('typed IDs format raw database identifiers without changing them',()=>{
   assert.equal(formatCustomerId(235),'C235')
   assert.equal(formatBranchId('10500'),'B10500')
-  assert.equal(formatBuyerId(1),'B10001')
-  assert.equal(formatBuyerId(25),'B10025')
+  assert.equal(formatBuyerId(1),'BY10001')
+  assert.equal(formatBuyerId(25),'BY10025')
 })
 
 test('typed IDs accept numeric and case-insensitive matching prefixes',()=>{
   assert.equal(parseTypedId('235','customer'),'235')
   assert.equal(parseTypedId(' c235 ','customer'),'235')
   assert.equal(parseTypedId('B10500','branch'),'10500')
-  assert.equal(parseTypedId('b10025','buyer'),'25')
+  assert.equal(parseTypedId('by10025','buyer'),'25')
   assert.equal(parseTypedId('10025','buyer'),'25')
   assert.throws(()=>parseTypedId('1','buyer'),/Buyer ID/)
+  assert.throws(()=>parseTypedId('B10025','buyer'),/Buyer ID/)
   assert.throws(()=>parseTypedId('C10025','buyer'),/Buyer ID/)
+  assert.equal(parseTypedId('B10025','branch'),'10025')
   assert.throws(()=>parseTypedId('B10500','customer'),/Customer ID/)
   assert.throws(()=>parseTypedId('C235','branch'),/Branch ID/)
 })
