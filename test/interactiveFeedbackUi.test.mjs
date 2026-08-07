@@ -42,3 +42,12 @@ test('shared rules preserve compact mobile layouts and reduced motion preference
   assert.doesNotMatch(css,/min-width:\s*\d/)
   assert.doesNotMatch(css,/width:\s*\d/)
 })
+
+test('Material, Product and Price Group cards use one neutral white base',()=>{
+  assert.match(css,/Material, Product and Price Group cards share one neutral base/)
+  assert.match(css,/\.category-grid > article,[\s\S]*\.material-grid > button,[\s\S]*\.price-level-grid > article,[\s\S]*background-color:\s*#fff/)
+  assert.match(css,/\.price-level-grid > article\.price-not-set/)
+  assert.match(css,/\.price-level-grid > article\.active/)
+  assert.match(css,/\.price-level-grid > article\.inactive/)
+  assert.match(css,/\.price-level-grid > article\.unused/)
+})

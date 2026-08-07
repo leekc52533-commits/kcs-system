@@ -84,10 +84,26 @@
   box-shadow: var(--interactive-shadow);
 }
 
+/* KCS design system: Material, Product and Price Group cards share one neutral base. */
+.category-grid > article,
+.material-grid > button,
+.price-level-grid > article,
+.price-level-grid > article.price-not-set,
+.price-level-grid > article.active,
+.price-level-grid > article.inactive,
+.price-level-grid > article.unused {
+  background-color: #fff;
+  border-color: var(--interactive-border);
+  border-radius: 12px;
+  box-shadow: var(--interactive-shadow);
+}
+
 .category-grid > article:has(.category-open:hover),
 .category-grid > article:has(.category-open:focus-visible),
 .material-grid > button:hover,
-.material-grid > button:focus-visible {
+.material-grid > button:focus-visible,
+.price-level-grid > article[role="button"]:hover,
+.price-level-grid > article[role="button"]:focus-visible {
   border-color: var(--interactive-border-hover);
   box-shadow: var(--interactive-shadow-hover);
 }
