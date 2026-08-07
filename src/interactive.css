@@ -1,0 +1,100 @@
+:root {
+  --interactive-border: #bfd2cb;
+  --interactive-border-hover: #6da995;
+  --interactive-hover: #f4faf7;
+  --interactive-pressed: #eaf6f1;
+  --interactive-focus: #16866f;
+  --interactive-shadow: 0 1px 3px rgba(21, 75, 62, .08);
+  --interactive-shadow-hover: 0 5px 14px rgba(21, 75, 62, .13);
+  --interactive-transition: 150ms ease;
+}
+
+:where(button:not(:disabled), a[href], summary, select:not(:disabled),
+  input[type="checkbox"]:not(:disabled), input[type="radio"]:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]), .interactive-link,
+  .interactive-row, .interactive-card) {
+  cursor: pointer;
+}
+
+:where(button, a[href], summary, select, input[type="checkbox"], input[type="radio"],
+  [role="button"], .interactive-link, .interactive-row, .interactive-card) {
+  transition: color var(--interactive-transition), background-color var(--interactive-transition),
+    border-color var(--interactive-transition), box-shadow var(--interactive-transition),
+    filter var(--interactive-transition), transform var(--interactive-transition);
+}
+
+:where(button:not(:disabled), [role="button"]:not([aria-disabled="true"]),
+  .interactive-row, .interactive-card):active {
+  transform: translateY(1px);
+}
+
+:where(button:not(:disabled), select:not(:disabled), summary):hover {
+  filter: brightness(.96);
+}
+
+:where(a[href], .interactive-link):hover {
+  color: #0d6958;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+:where(button, a[href], summary, select, input[type="checkbox"], input[type="radio"],
+  [role="button"], .interactive-link, .interactive-row, .interactive-card):focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--interactive-focus) 48%, white);
+  outline-offset: 2px;
+}
+
+:where(button:disabled, select:disabled, input:disabled, [aria-disabled="true"], .is-disabled) {
+  cursor: not-allowed;
+}
+
+.interactive-card,
+.price-level-grid article[role="button"],
+.vehicle-master-card[role="button"] {
+  border-color: var(--interactive-border);
+  box-shadow: var(--interactive-shadow);
+}
+
+:where(.interactive-card, .price-level-grid article[role="button"],
+  .vehicle-master-card[role="button"]):hover {
+  border-color: var(--interactive-border-hover);
+  background-color: var(--interactive-hover);
+  box-shadow: var(--interactive-shadow-hover);
+}
+
+:where(.interactive-card, .price-level-grid article[role="button"],
+  .vehicle-master-card[role="button"]):focus-visible {
+  border-color: var(--interactive-focus);
+  box-shadow: 0 0 0 1px var(--interactive-focus), var(--interactive-shadow-hover);
+}
+
+:where(.interactive-card, .price-level-grid article[role="button"],
+  .vehicle-master-card[role="button"]):active {
+  background-color: var(--interactive-pressed);
+}
+
+.interactive-row:hover,
+.interactive-row:focus-visible {
+  background-color: var(--interactive-hover);
+}
+
+.category-grid > article,
+.material-grid > button {
+  border-color: var(--interactive-border);
+  box-shadow: var(--interactive-shadow);
+}
+
+.category-grid > article:has(.category-open:hover),
+.category-grid > article:has(.category-open:focus-visible),
+.material-grid > button:hover,
+.material-grid > button:focus-visible {
+  border-color: var(--interactive-border-hover);
+  box-shadow: var(--interactive-shadow-hover);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(button, a[href], summary, select, input, [role="button"],
+    .interactive-link, .interactive-row, .interactive-card) {
+    transition-duration: 0.01ms;
+  }
+}
