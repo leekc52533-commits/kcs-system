@@ -192,7 +192,7 @@ export function listAuthAudit(params={},database=defaultDb){
 export function roleCan(role,permission){
   const normalized=normalizeRole(role)
   const map={
-    owner_admin:new Set(['desktop','accounts','account_identity','sensitive_data','system_security','employee_manage','gps_review','gps_migration','gps_migration_approve','price_manage','mobile']),
+    owner_admin:new Set(['desktop','accounts','account_identity','sensitive_data','system_security','employee_manage','vehicle_manage','gps_review','gps_migration','gps_migration_approve','price_manage','mobile']),
     operations_admin:new Set(['desktop','accounts','employee_manage','vehicle_manage','schedule_manage','gps_review','gps_migration','gps_migration_approve','price_manage','mobile']),
     supervisor:new Set(['desktop','gps_review','gps_migration','gps_migration_approve','mobile']),
     office:new Set(['desktop','gps_migration','mobile']),
@@ -205,3 +205,5 @@ export function roleCan(role,permission){
 export function accountCan(account,permission,database=defaultDb){
   return roleCan(account?.role,permission)||Boolean(account?.id&&database.prepare('SELECT 1 FROM auth_account_permissions WHERE account_id=? AND permission=?').get(account.id,permission))
 }
+
+export function canViewVehicleDocuments(account){return ['owner_admin','operations_admin','supervisor','office'].includes(normalizeRole(account?.role))}

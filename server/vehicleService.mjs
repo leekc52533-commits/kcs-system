@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { db as defaultDb, uploadsDir } from './database.mjs'
 
 const text=value=>String(value??'').trim()
@@ -41,7 +41,7 @@ function saveAttachment(vehicleId,file){
 
 const recordRows=(database,table,vehicleId,order)=>database.prepare(`SELECT * FROM ${table} WHERE vehicle_id=? ORDER BY ${order}`).all(vehicleId).map(camelRow)
 
-export function getVehicleDetail(id,database=defaultDb){
+export function getVehicleDetail(id,database=defaultDb,options={}){
   const row=vehicle(database,id);if(!row)throw new Error('Vehicle not found')
   const preferredZones=database.prepare(`SELECT z.id,z.code,z.name FROM vehicle_preferred_zones vpz JOIN zone_groups z ON z.id=vpz.zone_group_id WHERE vpz.vehicle_id=? ORDER BY z.sort_order,z.id`).all(id)
   const preferredAreas=database.prepare(`SELECT a.id,a.name FROM vehicle_preferred_areas vpa JOIN areas a ON a.id=vpa.area_id WHERE vpa.vehicle_id=? ORDER BY a.name`).all(id)
@@ -50,7 +50,7 @@ export function getVehicleDetail(id,database=defaultDb){
   if(compliance)for(const key of ['puspakomDueDate','roadTaxDueDate','insuranceDueDate','loanPaymentDueDate','nextServiceDate'])compliance[`${key}Alert`]=reminderLevel(compliance[key])
   return{...camelRow(row),status:row.operational_status,capacityKg:row.capacity_kg,operationalCapacityKg:row.capacity_kg,preferredZones,preferredAreas,currentDriver,compliance,
     maintenanceRecords:recordRows(database,'vehicle_maintenance_records',id,'maintenance_date DESC,id DESC'),fuelRecords:recordRows(database,'vehicle_fuel_records',id,'fuel_at DESC,id DESC'),
-    tyreRecords:recordRows(database,'vehicle_tyre_records',id,'install_date DESC,id DESC'),documents:row.operational_status==='sold'?recordRows(database,'vehicle_documents',id,'uploaded_at DESC,id DESC'):recordRows(database,'vehicle_documents',id,'document_type,id DESC'),
+    tyreRecords:recordRows(database,'vehicle_tyre_records',id,'install_date DESC,id DESC'),documents:options.includeDocuments===false?[]:recordRows(database,'vehicle_documents',id,'document_type,is_current DESC,version_number DESC,id DESC'),
     statusHistory:recordRows(database,'vehicle_status_history',id,'changed_at DESC,id DESC'),usageHistory:recordRows(database,'vehicle_usage_history',id,'dispatch_date DESC,id DESC')}
 }
 
@@ -83,11 +83,47 @@ export function addTyreRecord(id,payload,database=defaultDb){
   return camelRow(database.prepare('SELECT * FROM vehicle_tyre_records WHERE id=?').get(result.lastInsertRowid))
 }
 
-export function addVehicleDocument(id,payload,database=defaultDb){
-  if(!vehicle(database,id))throw new Error('Vehicle not found');if(!text(payload.documentType))throw new Error('Document type is required')
-  const file=saveAttachment(id,payload.file);if(!file.storageKey)throw new Error('Document file is required')
-  const result=database.prepare(`INSERT INTO vehicle_documents(vehicle_id,document_type,title,storage_key,original_name,content_type,size_bytes,document_date,expiry_date,uploaded_by) VALUES(?,?,?,?,?,?,?,?,?,?)`).run(id,text(payload.documentType),text(payload.title)||null,file.storageKey,file.originalName,file.contentType,file.sizeBytes,dateOrNull(payload.documentDate),dateOrNull(payload.expiryDate),actor(payload.uploadedBy))
-  return camelRow(database.prepare('SELECT * FROM vehicle_documents WHERE id=?').get(result.lastInsertRowid))
+const documentTypes=new Set(['ownership_certificate','road_tax','insurance','puspakom','permit_license','other'])
+const fileTypes={
+  'image/jpeg':{extensions:new Set(['.jpg','.jpeg']),extension:'.jpg',magic:buffer=>buffer.length>=3&&buffer[0]===0xff&&buffer[1]===0xd8&&buffer[2]===0xff},
+  'image/png':{extensions:new Set(['.png']),extension:'.png',magic:buffer=>buffer.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))},
+  'application/pdf':{extensions:new Set(['.pdf']),extension:'.pdf',magic:buffer=>buffer.subarray(0,5).toString()==='%PDF-'}
+}
+function safeDocumentFile(vehicleId,file,storageRoot=uploadsDir){
+  if(!file?.dataUrl)throw new Error('Document file is required')
+  const original=text(file.name);if(!original||path.basename(original)!==original||path.isAbsolute(original)||original.includes('..'))throw new Error('Document filename is unsafe')
+  const match=String(file.dataUrl).match(/^data:([^;,]+);base64,([A-Za-z0-9+/=]+)$/),type=match&&fileTypes[match[1]]
+  if(!type)throw new Error('Only JPG, JPEG, PNG or PDF documents are allowed')
+  const extension=path.extname(original).toLowerCase();if(!type.extensions.has(extension))throw new Error('Document extension does not match its MIME type')
+  const buffer=Buffer.from(match[2],'base64');if(buffer.length>8*1024*1024)throw new Error('Document must be 8 MB or smaller');if(!type.magic(buffer))throw new Error('Document content does not match its declared file type')
+  const root=path.resolve(storageRoot,'vehicles'),folder=path.resolve(root,String(Number(vehicleId)));if(!folder.startsWith(`${root}${path.sep}`))throw new Error('Document storage path is unsafe')
+  fs.mkdirSync(folder,{recursive:true});for(const candidate of [root,folder])if(fs.lstatSync(candidate).isSymbolicLink())throw new Error('Document storage may not use symbolic links')
+  const name=`${randomUUID()}${type.extension}`,finalPath=path.join(folder,name),tempPath=path.join(folder,`.${name}.tmp`);fs.writeFileSync(tempPath,buffer,{flag:'wx'});fs.renameSync(tempPath,finalPath)
+  return{storageKey:path.posix.join('vehicles',String(Number(vehicleId)),name),finalPath,originalName:original,contentType:match[1],sizeBytes:buffer.length,sha256:createHash('sha256').update(buffer).digest('hex')}
+}
+const documentActor=session=>({id:Number(session?.id)||null,name:text(session?.employeeName||session?.username)||'Office Admin'})
+export function listVehicleDocuments(id,database=defaultDb){if(!vehicle(database,id))throw new Error('Vehicle not found');return recordRows(database,'vehicle_documents',id,'document_type,is_current DESC,version_number DESC,id DESC')}
+export function addVehicleDocument(id,payload,session,database=defaultDb,storageRoot=uploadsDir){
+  if(!vehicle(database,id))throw new Error('Vehicle not found');const documentType=text(payload.documentType);if(!documentTypes.has(documentType))throw new Error('Invalid document type')
+  const file=safeDocumentFile(id,payload.file,storageRoot),who=documentActor(session);database.exec('BEGIN IMMEDIATE')
+  try{if(database.prepare('SELECT 1 FROM vehicle_documents WHERE vehicle_id=? AND document_type=? AND is_current=1').get(id,documentType))throw new Error('A current document already exists; use Replace')
+    const result=database.prepare(`INSERT INTO vehicle_documents(vehicle_id,document_type,title,storage_key,original_name,content_type,size_bytes,document_date,expiry_date,uploaded_by,sha256,remark,uploaded_by_account_id,version_number,is_current) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,1,1)`).run(id,documentType,text(payload.title)||null,file.storageKey,file.originalName,file.contentType,file.sizeBytes,dateOrNull(payload.documentDate),dateOrNull(payload.expiryDate),who.name,file.sha256,text(payload.remark)||null,who.id)
+    database.prepare(`INSERT INTO vehicle_document_audit(vehicle_id,document_id,action,document_type,sha256,actor_account_id,actor_name,remark) VALUES(?,?,'upload',?,?,?,?,?)`).run(id,result.lastInsertRowid,documentType,file.sha256,who.id,who.name,text(payload.remark)||null);database.exec('COMMIT');return camelRow(database.prepare('SELECT * FROM vehicle_documents WHERE id=?').get(result.lastInsertRowid))
+  }catch(error){database.exec('ROLLBACK');try{fs.unlinkSync(file.finalPath)}catch{}throw error}
+}
+export function replaceVehicleDocument(documentId,payload,session,database=defaultDb,storageRoot=uploadsDir){
+  const previous=database.prepare('SELECT * FROM vehicle_documents WHERE id=? AND is_current=1').get(documentId);if(!previous)throw new Error('Current document not found')
+  const file=safeDocumentFile(previous.vehicle_id,payload.file,storageRoot),who=documentActor(session);database.exec('BEGIN IMMEDIATE')
+  try{const version=Number(previous.version_number)+1;database.prepare('UPDATE vehicle_documents SET is_current=0,superseded_at=CURRENT_TIMESTAMP WHERE id=? AND is_current=1').run(documentId)
+    const result=database.prepare(`INSERT INTO vehicle_documents(vehicle_id,document_type,title,storage_key,original_name,content_type,size_bytes,document_date,expiry_date,uploaded_by,sha256,remark,uploaded_by_account_id,version_number,is_current,supersedes_document_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?)`).run(previous.vehicle_id,previous.document_type,text(payload.title)||previous.title,file.storageKey,file.originalName,file.contentType,file.sizeBytes,dateOrNull(payload.documentDate)||previous.document_date,dateOrNull(payload.expiryDate)||previous.expiry_date,who.name,file.sha256,text(payload.remark)||null,who.id,version,documentId)
+    database.prepare(`INSERT INTO vehicle_document_audit(vehicle_id,document_id,previous_document_id,action,document_type,sha256,actor_account_id,actor_name,remark) VALUES(?,?,?,'replace',?,?,?,?,?)`).run(previous.vehicle_id,result.lastInsertRowid,documentId,previous.document_type,file.sha256,who.id,who.name,text(payload.remark)||null);database.exec('COMMIT');return camelRow(database.prepare('SELECT * FROM vehicle_documents WHERE id=?').get(result.lastInsertRowid))
+  }catch(error){database.exec('ROLLBACK');try{fs.unlinkSync(file.finalPath)}catch{}throw error}
+}
+export function vehicleDocumentFile(documentId,database=defaultDb,storageRoot=uploadsDir){
+  const row=database.prepare('SELECT * FROM vehicle_documents WHERE id=?').get(documentId);if(!row)throw new Error('Document not found')
+  const root=path.resolve(storageRoot,'vehicles'),filePath=path.resolve(storageRoot,...String(row.storage_key).split('/'));if(!filePath.startsWith(`${root}${path.sep}`)||!fs.existsSync(filePath)||fs.lstatSync(filePath).isSymbolicLink())throw new Error('Document file is unavailable')
+  const buffer=fs.readFileSync(filePath);if(row.sha256&&createHash('sha256').update(buffer).digest('hex')!==row.sha256)throw new Error('Document integrity check failed')
+  return{buffer,contentType:row.content_type||'application/octet-stream',originalName:row.original_name}
 }
 
 export function addUsageRecord(id,payload,database=defaultDb){

@@ -375,6 +375,11 @@ CREATE TABLE IF NOT EXISTS vehicles (
   engine_number TEXT,
   gross_vehicle_weight_kg REAL,
   unladen_weight_kg REAL,
+  registered_owner TEXT,
+  fuel_type TEXT,
+  engine_capacity_cc INTEGER,
+  vehicle_origin TEXT,
+  vehicle_class TEXT,
   operational_status TEXT NOT NULL DEFAULT 'active',
   is_common INTEGER NOT NULL DEFAULT 1,
   remark TEXT,
@@ -693,6 +698,13 @@ CREATE TABLE IF NOT EXISTS vehicle_documents (
   document_date TEXT,
   expiry_date TEXT,
   uploaded_by TEXT,
+  sha256 TEXT,
+  remark TEXT,
+  uploaded_by_account_id INTEGER REFERENCES auth_accounts(id),
+  version_number INTEGER NOT NULL DEFAULT 1,
+  is_current INTEGER NOT NULL DEFAULT 1 CHECK (is_current IN (0,1)),
+  supersedes_document_id INTEGER REFERENCES vehicle_documents(id),
+  superseded_at TEXT,
   uploaded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

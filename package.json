@@ -31,6 +31,10 @@
     "migrate:v26": "node scripts/migrate-v26.mjs",
     "migrate:v27": "node scripts/migrate-v27.mjs",
     "migrate:v28": "node scripts/migrate-v28.mjs",
+    "migrate:v29": "node scripts/migrate-v29.mjs",
+    "apply:vehicle-master-v29": "node scripts/apply-vehicle-master-v29.mjs",
+    "backup:vehicle-data": "node scripts/backup-vehicle-data.mjs",
+    "verify:vehicle-backup": "node scripts/verify-vehicle-backup.mjs",
     "convert:materials": "node scripts/convert-material-prices.mjs"
   },
   "dependencies": {
