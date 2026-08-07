@@ -162,14 +162,18 @@ test('Operational Location坐标及GPS Collector来源选项三语显示正确�
 test('车辆与Operational Location实际主档组件在English与BM不显示CJK界面文字',()=>{
   for(const language of ['en','ms']){
     const vehicle=renderMasterSurface(language,'Vehicle Master loaded state',React.createElement(resourceModule.VehicleMaster,{
-      items:[{id:1,vehicleCode:'Lorry 1',registrationNumber:null,vehicleName:null,brand:null,capacityKg:null,defaultBase:null,preferredZones:[],preferredAreaIds:[],status:'available',isTemporary:false,defaultBaseLocationId:null}],
+      items:[{id:1,vehicleCode:'Lorry 1',registrationNumber:null,vehicleName:null,brand:null,model:null,capacityKg:null,defaultBase:null,preferredZones:[],preferredAreaIds:[],status:'available',isTemporary:false,defaultBaseLocationId:null},{id:2,vehicleCode:'Former Vehicle',registrationNumber:'QTW2704',vehicleName:null,brand:null,model:null,capacityKg:null,defaultBase:null,preferredZones:[],preferredAreaIds:[],status:'sold',isTemporary:false,defaultBaseLocationId:null}],
       locations:[],areas:[],form:{vehicleCode:'',vehicleName:'',registrationNumber:'',capacityKg:'',defaultBaseLocationId:'',preferredAreaIds:[]},
       setForm:noop,add:noop,save:noop,edit:noop,openDetail:noop,
     }))
     assert.match(htmlText(vehicle),new RegExp(translate(language,'vehicle.missingNameBrand').replace('/','\\/')))
-    assert.match(htmlText(vehicle),new RegExp(translate(language,'vehicle.missingCapacity')))
+    assert.match(htmlText(vehicle),new RegExp(translate(language,'common.notSet')))
     assert.match(htmlText(vehicle),new RegExp(translate(language,'vehicle.add')))
     assert.doesNotMatch(vehicle,/placeholder="Registration Number \/ Plate"/)
+    assert.doesNotMatch(htmlText(vehicle),new RegExp(translate(language,'vehicle.viewDetail')))
+    assert.doesNotMatch(htmlText(vehicle),new RegExp(translate(language,'vehicle.quickEdit')))
+    assert.match(vehicle,/vehicle-master-card sold-vehicle/)
+    assert.doesNotMatch(vehicle,/<select aria-label="Lorry 1 status"/)
 
     const location=renderMasterSurface(language,'Operational Location loaded state',React.createElement(resourceModule.LocationMaster,{
       items:[],form:{name:'',locationType:'depot',address:'',canStart:true,canEnd:true},setForm:noop,add:noop,save:noop,edit:noop,
@@ -187,8 +191,7 @@ test('Vehicle导航、折叠新增表单、可点击清单与Sold历史状态保
   assert.match(resource,/role="button" tabIndex="0"/)
   assert.match(resource,/vehicle-list-status/)
   assert.match(resource,/sold-vehicle/)
-  assert.match(app,/page==='vehicles'\?<BackButton label=\{t\('nav\.vehicles'\)\}/)
-  assert.match(app,/key=\{vehicleHomeKey\}/)
+  assert.match(app,/page!==['"]vehicles['"]&&<BackButton/)
   assert.match(detail,/className="vehicle-back" onClick=\{onBack\}>Back<\/button>/)
   assert.match(detail,/readOnly=\{!isOwnerAdmin\}/)
 })
