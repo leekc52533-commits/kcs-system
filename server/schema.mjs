@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 27
+export const SCHEMA_VERSION = 30
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -152,6 +152,9 @@ CREATE TABLE IF NOT EXISTS operational_locations (
   phone TEXT,
   status TEXT NOT NULL DEFAULT 'active',
   notes TEXT,
+  accepted_materials TEXT,
+  unloading_restrictions TEXT,
+  pricing_notes TEXT,
   buyer_id INTEGER REFERENCES buyers(id),
   created_by TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -707,6 +710,12 @@ CREATE TABLE IF NOT EXISTS vehicle_documents (
   superseded_at TEXT,
   uploaded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS system_sequences (
+  name TEXT PRIMARY KEY,
+  next_value INTEGER NOT NULL
+);
+INSERT OR IGNORE INTO system_sequences(name,next_value) VALUES('buyer_branch',10001);
 
 CREATE TABLE IF NOT EXISTS vehicle_status_history (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

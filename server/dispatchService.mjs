@@ -185,7 +185,7 @@ const resourceOptions=(database)=>({
     e.default_base_location_id defaultBaseLocationId,base.name defaultBase,e.default_area_id defaultAreaId,a.name defaultArea,GROUP_CONCAT(CASE WHEN r.is_active=1 THEN r.role END,'|') additionalRoles
     FROM employees e LEFT JOIN operational_locations base ON base.id=e.default_base_location_id LEFT JOIN areas a ON a.id=e.default_area_id LEFT JOIN employee_job_roles r ON r.employee_id=e.id
     WHERE e.is_active=1 AND e.employment_status='active' GROUP BY e.id ORDER BY e.name`).all().map(item=>({...item,additionalRoles:item.additionalRoles?item.additionalRoles.split('|'):[]})),
-  locations:database.prepare('SELECT id,name,can_start canStart,can_end canEnd FROM operational_locations WHERE is_active=1 ORDER BY name').all(),
+  locations:database.prepare(`SELECT l.id,l.location_code locationCode,l.can_start canStart,l.can_end canEnd,l.buyer_id buyerId,b.buyer_code buyerCode,b.buyer_name buyerName,CASE WHEN l.buyer_id IS NULL THEN l.name ELSE b.buyer_name||' → '||l.name END name FROM operational_locations l LEFT JOIN buyers b ON b.id=l.buyer_id WHERE l.is_active=1 AND COALESCE(l.status,'active')='active' ORDER BY COALESCE(b.buyer_name,l.name),l.name`).all(),
   areas:database.prepare('SELECT a.id,a.name,a.zone_group_id zoneGroupId,z.name zoneGroup FROM areas a JOIN zone_groups z ON z.id=a.zone_group_id WHERE a.is_active=1 ORDER BY z.sort_order,a.name').all(),
   zoneGroups:database.prepare('SELECT id,code,name,sort_order sortOrder FROM zone_groups WHERE is_active=1 ORDER BY sort_order,id').all()
 })

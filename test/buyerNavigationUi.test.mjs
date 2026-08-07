@@ -13,7 +13,7 @@ test('Buyer Master is an independent main workspace and not a Location tab',()=>
   assert.match(app,/page==='buyers'&&canAccessBuyer\?<MasterDataPage currentUser=\{currentUser\} initialTab="buyers" allowedTabs=\{\['buyers'\]\}/)
   assert.doesNotMatch(workspace,/\['buyers',t\('hub\.buyerMaster'\)\]/)
   assert.doesNotMatch(workspace,/tab==='buyers'/)
-  assert.match(master,/tab==='buyers'\?<EntityManager[^\n]*type="buyer" endpoint="\/api\/buyers"/)
+  assert.match(master,/tab==='buyers'\?<BuyerManager/)
   assert.match(master,/officialLatitude/)
   assert.match(master,/officialLongitude/)
 })
