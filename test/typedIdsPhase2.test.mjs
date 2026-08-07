@@ -1,17 +1,20 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {formatBranchId,formatCustomerId,parseTypedId} from '../shared/typedIds.js'
+import {formatBranchId,formatBuyerId,formatCustomerId,parseTypedId} from '../shared/typedIds.js'
 import fs from 'node:fs'
 
 test('typed IDs format raw database identifiers without changing them',()=>{
   assert.equal(formatCustomerId(235),'C235')
   assert.equal(formatBranchId('10500'),'B10500')
+  assert.equal(formatBuyerId(25),'B25')
 })
 
 test('typed IDs accept numeric and case-insensitive matching prefixes',()=>{
   assert.equal(parseTypedId('235','customer'),'235')
   assert.equal(parseTypedId(' c235 ','customer'),'235')
   assert.equal(parseTypedId('B10500','branch'),'10500')
+  assert.equal(parseTypedId('b25','buyer'),'25')
+  assert.throws(()=>parseTypedId('C25','buyer'),/Buyer ID/)
   assert.throws(()=>parseTypedId('B10500','customer'),/Customer ID/)
   assert.throws(()=>parseTypedId('C235','branch'),/Branch ID/)
 })

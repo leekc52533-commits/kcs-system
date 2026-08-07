@@ -21,12 +21,12 @@ import {
 import './MasterDataPage.css'
 import {apiRequest as api} from './apiClient.js'
 import {useI18n} from './i18n.jsx'
-import {formatBranchId,formatCustomerId} from '../shared/typedIds.js'
+import {formatBranchId,formatBuyerId,formatCustomerId} from '../shared/typedIds.js'
 
 const modules=[['customer','master.customer'],['branch','master.branch'],['zone','master.zone'],['area','master.area'],['gps','master.gps'],['buyer','master.buyer'],['operational_location','master.operationalLocation']]
 const customerFields=[['customerId','Customer ID','text',true],['customerName','Customer Name','text',true],['legalName','Legal Name'],['registrationNumber','Registration Number'],['billingAddress','Billing Address','textarea'],['contactPerson','Contact Person'],['phone','Phone'],['whatsapp','WhatsApp'],['email','Email','email'],['defaultPaymentType','Default Payment Type','select',['','Cash','Credit']],['creditTerms','Credit Terms'],['status','Status','select',['active','paused','closed']],['notes','Notes','textarea']]
 export const branchFields=[['branchId','Branch ID','text',true],['customerId','Customer ID','text',true],['branchName','Branch Name','text',true],['address','Address','textarea'],['zoneGroup','Zone Group (determined by Area)','readonly'],['areaId','Area ID'],['officialLatitude','Official Latitude','readonly'],['officialLongitude','Official Longitude','readonly'],['temporaryLatitude','Latest Temporary Latitude','readonly'],['temporaryLongitude','Latest Temporary Longitude','readonly'],['gpsVerificationStatus','GPS Verification Status','readonly'],['contactPerson','Contact Person'],['phone','Phone'],['collectionTimeConstraint','Collection Time Constraint'],['paymentType','Payment Type','select',['','Cash','Credit']],['proofRequirements','Proof Requirements','textarea'],['vehicleRestriction','Vehicle Restriction'],['status','Status','select',['active','paused','closed']],['notes','Notes','textarea']]
-export const buyerFields=[['buyerId','Buyer ID','text',true],['buyerName','Buyer Name','text',true],['locationName','Location Name'],['address','Address','textarea'],['officialLatitude','Official Latitude','number'],['officialLongitude','Official Longitude','number'],['contactPerson','Contact Person'],['phone','Phone'],['materialAccepted','Material Accepted'],['operatingHours','Operating Hours'],['unloadingRestrictions','Unloading Restrictions','textarea'],['pricingNotes','Pricing Notes','textarea'],['status','Status','select',['active','paused','closed']],['notes','Notes','textarea']]
+export const buyerFields=[['buyerId','Buyer ID','readonly'],['buyerName','Buyer Name','text',true],['locationName','Location Name'],['address','Address','textarea'],['officialLatitude','Official Latitude','number'],['officialLongitude','Official Longitude','number'],['contactPerson','Contact Person'],['phone','Phone'],['materialAccepted','Material Accepted'],['operatingHours','Operating Hours'],['unloadingRestrictions','Unloading Restrictions','textarea'],['pricingNotes','Pricing Notes','textarea'],['status','Status','select',['active','paused','closed']],['notes','Notes','textarea']]
 export const locationFields=[['locationId','Location ID','text',true],['name','Location Name','text',true],['locationType','Location Type','select',['Company Yard','Buyer','Employee Base','Workshop','Fuel Station','Other']],['address','Address','textarea'],['latitude','Latitude','number'],['longitude','Longitude','number'],['operatingHours','Operating Hours'],['contactPerson','Contact Person'],['phone','Phone'],['buyerId','Buyer ID'],['status','Status','select',['active','paused','closed']],['notes','Notes','textarea']]
 
 export default function MasterDataPage({currentUser,initialTab='customers',allowedTabs=null,embedded=false}){
@@ -61,7 +61,9 @@ export function EntityManager({type,endpoint,fields,reload,notify,fail,actor,ini
     const routeId=type==='buyer'?form?.id:form?.[idKey],isEdit=Boolean(routeId),url=isEdit?`${endpoint}/${encodeURIComponent(routeId)}`:endpoint,method=isEdit?'PATCH':'POST'
     fail('');notify('');setSaving(true)
     try{
-      await api(url,{method,body:JSON.stringify({...form,...actor,reason:form.reason||'Customer Master supervisor update'})})
+      const payload={...form,...actor,reason:form.reason||'Customer Master supervisor update'}
+      if(type==='buyer'){delete payload.buyerId;delete payload.id}
+      await api(url,{method,body:JSON.stringify(payload)})
       setEditingState(null)
       if(await load())notify(t('master.savedRefreshed',{entity:t(modules.find(item=>item[0]===type)?.[1]||'master.customer')}))
     }catch(item){fail(item.message)}
@@ -69,7 +71,7 @@ export function EntityManager({type,endpoint,fields,reload,notify,fail,actor,ini
   }
   const entityKey=modules.find(item=>item[0]===type)?.[1]||'master.customer',entityLabel=t(entityKey)
   const emptyKey=type==='buyer'?'master.noBuyers':type==='operational_location'?'master.noOperationalLocations':null
-  const displayId=item=>type==='customer'?formatCustomerId(item.customerId):type==='branch'?formatBranchId(item.branchId):item[idKey]||item.locationId
+  const displayId=item=>type==='customer'?formatCustomerId(item.customerId):type==='branch'?formatBranchId(item.branchId):type==='buyer'?formatBuyerId(item.id):item[idKey]||item.locationId
   return <section className="master-workspace">
     <header><div><h2>{type==='customer'?'Customer Master':type==='branch'?'Customer Branch Master':type==='buyer'?'Buyer Master':'Operational Location Master'}</h2><p>{t('customer.retentionHelp')}</p></div><button className="primary" onClick={()=>setEditing({status:'active',locationType:type==='operational_location'?'Other':undefined,materials:[],materialPricing:[],assignedWeekdays:[]})}>＋ {t('master.addEntity',{entity:entityLabel})}</button></header>
     <div className="master-filters"><input placeholder={t('customer.searchMaster')} value={search} onChange={event=>setSearch(event.target.value)}/><select value={status} onChange={event=>setStatus(event.target.value)}><option value="">{t('common.all')}</option><option value="active">Active</option><option value="paused">Paused</option><option value="closed">Closed</option></select><ExportButton module={type} search={search}/></div>

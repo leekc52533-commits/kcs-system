@@ -6,6 +6,7 @@ import {translate} from '../src/translations.js'
 const workspace=readFileSync(new URL('../src/WorkspaceHub.jsx',import.meta.url),'utf8')
 const master=readFileSync(new URL('../src/MasterDataPage.jsx',import.meta.url),'utf8')
 const app=readFileSync(new URL('../src/App.jsx',import.meta.url),'utf8')
+const server=readFileSync(new URL('../server/index.mjs',import.meta.url),'utf8')
 
 test('Buyer Master is an independent main workspace and not a Location tab',()=>{
   assert.match(app,/\['buyers','◉','nav\.buyers'\]/)
@@ -15,6 +16,15 @@ test('Buyer Master is an independent main workspace and not a Location tab',()=>
   assert.match(master,/tab==='buyers'\?<EntityManager[^\n]*type="buyer" endpoint="\/api\/buyers"/)
   assert.match(master,/officialLatitude/)
   assert.match(master,/officialLongitude/)
+})
+
+test('Buyer form and list use an immutable system-generated typed ID',()=>{
+  assert.match(master,/buyerFields=\[\['buyerId','Buyer ID','readonly'\]/)
+  assert.match(master,/type==='buyer'\?formatBuyerId\(item\.id\)/)
+  assert.match(master,/if\(type==='buyer'\)\{delete payload\.buyerId;delete payload\.id\}/)
+  assert.ok(server.includes("request.method === 'PATCH' && /^\\/api\\/buyers\\/\\d+$/.test"))
+  assert.match(server,/Object\.hasOwn\(payload,'buyerId'\)\|\|Object\.hasOwn\(payload,'id'\)/)
+  assert.match(server,/sendJson\(response,400,\{error:'Buyer ID is system generated and cannot be changed'\}\)/)
 })
 
 test('Buyer route persists through the existing page query while invalid Location tabs fall back safely',()=>{

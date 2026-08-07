@@ -1,4 +1,4 @@
-const TYPES={customer:{prefix:'C',label:'Customer'},branch:{prefix:'B',label:'Branch'}}
+const TYPES={customer:{prefix:'C',label:'Customer'},branch:{prefix:'B',label:'Branch'},buyer:{prefix:'B',label:'Buyer'}}
 
 export function parseTypedId(value,expectedType){
   const type=TYPES[String(expectedType||'').toLowerCase()]
@@ -11,3 +11,4 @@ export function parseTypedId(value,expectedType){
 const format=(value,type)=>{if(value==null||String(value).trim()==='')return '';const input=String(value).trim(),prefix=TYPES[type].prefix;try{return `${prefix}${parseTypedId(input,type)}`}catch{ return input.toUpperCase().startsWith(prefix)?input:`${prefix}${input}` }}
 export const formatCustomerId=value=>format(value,'customer')
 export const formatBranchId=value=>format(value,'branch')
+export const formatBuyerId=value=>format(value,'buyer')
