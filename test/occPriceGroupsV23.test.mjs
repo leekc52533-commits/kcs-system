@@ -19,12 +19,12 @@ const fixture=()=>{
   return db
 }
 
-test('v23 safely removes Product + Price uniqueness while preserving stable Group IDs',()=>{
+test('v23 preserves stable Group IDs while managed creation blocks duplicate prices',()=>{
   const db=fixture(),before=db.prepare("SELECT id FROM occ_price_groups WHERE price_amount=.19").get().id
   const result=applyV23Migration(db)
   assert.equal(result.schemaVersion,23)
-  const duplicate=createOccPriceGroup({priceAmount:.19,itemCode:'OCC-TRANSITION',reason:'Transition group'},db)
-  assert.notEqual(duplicate.id,before)
+  assert.throws(()=>createOccPriceGroup({priceAmount:.19,itemCode:'OCC-TRANSITION',reason:'Transition group'},db),error=>error.code==='OCC_PRICE_GROUP_DUPLICATE')
+  assert.equal(db.prepare("SELECT id FROM occ_price_groups WHERE price_amount=.19").get().id,before)
   assert.equal(db.prepare('PRAGMA integrity_check').get().integrity_check,'ok')
   assert.equal(applyV23Migration(db).schemaVersion,23)
 })
@@ -63,6 +63,10 @@ test('UI sources use used-group cards, branch detail management and modal master
   assert.match(materials,/>Preview Move</)
   assert.match(materials,/Confirm Move/)
   assert.match(materials,/OCC Branch move preview/)
+  assert.match(materials,/material\.addOccPriceGroup/)
+  assert.match(materials,/detail\.products\.length===1/)
+  assert.match(materials,/orderedCategories\.map/)
+  assert.match(materials,/<BackButton className="material-back-button"/)
   assert.doesNotMatch(materials,/Preview \/ Confirm Move/)
   assert.doesNotMatch(materials,/confirm\(`Move \$\{selected\.length\}/)
   assert.match(employees,/showCreate&&<div className="employee-detail-backdrop"/)

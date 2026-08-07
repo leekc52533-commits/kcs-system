@@ -34,9 +34,12 @@ export function updateOccPriceGroup(id,payload={},database=defaultDb){
 }
 
 export function createOccPriceGroup(payload,database=defaultDb){
-  const amount=price(payload.priceAmount),reason=text(payload.reason);if(!reason)throw new Error('Reason is required')
+  const raw=text(payload.priceAmount),numeric=Number(raw);if(!Number.isFinite(numeric)||numeric<=0)throw occError('OCC_PRICE_INVALID','OCC price must be a valid positive number.');if(Math.abs(numeric*100-Math.round(numeric*100))>1e-8)throw occError('OCC_PRICE_PRECISION','OCC price supports at most two decimal places.')
+  const amount=price(numeric),reason=text(payload.reason);if(!reason)throw new Error('Reason is required')
   const occ=database.prepare("SELECT id FROM materials WHERE material_code='OCC'").get();if(!occ)throw new Error('OCC material not found')
   const cents=Math.round(amount*100),code=text(payload.itemCode)||`OCC-${String(cents).padStart(3,'0')}`
+  if(database.prepare('SELECT id FROM occ_price_groups WHERE price_amount=?').get(amount))throw occError('OCC_PRICE_GROUP_DUPLICATE','An OCC Price Group with this price already exists.',409)
+  if(database.prepare('SELECT id FROM occ_price_groups WHERE item_code=? COLLATE NOCASE').get(code))throw occError('OCC_PRICE_GROUP_CODE_DUPLICATE','An OCC Price Group with this code already exists.',409)
   const result=database.prepare(`INSERT INTO occ_price_groups(material_id,item_code,price_amount,is_fixed,status,reason,created_by) VALUES(?,?,?,0,'active',?,?)`).run(occ.id,code,amount,reason,payload.changedBy||'Owner Admin')
   return groupRow(database,Number(result.lastInsertRowid))
 }

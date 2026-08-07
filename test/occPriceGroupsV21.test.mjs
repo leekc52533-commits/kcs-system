@@ -29,7 +29,9 @@ test('v21 creates exactly 46 fixed OCC groups idempotently with unique Product +
 test('custom OCC group can be added while fixed groups cannot be repriced through an update API',()=>{
   const db=database(),group=createOccPriceGroup({priceAmount:.7,reason:'New market requirement',changedBy:'Owner'},db)
   assert.equal(group.priceAmount,.7);assert.equal(group.isFixed,0)
-  assert.throws(()=>createOccPriceGroup({priceAmount:.7,reason:'Duplicate',changedBy:'Owner'},db),/UNIQUE/)
+  assert.throws(()=>createOccPriceGroup({priceAmount:.7,reason:'Duplicate',changedBy:'Owner'},db),error=>error.code==='OCC_PRICE_GROUP_DUPLICATE'&&error.statusCode===409)
+  assert.throws(()=>createOccPriceGroup({priceAmount:.701,reason:'Too precise',changedBy:'Owner'},db),error=>error.code==='OCC_PRICE_PRECISION')
+  assert.throws(()=>createOccPriceGroup({priceAmount:0,reason:'Invalid',changedBy:'Owner'},db),error=>error.code==='OCC_PRICE_INVALID')
   assert.equal(typeof group.priceAmount,'number')
 })
 
