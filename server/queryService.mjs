@@ -12,6 +12,7 @@ export function dashboardSummary(database = db) {
     (SELECT COUNT(*) FROM branches WHERE is_active=1) branchCount,
     (SELECT COUNT(DISTINCT branch_id) FROM branch_schedules WHERE branch_id IS NOT NULL AND is_active=1) scheduledBranchCount,
     (SELECT COUNT(*) FROM branches b WHERE ${gpsValidSql}) gpsBranchCount,
+    (SELECT COUNT(*) FROM branches b WHERE b.is_active=1 AND b.status='active' AND NOT COALESCE((${gpsValidSql}),0) AND NOT EXISTS(SELECT 1 FROM temporary_locations t WHERE t.branch_id=b.id AND t.verification_status='pending_supervisor')) gpsToCollectCount,
     (SELECT COUNT(*) FROM branches b WHERE ${routeReadySql}) routeReadyCount,
     (SELECT COUNT(*) FROM branches b WHERE EXISTS(SELECT 1 FROM branch_schedules s WHERE s.branch_id=b.id AND s.is_active=1) AND NOT COALESCE((${gpsValidSql}),0)) scheduledMissingGpsCount,
     (SELECT COUNT(*) FROM branches b WHERE NOT EXISTS(SELECT 1 FROM branch_schedules s WHERE s.branch_id=b.id AND s.is_active=1)) noScheduleCount,
@@ -58,11 +59,12 @@ export function schedules(params, database = db) {
 }
 
 export function dataQualitySummary(database = db) {
-  const groups = database.prepare(`SELECT b.jodoo_branch_id branchId,c.name customerName,b.branch_name branchName,z.name zoneGroup,a.name area,
+  const groups = database.prepare(`SELECT b.jodoo_branch_id branchId,c.name customerName,b.branch_name branchName,z.name zoneGroup,a.name area,b.is_active isActive,b.status,
     CASE WHEN ${gpsValidSql} THEN 1 ELSE 0 END hasGps,
     CASE WHEN EXISTS(SELECT 1 FROM branch_schedules s WHERE s.branch_id=b.id) THEN 1 ELSE 0 END hasSchedule,
     CASE WHEN (b.latitude IS NOT NULL OR b.longitude IS NOT NULL) AND NOT (${gpsValidSql}) THEN 1 ELSE 0 END invalidGps,
-    CASE WHEN b.area_id IS NULL THEN 1 ELSE 0 END missingArea
+    CASE WHEN b.area_id IS NULL THEN 1 ELSE 0 END missingArea,
+    EXISTS(SELECT 1 FROM temporary_locations t WHERE t.branch_id=b.id AND t.verification_status='pending_supervisor') hasPendingGps
     FROM branches b LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN zone_groups z ON z.id=a.zone_group_id ORDER BY c.name,b.branch_name`).all()
   const unmatchedSchedules = database.prepare(`SELECT jodoo_schedule_id scheduleId,source_branch_id branchId,days_of_week dayOfWeek FROM branch_schedules WHERE branch_id IS NULL`).all()
   return {

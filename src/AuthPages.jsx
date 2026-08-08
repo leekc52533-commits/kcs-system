@@ -6,6 +6,7 @@ import FieldError from './FieldError.jsx'
 import {clearFieldError,fieldAccessibility,passwordMessage,requiredMessage} from './formValidation.js'
 import {apiRequest as api} from './apiClient.js'
 import {formatBranchId,formatCustomerId} from '../shared/typedIds.js'
+import GoogleMapPreview from './GoogleMapPreview.jsx'
 
 const fileData=file=>new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve({name:file.name,dataUrl:reader.result});reader.onerror=reject;reader.readAsDataURL(file)})
 
@@ -33,7 +34,7 @@ function useLocation(){
   return callback=>navigator.geolocation?navigator.geolocation.getCurrentPosition(position=>callback({latitude:position.coords.latitude.toFixed(7),longitude:position.coords.longitude.toFixed(7),accuracyM:Math.round(position.coords.accuracy),deviceCapturedAt:new Date(position.timestamp).toISOString()}),error=>callback({error:t('mobile.gpsFailed',{message:error.message})}),{enableHighAccuracy:true,timeout:20000,maximumAge:0}):callback({error:t('mobile.gpsUnsupported')})
 }
 
-function MapPreview({latitude,longitude}){const{t}=useI18n();if(!latitude||!longitude)return null;const lat=Number(latitude),lng=Number(longitude),delta=.004,bbox=[lng-delta,lat-delta,lng+delta,lat+delta].join('%2C');return <div className="mobile-map"><iframe title="GPS map preview" src={`https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat}%2C${lng}`}/><a target="_blank" rel="noreferrer" href={`https://www.google.com/maps?q=${lat},${lng}`}>{t('mobile.openMap')}</a></div>}
+function MapPreview(props){return <GoogleMapPreview {...props}/>}
 
 export function MobileApp({account,onLogout,onChangePassword}){
   const{t,language}=useI18n(),locate=useLocation()

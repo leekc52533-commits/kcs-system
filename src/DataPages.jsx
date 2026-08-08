@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import {apiRequest} from './apiClient.js'
 import {useI18n} from './i18n.jsx'
+import {formatBranchId} from '../shared/typedIds.js'
 
 function useApi(url){const[data,setData]=useState(null),[error,setError]=useState('');useEffect(()=>{let active=true;setData(null);setError('');apiRequest(url).then(x=>active&&setData(x)).catch(e=>active&&setError(e.message));return()=>{active=false}},[url]);return{data,error}}
 const Raw=({children})=><span data-i18n-raw>{children}</span>
@@ -24,7 +25,7 @@ export function SchedulesPage(){
 }
 
 const groupKeys={scheduledWithGps:'schedule.qualityScheduledGps',scheduledMissingGps:'schedule.qualityScheduledMissingGps',gpsWithoutSchedule:'schedule.qualityGpsWithoutSchedule',missingGpsAndSchedule:'schedule.qualityMissingBoth',invalidGps:'schedule.qualityInvalidGps',unmatchedSchedules:'schedule.qualityUnmatchedBranch',missingArea:'schedule.qualityMissingArea'}
-export function DataQualityPage(){const{t}=useI18n(),{data,error}=useApi('/api/data-quality/summary');return <DataShell eyebrow="DATA QUALITY" title={t('schedule.dataQuality')} subtitle={t('schedule.dataQualityHelp')}>{!data?<Loading error={error}/>:<div className="quality-grid">{Object.entries(groupKeys).map(([key,labelKey])=><section key={key}><div><h2>{t(labelKey)}</h2><strong>{data[key]?.length??0}</strong></div><div>{(data[key]??[]).slice(0,50).map((x,i)=><p key={x.branchId||x.scheduleId||i}><b data-i18n-raw>{x.branchId||'—'}</b><span data-i18n-raw>{x.customerName||x.branchName||x.dayOfWeek||t('common.waitingReview')}</span></p>)}</div></section>)}</div>}</DataShell>}
+export function DataQualityPage(){const{t}=useI18n(),{data,error}=useApi('/api/data-quality/summary'),openGps=branchId=>window.location.assign(`?page=location-zone&tab=locations&branch=${encodeURIComponent(branchId)}`);return <DataShell eyebrow="DATA QUALITY" title={t('schedule.dataQuality')} subtitle={t('schedule.dataQualityHelp')}>{!data?<Loading error={error}/>:<div className="quality-grid">{Object.entries(groupKeys).map(([key,labelKey])=><section key={key}><div><h2>{t(labelKey)}</h2><strong>{data[key]?.length??0}</strong></div><div>{(data[key]??[]).slice(0,50).map((x,i)=>{const collectable=['scheduledMissingGps','missingGpsAndSchedule'].includes(key)&&Boolean(x.isActive)&&x.status==='active'&&!x.hasPendingGps;return <p className={collectable?'gps-quality-collectable':''} role={collectable?'button':undefined} tabIndex={collectable?0:undefined} onClick={collectable?()=>openGps(x.branchId):undefined} onKeyDown={collectable?event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();openGps(x.branchId)}}:undefined} key={x.branchId||x.scheduleId||i}><b data-i18n-raw>{x.branchId?formatBranchId(x.branchId):'—'}</b><span data-i18n-raw>{x.customerName||x.branchName||x.dayOfWeek||t('common.waitingReview')}{x.hasPendingGps?` · ${t('gpsCollection.pending')}`:''}</span></p>})}</div></section>)}</div>}</DataShell>}
 
 function DataShell({eyebrow,title,subtitle,children}){return <div className="page data-page"><div className="data-title"><em>{eyebrow}</em><h1>{title}</h1><p>{subtitle}</p></div>{children}</div>}
 function Status({ok=false,text}){return <span className={ok?'status-pill ok':'status-pill'}>{text}</span>}
