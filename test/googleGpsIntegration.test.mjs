@@ -40,6 +40,7 @@ test('Dashboard GPS To Collect excludes Official and valid Pending GPS',()=>{
 test('both missing-GPS quality groups navigate to the unified preselected collector only when collectable',()=>{
   assert.match(dataSource,/\['scheduledMissingGps','missingGpsAndSchedule'\]/)
   assert.match(dataSource,/page=location-zone&tab=locations&branch=/)
+  assert.match(dataSource,/encodeURIComponent\(formatBranchId\(branchId\)\)/)
   assert.match(dataSource,/event\.key==='Enter'\|\|event\.key===' '/)
   const db=new DatabaseSync(':memory:');db.exec(schemaSql)
   const customer=db.prepare("INSERT INTO customers(jodoo_customer_id,name,status,is_active) VALUES('1','Customer','active',1)").run().lastInsertRowid
