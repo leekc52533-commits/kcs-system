@@ -51,7 +51,7 @@ function zoneMetricFixture(){
   db.prepare("INSERT INTO branches(jodoo_branch_id,customer_id,area_id,branch_name,address) VALUES('B2',1,2,'No GPS Branch','Address 2')").run()
   db.prepare("INSERT INTO branches(jodoo_branch_id,customer_id,area_id,branch_name,address,latitude,longitude) VALUES('B3',1,2,'GPS Branch','Address 3',3.2,101.7),('B4',1,3,'Wrong Zone Branch','Address 4',3.3,101.8)").run()
   db.prepare("INSERT INTO branch_schedules(jodoo_schedule_id,branch_id,source_branch_id,frequency,days_of_week) VALUES('S3',3,'B3','Biweekly','Tuesday, Friday'),('S4',4,'B4','Weekly','Wednesday')").run()
-  db.prepare("INSERT INTO temporary_locations(branch_id,latitude,longitude,location_source) VALUES(2,3.25,101.75,'Customer WhatsApp')").run()
+  db.prepare("INSERT INTO temporary_locations(branch_id,latitude,longitude,location_source,verification_status) VALUES(2,3.25,101.75,'Customer WhatsApp','pending_supervisor')").run()
   return db
 }
 

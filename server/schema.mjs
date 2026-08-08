@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 30
+export const SCHEMA_VERSION = 31
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -82,6 +82,13 @@ CREATE TABLE IF NOT EXISTS branches (
   longitude REAL CHECK (longitude BETWEEN -180 AND 180 OR longitude IS NULL),
   gps_status TEXT,
   gps_verified_at TEXT,
+  gps_address TEXT,
+  gps_state TEXT,
+  gps_street TEXT,
+  gps_city TEXT,
+  gps_street_number TEXT,
+  gps_postal_code TEXT,
+  gps_reverse_geocode_provider TEXT,
   parking_note TEXT,
   truck_access TEXT,
   gps_remark TEXT,
@@ -847,6 +854,13 @@ CREATE TABLE IF NOT EXISTS temporary_locations (
   photo_original_name TEXT,
   photo_content_type TEXT,
   remark TEXT,
+  address TEXT,
+  state TEXT,
+  street TEXT,
+  city TEXT,
+  street_number TEXT,
+  postal_code TEXT,
+  reverse_geocode_provider TEXT,
   review_decision TEXT,
   review_reason TEXT,
   reviewed_by_account_id INTEGER REFERENCES auth_accounts(id),
@@ -855,6 +869,26 @@ CREATE TABLE IF NOT EXISTS temporary_locations (
   adopted_by TEXT,
   adopted_at TEXT
 );
+
+CREATE TABLE IF NOT EXISTS branch_gps_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  branch_id INTEGER NOT NULL REFERENCES branches(id),
+  action TEXT NOT NULL CHECK(action IN ('approved','withdrawn')),
+  latitude REAL,
+  longitude REAL,
+  address TEXT,
+  state TEXT,
+  street TEXT,
+  city TEXT,
+  street_number TEXT,
+  postal_code TEXT,
+  remark TEXT,
+  reverse_geocode_provider TEXT,
+  actor TEXT NOT NULL,
+  reason TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS branch_gps_history_branch_idx ON branch_gps_history(branch_id,created_at);
 
 CREATE TABLE IF NOT EXISTS gps_migration_batches (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

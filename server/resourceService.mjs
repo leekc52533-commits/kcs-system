@@ -136,7 +136,7 @@ export function getZoneGroupMetricDetails(id,options={},database=defaultDb){
   }else{
     const rows=database.prepare(`SELECT b.id,b.jodoo_branch_id branchId,b.branch_name branchName,b.latitude,b.longitude,b.gps_status gpsStatus,
       c.jodoo_customer_id customerId,c.name customerName,a.id areaId,a.name areaName,
-      EXISTS(SELECT 1 FROM temporary_locations t WHERE t.branch_id=b.id) hasTemporaryGps,
+      EXISTS(SELECT 1 FROM temporary_locations t WHERE t.branch_id=b.id AND t.verification_status='pending_supervisor') hasTemporaryGps,
       s.jodoo_schedule_id scheduleId,s.frequency,s.days_of_week assignedWeekdays
       FROM branches b JOIN areas a ON a.id=b.area_id LEFT JOIN customers c ON c.id=b.customer_id
       LEFT JOIN branch_schedules s ON s.branch_id=b.id AND s.is_active=1

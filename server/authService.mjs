@@ -192,10 +192,10 @@ export function listAuthAudit(params={},database=defaultDb){
 export function roleCan(role,permission){
   const normalized=normalizeRole(role)
   const map={
-    owner_admin:new Set(['desktop','accounts','account_identity','sensitive_data','system_security','employee_manage','vehicle_manage','gps_review','gps_migration','gps_migration_approve','price_manage','mobile']),
-    operations_admin:new Set(['desktop','accounts','employee_manage','vehicle_manage','schedule_manage','gps_review','gps_migration','gps_migration_approve','price_manage','mobile']),
-    supervisor:new Set(['desktop','gps_review','gps_migration','gps_migration_approve','mobile']),
-    office:new Set(['desktop','gps_migration','mobile']),
+    owner_admin:new Set(['desktop','accounts','account_identity','sensitive_data','system_security','employee_manage','vehicle_manage','gps_capture','gps_review','gps_migration','gps_migration_approve','price_manage','mobile']),
+    operations_admin:new Set(['desktop','accounts','employee_manage','vehicle_manage','schedule_manage','gps_capture','gps_review','gps_migration','gps_migration_approve','price_manage','mobile']),
+    supervisor:new Set(['desktop','gps_capture','gps_review','gps_migration','gps_migration_approve','mobile']),
+    office:new Set(['desktop','gps_capture','gps_migration','mobile']),
     driver:new Set(['mobile','gps_capture']),
     crew:new Set(['mobile','gps_capture'])
   }
