@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 33
+export const SCHEMA_VERSION = 34
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -416,6 +416,13 @@ CREATE TABLE IF NOT EXISTS dispatches (
   assistant_id INTEGER REFERENCES employees(id),
   assistant_employment_period_id INTEGER REFERENCES employee_employment_history(id),
   start_location_id INTEGER REFERENCES operational_locations(id),
+  start_location_type TEXT CHECK (start_location_type IS NULL OR start_location_type IN ('factory','employee_home','saved_location','custom')),
+  start_location_reference_type TEXT,
+  start_location_reference_id INTEGER,
+  start_location_name TEXT,
+  start_address TEXT,
+  start_latitude REAL CHECK (start_latitude BETWEEN -90 AND 90 OR start_latitude IS NULL),
+  start_longitude REAL CHECK (start_longitude BETWEEN -180 AND 180 OR start_longitude IS NULL),
   end_location_id INTEGER REFERENCES operational_locations(id),
   status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','released','in_progress','completed','cancelled')),
   created_by INTEGER REFERENCES users(id),
