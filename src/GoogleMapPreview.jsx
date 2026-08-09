@@ -4,8 +4,9 @@ import {loadGoogleMaps} from './googleMapsLoader.js'
 
 const mapsKey=import.meta.env.VITE_GOOGLE_MAPS_API_KEY||''
 
-export default function GoogleMapPreview({latitude,longitude}){
-  const{t}=useI18n(),container=useRef(null),map=useRef(null),marker=useRef(null),[error,setError]=useState('')
+export default function GoogleMapPreview({latitude,longitude,onPositionAdjusted}){
+  const{t}=useI18n(),container=useRef(null),map=useRef(null),marker=useRef(null),adjustmentHandler=useRef(onPositionAdjusted),[error,setError]=useState('')
+  adjustmentHandler.current=onPositionAdjusted
   useEffect(()=>{
     if(!latitude||!longitude)return
     const position={lat:Number(latitude),lng:Number(longitude)}
@@ -13,8 +14,8 @@ export default function GoogleMapPreview({latitude,longitude}){
     let current=true
     loadGoogleMaps(mapsKey).then(maps=>{
       if(!current||!container.current)return
-      if(!map.current){map.current=new maps.Map(container.current,{center:position,zoom:17,mapTypeControl:false,streetViewControl:false,fullscreenControl:false});marker.current=new maps.Marker({map:map.current,position,title:'Captured GPS'})}
-      else{map.current.setCenter(position);marker.current.setPosition(position)}
+      if(!map.current){map.current=new maps.Map(container.current,{center:position,zoom:17,mapTypeId:'roadmap',mapTypeControl:true,streetViewControl:false,fullscreenControl:false});marker.current=new maps.Marker({map:map.current,position,title:'Captured GPS',draggable:Boolean(adjustmentHandler.current)});marker.current.addListener('dragend',event=>adjustmentHandler.current?.({latitude:event.latLng.lat().toFixed(7),longitude:event.latLng.lng().toFixed(7)}))}
+      else{map.current.setCenter(position);marker.current.setPosition(position);marker.current.setDraggable(Boolean(adjustmentHandler.current))}
       setError('')
     }).catch(reason=>{console.error('[KCS Google Maps]',reason?.message||'unknown-error');if(current)setError(reason.message==='missing-key'?t('gpsCollection.mapKeyMissing'):t('gpsCollection.mapLoadFailed'))})
     return()=>{current=false}

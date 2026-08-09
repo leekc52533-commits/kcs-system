@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 31
+export const SCHEMA_VERSION = 32
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -867,7 +867,15 @@ CREATE TABLE IF NOT EXISTS temporary_locations (
   reviewed_by TEXT,
   reviewed_at TEXT,
   adopted_by TEXT,
-  adopted_at TEXT
+  adopted_at TEXT,
+  captured_latitude REAL,
+  captured_longitude REAL,
+  captured_accuracy_m REAL,
+  manually_adjusted INTEGER NOT NULL DEFAULT 0,
+  adjusted_by TEXT,
+  adjusted_at TEXT,
+  adjustment_reason TEXT,
+  adjustment_distance_m REAL
 );
 
 CREATE TABLE IF NOT EXISTS branch_gps_history (

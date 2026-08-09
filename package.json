@@ -34,6 +34,7 @@
     "migrate:v29": "node scripts/migrate-v29.mjs",
     "migrate:v30": "node scripts/migrate-v30.mjs",
     "migrate:v31": "node scripts/migrate-v31.mjs",
+    "migrate:v32": "node scripts/migrate-v32.mjs",
     "apply:vehicle-master-v29": "node scripts/apply-vehicle-master-v29.mjs",
     "backup:vehicle-data": "node scripts/backup-vehicle-data.mjs",
     "verify:vehicle-backup": "node scripts/verify-vehicle-backup.mjs",
