@@ -194,7 +194,7 @@ const moduleMessages={
 const routeMessages={
   en:{
     'common.noPhone':'No phone','common.noNotes':'No notes','common.records':'records','common.items':'items','common.branches':'branches','common.rename':'Rename','common.saving':'Saving…',
-    'common.loadingData':'Loading data…','common.waitingReview':'Pending review','common.unassignedArea':'Unassigned area','common.notNamedBranch':'Unnamed branch',
+    'common.loadingData':'Loading data…','common.waitingReview':'Pending review','common.unassignedArea':'Unassigned area','common.notNamedBranch':'Unnamed branch','gpsCollection.unassignedArea':'Unassigned Area','gpsCollection.groupCount':'{count} Branches',
     'common.unmatchedCustomer':'Unmatched customer','common.noAddress':'No address','common.notProvided':'Not provided','common.exportXlsx':'Export XLSX',
     'customer.masterTitle':'Customer Master','customer.retentionHelp':'Historical records are not physically deleted. Use Pause, Resume or Close to manage status.',
     'customer.exportMapping':'Export Area-Zone Mapping XLSX','customer.exportMappingLabel':'Export Area-Zone Mapping','customer.exportData':'Export data XLSX','customer.searchMaster':'Search ID, name, phone or address',
@@ -291,7 +291,7 @@ const routeMessages={
   },
   ms:{
     'common.noPhone':'Tiada telefon','common.noNotes':'Tiada catatan','common.records':'rekod','common.items':'item','common.branches':'cawangan','common.rename':'Tukar nama','common.saving':'Menyimpan…',
-    'common.loadingData':'Memuatkan data…','common.waitingReview':'Menunggu semakan','common.unassignedArea':'Kawasan belum ditetapkan','common.notNamedBranch':'Cawangan tanpa nama',
+    'common.loadingData':'Memuatkan data…','common.waitingReview':'Menunggu semakan','common.unassignedArea':'Kawasan belum ditetapkan','common.notNamedBranch':'Cawangan tanpa nama','gpsCollection.unassignedArea':'Kawasan Belum Ditetapkan','gpsCollection.groupCount':'{count} Cawangan',
     'common.unmatchedCustomer':'Pelanggan tidak sepadan','common.noAddress':'Tiada alamat','common.notProvided':'Belum diisi','common.exportXlsx':'Eksport XLSX',
     'customer.masterTitle':'Induk Pelanggan','customer.retentionHelp':'Rekod sejarah tidak dipadam secara fizikal. Gunakan Jeda, Sambung atau Tutup untuk mengurus status.',
     'customer.exportMapping':'Eksport Pemetaan Area-Zone XLSX','customer.exportMappingLabel':'Eksport Pemetaan Area-Zone','customer.exportData':'Eksport data XLSX','customer.searchMaster':'Cari ID, nama, telefon atau alamat',
@@ -388,7 +388,7 @@ const routeMessages={
   },
   zh:{
     'common.noPhone':'无电话','common.noNotes':'无备注','common.records':'笔','common.items':'项','common.branches':'间分店','common.rename':'改名','common.saving':'保存中…',
-    'common.loadingData':'资料载入中…','common.waitingReview':'等待核对','common.unassignedArea':'未分区','common.notNamedBranch':'未命名分店',
+    'common.loadingData':'资料载入中…','common.waitingReview':'等待核对','common.unassignedArea':'未分区','common.notNamedBranch':'未命名分店','gpsCollection.unassignedArea':'未分配区域','gpsCollection.groupCount':'{count} 个分店',
     'common.unmatchedCustomer':'未匹配客户','common.noAddress':'无地址','common.notProvided':'未填写','common.exportXlsx':'导出XLSX',
     'customer.masterTitle':'客户主档','customer.retentionHelp':'不物理删除历史资料；使用暂停、恢复或关闭管理状态。',
     'customer.exportMapping':'导出Area-Zone Mapping XLSX','customer.exportMappingLabel':'导出Area-Zone Mapping','customer.exportData':'导出资料XLSX','customer.searchMaster':'搜索编号、名称、电话或地址',

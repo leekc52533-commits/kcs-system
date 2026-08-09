@@ -23,6 +23,7 @@ import {apiRequest as api} from './apiClient.js'
 import {useI18n} from './i18n.jsx'
 import GoogleMapPreview from './GoogleMapPreview.jsx'
 import {collectHighAccuracyPosition} from './highAccuracyGps.js'
+import GpsRemainingGroups from './GpsRemainingGroups.jsx'
 import {formatBranchId,formatBuyerBranchId,formatBuyerId,formatCustomerId,parseTypedId} from '../shared/typedIds.js'
 import {buildBuyerBranchPatch} from './buyerBranchEditorState.js'
 
@@ -158,7 +159,7 @@ export function GpsCollector({reload,refresh,notify,fail,actor}){const initialBr
   return <section className="master-workspace gps-collector">
     <header><div><h2>{t('gps.collector')}</h2><p>{t('gps.collectorHelp')}</p></div></header>
     <div className="gps-progress"><span><b>{collection.summary.totalActiveBranches}</b>{t('gpsCollection.totalActive')}</span><span><b>{collection.summary.officialGps}</b>{t('gpsCollection.official')}</span><span><b>{collection.summary.pendingApproval}</b>{t('gpsCollection.pending')}</span><span><b>{collection.summary.remainingToCollect}</b>{t('gpsCollection.remaining')}</span></div>
-    {!branchId&&<div className="gps-to-collect desktop-gps-queue">{collection.items.map(branch=><button type="button" key={branch.internalId} onClick={()=>selectCollectionBranch(branch)}><b data-i18n-raw>{formatBranchId(branch.branchId)} — {branch.branchName}</b><span data-i18n-raw>{formatCustomerId(branch.customerId)} — {branch.customerName}</span><small data-i18n-raw>{branch.address||t('common.noAddress')} · {branch.area||t('common.unassignedArea')} / {branch.zoneGroup||'—'}</small></button>)}</div>}
+    {!branchId&&<GpsRemainingGroups items={collection.items} onSelect={selectCollectionBranch} t={t}/>}
     {branchId&&<button type="button" className="back-button" onClick={clearSelectedBranch}>← {t('gpsCollection.toCollect')}</button>}
     <form ref={formRef} onSubmit={capture}>
       <label>{t('gps.searchCustomerBranch')}<input value={search} onChange={event=>setSearch(event.target.value)} placeholder={t('gps.customerBranchPlaceholder')}/></label>

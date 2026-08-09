@@ -8,6 +8,7 @@ import {apiRequest as api} from './apiClient.js'
 import {formatBranchId,formatCustomerId} from '../shared/typedIds.js'
 import GoogleMapPreview from './GoogleMapPreview.jsx'
 import {collectHighAccuracyPosition} from './highAccuracyGps.js'
+import GpsRemainingGroups from './GpsRemainingGroups.jsx'
 
 const fileData=file=>new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve({name:file.name,dataUrl:reader.result});reader.onerror=reject;reader.readAsDataURL(file)})
 
@@ -59,7 +60,7 @@ export function MobileApp({account,onLogout,onChangePassword}){
     <section className="gps-collection-mobile"><h1>{t('gpsCollection.toCollect')}</h1>
       <div className="gps-progress"><span><b>{gpsSummary.totalActiveBranches}</b>{t('gpsCollection.totalActive')}</span><span><b>{gpsSummary.officialGps}</b>{t('gpsCollection.official')}</span><span><b>{gpsSummary.pendingApproval}</b>{t('gpsCollection.pending')}</span><span><b>{gpsSummary.remainingToCollect}</b>{t('gpsCollection.remaining')}</span></div>
       <label>{t('mobile.searchBranch')}<input value={search} onChange={event=>setSearch(event.target.value)}/></label>
-      {!selected&&<div className="mobile-results gps-to-collect">{branches.map(branch=><button key={branch.internalId} onClick={()=>{setSelected(branch);setCapture(emptyCapture)}}><b>{formatCustomerId(branch.customerId)} — <span data-i18n-raw>{branch.customerName}</span></b><span data-i18n-raw>{formatBranchId(branch.branchId)} — {branch.branchName}</span><small data-i18n-raw>{branch.address||t('common.noAddress')} · {branch.area||t('common.unassignedArea')} / {branch.zoneGroup||'—'}</small></button>)}{branches.length===0&&<p>{t('gpsCollection.none')}</p>}</div>}
+      {!selected&&<GpsRemainingGroups items={branches} onSelect={branch=>{setSelected(branch);setCapture(emptyCapture)}} t={t}/>}
       {selected&&<><button className="back-button" onClick={()=>{setSelected(null);setCapture(emptyCapture)}}>← {t('gpsCollection.toCollect')}</button>
         <article className="mobile-card gps-selected"><h2 data-i18n-raw>{selected.customerName} — {selected.branchName}</h2><p>{formatBranchId(selected.branchId)}</p><small data-i18n-raw>{selected.address||t('common.noAddress')}</small><p>{t('gpsCollection.notCollected')}</p></article>
         <label>{t('master.branchId')}<input value={formatBranchId(selected.branchId)} readOnly/></label>
