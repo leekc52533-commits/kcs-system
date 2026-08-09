@@ -1,0 +1,18 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import {DatabaseSync} from 'node:sqlite'
+import {schemaSql} from '../server/schema.mjs'
+import {applyV33Migration} from '../server/migrationV33.mjs'
+import {createEmployee,listResources,updateEmployee} from '../server/resourceService.mjs'
+import {employeeDetail} from '../server/employeeSensitiveService.mjs'
+
+const database=()=>{const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON;'+schemaSql);return db}
+
+test('v33 migration is explicit, additive, idempotent, and preserves protected counts',()=>{const db=database();for(const field of ['home_gps_remark','home_longitude','home_latitude','home_address'])db.exec(`ALTER TABLE employees DROP COLUMN ${field}`);db.prepare('INSERT INTO schema_meta(version) VALUES(32)').run();const result=applyV33Migration(db);assert.equal(result.schemaVersion,33);assert.equal(result.noOp,false);assert.deepEqual(result.before,result.after);assert.equal(applyV33Migration(db).noOp,true);assert.equal(db.prepare('PRAGMA integrity_check').get().integrity_check,'ok');for(const field of ['home_address','home_latitude','home_longitude','home_gps_remark'])assert.ok(db.prepare('PRAGMA table_info(employees)').all().some(row=>row.name===field))})
+
+test('Employee home address/GPS saves as one audited employee update and list exposes status only',()=>{const db=database(),employee=createEmployee({name:'Home Test',jobRole:'Driver'},db);updateEmployee(employee.id,{homeAddress:'Private address',homeLatitude:1.55,homeLongitude:110.35,homeGpsRemark:'Front gate',reason:'Home location confirmed',changedBy:'Owner Admin'},db);const full=employeeDetail(employee.id,{canViewHome:true},db),privateView=employeeDetail(employee.id,{canViewHome:false},db),listed=listResources(db).employees.find(row=>row.id===employee.id);assert.equal(full.homeAddress,'Private address');assert.equal(full.homeLatitude,1.55);assert.equal(full.homeGpsStatus,'Set');assert.equal(privateView.homeAddress,undefined);assert.equal(privateView.homeLatitude,undefined);assert.equal(listed.homeGpsStatus,'Set');assert.equal(listed.homeAddress,undefined);const audit=db.prepare("SELECT field_name,old_value,new_value,reason,changed_by FROM employee_change_history WHERE employee_id=? AND field_name LIKE 'home_%' ORDER BY field_name").all(employee.id);assert.equal(audit.length,4);assert.ok(audit.every(row=>row.reason==='Home location confirmed'&&row.changed_by==='Owner Admin'))})
+
+test('Home GPS validates coordinate pairs and rolls back partial changes',()=>{const db=database(),employee=createEmployee({name:'Rollback Home',jobRole:'Office'},db);assert.throws(()=>updateEmployee(employee.id,{homeAddress:'Must roll back',homeLatitude:1.5,reason:'Invalid pair',changedBy:'Admin'},db),/set or cleared together/);const row=db.prepare('SELECT home_address,home_latitude,home_longitude FROM employees WHERE id=?').get(employee.id);assert.equal(row.home_address,null);assert.equal(row.home_latitude,null);assert.equal(row.home_longitude,null)})
+
+test('Employee Home UI reuses high accuracy GPS and draggable Google map; API requires employee_manage',()=>{const ui=fs.readFileSync(new URL('../src/EmployeeMasterPage.jsx',import.meta.url),'utf8'),server=fs.readFileSync(new URL('../server/index.mjs',import.meta.url),'utf8');assert.match(ui,/Home Address \/ Home GPS/);assert.match(ui,/collectHighAccuracyPosition\(navigator\.geolocation\)/);assert.match(ui,/GoogleMapPreview latitude=\{draft\.homeLatitude\}/);assert.match(ui,/onPositionAdjusted=/);assert.match(server,/No permission to view private employee location/);assert.match(server,/canViewHome:true/)})

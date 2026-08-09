@@ -15,6 +15,10 @@ export function employeeDetailDraft(employee) {
     gdlExpiryDate: employee.gdlExpiryDate || '',
     defaultBaseLocationId: employee.defaultBaseLocationId || '',
     usualAreaIds: [...(employee.usualAreaIds || [])],
+    homeAddress: employee.homeAddress || '',
+    homeLatitude: employee.homeLatitude ?? '',
+    homeLongitude: employee.homeLongitude ?? '',
+    homeGpsRemark: employee.homeGpsRemark || '',
   }
 }
 
@@ -46,6 +50,7 @@ export function employeeDirectoryValue(employee, column) {
     jobRole: employee.jobRole,
     employmentType: employee.employmentType,
     employmentStatus: employee.employmentStatus,
+    homeGpsStatus: employee.homeGpsStatus,
     currentStartDate: period?.startDate,
     lastWorkingDay: period?.lastWorkingDay,
     employmentEndDate: period?.endDate,

@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 32
+export const SCHEMA_VERSION = 33
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -178,6 +178,10 @@ CREATE TABLE IF NOT EXISTS employees (
   phone TEXT,
   job_role TEXT,
   home_location_id INTEGER REFERENCES operational_locations(id),
+  home_address TEXT,
+  home_latitude REAL CHECK (home_latitude BETWEEN -90 AND 90 OR home_latitude IS NULL),
+  home_longitude REAL CHECK (home_longitude BETWEEN -180 AND 180 OR home_longitude IS NULL),
+  home_gps_remark TEXT,
   employment_status TEXT NOT NULL DEFAULT 'active' CHECK (employment_status IN ('active','on_leave','inactive')),
   employment_detail_status TEXT,
   employment_type TEXT NOT NULL DEFAULT 'Permanent',
