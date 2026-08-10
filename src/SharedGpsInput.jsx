@@ -1,21 +1,25 @@
-import {useEffect,useState} from 'react'
+import {useEffect,useRef,useState} from 'react'
 import {apiRequest as api} from './apiClient.js'
 import {collectHighAccuracyPosition} from './highAccuracyGps.js'
 import GoogleMapPreview from './GoogleMapPreview.jsx'
 import {parseCoordinates,validCoordinatePair} from './gpsCoordinates.js'
 import './SharedGpsInput.css'
 
-export default function SharedGpsInput({latitude='',longitude='',address='',gpsSource='',onChange,allowDevice=true,readOnly=false}){
+export default function SharedGpsInput({resetKey='',...props}){return <SharedGpsInputState key={resetKey||'shared-gps-input'} {...props}/>}
+
+function SharedGpsInputState({latitude='',longitude='',address='',gpsSource='',onChange,allowDevice=true,readOnly=false}){
   const[paste,setPaste]=useState(''),[mapSearch,setMapSearch]=useState(address||''),[candidates,setCandidates]=useState([]),[error,setError]=useState(''),[busy,setBusy]=useState(''),[pickerOpen,setPickerOpen]=useState(false),[draft,setDraft]=useState({latitude:String(latitude??''),longitude:String(longitude??''),address}),[draftSource,setDraftSource]=useState(gpsSource||'')
+  const generation=useRef(0)
   useEffect(()=>setDraft({latitude:String(latitude??''),longitude:String(longitude??''),address}),[latitude,longitude,address])
   useEffect(()=>{if(address&&!mapSearch.trim())setMapSearch(address)},[address,mapSearch])
-  const reverse=async(position,source,commit=true)=>{setBusy('address');setError('');try{const result=await api(`/api/gps-collection/reverse-geocode?latitude=${encodeURIComponent(position.latitude)}&longitude=${encodeURIComponent(position.longitude)}`);const next={...position,address:result.address||'',addressComponents:result,gpsSource:source};setDraft(current=>({...current,...next}));setDraftSource(source);if(commit)onChange(next)}catch(item){setError(`Coordinates kept; address lookup failed: ${item.message}`);const next={...position,gpsSource:source};setDraft(current=>({...current,...next}));setDraftSource(source);if(commit)onChange(next)}finally{setBusy('')}}
+  useEffect(()=>()=>{generation.current+=1},[])
+  const reverse=async(position,source,commit=true)=>{const requestGeneration=generation.current;setBusy('address');setError('');try{const result=await api(`/api/gps-collection/reverse-geocode?latitude=${encodeURIComponent(position.latitude)}&longitude=${encodeURIComponent(position.longitude)}`);if(requestGeneration!==generation.current)return;const next={...position,address:result.address||'',addressComponents:result,gpsSource:source};setDraft(current=>({...current,...next}));setDraftSource(source);if(commit)onChange(next)}catch(item){if(requestGeneration!==generation.current)return;setError(`Coordinates kept; address lookup failed: ${item.message}`);const next={...position,gpsSource:source};setDraft(current=>({...current,...next}));setDraftSource(source);if(commit)onChange(next)}finally{if(requestGeneration===generation.current)setBusy('')}}
   const commitManual=async()=>{try{const position=parseCoordinates(paste);await reverse(position,'manual_coordinates')}catch(item){setError(item.message)}}
   const updateField=(key,value)=>{setDraft(current=>({...current,[key]:value}));setError('');const next={...draft,[key]:value};if(validCoordinatePair(next.latitude,next.longitude))void reverse({latitude:next.latitude,longitude:next.longitude},'manual_coordinates')}
   const getDevice=async()=>{setBusy('gps');setError('');try{const reading=await collectHighAccuracyPosition(navigator.geolocation);await reverse({latitude:reading.latitude,longitude:reading.longitude},'device')}catch(item){setError(item.message)}finally{setBusy('')}}
   const select=position=>{setDraft(current=>({...current,...position}));setDraftSource('map_selection');void reverse(position,'map_selection',false)}
   const chooseCandidate=async candidate=>{setCandidates([]);setMapSearch(candidate.address);await reverse({latitude:candidate.latitude,longitude:candidate.longitude},'map_selection',false)}
-  const searchMap=async(query=mapSearch)=>{if(!query.trim())return setError('Enter an address to search');setBusy('search');setError('');setCandidates([]);try{const result=await api(`/api/gps-collection/geocode?address=${encodeURIComponent(query.trim())}`),items=result.candidates||[];if(items.length===1)await chooseCandidate(items[0]);else setCandidates(items)}catch(item){setError(item.message)}finally{setBusy('')}}
+  const searchMap=async(query=mapSearch)=>{if(!query.trim())return setError('Enter an address to search');const requestGeneration=generation.current;setBusy('search');setError('');setCandidates([]);try{const result=await api(`/api/gps-collection/geocode?address=${encodeURIComponent(query.trim())}`),items=result.candidates||[];if(requestGeneration!==generation.current)return;if(items.length===1)await chooseCandidate(items[0]);else setCandidates(items)}catch(item){if(requestGeneration===generation.current)setError(item.message)}finally{if(requestGeneration===generation.current)setBusy('')}}
   const findAddress=()=>{const query=String(address||draft.address||'').trim();setPickerOpen(true);setMapSearch(query);if(query)void searchMap(query)}
   const useLocation=()=>{if(!validCoordinatePair(draft.latitude,draft.longitude))return setError('Select a valid location on the map');onChange({...draft,gpsSource:'map_selection'});setPickerOpen(false)}
   return <section className="shared-gps-input">
