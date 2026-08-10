@@ -30,6 +30,7 @@ export async function geocodeGoogleAddress(address,{fetchImpl=fetch,apiKey=proce
   const endpoint=new URL('https://maps.googleapis.com/maps/api/geocode/json');endpoint.search=new URLSearchParams({address:query,key:apiKey});let response
   try{response=await fetchImpl(endpoint)}catch{throw safeError('Map search is temporarily unavailable.')}
   if(!response.ok)throw safeError('Map search is temporarily unavailable.');const data=await response.json();if(data.status==='ZERO_RESULTS')throw safeError('No matching location was found.',404);if(data.status!=='OK')throw safeError('Google could not search for this location.')
-  const result=data.results?.[0],location=result?.geometry?.location;if(!Number.isFinite(Number(location?.lat))||!Number.isFinite(Number(location?.lng)))throw safeError('Google returned an invalid map location.')
-  return{latitude:String(location.lat),longitude:String(location.lng),address:result.formatted_address||query,provider:'Google Geocoding API'}
+  const candidates=(data.results||[]).map((result,index)=>({id:String(result.place_id||index),name:(result.address_components||[]).find(item=>item.types?.includes('establishment'))?.long_name||result.formatted_address||query,address:result.formatted_address||query,latitude:String(result.geometry?.location?.lat??''),longitude:String(result.geometry?.location?.lng??'')})).filter(item=>Number.isFinite(Number(item.latitude))&&Number.isFinite(Number(item.longitude)))
+  if(!candidates.length)throw safeError('Google returned an invalid map location.')
+  return{candidates,provider:'Google Geocoding API'}
 }

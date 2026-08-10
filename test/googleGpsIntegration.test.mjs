@@ -19,8 +19,8 @@ test('Google Map uses only the Vite web key, creates a Marker and updates center
 })
 
 test('Google address search returns coordinates without exposing the server key',async()=>{
-  let requested='';const result=await geocodeGoogleAddress('Lee Sai Ker',{apiKey:'test-key',fetchImpl:async url=>{requested=String(url);return{ok:true,json:async()=>({status:'OK',results:[{formatted_address:'Kuching, Sarawak',geometry:{location:{lat:1.5,lng:110.3}}}]})}}})
-  assert.deepEqual(result,{latitude:'1.5',longitude:'110.3',address:'Kuching, Sarawak',provider:'Google Geocoding API'});assert.match(requested,/address=Lee\+Sai\+Ker/);assert.doesNotMatch(readFileSync(new URL('../src/SharedGpsInput.jsx',import.meta.url),'utf8'),/GOOGLE_GEOCODING_API_KEY/)
+  let requested='';const result=await geocodeGoogleAddress('Lee Sai Ker',{apiKey:'test-key',fetchImpl:async url=>{requested=String(url);return{ok:true,json:async()=>({status:'OK',results:[{place_id:'one',formatted_address:'Kuching, Sarawak',geometry:{location:{lat:1.5,lng:110.3}}},{place_id:'two',formatted_address:'Samarahan, Sarawak',geometry:{location:{lat:1.46,lng:110.42}}}]})}}})
+  assert.equal(result.candidates.length,2);assert.deepEqual(result.candidates[0],{id:'one',name:'Kuching, Sarawak',address:'Kuching, Sarawak',latitude:'1.5',longitude:'110.3'});assert.match(requested,/address=Lee\+Sai\+Ker/);assert.doesNotMatch(readFileSync(new URL('../src/SharedGpsInput.jsx',import.meta.url),'utf8'),/GOOGLE_GEOCODING_API_KEY/)
 })
 
 test('Google reverse geocoding maps real address components and leaves missing fields empty',async()=>{
