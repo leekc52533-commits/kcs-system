@@ -27,6 +27,8 @@ test('shared picker exposes three sources, map confirmation, reverse geocoding, 
   assert.match(source,/'device'/)
   assert.match(source,/inputMode="decimal"/)
   assert.match(source,/reverse-geocode/)
+  assert.match(source,/gps-collection\/geocode/)
+  assert.match(source,/Search address or place/)
   assert.doesNotMatch(source,/onPaste=.*preventDefault/)
 })
 

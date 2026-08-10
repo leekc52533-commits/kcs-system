@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {readFileSync} from 'node:fs'
 import {DatabaseSync} from 'node:sqlite'
 import {schemaSql} from '../server/schema.mjs'
-import {reverseGeocodeGoogle} from '../server/googleGeocodingService.mjs'
+import {geocodeGoogleAddress,reverseGeocodeGoogle} from '../server/googleGeocodingService.mjs'
 import {dashboardSummary,dataQualitySummary} from '../server/queryService.mjs'
 
 const mapSource=readFileSync(new URL('../src/GoogleMapPreview.jsx',import.meta.url),'utf8')
@@ -16,6 +16,11 @@ test('Google Map uses only the Vite web key, creates a Marker and updates center
   assert.doesNotMatch(mapSource,/GOOGLE_GEOCODING_API_KEY/)
   for(const token of ['new maps.Map','new maps.Marker','setCenter(position)','setPosition(position)','gpsCollection.mapKeyMissing'])assert.ok(mapSource.includes(token))
   assert.match(mobileSource,/GoogleMapPreview/)
+})
+
+test('Google address search returns coordinates without exposing the server key',async()=>{
+  let requested='';const result=await geocodeGoogleAddress('Lee Sai Ker',{apiKey:'test-key',fetchImpl:async url=>{requested=String(url);return{ok:true,json:async()=>({status:'OK',results:[{formatted_address:'Kuching, Sarawak',geometry:{location:{lat:1.5,lng:110.3}}}]})}}})
+  assert.deepEqual(result,{latitude:'1.5',longitude:'110.3',address:'Kuching, Sarawak',provider:'Google Geocoding API'});assert.match(requested,/address=Lee\+Sai\+Ker/);assert.doesNotMatch(readFileSync(new URL('../src/SharedGpsInput.jsx',import.meta.url),'utf8'),/GOOGLE_GEOCODING_API_KEY/)
 })
 
 test('Google reverse geocoding maps real address components and leaves missing fields empty',async()=>{

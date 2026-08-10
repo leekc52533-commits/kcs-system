@@ -24,3 +24,12 @@ export async function reverseGeocodeGoogle(latitude,longitude,{fetchImpl=fetch,a
     provider:'Google Geocoding API',
   }
 }
+
+export async function geocodeGoogleAddress(address,{fetchImpl=fetch,apiKey=process.env.GOOGLE_GEOCODING_API_KEY}={}){
+  const query=String(address??'').trim();if(!query)throw safeError('Enter an address to search.',400);if(!apiKey)throw safeError('Map search is unavailable because the Google Geocoding key is not configured.',503)
+  const endpoint=new URL('https://maps.googleapis.com/maps/api/geocode/json');endpoint.search=new URLSearchParams({address:query,key:apiKey});let response
+  try{response=await fetchImpl(endpoint)}catch{throw safeError('Map search is temporarily unavailable.')}
+  if(!response.ok)throw safeError('Map search is temporarily unavailable.');const data=await response.json();if(data.status==='ZERO_RESULTS')throw safeError('No matching location was found.',404);if(data.status!=='OK')throw safeError('Google could not search for this location.')
+  const result=data.results?.[0],location=result?.geometry?.location;if(!Number.isFinite(Number(location?.lat))||!Number.isFinite(Number(location?.lng)))throw safeError('Google returned an invalid map location.')
+  return{latitude:String(location.lat),longitude:String(location.lng),address:result.formatted_address||query,provider:'Google Geocoding API'}
+}
