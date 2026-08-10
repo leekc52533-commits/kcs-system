@@ -1,0 +1,23 @@
+import {useEffect,useState} from 'react'
+import {apiRequest as api} from './apiClient.js'
+import {collectHighAccuracyPosition} from './highAccuracyGps.js'
+import GoogleMapPreview from './GoogleMapPreview.jsx'
+import {parseCoordinates,validCoordinatePair} from './gpsCoordinates.js'
+import './SharedGpsInput.css'
+
+export default function SharedGpsInput({latitude='',longitude='',address='',gpsSource='',onChange,allowDevice=true,readOnly=false}){
+  const[paste,setPaste]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(''),[pickerOpen,setPickerOpen]=useState(false),[draft,setDraft]=useState({latitude:String(latitude??''),longitude:String(longitude??''),address}),[draftSource,setDraftSource]=useState(gpsSource||'')
+  useEffect(()=>setDraft({latitude:String(latitude??''),longitude:String(longitude??''),address}),[latitude,longitude,address])
+  const reverse=async(position,source,commit=true)=>{setBusy('address');setError('');try{const result=await api(`/api/gps-collection/reverse-geocode?latitude=${encodeURIComponent(position.latitude)}&longitude=${encodeURIComponent(position.longitude)}`);const next={...position,address:result.address||'',addressComponents:result,gpsSource:source};setDraft(current=>({...current,...next}));setDraftSource(source);if(commit)onChange(next)}catch(item){setError(`Coordinates kept; address lookup failed: ${item.message}`);const next={...position,gpsSource:source};setDraft(current=>({...current,...next}));setDraftSource(source);if(commit)onChange(next)}finally{setBusy('')}}
+  const commitManual=async()=>{try{const position=parseCoordinates(paste);await reverse(position,'manual_coordinates')}catch(item){setError(item.message)}}
+  const updateField=(key,value)=>{setDraft(current=>({...current,[key]:value}));setError('');const next={...draft,[key]:value};if(validCoordinatePair(next.latitude,next.longitude))void reverse({latitude:next.latitude,longitude:next.longitude},'manual_coordinates')}
+  const getDevice=async()=>{setBusy('gps');setError('');try{const reading=await collectHighAccuracyPosition(navigator.geolocation);await reverse({latitude:reading.latitude,longitude:reading.longitude},'device')}catch(item){setError(item.message)}finally{setBusy('')}}
+  const select=position=>{setDraft(current=>({...current,...position}));setDraftSource('map_selection');void reverse(position,'map_selection',false)}
+  const useLocation=()=>{if(!validCoordinatePair(draft.latitude,draft.longitude))return setError('Select a valid location on the map');onChange({...draft,gpsSource:'map_selection'});setPickerOpen(false)}
+  return <section className="shared-gps-input">
+    <div className="shared-gps-coordinates"><label>Latitude<input aria-label="Latitude" inputMode="decimal" readOnly={readOnly} value={draft.latitude} onChange={event=>updateField('latitude',event.target.value)}/></label><label>Longitude<input aria-label="Longitude" inputMode="decimal" readOnly={readOnly} value={draft.longitude} onChange={event=>updateField('longitude',event.target.value)}/></label></div>
+    {!readOnly&&<><label className="shared-gps-paste">Paste Coordinates<input value={paste} placeholder="1.4449047, 110.3337165" onChange={event=>setPaste(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();void commitManual()}}}/></label><div className="shared-gps-actions">{allowDevice&&<button type="button" disabled={Boolean(busy)} onClick={getDevice}>{busy==='gps'?'Getting GPS…':'Get Current GPS'}</button>}<button type="button" disabled={!paste.trim()||Boolean(busy)} onClick={commitManual}>Use Pasted Coordinates</button><button type="button" onClick={()=>setPickerOpen(true)}>Select on Map</button></div></>}
+    <small>GPS Source: {draftSource||'Not set'}</small>{busy==='address'&&<small>Finding address…</small>}{error&&<div className="data-error" role="alert">{error}</div>}
+    {pickerOpen&&<div className="shared-gps-map-dialog" role="dialog" aria-modal="true" aria-label="Select GPS on map"><div><header><h3>Select on Map</h3><button type="button" onClick={()=>setPickerOpen(false)}>×</button></header><GoogleMapPreview latitude={draft.latitude} longitude={draft.longitude} initialCenter={{lat:1.5533,lng:110.3592}} onMapClick={select} onPositionAdjusted={select}/><small>Pan or zoom, switch Map / Satellite, then click the map or drag the marker.</small><footer><button type="button" onClick={()=>setPickerOpen(false)}>Cancel</button><button type="button" className="primary" disabled={!validCoordinatePair(draft.latitude,draft.longitude)||Boolean(busy)} onClick={useLocation}>Use This Location</button></footer></div></div>}
+  </section>
+}
