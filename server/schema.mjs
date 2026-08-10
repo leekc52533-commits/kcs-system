@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 34
+export const SCHEMA_VERSION = 35
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -423,7 +423,17 @@ CREATE TABLE IF NOT EXISTS dispatches (
   start_address TEXT,
   start_latitude REAL CHECK (start_latitude BETWEEN -90 AND 90 OR start_latitude IS NULL),
   start_longitude REAL CHECK (start_longitude BETWEEN -180 AND 180 OR start_longitude IS NULL),
+  buyer_reference_id INTEGER,
+  buyer_code TEXT,
+  buyer_name TEXT,
   end_location_id INTEGER REFERENCES operational_locations(id),
+  end_location_reference_type TEXT,
+  end_location_reference_id INTEGER,
+  end_location_name TEXT,
+  end_location_parent_name TEXT,
+  end_address TEXT,
+  end_latitude REAL CHECK (end_latitude BETWEEN -90 AND 90 OR end_latitude IS NULL),
+  end_longitude REAL CHECK (end_longitude BETWEEN -180 AND 180 OR end_longitude IS NULL),
   status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','released','in_progress','completed','cancelled')),
   created_by INTEGER REFERENCES users(id),
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
