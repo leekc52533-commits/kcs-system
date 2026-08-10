@@ -14,8 +14,10 @@ test('Customer collectors show Find on Map for any non-empty current Address wit
   assert.match(mobile,/setCapture\(\{\.\.\.emptyCapture,address:branch\.address\|\|''\}\)/)
   assert.match(desktop,/setGps\(\{\.\.\.emptyGpsCapture,address:branch\.address\|\|''\}\)/)
   assert.match(desktop,/selectedBranch\?\.address.*address:selectedBranch\.address/)
-  assert.ok(mobile.indexOf("<label>{t('mobile.address')}")<mobile.indexOf('<SharedGpsInput resetKey='))
-  assert.ok(desktop.lastIndexOf("<label>{t('mobile.address')}",desktop.indexOf('<SharedGpsInput resetKey=',desktop.indexOf('export function GpsCollector')))<desktop.indexOf('<SharedGpsInput resetKey=',desktop.indexOf('export function GpsCollector')))
+  const mobileShared=mobile.indexOf('<SharedGpsInput className="customer-gps-shared" resetKey=')
+  const desktopShared=desktop.indexOf('<SharedGpsInput className="customer-gps-shared" resetKey=',desktop.indexOf('export function GpsCollector'))
+  assert.ok(mobile.indexOf("<label>{t('mobile.address')}")<mobileShared)
+  assert.ok(desktop.lastIndexOf("<label>{t('mobile.address')}",desktopShared)<desktopShared)
 })
 
 test('address result selection remains draft-only, supports candidates and the existing map controls',()=>{

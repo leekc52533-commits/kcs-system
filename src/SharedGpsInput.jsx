@@ -7,7 +7,7 @@ import './SharedGpsInput.css'
 
 export default function SharedGpsInput({resetKey='',...props}){return <SharedGpsInputState key={resetKey||'shared-gps-input'} {...props}/>}
 
-function SharedGpsInputState({latitude='',longitude='',address='',gpsSource='',onChange,allowDevice=true,readOnly=false}){
+function SharedGpsInputState({latitude='',longitude='',address='',gpsSource='',onChange,allowDevice=true,readOnly=false,className=''}){
   const[paste,setPaste]=useState(''),[mapSearch,setMapSearch]=useState(address||''),[candidates,setCandidates]=useState([]),[error,setError]=useState(''),[busy,setBusy]=useState(''),[pickerOpen,setPickerOpen]=useState(false),[draft,setDraft]=useState({latitude:String(latitude??''),longitude:String(longitude??''),address}),[draftSource,setDraftSource]=useState(gpsSource||'')
   const generation=useRef(0)
   useEffect(()=>setDraft({latitude:String(latitude??''),longitude:String(longitude??''),address}),[latitude,longitude,address])
@@ -22,7 +22,7 @@ function SharedGpsInputState({latitude='',longitude='',address='',gpsSource='',o
   const searchMap=async(query=mapSearch)=>{if(!query.trim())return setError('Enter an address to search');const requestGeneration=generation.current;setBusy('search');setError('');setCandidates([]);try{const result=await api(`/api/gps-collection/geocode?address=${encodeURIComponent(query.trim())}`),items=result.candidates||[];if(requestGeneration!==generation.current)return;if(items.length===1)await chooseCandidate(items[0]);else setCandidates(items)}catch(item){if(requestGeneration===generation.current)setError(item.message)}finally{if(requestGeneration===generation.current)setBusy('')}}
   const findAddress=()=>{const query=String(address||draft.address||'').trim();setPickerOpen(true);setMapSearch(query);if(query)void searchMap(query)}
   const useLocation=()=>{if(!validCoordinatePair(draft.latitude,draft.longitude))return setError('Select a valid location on the map');onChange({...draft,gpsSource:'map_selection'});setPickerOpen(false)}
-  return <section className="shared-gps-input">
+  return <section className={`shared-gps-input ${className}`.trim()}>
     <div className="shared-gps-coordinates"><label>Latitude<input aria-label="Latitude" inputMode="decimal" readOnly={readOnly} value={draft.latitude} onChange={event=>updateField('latitude',event.target.value)}/></label><label>Longitude<input aria-label="Longitude" inputMode="decimal" readOnly={readOnly} value={draft.longitude} onChange={event=>updateField('longitude',event.target.value)}/></label></div>
     {!readOnly&&<><label className="shared-gps-paste">Paste Coordinates<input value={paste} placeholder="" onChange={event=>setPaste(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();void commitManual()}}}/></label><div className="shared-gps-actions">{allowDevice&&<button type="button" disabled={Boolean(busy)} onClick={getDevice}>{busy==='gps'?'Getting GPS…':'Get Current GPS'}</button>}<button type="button" disabled={!paste.trim()||Boolean(busy)} onClick={commitManual}>Use Pasted Coordinates</button><button type="button" disabled={!String(address||draft.address||'').trim()||Boolean(busy)} onClick={findAddress}>Find on Map</button><button type="button" onClick={()=>setPickerOpen(true)}>Select on Map</button></div></>}
     <small>GPS Source: {draftSource||'Not set'}</small>{busy==='address'&&<small>Finding address…</small>}{error&&<div className="data-error" role="alert">{error}</div>}
