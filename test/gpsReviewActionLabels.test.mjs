@@ -7,9 +7,14 @@ const page=readFileSync(new URL('../src/MasterDataPage.jsx',import.meta.url),'ut
 const css=readFileSync(new URL('../src/MasterDataPage.css',import.meta.url),'utf8')
 
 test('GPS supervisor review labels are explicit in every locale',()=>{
+  const expected={
+    en:['Confirm & Save as Official GPS','Keep Existing GPS','Recollect GPS','Reject'],
+    ms:['Sahkan & Simpan sebagai GPS Rasmi','Kekalkan GPS Rasmi Sedia Ada','Kutip Semula GPS','Tolak'],
+    zh:['确认并保存为正式GPS','保留现有正式GPS','重新采集GPS','拒绝'],
+  }
   for(const language of ['en','ms','zh'])assert.deepEqual(
     ['gps.adoptOfficial','gps.keepOfficial','gps.recapture','gps.reject'].map(key=>messages[language][key]),
-    ['Confirm & Save as Official GPS','Keep Existing GPS','Recollect GPS','Reject']
+    expected[language]
   )
 })
 
