@@ -59,9 +59,9 @@ function ensureUnassignedTrip(database,day){
   return database.prepare('SELECT * FROM dispatch_trips WHERE id=?').get(result.lastInsertRowid)
 }
 
-function branchZoneSnapshot(database,branchId){return database.prepare(`SELECT a.id areaId,a.name areaName,COALESCE(a.confirmed_zone_group_id,a.zone_group_id) zoneGroupId,z.name zoneGroupName,a.default_vehicle_id areaDefaultVehicleId,z.default_vehicle_id zoneDefaultVehicleId FROM branches b LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN zone_groups z ON z.id=COALESCE(a.confirmed_zone_group_id,a.zone_group_id) WHERE b.id=?`).get(branchId)||{}}
+function branchZoneSnapshot(database,branchId){return database.prepare(`SELECT a.id areaId,a.name areaName,COALESCE(a.confirmed_zone_group_id,a.zone_group_id) zoneGroupId,z.name zoneGroupName,a.default_vehicle_id areaDefaultVehicleId FROM branches b LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN zone_groups z ON z.id=COALESCE(a.confirmed_zone_group_id,a.zone_group_id) WHERE b.id=?`).get(branchId)||{}}
 
-function availableDefaultVehicleId(database,snapshot){const vehicleId=snapshot.areaDefaultVehicleId??snapshot.zoneDefaultVehicleId;if(!vehicleId)return null;return database.prepare("SELECT id FROM vehicles WHERE id=? AND is_temporary=0 AND operational_status IN ('available','active') AND status IN ('available','assigned')").get(vehicleId)?.id??null}
+function availableDefaultVehicleId(database,snapshot){let vehicleId=snapshot.areaDefaultVehicleId;if(!vehicleId&&snapshot.zoneGroupId){const pool=database.prepare('SELECT vehicle_id id FROM zone_default_vehicles WHERE zone_group_id=? ORDER BY position').all(snapshot.zoneGroupId);if(pool.length!==1)return null;vehicleId=pool[0].id}if(!vehicleId)return null;return database.prepare("SELECT id FROM vehicles WHERE id=? AND is_temporary=0 AND operational_status IN ('available','active') AND status IN ('available','assigned')").get(vehicleId)?.id??null}
 
 function ensureVehicleTrip(database,day,vehicleId,tripNumber){
   const found=database.prepare(`SELECT dt.* FROM dispatch_trips dt JOIN dispatches d ON d.id=dt.dispatch_id WHERE dt.dispatch_day_id=? AND d.vehicle_id=? AND dt.trip_number=?`).get(day.id,vehicleId,tripNumber)
@@ -168,15 +168,15 @@ function dayView(database, day) {
   const unassignedStops=stops.filter(stop=>!stop.vehicleId||!availableIds.has(stop.vehicleId))
   const unassignedGroups=[...new Map(unassignedStops.map(stop=>[stop.areaId??'unassigned',{areaId:stop.areaId??null,areaName:stop.area||'未分区',zoneGroupId:stop.zoneGroupId??'pending',zoneGroupName:stop.zoneGroup||'待确认',zoneSortOrder:stop.zoneSortOrder??9999}])).values()].map(group=>{
     const groupedStops=unassignedStops.filter(stop=>(stop.areaId??null)===group.areaId),weights=groupedStops.filter(stop=>stop.estimatedWeightKg!=null)
-    const defaults=database.prepare(`SELECT a.default_vehicle_id areaDefaultVehicleId,z.default_vehicle_id zoneDefaultVehicleId FROM areas a LEFT JOIN zone_groups z ON z.id=COALESCE(a.confirmed_zone_group_id,a.zone_group_id) WHERE a.id=?`).get(group.areaId)||{}
-    return{...group,...defaults,defaultVehicleId:defaults.areaDefaultVehicleId??defaults.zoneDefaultVehicleId??null,customerCount:groupedStops.length,estimatedWeightKg:weights.reduce((sum,stop)=>sum+Number(stop.estimatedWeightKg),0),weightedCustomerCount:weights.length,
+    const defaults=database.prepare(`SELECT a.default_vehicle_id areaDefaultVehicleId,COALESCE(a.confirmed_zone_group_id,a.zone_group_id) zoneGroupId FROM areas a WHERE a.id=?`).get(group.areaId)||{},zonePool=defaults.zoneGroupId?database.prepare('SELECT vehicle_id id FROM zone_default_vehicles WHERE zone_group_id=? ORDER BY position').all(defaults.zoneGroupId).map(row=>row.id):[],defaultVehicleIds=defaults.areaDefaultVehicleId?[defaults.areaDefaultVehicleId]:zonePool
+    return{...group,...defaults,defaultVehicleIds,defaultVehicleId:defaultVehicleIds.length===1?defaultVehicleIds[0]:null,customerCount:groupedStops.length,estimatedWeightKg:weights.reduce((sum,stop)=>sum+Number(stop.estimatedWeightKg),0),weightedCustomerCount:weights.length,
       missingGpsCount:groupedStops.filter(stop=>!Number.isFinite(stop.latitude)||!Number.isFinite(stop.longitude)||stop.latitude===0||stop.longitude===0).length,
       timeRestrictionCount:groupedStops.filter(stop=>Boolean(String(stop.timeRestriction||'').trim())).length,stops:groupedStops}
   }).sort((a,b)=>a.areaName.localeCompare(b.areaName))
   const unassignedZones=[...new Map(unassignedGroups.map(group=>[group.zoneGroupId,{zoneGroupId:group.zoneGroupId,zoneGroupName:group.zoneGroupName}])).values()].map(zone=>{
     const areas=unassignedGroups.filter(group=>group.zoneGroupId===zone.zoneGroupId),zoneStops=areas.flatMap(group=>group.stops)
-    const defaultVehicleId=database.prepare('SELECT default_vehicle_id value FROM zone_groups WHERE id=?').get(zone.zoneGroupId)?.value??null
-    return{...zone,defaultVehicleId,areaCount:areas.length,customerCount:zoneStops.length,estimatedWeightKg:areas.reduce((sum,group)=>sum+group.estimatedWeightKg,0),weightedCustomerCount:areas.reduce((sum,group)=>sum+group.weightedCustomerCount,0),
+    const defaultVehicleIds=database.prepare('SELECT vehicle_id id FROM zone_default_vehicles WHERE zone_group_id=? ORDER BY position').all(zone.zoneGroupId).map(row=>row.id),defaultVehicleId=defaultVehicleIds.length===1?defaultVehicleIds[0]:null
+    return{...zone,defaultVehicleIds,defaultVehicleId,areaCount:areas.length,customerCount:zoneStops.length,estimatedWeightKg:areas.reduce((sum,group)=>sum+group.estimatedWeightKg,0),weightedCustomerCount:areas.reduce((sum,group)=>sum+group.weightedCustomerCount,0),
       missingGpsCount:areas.reduce((sum,group)=>sum+group.missingGpsCount,0),timeRestrictionCount:areas.reduce((sum,group)=>sum+group.timeRestrictionCount,0),stops:zoneStops,areas}
   }).sort((a,b)=>a.zoneSortOrder-b.zoneSortOrder||String(a.zoneGroupName).localeCompare(String(b.zoneGroupName)))
   const weightedStops=stops.filter(stop=>stop.estimatedWeightKg!=null),missingGpsCount=stops.filter(stop=>!Number.isFinite(stop.latitude)||!Number.isFinite(stop.longitude)||stop.latitude===0||stop.longitude===0).length,timeRestrictionCount=stops.filter(stop=>Boolean(String(stop.timeRestriction||'').trim())).length,missingWeightCount=stops.length-weightedStops.length

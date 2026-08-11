@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 36
+export const SCHEMA_VERSION = 37
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -739,6 +739,16 @@ CREATE TABLE IF NOT EXISTS vehicle_documents (
   supersedes_document_id INTEGER REFERENCES vehicle_documents(id),
   superseded_at TEXT,
   uploaded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS zone_default_vehicles (
+  zone_group_id INTEGER NOT NULL REFERENCES zone_groups(id),
+  vehicle_id INTEGER NOT NULL REFERENCES vehicles(id),
+  position INTEGER NOT NULL CHECK (position BETWEEN 1 AND 3),
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (zone_group_id,vehicle_id),
+  UNIQUE (zone_group_id,position)
 );
 
 CREATE TABLE IF NOT EXISTS system_sequences (
