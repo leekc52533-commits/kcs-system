@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 37
+export const SCHEMA_VERSION = 38
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -749,6 +749,35 @@ CREATE TABLE IF NOT EXISTS zone_default_vehicles (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (zone_group_id,vehicle_id),
   UNIQUE (zone_group_id,position)
+);
+
+CREATE TABLE IF NOT EXISTS route_templates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  zone_group_id INTEGER NOT NULL UNIQUE REFERENCES zone_groups(id),
+  version INTEGER NOT NULL DEFAULT 1,
+  is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0,1)),
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_by TEXT,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS route_template_areas (
+  route_template_id INTEGER NOT NULL REFERENCES route_templates(id) ON DELETE CASCADE,
+  area_id INTEGER NOT NULL REFERENCES areas(id),
+  vehicle_id INTEGER NOT NULL REFERENCES vehicles(id),
+  area_order INTEGER NOT NULL CHECK (area_order>0),
+  PRIMARY KEY (route_template_id,area_id),
+  UNIQUE (route_template_id,vehicle_id,area_order)
+);
+
+CREATE TABLE IF NOT EXISTS route_template_branches (
+  route_template_id INTEGER NOT NULL REFERENCES route_templates(id) ON DELETE CASCADE,
+  area_id INTEGER NOT NULL REFERENCES areas(id),
+  branch_id INTEGER NOT NULL REFERENCES branches(id),
+  branch_order INTEGER NOT NULL CHECK (branch_order>0),
+  PRIMARY KEY (route_template_id,branch_id),
+  UNIQUE (route_template_id,area_id,branch_order)
 );
 
 CREATE TABLE IF NOT EXISTS system_sequences (
