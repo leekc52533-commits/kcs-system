@@ -59,7 +59,9 @@ function ensureUnassignedTrip(database,day){
   return database.prepare('SELECT * FROM dispatch_trips WHERE id=?').get(result.lastInsertRowid)
 }
 
-function branchZoneSnapshot(database,branchId){return database.prepare(`SELECT a.id areaId,a.name areaName,COALESCE(a.confirmed_zone_group_id,a.zone_group_id) zoneGroupId,z.name zoneGroupName FROM branches b LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN zone_groups z ON z.id=COALESCE(a.confirmed_zone_group_id,a.zone_group_id) WHERE b.id=?`).get(branchId)||{}}
+function branchZoneSnapshot(database,branchId){return database.prepare(`SELECT a.id areaId,a.name areaName,COALESCE(a.confirmed_zone_group_id,a.zone_group_id) zoneGroupId,z.name zoneGroupName,a.default_vehicle_id areaDefaultVehicleId,z.default_vehicle_id zoneDefaultVehicleId FROM branches b LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN zone_groups z ON z.id=COALESCE(a.confirmed_zone_group_id,a.zone_group_id) WHERE b.id=?`).get(branchId)||{}}
+
+function availableDefaultVehicleId(database,snapshot){const vehicleId=snapshot.areaDefaultVehicleId??snapshot.zoneDefaultVehicleId;if(!vehicleId)return null;return database.prepare("SELECT id FROM vehicles WHERE id=? AND is_temporary=0 AND operational_status IN ('available','active') AND status IN ('available','assigned')").get(vehicleId)?.id??null}
 
 function ensureVehicleTrip(database,day,vehicleId,tripNumber){
   const found=database.prepare(`SELECT dt.* FROM dispatch_trips dt JOIN dispatches d ON d.id=dt.dispatch_id WHERE dt.dispatch_day_id=? AND d.vehicle_id=? AND dt.trip_number=?`).get(day.id,vehicleId,tripNumber)
@@ -83,9 +85,10 @@ function addScheduledStop(database, day, schedule, occurrenceSource='recurrence'
     const occurrence=database.prepare('INSERT OR IGNORE INTO schedule_occurrences(schedule_id,branch_id,planned_date,occurrence_source) VALUES(?,?,?,?)').run(schedule.id,schedule.branch_id,day.dispatch_date,occurrenceSource)
     if(!occurrence.changes){const other=database.prepare("SELECT * FROM schedule_occurrences WHERE branch_id=? AND planned_date=? AND status<>'cancelled' ORDER BY id LIMIT 1").get(schedule.branch_id,day.dispatch_date);return{created:false,result:'Already Exists',code:'DUPLICATE_BRANCH_SERVICE_DATE',branchId:schedule.branch_id,serviceDate:day.dispatch_date,existingOccurrenceId:other?.id??null,existingScheduleId:other?.schedule_id??null,attemptedScheduleId:schedule.id}}
   }
-  const trip=ensureUnassignedTrip(database,day)
-  const sequence=database.prepare('SELECT COALESCE(MAX(stop_sequence),0)+1 value FROM dispatch_stops WHERE dispatch_id=?').get(trip.dispatch_id).value
   const snapshot=branchZoneSnapshot(database,schedule.branch_id)
+  const defaultVehicleId=availableDefaultVehicleId(database,snapshot)
+  const trip=defaultVehicleId?ensureVehicleTrip(database,day,defaultVehicleId,1):ensureUnassignedTrip(database,day)
+  const sequence=database.prepare('SELECT COALESCE(MAX(stop_sequence),0)+1 value FROM dispatch_stops WHERE dispatch_id=?').get(trip.dispatch_id).value
   const estimatedWeightKg=latestExistingEstimatedWeight(database,schedule.branch_id)
   const stop=database.prepare(`INSERT INTO dispatch_stops(dispatch_id,branch_id,stop_sequence,status,dispatch_trip_id,source_schedule_id,service_date,dedupe_enforced,estimated_weight_kg,zone_group_id_snapshot,zone_group_name_snapshot,area_name_snapshot)
     VALUES(?,?,?,'locked',?,?,?,1,?,?,?,?)`).run(trip.dispatch_id,schedule.branch_id,sequence,trip.id,schedule.id,day.dispatch_date,estimatedWeightKg,snapshot.zoneGroupId??null,snapshot.zoneGroupName??'待确认',snapshot.areaName??'未分区')
@@ -165,13 +168,15 @@ function dayView(database, day) {
   const unassignedStops=stops.filter(stop=>!stop.vehicleId||!availableIds.has(stop.vehicleId))
   const unassignedGroups=[...new Map(unassignedStops.map(stop=>[stop.areaId??'unassigned',{areaId:stop.areaId??null,areaName:stop.area||'未分区',zoneGroupId:stop.zoneGroupId??'pending',zoneGroupName:stop.zoneGroup||'待确认',zoneSortOrder:stop.zoneSortOrder??9999}])).values()].map(group=>{
     const groupedStops=unassignedStops.filter(stop=>(stop.areaId??null)===group.areaId),weights=groupedStops.filter(stop=>stop.estimatedWeightKg!=null)
-    return{...group,customerCount:groupedStops.length,estimatedWeightKg:weights.reduce((sum,stop)=>sum+Number(stop.estimatedWeightKg),0),weightedCustomerCount:weights.length,
+    const defaults=database.prepare(`SELECT a.default_vehicle_id areaDefaultVehicleId,z.default_vehicle_id zoneDefaultVehicleId FROM areas a LEFT JOIN zone_groups z ON z.id=COALESCE(a.confirmed_zone_group_id,a.zone_group_id) WHERE a.id=?`).get(group.areaId)||{}
+    return{...group,...defaults,defaultVehicleId:defaults.areaDefaultVehicleId??defaults.zoneDefaultVehicleId??null,customerCount:groupedStops.length,estimatedWeightKg:weights.reduce((sum,stop)=>sum+Number(stop.estimatedWeightKg),0),weightedCustomerCount:weights.length,
       missingGpsCount:groupedStops.filter(stop=>!Number.isFinite(stop.latitude)||!Number.isFinite(stop.longitude)||stop.latitude===0||stop.longitude===0).length,
       timeRestrictionCount:groupedStops.filter(stop=>Boolean(String(stop.timeRestriction||'').trim())).length,stops:groupedStops}
   }).sort((a,b)=>a.areaName.localeCompare(b.areaName))
   const unassignedZones=[...new Map(unassignedGroups.map(group=>[group.zoneGroupId,{zoneGroupId:group.zoneGroupId,zoneGroupName:group.zoneGroupName}])).values()].map(zone=>{
     const areas=unassignedGroups.filter(group=>group.zoneGroupId===zone.zoneGroupId),zoneStops=areas.flatMap(group=>group.stops)
-    return{...zone,areaCount:areas.length,customerCount:zoneStops.length,estimatedWeightKg:areas.reduce((sum,group)=>sum+group.estimatedWeightKg,0),weightedCustomerCount:areas.reduce((sum,group)=>sum+group.weightedCustomerCount,0),
+    const defaultVehicleId=database.prepare('SELECT default_vehicle_id value FROM zone_groups WHERE id=?').get(zone.zoneGroupId)?.value??null
+    return{...zone,defaultVehicleId,areaCount:areas.length,customerCount:zoneStops.length,estimatedWeightKg:areas.reduce((sum,group)=>sum+group.estimatedWeightKg,0),weightedCustomerCount:areas.reduce((sum,group)=>sum+group.weightedCustomerCount,0),
       missingGpsCount:areas.reduce((sum,group)=>sum+group.missingGpsCount,0),timeRestrictionCount:areas.reduce((sum,group)=>sum+group.timeRestrictionCount,0),stops:zoneStops,areas}
   }).sort((a,b)=>a.zoneSortOrder-b.zoneSortOrder||String(a.zoneGroupName).localeCompare(String(b.zoneGroupName)))
   const weightedStops=stops.filter(stop=>stop.estimatedWeightKg!=null),missingGpsCount=stops.filter(stop=>!Number.isFinite(stop.latitude)||!Number.isFinite(stop.longitude)||stop.latitude===0||stop.longitude===0).length,timeRestrictionCount=stops.filter(stop=>Boolean(String(stop.timeRestriction||'').trim())).length,missingWeightCount=stops.length-weightedStops.length

@@ -90,7 +90,7 @@ export function getEmployeeMaster(id,database=defaultDb){const item=employeeRows
 
 export function assertEmployeePayloadId(id,payload){const payloadId=Number(payload?.employeeId);if(!Number.isInteger(payloadId)||payloadId!==Number(id)){const error=new Error('Employee ID mismatch: request URL and payload must identify the same employee');error.statusCode=409;throw error}return payloadId}
 
-const zoneStatsSql=`SELECT z.id,z.code,z.name,z.sort_order sortOrder,z.is_active isActive,
+const zoneStatsSql=`SELECT z.id,z.code,z.name,z.sort_order sortOrder,z.is_active isActive,z.default_vehicle_id defaultVehicleId,dv.vehicle_code defaultVehicleCode,dv.registration_number defaultVehiclePlate,dv.operational_status defaultVehicleStatus,
   (SELECT COUNT(*) FROM areas a WHERE a.zone_group_id=z.id) areaCount,
   (SELECT COUNT(*) FROM areas a WHERE a.zone_group_id=z.id AND a.zone_assignment_status='confirmed') confirmedAreaCount,
   (SELECT COUNT(*) FROM areas a WHERE a.zone_group_id=z.id AND a.zone_assignment_status='pending_confirmation') pendingAreaCount,
@@ -100,15 +100,15 @@ const zoneStatsSql=`SELECT z.id,z.code,z.name,z.sort_order sortOrder,z.is_active
    (SELECT COUNT(*) FROM branches b JOIN areas a ON a.id=b.area_id WHERE a.zone_group_id=z.id AND b.latitude BETWEEN -90 AND 90 AND b.longitude BETWEEN -180 AND 180 AND NOT(b.latitude=0 AND b.longitude=0))) missingGpsBranchCount,
   (SELECT COUNT(DISTINCT b.id) FROM branches b JOIN areas a ON a.id=b.area_id WHERE a.zone_group_id=z.id AND EXISTS(SELECT 1 FROM branch_schedules s WHERE s.branch_id=b.id AND s.is_active=1)) scheduledCustomerCount,
   (SELECT COUNT(DISTINCT b.id) FROM branches b JOIN areas a ON a.id=b.area_id WHERE a.zone_group_id=z.id AND EXISTS(SELECT 1 FROM branch_schedules s WHERE s.branch_id=b.id AND s.is_active=1)) scheduledBranchCount
-  FROM zone_groups z`
+  FROM zone_groups z LEFT JOIN vehicles dv ON dv.id=z.default_vehicle_id`
 const zoneRow=(database,id)=>database.prepare(`${zoneStatsSql} WHERE z.id=?`).get(id)
 const zoneRows=database=>database.prepare(`${zoneStatsSql} ORDER BY z.sort_order,z.id`).all()
-const areaRows=database=>database.prepare(`SELECT a.id,a.jodoo_area_id areaId,a.name,a.is_active isActive,a.zone_group_id zoneGroupId,a.confirmed_zone_group_id confirmedZoneGroupId,
+const areaRows=database=>database.prepare(`SELECT a.id,a.jodoo_area_id areaId,a.name,a.is_active isActive,a.zone_group_id zoneGroupId,a.confirmed_zone_group_id confirmedZoneGroupId,a.default_vehicle_id defaultVehicleId,dv.vehicle_code defaultVehicleCode,dv.registration_number defaultVehiclePlate,dv.operational_status defaultVehicleStatus,
   a.zone_assignment_status zoneAssignmentStatus,z.name zoneGroup,confirmed.name confirmedZoneGroup,
   (SELECT COUNT(DISTINCT b.customer_id) FROM branches b WHERE b.area_id=a.id) customerCount,
   (SELECT COUNT(*) FROM branches b WHERE b.area_id=a.id) branchCount,
   (SELECT COUNT(*) FROM branches b WHERE b.area_id=a.id AND b.latitude BETWEEN -90 AND 90 AND b.longitude BETWEEN -180 AND 180 AND NOT(b.latitude=0 AND b.longitude=0)) gpsBranchCount
-  FROM areas a JOIN zone_groups z ON z.id=a.zone_group_id LEFT JOIN zone_groups confirmed ON confirmed.id=a.confirmed_zone_group_id ORDER BY z.sort_order,a.name`).all()
+  FROM areas a JOIN zone_groups z ON z.id=a.zone_group_id LEFT JOIN zone_groups confirmed ON confirmed.id=a.confirmed_zone_group_id LEFT JOIN vehicles dv ON dv.id=a.default_vehicle_id ORDER BY z.sort_order,a.name`).all()
 const auditZone=(database,action,id,before,after,changedBy)=>database.prepare(`INSERT INTO audit_logs(action,entity_type,entity_id,before_json,after_json) VALUES(?,?,?,?,?)`).run(`${action}:${text(changedBy)||'Supervisor'}`,'zone_group',String(id),before?JSON.stringify(before):null,after?JSON.stringify(after):null)
 const auditArea=(database,action,id,before,after,changedBy)=>database.prepare(`INSERT INTO audit_logs(action,entity_type,entity_id,before_json,after_json) VALUES(?,?,?,?,?)`).run(action,'area',String(id),before?JSON.stringify(before):null,JSON.stringify({...after,changedBy:text(changedBy)||'Supervisor'}))
 const affectedDates=(database,areaIds)=>{if(!areaIds.length)return[];const marks=areaIds.map(()=>'?').join(',');return database.prepare(`SELECT DISTINCT dd.dispatch_date FROM dispatch_days dd JOIN dispatch_trips dt ON dt.dispatch_day_id=dd.id JOIN dispatch_stops ds ON ds.dispatch_trip_id=dt.id JOIN branches b ON b.id=ds.branch_id WHERE b.area_id IN (${marks}) AND dd.dispatch_date>=date('now','+8 hours') AND dd.status IN ('approved','published')`).all(...areaIds).map(item=>item.dispatch_date)}

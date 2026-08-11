@@ -1,0 +1,8 @@
+export const V36_VERSION=36
+const columns=(db,table)=>new Set(db.prepare(`PRAGMA table_info("${table}")`).all().map(row=>row.name))
+const add=(db,table,name,definition)=>{if(!columns(db,table).has(name))db.exec(`ALTER TABLE ${table} ADD COLUMN "${name}" ${definition}`)}
+const counts=db=>({zones:db.prepare('SELECT COUNT(*) n FROM zone_groups').get().n,areas:db.prepare('SELECT COUNT(*) n FROM areas').get().n,vehicles:db.prepare('SELECT COUNT(*) n FROM vehicles').get().n,dispatches:db.prepare('SELECT COUNT(*) n FROM dispatches').get().n,stops:db.prepare('SELECT COUNT(*) n FROM dispatch_stops').get().n})
+
+export function ensureV36Schema(db){add(db,'zone_groups','default_vehicle_id','INTEGER REFERENCES vehicles(id)');add(db,'areas','default_vehicle_id','INTEGER REFERENCES vehicles(id)')}
+
+export function applyV36Migration(db){const version=Number(db.prepare('SELECT COALESCE(MAX(version),0) version FROM schema_meta').get().version);if(version>=V36_VERSION)return{schemaVersion:version,noOp:true,before:counts(db),after:counts(db)};if(version!==35)throw new Error(`Schema v35 is required before v36; current schema is v${version}`);if(db.prepare('PRAGMA integrity_check').get().integrity_check!=='ok')throw new Error('Database integrity check failed before v36 migration');const before=counts(db);db.exec('BEGIN IMMEDIATE');try{ensureV36Schema(db);db.prepare('INSERT INTO schema_meta(version) VALUES(?)').run(V36_VERSION);const after=counts(db);if(JSON.stringify(before)!==JSON.stringify(after))throw new Error('Protected Zone, Area, Vehicle or Dispatch counts changed during v36 migration');db.exec('COMMIT');return{schemaVersion:V36_VERSION,noOp:false,before,after}}catch(error){db.exec('ROLLBACK');throw error}}

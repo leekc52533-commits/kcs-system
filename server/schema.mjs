@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 35
+export const SCHEMA_VERSION = 36
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS zone_groups (
   name TEXT NOT NULL UNIQUE,
   source_driver TEXT,
   sort_order INTEGER NOT NULL DEFAULT 0,
+  default_vehicle_id INTEGER REFERENCES vehicles(id),
   is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0,1)),
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -38,6 +39,7 @@ CREATE TABLE IF NOT EXISTS areas (
   zone_confirmed_at TEXT,
   schedule_text TEXT,
   default_driver_name TEXT,
+  default_vehicle_id INTEGER REFERENCES vehicles(id),
   is_active INTEGER NOT NULL DEFAULT 1,
   source_updated_at TEXT,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
