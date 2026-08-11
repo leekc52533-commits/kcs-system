@@ -19,6 +19,7 @@ const navigation=[['dashboard','⌂','nav.dashboard'],['operations','↗','nav.d
 const modules=[['operations','↗','','','','green'],['special','＋','','','','rose'],['customers','◎','','','','blue'],['location-zone','⌖','','','','violet'],['vehicles','◇','','','','cyan'],['materials','▦','','','','orange'],['staff','♙','','','','green']]
 const pageTitleKeys={special:'nav.special'}
 const legacyPages={dispatch:['operations','weekly'],schedule:['operations','schedules'],data:['location-zone','data-quality'],'gps-zone':['location-zone','recommendations'],resources:['vehicles','vehicles'],accounts:['staff','accounts'],'gps-migration':['location-zone','legacy-gps']}
+const resolvePage=(raw,tab='')=>{const mapped=legacyPages[raw],page=mapped?.[0]||raw,pageTab=tab||mapped?.[1]||'';return page==='location-zone'&&pageTab==='area-zone'?{page:'operations',tab:'area-zone'}:{page,tab:pageTab}}
 class AppErrorBoundary extends Component {
   state={error:null}
   static getDerivedStateFromError(error){return{error}}
@@ -50,17 +51,17 @@ export default function App(){return <AppErrorBoundary><AppContent/></AppErrorBo
 
 function DesktopApp({account,onLogout,onChangePassword}){
   const{t,language}=useI18n()
-  const initial=()=>{const query=new URLSearchParams(window.location.search),raw=query.get('page')||window.history.state?.kcsPage||'dashboard',mapped=legacyPages[raw];return{page:mapped?.[0]||raw,tab:query.get('tab')||mapped?.[1]||''}}
+  const initial=()=>{const query=new URLSearchParams(window.location.search),raw=query.get('page')||window.history.state?.kcsPage||'dashboard';return resolvePage(raw,query.get('tab')||'')}
   const start=initial(),[page,setPage]=useState(start.page),[pageTab,setPageTab]=useState(start.tab),[menuOpen,setMenuOpen]=useState(false)
   const[systemStatus,setSystemStatus]=useState({connected:false,label:t('system.connecting')})
   useEffect(()=>{let active=true;fetch('/api/system/status').then(r=>{if(!r.ok)throw new Error();return r.json()}).then(s=>active&&setSystemStatus({connected:s.database==='connected',label:t('system.database',{version:s.schemaVersion,jodoo:t(s.integrations?.jodoo?.configured?'system.configured':'system.awaiting')})})).catch(()=>active&&setSystemStatus({connected:false,label:t('system.offline')}));return()=>{active=false}},[t])
   useEffect(()=>{
     if(!window.history.state?.kcsPage)window.history.replaceState({kcsPage:page},'',`?page=${page}${pageTab?`&tab=${pageTab}`:''}`)
-    const onPop=event=>{if(hasUnsavedNavigation()&&!confirmNavigation(t('common.unsaved'))){window.history.pushState({kcsPage:page},'',`?page=${page}${pageTab?`&tab=${pageTab}`:''}`);return}const query=new URLSearchParams(window.location.search),raw=query.get('page')||event.state?.kcsPage||'dashboard',mapped=legacyPages[raw];setPage(mapped?.[0]||raw);setPageTab(query.get('tab')||mapped?.[1]||'')}
+    const onPop=event=>{if(hasUnsavedNavigation()&&!confirmNavigation(t('common.unsaved'))){window.history.pushState({kcsPage:page},'',`?page=${page}${pageTab?`&tab=${pageTab}`:''}`);return}const query=new URLSearchParams(window.location.search),raw=query.get('page')||event.state?.kcsPage||'dashboard',resolved=resolvePage(raw,query.get('tab')||'');setPage(resolved.page);setPageTab(resolved.tab)}
     window.addEventListener('popstate',onPop)
     return()=>window.removeEventListener('popstate',onPop)
   },[page,pageTab,t])
-  const go=(id,tab='')=>{const mapped=legacyPages[id],next=mapped?.[0]||id,nextTab=tab||mapped?.[1]||'';if(next===page&&nextTab===pageTab){setMenuOpen(false);return}if(!confirmNavigation(t('common.unsaved')))return;window.history.pushState({kcsPage:next},'',`?page=${next}${nextTab?`&tab=${nextTab}`:''}`);setPage(next);setPageTab(nextTab);setMenuOpen(false)}
+  const go=(id,tab='')=>{const resolved=resolvePage(id,tab),next=resolved.page,nextTab=resolved.tab;if(next===page&&nextTab===pageTab){setMenuOpen(false);return}if(!confirmNavigation(t('common.unsaved')))return;window.history.pushState({kcsPage:next},'',`?page=${next}${nextTab?`&tab=${nextTab}`:''}`);setPage(next);setPageTab(nextTab);setMenuOpen(false)}
   const changeTab=tab=>{window.history.replaceState({kcsPage:page},'',`?page=${page}&tab=${tab}`);setPageTab(tab)}
   const title=t(navigation.find(x=>x[0]===page)?.[2]||pageTitleKeys[page]||'nav.dashboard'),currentUser={name:account.employeeName,role:account.role==='owner_admin'?'admin':account.role==='operations_admin'?'supervisor':account.role,systemRole:account.role,permissions:account.permissions||[]},canAccessBuyer=['owner_admin','operations_admin','supervisor','office'].includes(account.role),visibleNavigation=navigation.filter(item=>item[0]!=='buyers'||canAccessBuyer)
   const dateLabel=kuchingDateLabel(new Date(),language==='zh'?'zh-MY':language==='ms'?'ms-MY':'en-MY')
