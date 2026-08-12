@@ -40,7 +40,7 @@ export function employeeMatchesDirectory(employee, filters) {
   return true
 }
 
-const currentPeriod = (employee) => [...(employee.employmentPeriods || [])].reverse().find((period) => !period.endDate) || employee.employmentPeriods?.at(-1)
+const currentPeriod = (employee) => [...(employee.employmentPeriods || [])].reverse().find((period) => !period.endDate && period.employmentStatus === 'active')
 
 export function employeeDirectoryValue(employee, column) {
   const period = currentPeriod(employee)
