@@ -7,12 +7,18 @@ const displayName=value=>text(value).replace(/^jln\b/i,'Jalan').replace(/^lrg\b/
 const hasGps=row=>Number.isFinite(row.latitude)&&Number.isFinite(row.longitude)&&!(row.latitude===0&&row.longitude===0)
 const actor=value=>text(value)||'KCS User'
 const round=value=>Math.round(Number(value)*1e7)/1e7
-const buildingPattern=/\b(aeon|mall|plaza|wisma|boulevard|cityone|vivacity|commercial centre|shopping centre|shopping center)\b/i
+const buildingPattern=/\b(aeon|mall|plaza|wisma|boulevard|podium|city\s*one|viva\s*city|commercial centre|shopping centre|shopping center)\b/i
+const broadLocationPattern=/^(?:batu|bt)\s*\d+$/i
+const genericLocationPattern=/^(?:kuching|sarawak|malaysia)$/i
+const microRoadPattern=/^(?:lorong|lane)\b/i
 
 function distanceKm(a,b){const rad=Math.PI/180,dLat=(b.latitude-a.latitude)*rad,dLon=(b.longitude-a.longitude)*rad,lat1=a.latitude*rad,lat2=b.latitude*rad,x=Math.sin(dLat/2)**2+Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;return 6371*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x))}
 function candidateName(result,preferLocality=false){const locality=text(result.sublocality||result.neighborhood);if(preferLocality&&locality&&!/^kuching$/i.test(locality))return displayName(locality);return displayName(result.road||result.street||(preferLocality?locality:'')||result.locality||result.city||'')}
-function groupingKey(value){return normalizeName(value).replace(/\b(lorong|lane)\b/g,'').replace(/\b\d+[a-z]?\b$/,'').trim()}
 function sameArea(a,b){return normalizeName(a)===normalizeName(b)}
+export function normalizeBatuContext(value){return text(value).replace(/\b(?:bt|batu)\s*(\d+)\b/ig,(_match,number)=>`BATU ${number}`)}
+function compact(value){return normalizeName(value).replace(/\s+/g,'')}
+function branchAreaHint(branch,existingAreas){const name=normalizeBatuContext(branch.branchName),normalized=compact(name),matches=existingAreas.filter(area=>!broadLocationPattern.test(area.name)&&normalized.includes(compact(area.name))).sort((a,b)=>b.name.length-a.name.length);if(matches[0])return matches[0].name;const building=name.match(/\b(?:AEON(?:\s+MALL)?|PODIUM|CITY\s*ONE|VIVA\s*CITY|(?:[A-Z0-9]+\s+){0,2}WISMA|BOULEVARD|PLAZA(?:\s+[A-Z0-9]+){0,2})\b/i)?.[0];if(!building)return'';if(/^aeon$/i.test(building)&&/aeon/i.test(branch.currentAreaName))return branch.currentAreaName;return displayName(building.toUpperCase())}
+function reliableLocation(branch,existingAreas,validatedBuilding=''){const hint=validatedBuilding||branchAreaHint(branch,existingAreas),sub=text(branch.geocode.sublocality||branch.geocode.neighborhood),road=displayName(branch.geocode.road||branch.geocode.street),current=text(branch.currentAreaName),evidence=compact(`${branch.geocode.address||''} ${road} ${sub}`);if(hint)return{name:hint,kind:buildingPattern.test(hint)?'building':'existing',confidence:'high'};if(current&&!broadLocationPattern.test(current)&&evidence.includes(compact(current)))return{name:current,kind:buildingPattern.test(current)?'building':'existing',confidence:'high'};if(sub&&!genericLocationPattern.test(sub))return{name:displayName(sub),kind:buildingPattern.test(sub)?'building':'named_locality',confidence:'high'};if(road&&!microRoadPattern.test(road))return{name:road,kind:'main_road',confidence:'medium'};if(current&&!broadLocationPattern.test(current))return{name:current,kind:'existing_fallback',confidence:'medium'};return{name:'',kind:'uncertain',confidence:'needs_review'}}
 
 async function concurrentMap(items,limit,mapper){const output=new Array(items.length);let cursor=0;await Promise.all(Array.from({length:Math.min(limit,items.length)},async()=>{while(cursor<items.length){const index=cursor++;output[index]=await mapper(items[index],index)}}));return output}
 
@@ -42,26 +48,11 @@ function groupAreaItems(items){
 }
 
 function groupZoneItems(items,existingAreas){
-  const gps=items.filter(hasGps),handled=new Set(),stableGroups=[]
-  const byCurrent=new Map()
-  for(const item of gps){if(!byCurrent.has(item.currentAreaId))byCurrent.set(item.currentAreaId,[]);byCurrent.get(item.currentAreaId).push(item)}
-  for(const group of byCurrent.values())if(group.length>=2&&buildingPattern.test(group[0].currentAreaName||'')){
-    for(const item of group){handled.add(item.id);item.proposedAreaName=item.currentAreaName;item.action='keep';item.confidence='high';item.reason=`${group.length} official GPS Branches share the protected building/commercial-centre Area “${item.currentAreaName}”; road entrance differences do not split it.`}
-  }
-  const grouped=new Map()
-  for(const item of gps.filter(row=>!handled.has(row.id))){const key=groupingKey(item.proposedAreaName);if(!key){item.action='needs_review';item.confidence='needs_review';item.reason='No reliable operational locality or road evidence was returned; manual review is required.';continue}if(!grouped.has(key))grouped.set(key,[]);grouped.get(key).push(item)}
-  for(const group of grouped.values())if(group.length>=2){
-    const canonical=[...new Set(group.map(item=>item.proposedAreaName))].sort((a,b)=>a.length-b.length||a.localeCompare(b))[0],existing=existingAreas.find(area=>sameArea(area.name,canonical)),target=existing?.name||canonical,confidence=group.length>=3?'high':'medium'
-    for(const item of group){item.proposedAreaName=target;item.action=sameArea(item.currentAreaName,target)?'keep':'move';item.confidence=confidence;item.reason=`${group.length} Official GPS Branches across ${new Set(group.map(row=>row.currentAreaId)).size} current Area(s) form one operational road/locality group “${target}”.`}
-    stableGroups.push(group)
-  }
-  for(const group of grouped.values().filter(value=>value.length===1)){
-    const item=group[0],existing=existingAreas.find(area=>sameArea(area.name,item.proposedAreaName))
-    if(existing){item.proposedAreaName=existing.name;item.action=sameArea(item.currentAreaName,existing.name)?'keep':'move';item.confidence='medium';item.reason='Official GPS/address evidence matches an existing Area in this Zone.';continue}
-    const near=stableGroups.map(candidate=>({candidate,distance:Math.min(...candidate.map(row=>distanceKm(item,row)))})).filter(row=>row.distance<=0.75).sort((a,b)=>a.distance-b.distance)[0]
-    if(near){item.proposedAreaName=near.candidate[0].proposedAreaName;item.action=sameArea(item.currentAreaName,item.proposedAreaName)?'keep':'move';item.confidence='medium';item.reason=`Single GPS point is within ${near.distance.toFixed(2)} km of a stable operational group; supervisor review remains recommended.`}
-    else if(sameArea(item.currentAreaName,item.proposedAreaName)){item.action='keep';item.confidence='medium';item.reason='Official GPS evidence remains consistent with the current operational Area.'}
-    else{item.action='needs_review';item.confidence='needs_review';item.reason='A legitimate one-Branch operational Area is possible, but the evidence is insufficient for automatic creation.'}
+  const gps=items.filter(hasGps),grouped=new Map(),buildingSeeds=gps.map(item=>({item,hint:branchAreaHint(item,existingAreas)})).filter(row=>buildingPattern.test(row.hint))
+  for(const item of gps){const seed=buildingSeeds.filter(row=>row.item.currentAreaId===item.currentAreaId&&distanceKm(row.item,item)<=0.15).sort((a,b)=>distanceKm(a.item,item)-distanceKm(b.item,item))[0],location=reliableLocation(item,existingAreas,seed?.hint||'');item.proposedAreaName=location.name;item.locationKind=location.kind;item.confidence=location.confidence;if(!location.name){item.action='needs_review';item.reason='Only a micro road, broad BATU context, or conflicting location evidence is available; manual review is required.';continue}const key=normalizeName(location.name);if(!grouped.has(key))grouped.set(key,[]);grouped.get(key).push(item)}
+  for(const group of grouped.values()){
+    const canonical=[...new Set(group.map(item=>item.proposedAreaName))].sort((a,b)=>a.length-b.length||a.localeCompare(b))[0],existing=existingAreas.find(area=>sameArea(area.name,canonical)),target=existing?.name||canonical,building=group.every(item=>item.locationKind==='building'),named=group.every(item=>['building','named_locality'].includes(item.locationKind)),currentAreas=new Set(group.map(item=>item.currentAreaId)),confidence=building||named?'high':group.some(item=>item.confidence==='medium')?'medium':'high'
+    for(const item of group){item.proposedAreaName=target;if(currentAreas.size>1&&!building){item.action='needs_review';item.confidence='needs_review';item.reason=`The named location “${target}” appears across ${currentAreas.size} meaningful Existing Areas. GPS proximity or a shared locality alone cannot merge them.`;continue}item.action=sameArea(item.currentAreaName,target)?'keep':'move';item.confidence=confidence;item.reason=building?`${group.length} Official GPS Branch(es) identify the same building or commercial complex “${target}”.`:`${group.length} Official GPS Branch(es) identify the same explicit operational location “${target}”; no distance-only merge was applied.`}
   }
   return items
 }

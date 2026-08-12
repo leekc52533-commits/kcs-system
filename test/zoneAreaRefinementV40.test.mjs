@@ -5,7 +5,7 @@ import {DatabaseSync} from 'node:sqlite'
 import {schemaSql,SCHEMA_VERSION} from '../server/schema.mjs'
 import {applyV39Migration} from '../server/migrationV39.mjs'
 import {applyV40Migration} from '../server/migrationV40.mjs'
-import {analyzeZoneAreas,confirmAreaRefinement,getAreaRefinement,updateAreaRefinement} from '../server/areaRefinementService.mjs'
+import {analyzeZoneAreas,confirmAreaRefinement,getAreaRefinement,normalizeBatuContext,updateAreaRefinement} from '../server/areaRefinementService.mjs'
 import {messages} from '../src/translations.js'
 
 function fixture(){
@@ -54,18 +54,42 @@ test('same-building protection keeps one operational Area despite different entr
 test('Preview permits small Areas, needs review, manual split, rename, merge and branch moves',async()=>{
   const db=fixture(),preview=await analyzeZoneAreas(91,{createdBy:'Supervisor',geocoder},db),remote=preview.items.find(item=>item.branchInternalId===106),central=preview.items.filter(item=>[103,104].includes(item.branchInternalId)
   )
-  assert.equal(remote.action,'needs_review')
+  assert.equal(remote.action,'keep');assert.equal(remote.proposedAreaName,'REMOTE')
   const updated=updateAreaRefinement(preview.id,{changedBy:'Supervisor',items:[{branchId:remote.branchInternalId,action:'move',proposedAreaName:'Remote Shop',reason:'Valid one-Branch operational Area'},{branchId:central[0].branchInternalId,action:'move',proposedAreaName:'Central North',reason:'Manual split'},{branchId:central[1].branchInternalId,action:'move',proposedAreaName:'Central Combined',reason:'Manual rename/merge'}]},db)
   assert.equal(updated.items.find(item=>item.branchInternalId===106).proposedAreaName,'Remote Shop');assert.equal(updated.items.find(item=>item.branchInternalId===103).proposedAreaName,'Central North');assert.equal(updated.items.find(item=>item.branchInternalId===104).proposedAreaName,'Central Combined')
 })
 
 test('Confirm is transactional, enforces Zone boundary and incremental analysis preserves confirmed assignments',async()=>{
   const db=fixture(),preview=await analyzeZoneAreas(91,{createdBy:'Supervisor',geocoder},db),remote=preview.items.find(item=>item.branchInternalId===106)
-  updateAreaRefinement(preview.id,{changedBy:'Supervisor',items:[{branchId:remote.branchInternalId,action:'keep',proposedAreaName:'REMOTE',reason:'Keep current'}]},db)
+  const central=preview.items.filter(item=>[103,104].includes(item.branchInternalId));updateAreaRefinement(preview.id,{changedBy:'Supervisor',items:[{branchId:remote.branchInternalId,action:'keep',proposedAreaName:'REMOTE',reason:'Keep current'},...central.map(item=>({branchId:item.branchInternalId,action:'move',proposedAreaName:'Central Park',reason:'Supervisor confirmed same commercial centre'}))]},db)
   db.prepare('UPDATE branches SET area_id=20 WHERE id=104').run();assert.throws(()=>confirmAreaRefinement(preview.id,{changedBy:'Supervisor',reason:'Reviewed Zone Preview'},db),/outside the analyzed Zone/);assert.equal(getAreaRefinement(preview.id,db).status,'preview');assert.equal(db.prepare('SELECT area_id FROM branches WHERE id=103').get().area_id,11)
   db.prepare('UPDATE branches SET area_id=12 WHERE id=104').run();const confirmed=confirmAreaRefinement(preview.id,{changedBy:'Supervisor',reason:'Reviewed Zone Preview'},db);assert.equal(confirmed.status,'confirmed');assert.equal(db.prepare("SELECT COUNT(*) n FROM master_change_history WHERE change_type='area_refinement_confirmed'").get().n,3)
   db.prepare("INSERT INTO branches(id,jodoo_branch_id,customer_id,area_id,branch_name,latitude,longitude) VALUES(107,'10107',1,11,'NEW GPS',1.5103,110.3103)").run()
   const incremental=await analyzeZoneAreas(91,{createdBy:'Supervisor',geocoder},db);assert.deepEqual(incremental.items.map(item=>item.branchInternalId).sort((a,b)=>a-b),[105,107]);const full=await analyzeZoneAreas(91,{includeExisting:true,createdBy:'Supervisor',geocoder},db);assert.equal(full.items.length,7)
+})
+
+test('BATU context is normalized but never replaces a more specific operational location',()=>{
+  assert.equal(normalizeBatuContext('ALPRO bt3'),'ALPRO BATU 3');assert.equal(normalizeBatuContext('CCK BT 3'),'CCK BATU 3');assert.equal(normalizeBatuContext('SHELL batu4'),'SHELL BATU 4')
+})
+
+test('operational locality outranks company and BATU shorthand; single-Branch Areas are allowed',async()=>{
+  const db=fixture();db.exec("INSERT INTO areas(id,jodoo_area_id,name,zone_group_id,confirmed_zone_group_id,zone_assignment_status) VALUES(14,'A14','BATU 3',91,91,'confirmed'),(15,'A15','BATU 4',91,91,'confirmed'); INSERT INTO branches(id,jodoo_branch_id,customer_id,area_id,branch_name,address,latitude,longitude) VALUES(108,'10462',1,14,'ALPRO BT3','Rock Road',1.521,110.339),(109,'10032',1,14,'CCK LOCAL BT3','Jalan Batu Kawa',1.520,110.334),(110,'10168',1,14,'HNL BT3','Jalan Rock',1.5204,110.335),(111,'10459',1,15,'SHELL BT4','Mile 4',1.506,110.335)")
+  const locations=new Map([[1.521,'Central Park Commercial Centre'],[1.520,'Everbright Park'],[1.5204,'Iris Garden'],[1.506,'']]),lookup=async latitude=>({sublocality:locations.get(latitude),road:latitude===1.506?'Jalan Tun Hussien Onn 4':'Rock Road',locality:'Kuching'}),preview=await analyzeZoneAreas(91,{createdBy:'Supervisor',geocoder:lookup},db),byId=id=>preview.items.find(item=>item.branchId===id)
+  assert.equal(byId('10462').proposedAreaName,'Central Park Commercial Centre');assert.equal(byId('10032').proposedAreaName,'Everbright Park');assert.equal(byId('10168').proposedAreaName,'Iris Garden');assert.equal(byId('10459').proposedAreaName,'Jalan Tun Hussien Onn 4');for(const id of ['10462','10032','10168','10459'])assert.equal(byId(id).action,'move');assert.ok(preview.items.every(item=>!/^ALPRO|^CCK LOCAL|^HNL|^SHELL/i.test(item.proposedAreaName||'')))
+})
+
+test('same old Area may split PODIUM, AEON and a specific locality without trusting the old label',async()=>{
+  const db=fixture();db.prepare("INSERT INTO branches(id,jodoo_branch_id,customer_id,area_id,branch_name,address,latitude,longitude) VALUES(107,'10353',1,10,'EMC BATU 2','Batu 2',1.535,110.337)").run();const lookup=async latitude=>latitude===1.535?{sublocality:'Hock Kui Commercial Centre',road:'Jalan Tun Ahmad Zaidi Adruce',locality:'Kuching'}:geocoder(latitude),preview=await analyzeZoneAreas(91,{createdBy:'Supervisor',geocoder:lookup},db)
+  assert.equal(preview.items.find(item=>item.branchId==='10353').proposedAreaName,'Hock Kui Commercial Centre');assert.ok(preview.items.filter(item=>['10101','10102'].includes(item.branchId)).every(item=>item.proposedAreaName==='AEON MALL'))
+  db.prepare("UPDATE branches SET branch_name='PODIUM' WHERE id=101").run();db.prepare("UPDATE branches SET branch_name='MIX STORE PODIUM' WHERE id=102").run();const split=await analyzeZoneAreas(91,{createdBy:'Supervisor',geocoder:lookup},db);assert.ok(split.items.filter(item=>['10101','10102'].includes(item.branchId)).every(item=>item.proposedAreaName==='PODIUM'))
+})
+
+test('different meaningful Existing Areas never merge from GPS distance or shared locality alone',async()=>{
+  const db=fixture(),preview=await analyzeZoneAreas(91,{createdBy:'Supervisor',geocoder},db),central=preview.items.filter(item=>[103,104].includes(item.branchInternalId));assert.ok(central.every(item=>item.action==='needs_review'));assert.ok(central.every(item=>/cannot merge/.test(item.reason)))
+})
+
+test('same-complex GPS validates an explicit building seed without trusting the old Area alone',async()=>{
+  const db=fixture();db.exec("INSERT INTO areas(id,jodoo_area_id,name,zone_group_id,confirmed_zone_group_id,zone_assignment_status) VALUES(14,'A14','BOULEVARD',91,91,'confirmed'); INSERT INTO branches(id,jodoo_branch_id,customer_id,area_id,branch_name,address,latitude,longitude) VALUES(107,'10701',1,14,'DIY BOULEVARD','Complex',1.5300,110.3300),(108,'10702',1,14,'ECO BOULEVARD','Complex',1.5301,110.3301),(109,'10703',1,14,'NATURAL HEALTH FARM','Complex',1.53005,110.33005)");const lookup=async()=>({sublocality:'Taman Nearby',road:'Jalan Main',locality:'Kuching'}),preview=await analyzeZoneAreas(91,{createdBy:'Supervisor',geocoder:lookup},db),complex=preview.items.filter(item=>['10701','10702','10703'].includes(item.branchId));assert.ok(complex.every(item=>item.proposedAreaName==='BOULEVARD'));assert.ok(complex.every(item=>item.action==='keep'));assert.ok(complex.every(item=>item.confidence==='high'))
 })
 
 test('Zone API, map, manual controls, permissions and mobile UI are wired without Route Template changes',()=>{
