@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 38
+export const SCHEMA_VERSION = 39
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -780,6 +780,49 @@ CREATE TABLE IF NOT EXISTS route_template_branches (
   UNIQUE (route_template_id,area_id,branch_order)
 );
 
+CREATE TABLE IF NOT EXISTS area_refinement_analyses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  parent_area_id INTEGER NOT NULL REFERENCES areas(id),
+  status TEXT NOT NULL DEFAULT 'preview' CHECK(status IN ('preview','confirmed','cancelled')),
+  include_existing INTEGER NOT NULL DEFAULT 0 CHECK(include_existing IN (0,1)),
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_by TEXT,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  confirmed_by TEXT,
+  confirmed_at TEXT,
+  reason TEXT
+);
+
+CREATE TABLE IF NOT EXISTS area_refinement_suggestions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  analysis_id INTEGER NOT NULL REFERENCES area_refinement_analyses(id) ON DELETE CASCADE,
+  branch_id INTEGER NOT NULL REFERENCES branches(id),
+  current_area_id INTEGER REFERENCES areas(id),
+  proposed_area_name TEXT,
+  action TEXT NOT NULL CHECK(action IN ('move','keep','needs_review','need_gps')),
+  confidence TEXT NOT NULL CHECK(confidence IN ('high','medium','needs_review')),
+  reason TEXT NOT NULL,
+  official_latitude REAL,
+  official_longitude REAL,
+  reverse_address TEXT,
+  road TEXT,
+  locality TEXT,
+  sublocality TEXT,
+  postal_code TEXT,
+  reviewed_by TEXT,
+  reviewed_at TEXT,
+  UNIQUE(analysis_id,branch_id)
+);
+
+CREATE TABLE IF NOT EXISTS area_refinement_children (
+  parent_area_id INTEGER NOT NULL REFERENCES areas(id),
+  child_area_id INTEGER NOT NULL UNIQUE REFERENCES areas(id),
+  analysis_id INTEGER NOT NULL REFERENCES area_refinement_analyses(id),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY(parent_area_id,child_area_id)
+);
+
 CREATE TABLE IF NOT EXISTS system_sequences (
   name TEXT PRIMARY KEY,
   next_value INTEGER NOT NULL
@@ -1306,6 +1349,8 @@ CREATE INDEX IF NOT EXISTS branch_material_price_selections_branch_idx ON branch
 CREATE INDEX IF NOT EXISTS branch_material_price_selections_pricing_idx ON branch_material_price_selections(customer_material_pricing_id,price_type);
 CREATE INDEX IF NOT EXISTS occ_price_groups_material_idx ON occ_price_groups(material_id,price_amount);
 CREATE INDEX IF NOT EXISTS branch_occ_price_group_idx ON branch_occ_price_assignments(occ_price_group_id,branch_id);
+CREATE INDEX IF NOT EXISTS area_refinement_analyses_parent_idx ON area_refinement_analyses(parent_area_id,status,created_at DESC);
+CREATE INDEX IF NOT EXISTS area_refinement_suggestions_analysis_idx ON area_refinement_suggestions(analysis_id,action,confidence);
 
 INSERT OR IGNORE INTO zone_groups(id,code,name,sort_order) VALUES
   (1,'KUCHING-A','Kuching A — BDC',1),

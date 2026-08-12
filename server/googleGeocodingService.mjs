@@ -19,6 +19,8 @@ export async function reverseGeocodeGoogle(latitude,longitude,{fetchImpl=fetch,a
     state:component('administrative_area_level_1'),
     street:component('route'),
     city:component('locality','postal_town','administrative_area_level_2'),
+    locality:component('locality','postal_town'),
+    sublocality:component('sublocality_level_1','sublocality','neighborhood'),
     streetNumber:component('street_number'),
     postalCode:component('postal_code'),
     provider:'Google Geocoding API',

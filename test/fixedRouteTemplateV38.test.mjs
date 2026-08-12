@@ -94,7 +94,7 @@ test('Route Template audit preserves reason, actor and complete before/after',()
 })
 
 test('Session permission, mobile fallback controls and trilingual labels are wired without English Malay fallback',()=>{
-  assert.equal(SCHEMA_VERSION,38)
+  assert.equal(SCHEMA_VERSION,39)
   const api=fs.readFileSync(new URL('../server/index.mjs',import.meta.url),'utf8'),ui=fs.readFileSync(new URL('../src/ZoneGroupManager.jsx',import.meta.url),'utf8')
   assert.match(api,/route-template/)
   assert.match(api,/canManageSchedules\(session\)/)

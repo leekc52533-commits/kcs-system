@@ -41,6 +41,7 @@
     "migrate:v36": "node scripts/migrate-v36.mjs",
     "migrate:v37": "node scripts/migrate-v37.mjs",
     "migrate:v38": "node scripts/migrate-v38.mjs",
+    "migrate:v39": "node scripts/migrate-v39.mjs",
     "apply:vehicle-master-v29": "node scripts/apply-vehicle-master-v29.mjs",
     "backup:vehicle-data": "node scripts/backup-vehicle-data.mjs",
     "verify:vehicle-backup": "node scripts/verify-vehicle-backup.mjs",
