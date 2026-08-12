@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 39
+export const SCHEMA_VERSION = 40
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -791,7 +791,9 @@ CREATE TABLE IF NOT EXISTS area_refinement_analyses (
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   confirmed_by TEXT,
   confirmed_at TEXT,
-  reason TEXT
+  reason TEXT,
+  scope_type TEXT NOT NULL DEFAULT 'area' CHECK(scope_type IN ('area','zone')),
+  zone_group_id INTEGER REFERENCES zone_groups(id)
 );
 
 CREATE TABLE IF NOT EXISTS area_refinement_suggestions (
