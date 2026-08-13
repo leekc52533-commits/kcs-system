@@ -5,7 +5,7 @@ import {DatabaseSync} from 'node:sqlite'
 import {schemaSql,SCHEMA_VERSION} from '../server/schema.mjs'
 import {applyV39Migration} from '../server/migrationV39.mjs'
 import {applyV40Migration} from '../server/migrationV40.mjs'
-import {analyzeZoneAreas,confirmAreaRefinement,getAreaRefinement,normalizeBatuContext,updateAreaRefinement} from '../server/areaRefinementService.mjs'
+import {analyzeZoneAreas,confirmAreaRefinement,extractBatuSegments,getAreaRefinement,isMajorRoadCorridor,normalizeBatuContext,updateAreaRefinement} from '../server/areaRefinementService.mjs'
 import {messages} from '../src/translations.js'
 
 function fixture(){
@@ -69,7 +69,18 @@ test('Confirm is transactional, enforces Zone boundary and incremental analysis 
 })
 
 test('BATU context is normalized but never replaces a more specific operational location',()=>{
-  assert.equal(normalizeBatuContext('ALPRO bt3'),'ALPRO BATU 3');assert.equal(normalizeBatuContext('CCK BT 3'),'CCK BATU 3');assert.equal(normalizeBatuContext('SHELL batu4'),'SHELL BATU 4')
+  assert.equal(normalizeBatuContext('ALPRO bt3'),'ALPRO BATU 3');assert.equal(normalizeBatuContext('CCK BT 3'),'CCK BATU 3');assert.equal(normalizeBatuContext('SHELL batu4'),'SHELL BATU 4');assert.equal(normalizeBatuContext('5th Mile, Jalan Penrissen'),'BATU 5, Jalan Penrissen');assert.equal(normalizeBatuContext('Mile 17'),'BATU 17');assert.deepEqual(extractBatuSegments('BT02','38th Mile','Mile 10'),['BATU 2','BATU 38','BATU 10']);assert.equal(isMajorRoadCorridor('Jalan Penrissen'),true)
+})
+
+test('BATU segment outranks a micro road or major corridor but not a specific operational locality',async()=>{
+  const db=fixture();db.exec("INSERT INTO areas(id,jodoo_area_id,name,zone_group_id,confirmed_zone_group_id,zone_assignment_status) VALUES(14,'A14','BATU 5',91,91,'confirmed'),(15,'A15','BATU 3',91,91,'confirmed'); INSERT INTO branches(id,jodoo_branch_id,customer_id,area_id,branch_name,address,latitude,longitude) VALUES(107,'10277',1,14,'SK FOOD COURT','5th Mile, Jalan Penrissen, Kuching',1.49134,110.33008),(108,'10278',1,14,'SK HARDWARE','5th Mile, Jalan Penrissen, Kuching',1.49135,110.33009),(109,'10901',1,15,'SHOP BT3','BT3 Jalan Penrissen',1.5201,110.3351),(110,'11001',1,14,'SHOP BT5','BT5 Jalan Penrissen',1.4901,110.3301),(111,'11101',1,15,'ALPRO BT3','BT3 Jalan Penrissen',1.5211,110.3391)")
+  const lookup=async latitude=>latitude===1.5211?{sublocality:'Central Park Commercial Centre',road:'Jalan Penrissen',locality:'Kuching'}:{sublocality:latitude<1.50?'Lorong STC 2':'',road:'Jalan Penrissen',locality:'Kuching'},preview=await analyzeZoneAreas(91,{createdBy:'Supervisor',geocoder:lookup},db),byId=id=>preview.items.find(item=>item.branchId===id)
+  for(const id of ['10277','10278','11001']){assert.equal(byId(id).proposedAreaName,'BATU 5');assert.equal(byId(id).confidence,'medium')}
+  assert.equal(byId('10901').proposedAreaName,'BATU 3');assert.equal(byId('11101').proposedAreaName,'Central Park Commercial Centre');assert.notEqual(byId('10901').proposedAreaName,byId('11001').proposedAreaName);assert.ok(preview.items.every(item=>item.proposedAreaName!=='Jalan Penrissen'&&item.proposedAreaName!=='Lorong STC 2'))
+})
+
+test('conflicting reliable BATU evidence remains Needs Review and cannot be hidden by a shared road',async()=>{
+  const db=fixture();db.exec("INSERT INTO areas(id,jodoo_area_id,name,zone_group_id,confirmed_zone_group_id,zone_assignment_status) VALUES(14,'A14','BATU 3',91,91,'confirmed'); INSERT INTO branches(id,jodoo_branch_id,customer_id,area_id,branch_name,address,latitude,longitude) VALUES(107,'10701',1,14,'SHOP BT3','5th Mile, Jalan Penrissen',1.49,110.33)");const preview=await analyzeZoneAreas(91,{createdBy:'Supervisor',geocoder:async()=>({road:'Jalan Penrissen',locality:'Kuching'})},db),item=preview.items.find(row=>row.branchId==='10701');assert.equal(item.action,'needs_review');assert.match(item.reason,/Conflicting BATU/)
 })
 
 test('operational locality outranks company and BATU shorthand; single-Branch Areas are allowed',async()=>{
