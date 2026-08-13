@@ -5,7 +5,7 @@ import {DatabaseSync} from 'node:sqlite'
 import {schemaSql,SCHEMA_VERSION} from '../server/schema.mjs'
 import {applyV39Migration} from '../server/migrationV39.mjs'
 import {applyV40Migration} from '../server/migrationV40.mjs'
-import {analyzeZoneAreas,confirmAreaRefinement,extractBatuSegments,getAreaRefinement,isMajorRoadCorridor,normalizeBatuContext,updateAreaRefinement} from '../server/areaRefinementService.mjs'
+import {analyzeZoneAreas,confirmAreaRefinement,extractBatuSegments,getAreaRefinement,isMajorRoadCorridor,normalizeBatuContext,normalizeOperationalLocationAlias,updateAreaRefinement} from '../server/areaRefinementService.mjs'
 import {messages} from '../src/translations.js'
 
 function fixture(){
@@ -70,6 +70,11 @@ test('Confirm is transactional, enforces Zone boundary and incremental analysis 
 
 test('BATU context is normalized but never replaces a more specific operational location',()=>{
   assert.equal(normalizeBatuContext('ALPRO bt3'),'ALPRO BATU 3');assert.equal(normalizeBatuContext('CCK BT 3'),'CCK BATU 3');assert.equal(normalizeBatuContext('SHELL batu4'),'SHELL BATU 4');assert.equal(normalizeBatuContext('5th Mile, Jalan Penrissen'),'BATU 5, Jalan Penrissen');assert.equal(normalizeBatuContext('Mile 17'),'BATU 17');assert.deepEqual(extractBatuSegments('BT02','38th Mile','Mile 10'),['BATU 2','BATU 38','BATU 10']);assert.deepEqual(extractBatuSegments('3 1/2 Mile'),[]);assert.equal(isMajorRoadCorridor('Jalan Penrissen'),true)
+})
+
+test('TT3 location aliases normalize to the parent operational Area without changing unrelated names',()=>{
+  for(const value of ['TT3','tt 3','Tabuan Tranquility 3','TT3 Commercial Centre','Tabuan Tranquility 3 Commercial Centre'])assert.equal(normalizeOperationalLocationAlias(value),'TABUAN TRANQUILITY')
+  assert.equal(normalizeOperationalLocationAlias('Tabuan Jaya'),'Tabuan Jaya')
 })
 
 test('BATU segment outranks a micro road or major corridor but not a specific operational locality',async()=>{
