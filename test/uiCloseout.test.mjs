@@ -5,15 +5,20 @@ import {messages} from '../src/translations.js'
 
 const source=file=>fs.readFileSync(new URL(`../${file}`,import.meta.url),'utf8')
 
-test('Branch editor keeps sticky back and close controls with dirty-only protection',()=>{
+test('Branch editor keeps a compact sticky logo and single Back exit with dirty-only protection',()=>{
   const page=source('src/MasterDataPage.jsx'),branchEditor=source('src/BranchEditor.jsx'),css=source('src/MasterDataPage.css'),hub=source('src/WorkspaceHub.jsx')
   assert.match(branchEditor,/className="branch-editor-sticky"/)
+  assert.match(branchEditor,/className="branch-editor-logo" src="\/icons\/kcs-app-icon-48\.png" alt="KCS"/)
+  assert.match(branchEditor,/className="back-button" onClick=\{leave\}/)
   assert.match(branchEditor,/JSON\.stringify\(form\)!==JSON\.stringify\(initialDraftRef\.current\)/)
   assert.match(branchEditor,/window\.confirm\(t\('branchEditor\.unsavedLeave'\)\)/)
-  assert.match(branchEditor,/onClick=\{leave\} disabled=\{saving\}>\{t\('common\.close'\)\}/)
+  assert.doesNotMatch(branchEditor,/branch-editor-close|t\('master\.rawLocationHelp'\)|t\('branchEditor\.editBranch'\)/)
+  assert.equal((branchEditor.match(/onClick=\{leave\}/g)||[]).length,1)
   assert.doesNotMatch(branchEditor,/>Cancel<\/button>/)
   assert.match(page,/InlineBranchEditor fields=\{branchFields\}/)
   assert.match(css,/\.branch-editor-sticky\{position:sticky!important;top:0/)
+  assert.match(css,/\.branch-editor-logo\{width:36px;height:36px/)
+  assert.doesNotMatch(css,/\.branch-editor-close/)
   assert.match(hub,/branchEditorFrom:source\|\|undefined/)
   assert.match(hub,/source==='branch-review'\?'branch-review':'branches'/)
 })
