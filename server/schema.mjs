@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 40
+export const SCHEMA_VERSION = 41
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -104,6 +104,11 @@ CREATE TABLE IF NOT EXISTS branches (
   proof_requirements TEXT,
   vehicle_restriction TEXT,
   status TEXT NOT NULL DEFAULT 'active',
+  lifecycle_status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (lifecycle_status IN ('ACTIVE','TEMPORARILY_PAUSED','CLOSED','DUPLICATE_REPLACED','NOT_COLLECTING','TEST_INVALID')),
+  status_reason TEXT,
+  status_changed_at TEXT,
+  status_changed_by TEXT,
+  replaced_by_branch_id INTEGER REFERENCES branches(id),
   notes TEXT,
   source_system TEXT NOT NULL DEFAULT 'Jodoo',
   created_by TEXT,

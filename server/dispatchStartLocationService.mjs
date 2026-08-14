@@ -25,7 +25,7 @@ export function resolveStartLocation(selection={},context={},database){
   if(type==='saved_location'){
     const referenceType=clean(selection.referenceType||selection.startLocationReferenceType),referenceId=Number(selection.referenceId||selection.startLocationReferenceId);if(!referenceId)throw new Error('Select a Saved Location')
     let row
-    if(referenceType==='customer_branch')row=database.prepare(`SELECT b.id,c.name||' — '||b.branch_name name,b.address,b.latitude,b.longitude FROM branches b JOIN customers c ON c.id=b.customer_id WHERE b.id=? AND b.is_active=1 AND b.latitude IS NOT NULL AND b.longitude IS NOT NULL`).get(referenceId)
+    if(referenceType==='customer_branch')row=database.prepare(`SELECT b.id,c.name||' — '||b.branch_name name,b.address,b.latitude,b.longitude FROM branches b JOIN customers c ON c.id=b.customer_id WHERE b.id=? AND b.lifecycle_status='ACTIVE' AND b.latitude IS NOT NULL AND b.longitude IS NOT NULL`).get(referenceId)
     else if(referenceType==='operational_location')row=database.prepare(`SELECT id,name,address,latitude,longitude FROM operational_locations WHERE id=? AND is_active=1 AND COALESCE(status,'active')='active' AND latitude IS NOT NULL AND longitude IS NOT NULL`).get(referenceId)
     else throw new Error('Invalid Saved Location type')
     if(!row)throw new Error('Saved Location GPS is not available');coordinates(row.latitude,row.longitude);return snapshot('saved_location',referenceType,row.id,row)
@@ -41,7 +41,7 @@ export function resolveStartLocation(selection={},context={},database){
 export function startLocationOptions({driverId=null,includeEmployeeHome=false}={},database){
   let factory=null;try{const yard=companyYard(database);factory=snapshot('factory','operational_location',yard.id,yard)}catch{}
   const operational=database.prepare(`SELECT id,name,address,latitude,longitude,operational_type locationType FROM operational_locations WHERE is_active=1 AND COALESCE(status,'active')='active' AND latitude IS NOT NULL AND longitude IS NOT NULL ORDER BY name`).all().map(row=>({...snapshot('saved_location','operational_location',row.id,row),locationType:row.locationType}))
-  const branches=database.prepare(`SELECT b.id,c.name customerName,b.branch_name name,b.address,b.latitude,b.longitude FROM branches b JOIN customers c ON c.id=b.customer_id WHERE b.is_active=1 AND b.latitude IS NOT NULL AND b.longitude IS NOT NULL ORDER BY c.name,b.branch_name`).all().map(row=>({...snapshot('saved_location','customer_branch',row.id,row),customerName:row.customerName}))
+  const branches=database.prepare(`SELECT b.id,c.name customerName,b.branch_name name,b.address,b.latitude,b.longitude FROM branches b JOIN customers c ON c.id=b.customer_id WHERE b.lifecycle_status='ACTIVE' AND b.latitude IS NOT NULL AND b.longitude IS NOT NULL ORDER BY c.name,b.branch_name`).all().map(row=>({...snapshot('saved_location','customer_branch',row.id,row),customerName:row.customerName}))
   let employeeHome=null;if(includeEmployeeHome&&driverId){const employee=database.prepare('SELECT id,name,home_address address,home_latitude latitude,home_longitude longitude FROM employees WHERE id=? AND is_active=1').get(Number(driverId));employeeHome=employee&&employee.latitude!=null&&employee.longitude!=null?snapshot('employee_home','employee',employee.id,employee):{available:false,message:'Home GPS Not Set'}}
   return{factory,employeeHome,savedLocations:[...operational,...branches]}
 }

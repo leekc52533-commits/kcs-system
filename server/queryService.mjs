@@ -2,20 +2,21 @@ import { db } from './database.mjs'
 import {parseTypedId} from '../shared/typedIds.js'
 import {listBranchMaterials} from './materialPriceService.mjs'
 
-const routeReadySql = `EXISTS (SELECT 1 FROM branch_schedules s WHERE s.branch_id=b.id AND s.is_active=1) AND b.latitude BETWEEN -90 AND 90 AND b.longitude BETWEEN -180 AND 180 AND NOT (b.latitude=0 AND b.longitude=0) AND b.is_active=1`
+const activeBranchSql = `COALESCE(b.lifecycle_status,'ACTIVE')='ACTIVE'`
+const routeReadySql = `EXISTS (SELECT 1 FROM branch_schedules s WHERE s.branch_id=b.id AND s.is_active=1) AND b.latitude BETWEEN -90 AND 90 AND b.longitude BETWEEN -180 AND 180 AND NOT (b.latitude=0 AND b.longitude=0) AND ${activeBranchSql}`
 const gpsValidSql = `b.latitude BETWEEN -90 AND 90 AND b.longitude BETWEEN -180 AND 180 AND NOT (b.latitude=0 AND b.longitude=0)`
 const like = (value) => `%${value}%`
 
 export function dashboardSummary(database = db) {
   return database.prepare(`SELECT
     (SELECT COUNT(*) FROM customers WHERE is_active=1) customerCount,
-    (SELECT COUNT(*) FROM branches WHERE is_active=1) branchCount,
-    (SELECT COUNT(DISTINCT branch_id) FROM branch_schedules WHERE branch_id IS NOT NULL AND is_active=1) scheduledBranchCount,
-    (SELECT COUNT(*) FROM branches b WHERE ${gpsValidSql}) gpsBranchCount,
-    (SELECT COUNT(*) FROM branches b WHERE b.is_active=1 AND b.status='active' AND NOT COALESCE((${gpsValidSql}),0) AND NOT EXISTS(SELECT 1 FROM temporary_locations t WHERE t.branch_id=b.id AND t.verification_status='pending_supervisor')) gpsToCollectCount,
+    (SELECT COUNT(*) FROM branches b WHERE ${activeBranchSql}) branchCount,
+    (SELECT COUNT(DISTINCT s.branch_id) FROM branch_schedules s JOIN branches b ON b.id=s.branch_id WHERE s.is_active=1 AND ${activeBranchSql}) scheduledBranchCount,
+    (SELECT COUNT(*) FROM branches b WHERE ${activeBranchSql} AND ${gpsValidSql}) gpsBranchCount,
+    (SELECT COUNT(*) FROM branches b WHERE ${activeBranchSql} AND NOT COALESCE((${gpsValidSql}),0) AND NOT EXISTS(SELECT 1 FROM temporary_locations t WHERE t.branch_id=b.id AND t.verification_status='pending_supervisor')) gpsToCollectCount,
     (SELECT COUNT(*) FROM branches b WHERE ${routeReadySql}) routeReadyCount,
-    (SELECT COUNT(*) FROM branches b WHERE EXISTS(SELECT 1 FROM branch_schedules s WHERE s.branch_id=b.id AND s.is_active=1) AND NOT COALESCE((${gpsValidSql}),0)) scheduledMissingGpsCount,
-    (SELECT COUNT(*) FROM branches b WHERE NOT EXISTS(SELECT 1 FROM branch_schedules s WHERE s.branch_id=b.id AND s.is_active=1)) noScheduleCount,
+    (SELECT COUNT(*) FROM branches b WHERE ${activeBranchSql} AND EXISTS(SELECT 1 FROM branch_schedules s WHERE s.branch_id=b.id AND s.is_active=1) AND NOT COALESCE((${gpsValidSql}),0)) scheduledMissingGpsCount,
+    (SELECT COUNT(*) FROM branches b WHERE ${activeBranchSql} AND NOT EXISTS(SELECT 1 FROM branch_schedules s WHERE s.branch_id=b.id AND s.is_active=1)) noScheduleCount,
     (SELECT COUNT(*) FROM branch_schedules WHERE branch_id IS NULL) unmatchedScheduleCount`).get()
 }
 
@@ -49,7 +50,7 @@ export function customerBranchDetail(branchId, database = db) {
 }
 
 export function schedules(params, database = db) {
-  const where=['1=1'], args=[]
+  const where=["(s.branch_id IS NULL OR COALESCE(b.lifecycle_status,'ACTIVE')='ACTIVE')"], args=[]
   if (params.day) { where.push('s.days_of_week LIKE ?'); args.push(like(params.day)) }
   if (params.frequency) { where.push('s.frequency=?'); args.push(params.frequency) }
   if (params.search) { where.push('(s.source_branch_id LIKE ? OR b.branch_name LIKE ?)'); args.push(like(params.search),like(params.search)) }
@@ -65,7 +66,7 @@ export function dataQualitySummary(database = db) {
     CASE WHEN (b.latitude IS NOT NULL OR b.longitude IS NOT NULL) AND NOT (${gpsValidSql}) THEN 1 ELSE 0 END invalidGps,
     CASE WHEN b.area_id IS NULL THEN 1 ELSE 0 END missingArea,
     EXISTS(SELECT 1 FROM temporary_locations t WHERE t.branch_id=b.id AND t.verification_status='pending_supervisor') hasPendingGps
-    FROM branches b LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN zone_groups z ON z.id=a.zone_group_id ORDER BY c.name,b.branch_name`).all()
+    FROM branches b LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN zone_groups z ON z.id=a.zone_group_id WHERE ${activeBranchSql} ORDER BY c.name,b.branch_name`).all()
   const unmatchedSchedules = database.prepare(`SELECT jodoo_schedule_id scheduleId,source_branch_id branchId,days_of_week dayOfWeek FROM branch_schedules WHERE branch_id IS NULL`).all()
   return {
     scheduledWithGps: groups.filter((x)=>x.hasSchedule&&x.hasGps), scheduledMissingGps: groups.filter((x)=>x.hasSchedule&&!x.hasGps&&!x.invalidGps),

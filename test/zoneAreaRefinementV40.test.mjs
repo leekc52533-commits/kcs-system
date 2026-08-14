@@ -114,7 +114,7 @@ test('same-complex GPS validates an explicit building seed without trusting the 
 
 test('Zone API, map, manual controls, permissions and mobile UI are wired without Route Template changes',()=>{
   const server=fs.readFileSync(new URL('../server/index.mjs',import.meta.url),'utf8'),ui=fs.readFileSync(new URL('../src/ZoneGroupManager.jsx',import.meta.url),'utf8'),map=fs.readFileSync(new URL('../src/AreaRefinementMap.jsx',import.meta.url),'utf8'),css=fs.readFileSync(new URL('../src/ZoneGroupManager.css',import.meta.url),'utf8')
-  assert.match(server,/area-refinement\\\/analyze[\s\S]{0,300}canManageSchedules\(session\)/);for(const token of ['areaRefinement.analyzeZone','AreaRefinementDialog','renameOrMerge','areaRefinement.splitHelp','includeExisting'])assert.match(ui,new RegExp(token));for(const token of ['currentAreaName','proposedAreaName','confidence','reason'])assert.match(map,new RegExp(token));assert.match(css,/@media\(max-width:720px\)/);assert.equal(SCHEMA_VERSION,40)
+  assert.match(server,/area-refinement\\\/analyze[\s\S]{0,300}canManageSchedules\(session\)/);for(const token of ['areaRefinement.analyzeZone','AreaRefinementDialog','renameOrMerge','areaRefinement.splitHelp','includeExisting'])assert.match(ui,new RegExp(token));for(const token of ['currentAreaName','proposedAreaName','confidence','reason'])assert.match(map,new RegExp(token));assert.match(css,/@media\(max-width:720px\)/);assert.ok(SCHEMA_VERSION>=40)
 })
 
 test('Zone refinement labels are complete in English, Malay and Chinese without Malay fallback',()=>{

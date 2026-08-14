@@ -33,13 +33,13 @@ async function concurrentMap(items,limit,mapper){const output=new Array(items.le
 function areaBranchRows(areaId,includeExisting,database){
   const childIds=database.prepare('SELECT child_area_id id FROM area_refinement_children WHERE parent_area_id=?').all(areaId).map(row=>row.id)
   const ids=includeExisting?[areaId,...childIds]:[areaId],marks=ids.map(()=>'?').join(',')
-  return database.prepare(`SELECT b.id,b.jodoo_branch_id branchId,b.branch_name branchName,b.address,b.latitude,b.longitude,b.gps_address gpsAddress,b.gps_street savedRoad,b.gps_city savedLocality,b.area_id currentAreaId,a.name currentAreaName,c.jodoo_customer_id customerId,c.name customerName FROM branches b LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN customers c ON c.id=b.customer_id WHERE b.is_active=1 AND b.status='active' AND b.area_id IN (${marks}) ORDER BY COALESCE(b.branch_name,''),b.id`).all(...ids)
+  return database.prepare(`SELECT b.id,b.jodoo_branch_id branchId,b.branch_name branchName,b.address,b.latitude,b.longitude,b.gps_address gpsAddress,b.gps_street savedRoad,b.gps_city savedLocality,b.area_id currentAreaId,a.name currentAreaName,c.jodoo_customer_id customerId,c.name customerName FROM branches b LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN customers c ON c.id=b.customer_id WHERE b.lifecycle_status='ACTIVE' AND b.area_id IN (${marks}) ORDER BY COALESCE(b.branch_name,''),b.id`).all(...ids)
 }
 
 function confirmedZoneBranchIds(zoneId,database){return new Set(database.prepare(`SELECT DISTINCT s.branch_id id FROM area_refinement_suggestions s JOIN area_refinement_analyses ar ON ar.id=s.analysis_id WHERE ar.scope_type='zone' AND ar.zone_group_id=? AND ar.status='confirmed' AND s.action<>'need_gps'`).all(zoneId).map(row=>row.id))}
 function zoneBranchRows(zoneId,includeExisting,database){
   const stable=includeExisting?new Set():confirmedZoneBranchIds(zoneId,database)
-  return database.prepare(`SELECT b.id,b.jodoo_branch_id branchId,b.branch_name branchName,b.address,b.latitude,b.longitude,b.gps_address gpsAddress,b.gps_street savedRoad,b.gps_city savedLocality,b.area_id currentAreaId,a.name currentAreaName,c.jodoo_customer_id customerId,c.name customerName FROM branches b JOIN areas a ON a.id=b.area_id LEFT JOIN customers c ON c.id=b.customer_id WHERE b.is_active=1 AND b.status='active' AND a.is_active=1 AND COALESCE(a.confirmed_zone_group_id,a.zone_group_id)=? ORDER BY COALESCE(a.name,''),COALESCE(b.branch_name,''),b.id`).all(zoneId).filter(row=>!stable.has(row.id)||!hasGps(row))
+  return database.prepare(`SELECT b.id,b.jodoo_branch_id branchId,b.branch_name branchName,b.address,b.latitude,b.longitude,b.gps_address gpsAddress,b.gps_street savedRoad,b.gps_city savedLocality,b.area_id currentAreaId,a.name currentAreaName,c.jodoo_customer_id customerId,c.name customerName FROM branches b JOIN areas a ON a.id=b.area_id LEFT JOIN customers c ON c.id=b.customer_id WHERE b.lifecycle_status='ACTIVE' AND a.is_active=1 AND COALESCE(a.confirmed_zone_group_id,a.zone_group_id)=? ORDER BY COALESCE(a.name,''),COALESCE(b.branch_name,''),b.id`).all(zoneId).filter(row=>!stable.has(row.id)||!hasGps(row))
 }
 
 function groupAreaItems(items){

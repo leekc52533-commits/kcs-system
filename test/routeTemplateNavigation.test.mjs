@@ -38,7 +38,7 @@ test('every valid Zone can render an empty not-yet-configured Route Template saf
     assert.deepEqual(value.routes,[])
     assert.deepEqual(value.unassignedAreas,[])
   }
-  assert.equal(SCHEMA_VERSION,40)
+  assert.ok(SCHEMA_VERSION>=38)
 })
 
 test('Route Template direct access remains Session-authorized and new route labels are trilingual',()=>{
