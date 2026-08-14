@@ -57,6 +57,6 @@ test('Special Collection Request is removed only from the sidebar and remains av
 })
 
 test('Customer and Branch remain separate and shared Back navigation remains active',()=>{
-  assert.match(workspace,/tabs=\[\['customers',t\('master\.customer'\)\],\['branches',t\('master\.branch'\)\]\]/)
-  assert.match(app,/page!=='dashboard'&&page!=='materials'&&page!=='vehicles'&&<BackButton/)
+  assert.match(workspace,/tabs=\[\['customers',t\('master\.customer'\)\],\['branches',t\('master\.branch'\)\],\['branch-review',t\('branchLifecycle\.reviewTitle'\)\]\]/)
+  assert.match(app,/<BackButton fallback=\{\(\)=>go\('dashboard'\)\}/)
 })

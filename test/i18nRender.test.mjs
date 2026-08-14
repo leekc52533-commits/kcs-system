@@ -75,7 +75,8 @@ test('Customer Branch、GPS Collector、Buyer、Operational Location及Import/Ex
       type:'branch',endpoint:'/api/master/branches',fields:[],reload:noop,notify:noop,fail:noop,actor,
       initialLoading:false,initialItems:[{branchId:'B-1',branchName:'Branch Test',customerName:'Customer Test',area:null,paymentType:null,materialCount:0,status:'active',notes:null}],
     }))
-    assert.match(customer,new RegExp(translate(language,'customer.noPayment')))
+    assert.match(customer,new RegExp(translate(language,'list.payment')))
+    assert.doesNotMatch(customer,new RegExp(translate(language,'customer.noPayment')))
     assert.match(customer,/data-i18n-raw/)
 
     const buyer=renderMasterSurface(language,'Buyer Master',React.createElement(masterModule.EntityManager,{

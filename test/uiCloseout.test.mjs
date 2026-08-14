@@ -20,8 +20,8 @@ test('Branch editor keeps sticky back and close controls with dirty-only protect
 
 test('dense tables move ID copy actions to details and retain useful copy feedback',()=>{
   const master=source('src/MasterDataPage.jsx'),review=source('src/BranchLifecycleReviewPage.jsx'),accounts=source('src/AccountManagementPage.jsx'),compact=source('src/CompactDataTable.jsx')
-  assert.match(master,/key:'branchId'.*value:item=>displayId\(item\)\}/)
-  assert.match(master,/key:'customerId'.*value:item=>displayId\(item\)\}/)
+  assert.match(master,/key:'branchId'.*value:item=>displayId\(item\)[^}]*\}/)
+  assert.match(master,/key:'customerId'.*value:item=>displayId\(item\)[^}]*\}/)
   assert.match(review,/key:'branchId'.*value:item=>formatBranchId\(item\.branchId\)\}/)
   assert.match(accounts,/key:'employeeCode',label:t\('list\.employeeId'\)\}/)
   assert.match(master,/<dt>\{t\('list\.branchId'\)\}<\/dt><dd><CopyValue/)
