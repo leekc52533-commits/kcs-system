@@ -43,5 +43,8 @@ test('Map preview keeps unmount protection and updates existing center and Marke
   assert.match(source,/addListener\('dragend'/)
   assert.match(source,/mapTypeControl:true/)
   assert.match(source,/mapTypeId:'roadmap'/)
+  assert.match(source,/gestureHandling:'greedy'/)
+  assert.match(source,/zoomControl:false/)
+  assert.match(source,/cameraControl:false/)
   assert.match(source,/setDraggable\(Boolean\(adjustmentHandler\.current\)\)/)
 })

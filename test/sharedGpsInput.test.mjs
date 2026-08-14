@@ -36,12 +36,16 @@ test('shared picker exposes three sources, map confirmation, reverse geocoding, 
   assert.doesNotMatch(source,/onPaste=.*preventDefault/)
 })
 
-test('map picker supports map click, drag, and native map type control',()=>{
+test('map picker supports direct gestures, map click, drag, and native map type control',()=>{
   const map=fs.readFileSync(new URL('../src/GoogleMapPreview.jsx',import.meta.url),'utf8')
   assert.match(map,/onMapClick/)
   assert.match(map,/map\.current\.addListener\('click'/)
   assert.match(map,/draggable:Boolean/)
   assert.match(map,/mapTypeControl:true/)
+  assert.match(map,/gestureHandling:'greedy'/)
+  assert.match(map,/zoomControl:false/)
+  assert.match(map,/panControl:false/)
+  assert.match(map,/cameraControl:false/)
 })
 
 test('all supported editors use the shared picker and customer capture remains temporary',()=>{
