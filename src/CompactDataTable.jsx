@@ -27,6 +27,7 @@ export default function CompactDataTable({items,rowKey,columns,renderDetails,ren
   const[sort,setSort]=useState({key:'',direction:''}),[filters,setFilters]=useState({}),[selected,setSelected]=useState(()=>new Set()),[expanded,setExpanded]=useState(()=>new Set()),[visibleKeys,setVisibleKeys]=useState(()=>readColumns(preferenceKey,columns))
   const chooserRef=useRef(null)
   useEffect(()=>{if(!preferenceKey||typeof window==='undefined')return;window.localStorage.setItem(storageKey(preferenceKey),JSON.stringify(visibleKeys))},[preferenceKey,visibleKeys])
+  useEffect(()=>{setExpanded(new Set())},[items,filters])
   useEffect(()=>{const close=event=>{if(chooserRef.current?.open&&!chooserRef.current.contains(event.target))chooserRef.current.removeAttribute('open')};document.addEventListener('pointerdown',close);return()=>document.removeEventListener('pointerdown',close)},[])
   const visibleColumns=columns.filter(column=>column.required||visibleKeys.includes(column.key))
   const visible=useMemo(()=>{
@@ -38,7 +39,7 @@ export default function CompactDataTable({items,rowKey,columns,renderDetails,ren
   const keys=visible.map(item=>String(rowKey(item))),allSelected=keys.length>0&&keys.every(key=>selected.has(key))
   const toggleAll=()=>setSelected(current=>{const next=new Set(current);if(allSelected)keys.forEach(key=>next.delete(key));else keys.forEach(key=>next.add(key));return next})
   const toggleSelected=key=>setSelected(current=>{const next=new Set(current);if(next.has(key))next.delete(key);else next.add(key);return next})
-  const toggleExpanded=key=>setExpanded(current=>{const next=new Set(current);if(next.has(key))next.delete(key);else next.add(key);return next})
+  const toggleExpanded=key=>setExpanded(current=>current.has(key)?new Set():new Set([key]))
   const applySort=(event,key,direction)=>{setSort(direction?{key,direction}:{key:'',direction:''});event.currentTarget.closest('details')?.removeAttribute('open')}
   const toggleFilter=(column,value)=>setFilters(current=>{const all=[...new Set(items.map(item=>String(valueOf(column,item)??'')))],chosen=current[column.key]||[],next=chosen.length?(chosen.includes(value)?chosen.filter(item=>item!==value):[...chosen,value]):all.filter(item=>item!==value);return{...current,[column.key]:next.length===all.length?[]:next}})
   const toggleColumn=column=>{if(column.required)return;setVisibleKeys(current=>{const next=current.includes(column.key)?current.filter(key=>key!==column.key):[...current,column.key];return next});if(sort.key===column.key)setSort({key:'',direction:''});setFilters(current=>({...current,[column.key]:[]}))}

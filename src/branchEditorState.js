@@ -35,6 +35,7 @@ export function buildBranchSavePayload(form, {
     materials: (form.materials || []).map(item => ({...item})),
     assignedWeekdays: [...(form.assignedWeekdays || [])],
   }
+  for (const field of ['lifecycleStatus','statusReason','statusChangedAt','statusChangedBy','replacedByBranchId','replacedByBranchInternalId','replacedByBranchName','audit']) delete payload[field]
   if (!frequencyTouched && !weekdaysTouched) {
     delete payload.collectionFrequency
     delete payload.assignedWeekdays

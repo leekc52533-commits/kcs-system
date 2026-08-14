@@ -4,6 +4,7 @@ import { addTemporaryLocation, adoptTemporaryLocation } from './specialRequestSe
 import { listBranchMaterials, listCustomerMaterialPricing, normalizeCollectionSettings, replaceBranchMaterialSelections, saveCustomerMaterialPricing } from './materialPriceService.mjs'
 import {assertLocationFields} from '../shared/locationText.js'
 import {formatBuyerBranchId,formatBuyerId,parseTypedId} from '../shared/typedIds.js'
+import {applyBranchLifecycle} from './branchLifecycleService.mjs'
 
 const text = value => String(value ?? '').trim()
 const nullable = value => text(value) || null
@@ -160,6 +161,21 @@ export function updateBranch(branchId,payload,database=defaultDb){
     if(changed||priceResult.changed)invalidateBranches(database,[before.id],'branch_master_changed','branch',branchId,before,{...after,materials:priceResult.items},actor)
     database.exec('RELEASE update_branch');return getBranch(branchId,database)
   }catch(error){database.exec('ROLLBACK TO update_branch; RELEASE update_branch');throw error}
+}
+
+export function updateBranchWithLifecycle(branchId,payload={},actor={},database=defaultDb){
+  const branchPayload={...payload},lifecycle=branchPayload.lifecycle
+  delete branchPayload.lifecycle
+  branchPayload.changedBy=text(actor.changedBy||actor.employeeName)||'Authenticated User'
+  const write=()=>{
+    updateBranch(branchId,branchPayload,database)
+    let lifecycleResult=null
+    if(lifecycle)lifecycleResult=applyBranchLifecycle(branchId,lifecycle,actor,database)
+    return{...getBranch(branchId,database),lifecycleWarnings:lifecycleResult?.warnings||[]}
+  }
+  if(database.isTransaction)return write()
+  database.exec('BEGIN IMMEDIATE')
+  try{const result=write();database.exec('COMMIT');return result}catch(error){database.exec('ROLLBACK');throw error}
 }
 
 export function listMasterAudit(params={},database=defaultDb){const where=['1=1'],args=[];if(params.entityType){where.push('entity_type=?');args.push(params.entityType)}if(params.entityId){where.push('entity_id=?');args.push(String(params.entityId))}return database.prepare(`SELECT id,entity_type entityType,entity_id entityId,change_type changeType,field_name fieldName,old_value oldValue,new_value newValue,reason,changed_by changedBy,changed_at changedAt,before_json beforeJson,after_json afterJson FROM master_change_history WHERE ${where.join(' AND ')} ORDER BY id DESC LIMIT 300`).all(...args)}
