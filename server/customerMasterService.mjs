@@ -46,7 +46,7 @@ const customerSelect = `SELECT c.jodoo_customer_id customerId,c.name customerNam
 export function listCustomers(params={},database=defaultDb){
   const where=['1=1'],args=[];if(params.search){let search=text(params.search);if(/^c\d+$/i.test(search))search=parseTypedId(search,'customer');const q=`%${search}%`;where.push('(c.jodoo_customer_id LIKE ? OR c.name LIKE ? OR c.legal_name LIKE ? OR c.phone LIKE ? OR c.whatsapp LIKE ?)');args.push(q,q,q,q,q)}
   if(params.status){where.push('c.status=?');args.push(params.status)}
-  const page=Math.max(1,Number(params.page)||1),pageSize=Math.min(200,Math.max(1,Number(params.pageSize)||25))
+  const page=Math.max(1,Number(params.page)||1),pageSize=Math.min(500,Math.max(1,Number(params.pageSize)||25))
   const total=database.prepare(`SELECT COUNT(*) total FROM customers c WHERE ${where.join(' AND ')}`).get(...args).total
   const items=database.prepare(`${customerSelect} WHERE ${where.join(' AND ')} GROUP BY c.id ORDER BY c.name,c.jodoo_customer_id LIMIT ? OFFSET ?`).all(...args,pageSize,(page-1)*pageSize)
   return{items,pagination:{page,pageSize,total,pages:Math.ceil(total/pageSize)}}

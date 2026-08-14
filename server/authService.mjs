@@ -37,9 +37,9 @@ const publicAccount=row=>row&&({
   username:row.username,role:resolvedRole(row),preferredLanguage:language(row.preferred_language),
   isActive:Boolean(row.is_active),mustChangePassword:Boolean(row.must_change_password),lastLoginAt:row.last_login_at,
   passwordChangedAt:row.password_changed_at,failedLoginCount:row.failed_login_count,lockedUntil:row.locked_until,
-  createdAt:row.created_at,disabledAt:row.disabled_at
+  createdAt:row.created_at,updatedAt:row.updated_at,disabledAt:row.disabled_at,mainJobRole:row.job_role
 })
-const accountSql=`SELECT a.*,e.employee_code,e.name employee_name,e.employment_status FROM auth_accounts a JOIN employees e ON e.id=a.employee_id`
+const accountSql=`SELECT a.*,e.employee_code,e.name employee_name,e.job_role,e.employment_status FROM auth_accounts a JOIN employees e ON e.id=a.employee_id`
 const permissionsFor=(accountId,database)=>database.prepare('SELECT permission FROM auth_account_permissions WHERE account_id=? ORDER BY permission').all(accountId).map(item=>item.permission)
 const withPermissions=(account,database)=>account&&({...account,permissions:permissionsFor(account.id,database)})
 const change = (database,target,field,oldValue,newValue,actor) => {
