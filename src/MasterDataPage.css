@@ -35,3 +35,21 @@
 .desktop-gps-queue{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:9px;margin:12px 0 18px}.desktop-gps-queue button{display:grid;gap:4px;min-width:0;padding:12px;border:1px solid #a9beb6;border-radius:10px;background:#fff;text-align:left}.desktop-gps-queue span,.desktop-gps-queue small{overflow-wrap:anywhere}@media(max-width:600px){.desktop-gps-queue{grid-template-columns:1fr}.desktop-gps-queue button{width:100%}}
 .gps-coordinate-summary{display:flex;flex-direction:column;gap:4px;min-width:0;padding:10px 12px;border:1px solid #c8d8d2;border-radius:10px;background:#fff}.gps-coordinate-summary span{overflow-wrap:anywhere}.gps-coordinate-summary.manual{border-color:#8cb9a9;background:#f3faf7}.google-map-preview,.google-map-canvas{width:100%;max-width:100%;box-sizing:border-box}.google-map-canvas{min-height:320px;border:1px solid #a9beb6;border-radius:12px;overflow:hidden}@media(max-width:600px){.google-map-canvas{min-height:280px}.gps-coordinate-summary{width:100%}}
 .master-workspace.branch .master-record-grid article footer button:not(:first-child){display:none}
+.branch-editor-form{position:relative}
+.branch-editor-sticky{position:sticky!important;top:0;z-index:8;display:grid!important;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px;background:#fff;border-bottom:1px solid #cadbd5;box-shadow:0 3px 10px #173c3317}
+.branch-editor-sticky .back-button{white-space:nowrap}
+.branch-editor-close{width:36px;height:36px;border:1px solid #b7cac3;border-radius:8px;background:#fff;color:#285f51;font-size:20px;cursor:pointer}
+.branch-editor-close:hover{background:#eaf4f0}
+.compact-export{position:relative}
+.compact-export>summary{padding:8px 11px;border:1px solid #afc5bd;border-radius:8px;background:#fff;color:#176b5b;font-weight:700;cursor:pointer;list-style:none;white-space:nowrap}
+.compact-export>summary::-webkit-details-marker{display:none}
+.compact-export>summary:hover,.compact-export>summary:focus-visible{background:#e9f4f0}
+.compact-export>div{position:absolute;z-index:15;right:0;top:calc(100% + 5px);display:grid;min-width:130px;padding:6px;border:1px solid #9fb8af;border-radius:9px;background:#fff;box-shadow:0 8px 22px #173c3330}
+.compact-export button{padding:8px;border:0;border-radius:6px;background:#fff;text-align:left;cursor:pointer}
+.compact-export button:hover{background:#edf6f2}
+.transfer-tools{align-items:end!important;gap:8px!important}
+.transfer-tools>button{padding:8px 10px!important}
+.gps-branch-picker{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin:0 0 14px;padding:12px;border:1px solid #c3d5cf;border-radius:10px;background:#f9fbfa}
+.gps-branch-picker legend{padding:0 6px;color:#285f51;font-weight:800}
+.gps-branch-picker label{min-width:0}
+@media(max-width:700px){.branch-editor-sticky{grid-template-columns:auto 1fr auto}.branch-editor-sticky small{display:none}.gps-branch-picker{grid-template-columns:1fr}.compact-export>div{position:fixed;right:12px;bottom:12px;top:auto;left:12px}.transfer-tools{align-items:stretch!important}}
