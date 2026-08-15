@@ -3,7 +3,7 @@ import { invalidateDispatchDay } from './dispatchService.mjs'
 import { addTemporaryLocation, adoptTemporaryLocation } from './specialRequestService.mjs'
 import { listBranchMaterials, listCustomerMaterialPricing, normalizeCollectionSettings, replaceBranchMaterialSelections, saveCustomerMaterialPricing } from './materialPriceService.mjs'
 import {assertLocationFields} from '../shared/locationText.js'
-import {formatBuyerBranchId,formatBuyerId,parseTypedId} from '../shared/typedIds.js'
+import {formatBranchId,formatBuyerBranchId,formatBuyerId,formatCustomerId,parseTypedId} from '../shared/typedIds.js'
 import {applyBranchLifecycle} from './branchLifecycleService.mjs'
 
 const text = value => String(value ?? '').trim()
@@ -22,6 +22,13 @@ const paymentValue = value => {
   return payment || null
 }
 const json = value => value == null ? null : JSON.stringify(value)
+
+function nextMasterId(database,table,column,type){
+  const rows=database.prepare(`SELECT ${column} value FROM ${table}`).all()
+  const highest=rows.reduce((max,row)=>{try{return Math.max(max,Number(parseTypedId(row.value,type))||0)}catch{return max}},0)
+  const raw=String(highest+1).padStart(5,'0')
+  return type==='customer'?formatCustomerId(raw):formatBranchId(raw)
+}
 
 function history(database, entityType, entityId, changeType, before, after, payload = {}) {
   database.prepare(`INSERT INTO master_change_history(entity_type,entity_id,change_type,field_name,old_value,new_value,before_json,after_json,reason,changed_by)
@@ -63,9 +70,10 @@ export function getCustomer(customerId,database=defaultDb){
 
 export function createCustomer(payload,database=defaultDb){
   assertLocationFields(payload,['billingAddress'])
-  const customerId=text(payload.customerId),name=text(payload.customerName||payload.name);if(!customerId||!name)throw new Error('Customer ID and Customer Name are required')
+  const name=text(payload.customerName||payload.name);if(!name)throw new Error('Customer Name is required')
   const status=statusValue(payload.status),payment=paymentValue(payload.defaultPaymentType??payload.paymentType),actor=text(payload.changedBy||payload.createdBy)||'Supervisor'
   database.exec('SAVEPOINT create_customer');try{
+    const customerId=text(payload.customerId)||nextMasterId(database,'customers','jodoo_customer_id','customer')
     database.prepare(`INSERT INTO customers(jodoo_customer_id,name,legal_name,registration_number,billing_address,contact_person,phone,whatsapp,email,default_payment_type,payment_type,credit_terms,status,notes,source_system,created_by,created_at,is_active)
       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'KCS',?,CURRENT_TIMESTAMP,?)`).run(customerId,name,nullable(payload.legalName),nullable(payload.registrationNumber),nullable(payload.billingAddress),nullable(payload.contactPerson),nullable(payload.phone),nullable(payload.whatsapp),nullable(payload.email),payment,payment,nullable(payload.creditTerms),status,nullable(payload.notes),actor,status==='active'?1:0)
     saveCustomerMaterialPricing(customerId,payload.materialPricing,{changedBy:actor,reason:payload.reason,confirmed:Boolean(payload.pricingConfirmed),removedMaterialIds:payload.removedMaterialIds},database)
@@ -130,16 +138,39 @@ export function getBranch(branchId,database=defaultDb){
 
 export function createBranch(payload,database=defaultDb){
   assertLocationFields(payload,['address'])
-  const branchId=text(payload.branchId),customerId=text(payload.customerId),name=text(payload.branchName);if(!branchId||!customerId||!name)throw new Error('Branch ID, Customer ID and Branch Name are required')
+  const customerId=text(payload.customerId),name=text(payload.branchName);if(!customerId)throw new Error('Parent Customer is required');if(!name)throw new Error('Branch Name is required')
   const customer=database.prepare('SELECT id FROM customers WHERE jodoo_customer_id=?').get(customerId);if(!customer)throw new Error('Customer ID was not found')
   const area=payload.areaId?database.prepare('SELECT id FROM areas WHERE jodoo_area_id=? OR id=?').get(text(payload.areaId),Number(payload.areaId)||-1):null;if(payload.areaId&&!area)throw new Error('Area ID was not found')
   const status=statusValue(payload.status),payment=paymentValue(payload.paymentType),actor=text(payload.changedBy||payload.createdBy)||'Supervisor',settings=normalizeCollectionSettings(payload.collectionFrequency,payload.assignedWeekdays);if(status!=='active')throw new Error('Create the Branch as Active, then use Change Status with a reason')
   database.exec('SAVEPOINT create_branch');try{
+    const branchId=text(payload.branchId)||nextMasterId(database,'branches','jodoo_branch_id','branch')
     const result=database.prepare(`INSERT INTO branches(jodoo_branch_id,customer_id,area_id,source_customer_id,source_area_id,branch_name,address,latitude,longitude,gps_status,gps_verified_at,contact_person,phone,collection_frequency,assigned_weekdays,time_restriction,occ_price,payment_type,proof_requirements,vehicle_restriction,status,notes,source_system,created_by,created_at,is_active)
       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'KCS',?,CURRENT_TIMESTAMP,?)`).run(branchId,customer.id,area?.id||null,customerId,payload.areaId?text(payload.areaId):null,name,nullable(payload.address),payload.officialLatitude??null,payload.officialLongitude??null,nullable(payload.gpsVerificationStatus),payload.gpsVerifiedAt||null,nullable(payload.contactPerson),nullable(payload.phone),settings.collectionFrequency,settings.assignedWeekdaysStorage,nullable(payload.collectionTimeConstraint),payload.occPrice??null,payment,nullable(payload.proofRequirements),nullable(payload.vehicleRestriction),status,nullable(payload.notes),actor,status==='active'?1:0)
     replaceBranchMaterialSelections(Number(result.lastInsertRowid),payload.materials,{changedBy:actor,reason:payload.reason||'Branch created'},database)
     const item=getBranch(branchId,database);history(database,'branch',branchId,'created',null,item,{changedBy:actor,reason:payload.reason});database.exec('RELEASE create_branch');return item
   }catch(error){database.exec('ROLLBACK TO create_branch; RELEASE create_branch');throw error}
+}
+
+export function listUnlinkedBranches(params={},database=defaultDb){
+  const search=text(params.search),q=`%${search.replace(/^B/i,'')}%`,where=["b.customer_id IS NULL"],args=[]
+  if(search){where.push('(b.jodoo_branch_id LIKE ? OR b.branch_name LIKE ? OR a.name LIKE ? OR b.address LIKE ?)');args.push(q,`%${search}%`,`%${search}%`,`%${search}%`)}
+  const items=database.prepare(`${branchSelect} WHERE ${where.join(' AND ')} GROUP BY b.id ORDER BY b.branch_name,b.jodoo_branch_id`).all(...args)
+  return{items,summary:{totalBranches:Number(database.prepare('SELECT COUNT(*) n FROM branches').get().n),linkedBranches:Number(database.prepare('SELECT COUNT(*) n FROM branches WHERE customer_id IS NOT NULL').get().n),unlinkedBranches:items.length}}
+}
+
+export function linkBranchToCustomer(branchId,payload,database=defaultDb){
+  const customerId=text(payload.customerId),actor=text(payload.changedBy)||'Supervisor',reason=text(payload.reason)
+  if(!customerId)throw new Error('Parent Customer is required')
+  if(!reason)throw new Error('Link reason is required')
+  const before=database.prepare('SELECT * FROM branches WHERE jodoo_branch_id=?').get(branchId);if(!before)throw new Error('Branch not found')
+  if(before.customer_id!=null)throw new Error('Branch is already linked to a Customer')
+  const customer=database.prepare('SELECT id,jodoo_customer_id,name FROM customers WHERE jodoo_customer_id=?').get(customerId);if(!customer)throw new Error('Customer ID was not found')
+  database.exec('SAVEPOINT link_branch_customer');try{
+    database.prepare('UPDATE branches SET customer_id=?,source_customer_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND customer_id IS NULL').run(customer.id,customer.jodoo_customer_id,before.id)
+    const after=database.prepare('SELECT * FROM branches WHERE id=?').get(before.id)
+    history(database,'branch',branchId,'parent_customer_linked',before,after,{changedBy:actor,reason,fieldName:'customer_id',oldValue:null,newValue:customer.jodoo_customer_id})
+    database.exec('RELEASE link_branch_customer');return getBranch(branchId,database)
+  }catch(error){database.exec('ROLLBACK TO link_branch_customer; RELEASE link_branch_customer');throw error}
 }
 
 export function updateBranch(branchId,payload,database=defaultDb){
