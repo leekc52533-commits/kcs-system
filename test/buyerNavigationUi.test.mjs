@@ -30,7 +30,7 @@ test('Buyer form and list use an immutable system-generated typed ID',()=>{
 test('Buyer route persists through the existing page query while invalid Location tabs fall back safely',()=>{
   assert.match(app,/query\.get\('page'\)/)
   assert.match(app,/window\.history\.pushState[^\n]*`\?page=\$\{next\}/)
-  assert.match(workspace,/tabs\.some\(\(\[id\]\)=>id===initialTab\)\?initialTab:defaultTab/)
+  assert.match(workspace,/validTabs\.some\(\(\[id\]\)=>id===initialTab\)\?initialTab:defaultTab/)
 })
 
 test('Buyer navigation is limited to existing office and supervisor desktop roles',()=>{
@@ -57,6 +57,6 @@ test('Special Collection Request is removed only from the sidebar and remains av
 })
 
 test('Customer and Branch remain separate and shared Back navigation remains active',()=>{
-  assert.match(workspace,/tabs=\[\['customers',t\('master\.customer'\)\],\['branches',t\('master\.branch'\)\],\['branch-review',t\('branchLifecycle\.reviewTitle'\)\]\]/)
-  assert.match(app,/<BackButton fallback=\{\(\)=>go\('dashboard'\)\}/)
+  assert.match(workspace,/tabs=\[\['customers',t\('master\.customer'\)\],\['branch-review',t\('branchLifecycle\.reviewTitle'\)\],\['unlinked',t\('unlinked\.title'\)\]\]/)
+  assert.match(app,/<BackButton fallback=\{backFallback\}/)
 })
