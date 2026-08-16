@@ -20,6 +20,7 @@
     "deploy:v41:check": "node scripts/cloud-preflight.mjs",
     "cloud:preflight": "node scripts/cloud-preflight.mjs",
     "cloud:rehearsal:v16-to-v17": "node scripts/cloud-migration-rehearsal.mjs --from 16 --to 17",
+    "verify:v16-to-v17:postflight": "node scripts/verify-v17-postflight.mjs",
     "migrate:kcs": "node scripts/migrate.mjs",
     "migrate:v16-to-v17": "node scripts/migrate.mjs --from 16 --to 17",
     "migrate:v18": "node scripts/migrate-v18.mjs",

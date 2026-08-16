@@ -32,5 +32,5 @@ const run=(script,extra=[])=>{
   if(result.status!==0)throw new Error(`${script} failed on rehearsal copy`)
 }
 run('scripts/migrate.mjs',['--from','16','--to','17','--confirm-migration'])
-run('scripts/verify-v17-rehearsal.mjs',['--snapshot',snapshotPath])
+run('scripts/verify-v17-postflight.mjs',['--snapshot',snapshotPath])
 console.log(JSON.stringify({ok:true,from:16,to:17,productionDatabaseUntouched:true,rehearsalPath,snapshotPath,verifiedAfterMigration:true},null,2))

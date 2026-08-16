@@ -117,7 +117,7 @@ sudo -u "$APP_USER" -H npm --prefix "$APP" test
 sudo -u "$KCS_USER" env KCS_DB_PATH="$DB" KCS_DATA_DIR=/var/lib/kcs/data \
   npm --prefix "$APP" run migrate:v16-to-v17 -- --confirm-migration # HISTORICAL ONLY; NEVER RUN FOR v41 CODE-ONLY
 sudo -u "$KCS_USER" env KCS_DB_PATH="$DB" \
-  node "$APP/scripts/cloud-preflight.mjs" --mode after --snapshot "$SNAPSHOT"
+  npm --prefix "$APP" run verify:v16-to-v17:postflight -- --snapshot "$SNAPSHOT"
 
 sudo systemctl start kcs-api
 sudo systemctl --no-pager --full status kcs-api

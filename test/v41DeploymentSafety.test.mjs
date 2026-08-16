@@ -96,6 +96,9 @@ test('historical v17 document retains the baseline operational material',()=>{
   assert.match(historical,/Historical command block — only for the original v16→v17 migration/)
   assert.match(historical,/run cloud:rehearsal:v16-to-v17 -- --backup/)
   assert.match(historical,/run migrate:v16-to-v17 -- --confirm-migration/)
+  assert.match(historical,/run verify:v16-to-v17:postflight -- --snapshot/)
+  const v17Section=historical.slice(historical.indexOf('## Ubuntu / AWS 正式部署'))
+  assert.doesNotMatch(v17Section,/cloud-preflight\.mjs" --mode after/)
 })
 
 test('postflight rejects malformed or foreign snapshots without writing either database',()=>{

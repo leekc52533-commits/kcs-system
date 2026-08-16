@@ -147,16 +147,30 @@ test('historical rehearsal migrates a copy, verifies v17 preservation, and leave
   const snapshot={schemaVersion:16,integrity:'ok',counts:{customers:2,branches:2,employees:2,vehicles:1,zoneGroups:1,officialGps:1,authAccounts:2},employees:fixture.employees,authAccounts:[{id:1,employeeId:1,username:'kcadmin',role:'admin',isActive:1,passwordFingerprint:crypto.createHash('sha256').update('hash-owner').digest('hex')},{id:2,employeeId:4,username:'emp0003',role:'driver',isActive:1,passwordFingerprint:crypto.createHash('sha256').update('hash-emp0003').digest('hex')}]}
   fs.writeFileSync(fixture.snapshotPath,JSON.stringify(snapshot))
   const result=runScript('scripts/cloud-migration-rehearsal.mjs',['--from','16','--to','17','--backup',fixture.databasePath,'--snapshot',fixture.snapshotPath])
-  assert.equal(result.status,0,result.stderr);assert.match(result.stdout,/"verifiedAfterMigration": true/);assert.match(result.stdout,/historical-v16-to-v17-rehearsal-after/)
+  assert.equal(result.status,0,result.stderr);assert.match(result.stdout,/"verifiedAfterMigration": true/);assert.match(result.stdout,/historical-v16-to-v17-postflight/)
   assert.deepEqual(fs.readFileSync(fixture.databasePath),sourceBefore)
 })
 
-test('historical after verifier rejects a damaged migrated copy without changing the source',()=>{
+test('historical postflight rejects password or role changes without changing the source',()=>{
   const fixture=historicalFixture(),sourceBefore=fs.readFileSync(fixture.databasePath),damaged=path.join(fixture.dir,'damaged.sqlite')
   const snapshot={schemaVersion:16,integrity:'ok',counts:{customers:2,branches:2,employees:2,vehicles:1,zoneGroups:1,officialGps:1,authAccounts:2},employees:fixture.employees,authAccounts:[{id:1,employeeId:1,username:'kcadmin',role:'admin',isActive:1,passwordFingerprint:crypto.createHash('sha256').update('hash-owner').digest('hex')},{id:2,employeeId:4,username:'emp0003',role:'driver',isActive:1,passwordFingerprint:crypto.createHash('sha256').update('hash-emp0003').digest('hex')}]}
   fs.writeFileSync(fixture.snapshotPath,JSON.stringify(snapshot));fs.copyFileSync(fixture.databasePath,damaged)
   assert.equal(runScript('scripts/migrate.mjs',['--from','16','--to','17','--confirm-migration'],damaged).status,0)
-  const db=new DatabaseSync(damaged);db.exec("UPDATE auth_accounts SET password_hash='damaged' WHERE id=2");db.close()
-  const result=runScript('scripts/verify-v17-rehearsal.mjs',['--snapshot',fixture.snapshotPath],damaged)
-  assert.notEqual(result.status,0);assert.match(result.stderr,/account 2 identity\/status\/password changed/);assert.deepEqual(fs.readFileSync(fixture.databasePath),sourceBefore)
+  for(const sql of ["UPDATE auth_accounts SET password_hash='damaged' WHERE id=2","UPDATE auth_accounts SET role='crew' WHERE id=2"]){
+    const db=new DatabaseSync(damaged);db.exec(sql);db.close()
+    const result=runScript('scripts/verify-v17-postflight.mjs',['--snapshot',fixture.snapshotPath],damaged)
+    assert.notEqual(result.status,0);assert.match(result.stderr,/account 2 identity\/role\/status\/password changed/)
+  }
+  assert.deepEqual(fs.readFileSync(fixture.databasePath),sourceBefore)
+})
+
+test('historical postflight rejects empty and malformed sentinels',()=>{
+  const fixture=historicalFixture(),migrated=path.join(fixture.dir,'migrated.sqlite');fs.copyFileSync(fixture.databasePath,migrated)
+  assert.equal(runScript('scripts/migrate.mjs',['--from','16','--to','17','--confirm-migration'],migrated).status,0)
+  const valid={schemaVersion:16,integrity:'ok',counts:{customers:2,branches:2,employees:2,vehicles:1,zoneGroups:1,officialGps:1,authAccounts:2},employees:fixture.employees,authAccounts:[{id:1,employeeId:1,username:'kcadmin',role:'admin',isActive:1,passwordFingerprint:crypto.createHash('sha256').update('hash-owner').digest('hex')}]}
+  for(const mutate of [snapshot=>{snapshot.employees=[]},snapshot=>{snapshot.authAccounts=[]},snapshot=>{snapshot.employees[0].isActive=2},snapshot=>{snapshot.authAccounts[0].passwordFingerprint='NOT-A-FINGERPRINT'},snapshot=>{delete snapshot.authAccounts[0].role}]){
+    const snapshot=structuredClone(valid);mutate(snapshot);fs.writeFileSync(fixture.snapshotPath,JSON.stringify(snapshot))
+    const result=runScript('scripts/verify-v17-postflight.mjs',['--snapshot',fixture.snapshotPath],migrated)
+    assert.notEqual(result.status,0);assert.match(result.stderr,/Invalid historical snapshot/)
+  }
 })
