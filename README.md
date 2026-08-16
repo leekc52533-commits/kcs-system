@@ -1,6 +1,6 @@
 # KCS Dispatch System
 
-Current database schema: **v25**. Material catalogue administration uses `Category → Product / Grade → Price Group`; see [MATERIAL_CATEGORY_V25.md](MATERIAL_CATEGORY_V25.md) for migration and safety details.
+Current database schema: **v41**. 当前正式发布入口是 [Schema v41 code-only runbook](docs/DEPLOY_V41_CODE_ONLY.md)；before/after 必须保持 v41，且不执行 migration。
 
 Schema v24 introduces the audited Material Category → Product / Grade → Price Group → Branch Assignment hierarchy. See [MATERIAL_CATALOG_V24.md](MATERIAL_CATALOG_V24.md) for migration, operations and rollback rules.
 
@@ -48,6 +48,7 @@ npm run build     # 生成正式前端构建
 npm test          # 自动测试导入与 Route Ready 规则
 npm run preview   # 预览正式构建
 npm run predeploy:kcs # migration/部署前建立并验证SQLite备份
+npm run deploy:v41:check -- --mode before --snapshot <path> # 必须显式设置 KCS_DB_PATH
 npm run verify:data   # 核对schema、完整性及核心资料数量
 ```
 
@@ -95,9 +96,9 @@ Customer Branch 正常页面已取消单独 OCC Price，改为可保存多个 `M
 - 登录、首次／普通改密、账号建立／重设、手机临时客户及临时收货请求不再依赖浏览器原生 `required` 气泡。必填、密码至少 8 位和确认密码不一致均在字段下方按当前 BM／中文／English 显示；输入后会清除相关错误，并提供 `aria-invalid`、`aria-describedby` 与可读错误区域。
 - 正式域名为 `https://dispatch.leesaiker.com`；旧 sslip.io 地址继续由现有部署配置保留。本次代码不会自动修改 DNS、证书或反向代理。
 
-完整部署、回滚、权限矩阵、测试及故障处理见 [`docs/PRELAUNCH_V17.md`](docs/PRELAUNCH_V17.md)。
+v17 说明仅作为历史记录保留于 [`docs/PRELAUNCH_V17.md`](docs/PRELAUNCH_V17.md)，不可用于当前部署。
 
-> AWS 正式库与开发电脑的本机 SQLite 不同。正式库固定使用 `/var/lib/kcs/data/kcs-dispatch.db`，包含云端 EMP0003 及其账号；部署只允许对该库执行经过 backup rehearsal 的 schema migration，禁止用本机数据库覆盖。Ubuntu/systemd/Caddy 的完整 preflight、部署和回滚命令以 `PRELAUNCH_V17.md` 为准，本批次不会自动部署。
+> 正式库与开发电脑的本机 SQLite 不同，禁止用本机数据库覆盖。当前 v41 code-only 部署完整的 exact-commit、detached-HEAD、备份、只读 pre/postflight 与 health 检查以 [`docs/DEPLOY_V41_CODE_ONLY.md`](docs/DEPLOY_V41_CODE_ONLY.md) 为唯一入口。任何 schema migration 都必须使用完全独立的 from/to runbook、backup rehearsal 和人工确认。
 
 ## GPS-Based Zone Recommendation V1
 

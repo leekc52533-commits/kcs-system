@@ -6,7 +6,8 @@ import {fileURLToPath} from 'node:url'
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..')
 const databasePath=path.resolve(process.env.KCS_DB_PATH||path.join(root,'data','kcs-dispatch.db'))
 const backupDir=path.resolve(process.env.KCS_BACKUP_DIR||path.join(root,'data','backups'))
-fs.mkdirSync(backupDir,{recursive:true})
+fs.mkdirSync(backupDir,{recursive:true,mode:0o700})
+fs.chmodSync(backupDir,0o700)
 if(!fs.existsSync(databasePath))throw new Error(`Database not found: ${databasePath}`)
 const stamp=new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d{3}Z$/,'Z')
 const backupPath=path.join(backupDir,`kcs-dispatch-predeploy-${stamp}.sqlite`)
@@ -23,4 +24,5 @@ try{
   const result=backup.prepare('PRAGMA integrity_check').get().integrity_check
   if(result!=='ok')throw new Error(`Backup integrity check failed: ${result}`)
 }finally{backup.close()}
+fs.chmodSync(backupPath,0o600)
 console.log(JSON.stringify({ok:true,databasePath,backupPath,integrity:'ok'},null,2))
