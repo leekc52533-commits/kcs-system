@@ -1,5 +1,8 @@
 # KCS 上线前修正 v17
 
+> [!WARNING]
+> **Historical / 历史资料：仅记录 schema v16→v17 上线，不是当前部署指引。** 当前 schema v41 code-only 发布的唯一入口是 [`DEPLOY_V41_CODE_ONLY.md`](DEPLOY_V41_CODE_ONLY.md)，before/after 都必须保持 v41，并且不得运行 v16→v17 migration。以下历史命令按原貌保留供审计，不可直接复制到当前正式环境。
+
 ## 目的与代码变更
 
 本批次统一古晋日期、增加账号级三语言、标准返回导航、正式 System Role 权限和密码可视化。没有重建 Customer、Branch、GPS、Dispatch、Vehicle、Employee 或 Auth 主档。
@@ -62,7 +65,9 @@ v17 只为 `auth_accounts` 增加：
 
 本次 Account/Profile 修正不提高 schema 版本，也不新增资料 migration；继续沿用 schema v17。
 
-## Ubuntu / AWS 正式部署（本批次尚未执行）
+## Ubuntu / AWS 正式部署（历史 v16→v17；本批次尚未执行）
+
+> **Historical command block — only for the original v16→v17 migration. Do not execute on schema v41.** 当前 v41 code-only 流程请改用 [`DEPLOY_V41_CODE_ONLY.md`](DEPLOY_V41_CODE_ONLY.md)。下列旧 `cloud-preflight`、rehearsal 与 `migrate:kcs` 调用依赖当时的 v16/v17 脚本契约，不是当前命令。
 
 以下命令只可在维护时段由正式服务器管理员执行。不要使用 `npm run dev`，不要复制本机 SQLite。假设现有 App、Database、systemd 和 Caddy 路径保持不变：
 
@@ -110,7 +115,7 @@ sudo -u "$APP_USER" -H npm --prefix "$APP" test
 # 以上全部通过后，才对原AWS数据库执行独立的schema-v17-only migration。
 # 此命令不会载入server/database.mjs，因此不会执行车辆规范化、seed或其他启动期资料整理。
 sudo -u "$KCS_USER" env KCS_DB_PATH="$DB" KCS_DATA_DIR=/var/lib/kcs/data \
-  npm --prefix "$APP" run migrate:kcs
+  npm --prefix "$APP" run migrate:kcs # HISTORICAL v16→v17 ONLY; NEVER RUN FOR v41 CODE-ONLY
 sudo -u "$KCS_USER" env KCS_DB_PATH="$DB" \
   node "$APP/scripts/cloud-preflight.mjs" --mode after --snapshot "$SNAPSHOT"
 

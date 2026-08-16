@@ -83,7 +83,12 @@ test('production migration command requires an explicit v16 database and perform
     INSERT INTO sentinel VALUES(1,'must remain untouched');
   `)
   db.close()
-  const result=spawnSync(process.execPath,['scripts/migrate.mjs'],{
+  const refused=spawnSync(process.execPath,['scripts/migrate.mjs'],{
+    cwd:projectRoot,env:{...process.env,KCS_DB_PATH:databasePath},encoding:'utf8'
+  })
+  assert.notEqual(refused.status,0)
+  assert.match(refused.stderr,/v16→v17 only/)
+  const result=spawnSync(process.execPath,['scripts/migrate.mjs','--from','16','--to','17','--confirm-migration'],{
     cwd:projectRoot,
     env:{...process.env,KCS_DB_PATH:databasePath},
     encoding:'utf8'

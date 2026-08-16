@@ -5,8 +5,8 @@ import {fileURLToPath} from 'node:url'
 
 const args=process.argv.slice(2)
 const value=name=>{const index=args.indexOf(name);return index>=0?args[index+1]:null}
-const backup=value('--backup'),snapshot=value('--snapshot')
-if(!backup||!snapshot)throw new Error('Usage: node scripts/cloud-migration-rehearsal.mjs --backup <verified-sqlite-backup> --snapshot <preflight-json>')
+const backup=value('--backup'),snapshot=value('--snapshot'),from=value('--from'),to=value('--to')
+if(!backup||!snapshot||from!=='16'||to!=='17')throw new Error('Historical v17 rehearsal only. Usage: node scripts/cloud-migration-rehearsal.mjs --from 16 --to 17 --backup <verified-sqlite-backup> --snapshot <v16-preflight-json>')
 const backupPath=path.resolve(backup),snapshotPath=path.resolve(snapshot)
 if(!fs.existsSync(backupPath)||!fs.existsSync(snapshotPath))throw new Error('Backup or preflight snapshot not found')
 const rehearsalPath=path.join(path.dirname(backupPath),`v17-rehearsal-${new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d{3}Z$/,'Z')}.sqlite`)
@@ -18,6 +18,5 @@ const run=(script,extra=[])=>{
   if(result.stderr)process.stderr.write(result.stderr)
   if(result.status!==0)throw new Error(`${script} failed on rehearsal copy`)
 }
-run('scripts/migrate.mjs')
-run('scripts/cloud-preflight.mjs',['--mode','after','--snapshot',snapshotPath])
-console.log(JSON.stringify({ok:true,productionDatabaseUntouched:true,rehearsalPath},null,2))
+run('scripts/migrate.mjs',['--from','16','--to','17','--confirm-migration'])
+console.log(JSON.stringify({ok:true,from:16,to:17,productionDatabaseUntouched:true,rehearsalPath,snapshotPath,note:'Historical rehearsal does not use the v41 code-only postflight.'},null,2))

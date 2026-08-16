@@ -3,69 +3,79 @@ import {DatabaseSync} from 'node:sqlite'
 import fs from 'node:fs'
 import path from 'node:path'
 
+const EXPECTED_SCHEMA_VERSION=41
+const SNAPSHOT_FORMAT_VERSION=1
+const COUNT_KEYS=['customers','branches','employees','authAccounts','vehicles','zoneGroups','officialGps']
 const args=process.argv.slice(2)
-const value=name=>{const index=args.indexOf(name);return index>=0?args[index+1]:null}
-const mode=value('--mode')
-const snapshotPath=value('--snapshot')
-const databasePath=path.resolve(process.env.KCS_DB_PATH||'')
-if(!['before','after'].includes(mode)||!snapshotPath||!process.env.KCS_DB_PATH)throw new Error('Usage: KCS_DB_PATH=/var/lib/kcs/data/kcs-dispatch.db node scripts/cloud-preflight.mjs --mode before|after --snapshot <absolute-json-path>')
-if(!fs.existsSync(databasePath))throw new Error(`Production database not found: ${databasePath}`)
+const option=name=>{const indexes=args.flatMap((item,index)=>item===name?[index]:[]);if(indexes.length!==1||!args[indexes[0]+1]||args[indexes[0]+1].startsWith('--'))throw new Error(`Exactly one ${name} value is required`);return args[indexes[0]+1]}
+if(!process.env.KCS_DB_PATH)throw new Error('KCS_DB_PATH is required; no database path is inferred')
+const mode=option('--mode'),snapshotPath=path.resolve(option('--snapshot'))
+if(!['before','after'].includes(mode))throw new Error('--mode must be before or after')
+const requestedDatabasePath=path.resolve(process.env.KCS_DB_PATH)
+if(!fs.existsSync(requestedDatabasePath))throw new Error(`Database not found: ${requestedDatabasePath}`)
+const databasePath=fs.realpathSync.native(requestedDatabasePath)
+if(mode==='after'&&!fs.existsSync(snapshotPath))throw new Error(`Before snapshot not found: ${snapshotPath}`)
 
 const db=new DatabaseSync(databasePath,{readOnly:true})
-const tableCount=table=>db.prepare(`SELECT COUNT(*) count FROM ${table}`).get().count
-const hasColumn=(table,column)=>db.prepare(`PRAGMA table_info(${table})`).all().some(item=>item.name===column)
-const employeeRows=db.prepare(`SELECT id,employee_code employeeCode,name,employment_status employmentStatus,is_active isActive FROM employees ORDER BY id`).all()
-const accountRows=db.prepare(`SELECT a.id,a.employee_id employeeId,a.username,a.role,a.is_active isActive,a.password_hash passwordHash,e.employee_code employeeCode,e.name employeeName FROM auth_accounts a JOIN employees e ON e.id=a.employee_id ORDER BY a.id`).all()
-const publicAccounts=accountRows.map(item=>({
-  id:item.id,
-  employeeId:item.employeeId,
-  username:item.username,
-  role:item.role,
-  isActive:item.isActive,
-  employeeCode:item.employeeCode,
-  employeeName:item.employeeName
-}))
-const protectedAccounts=accountRows.map(item=>({...publicAccounts.find(account=>account.id===item.id),passwordFingerprint:crypto.createHash('sha256').update(item.passwordHash).digest('hex')}))
-const normalize=value=>String(value||'').replaceAll('-','').toUpperCase()
-const emp0003=employeeRows.find(item=>normalize(item.employeeCode)==='EMP0003')||null
-const emp0003Account=emp0003?publicAccounts.find(item=>item.employeeId===emp0003.id)||null:null
-const state={
-  capturedAt:new Date().toISOString(),
-  databasePath,
-  schemaVersion:Number(db.prepare('SELECT COALESCE(MAX(version),0) version FROM schema_meta').get().version),
-  integrity:db.prepare('PRAGMA integrity_check').get().integrity_check,
-  counts:{
-    customers:tableCount('customers'),branches:tableCount('branches'),employees:employeeRows.length,
-    vehicles:tableCount('vehicles'),zoneGroups:tableCount('zone_groups'),
-    officialGps:db.prepare(`SELECT COUNT(*) count FROM branches WHERE latitude BETWEEN -90 AND 90 AND longitude BETWEEN -180 AND 180 AND NOT(latitude=0 AND longitude=0)`).get().count,
-    authAccounts:accountRows.length
-  },
-  employees:employeeRows,
-  authAccounts:protectedAccounts,
-  emp0003,
-  emp0003Account,
-  kcadmin:publicAccounts.find(item=>String(item.username).toLowerCase()==='kcadmin')||null,
-  v17Columns:{systemRole:hasColumn('auth_accounts','system_role'),preferredLanguage:hasColumn('auth_accounts','preferred_language')}
+const scalar=sql=>Number(db.prepare(sql).get().count)
+const fingerprint=value=>crypto.createHash('sha256').update(String(value)).digest('hex')
+let state
+try{
+  const employees=db.prepare('SELECT id, employee_code AS employeeCode, name, employment_status AS employmentStatus, is_active AS isActive FROM employees ORDER BY id').all()
+  const accounts=db.prepare('SELECT id, employee_id AS employeeId, username, role, is_active AS isActive, password_hash AS passwordHash FROM auth_accounts ORDER BY id').all()
+  state={
+    formatVersion:SNAPSHOT_FORMAT_VERSION,capturedAt:new Date().toISOString(),databasePath,
+    schemaVersion:Number(db.prepare('SELECT COALESCE(MAX(version),0) AS version FROM schema_meta').get().version),
+    integrity:db.prepare('PRAGMA integrity_check').get().integrity_check,
+    counts:{
+      customers:scalar('SELECT COUNT(*) AS count FROM customers'),branches:scalar('SELECT COUNT(*) AS count FROM branches'),
+      employees:employees.length,authAccounts:accounts.length,vehicles:scalar('SELECT COUNT(*) AS count FROM vehicles'),
+      zoneGroups:scalar('SELECT COUNT(*) AS count FROM zone_groups'),
+      officialGps:scalar("SELECT COUNT(*) AS count FROM branches WHERE latitude BETWEEN -90 AND 90 AND longitude BETWEEN -180 AND 180 AND NOT(latitude=0 AND longitude=0)")
+    },
+    employeeSentinels:employees,
+    accountSentinels:accounts.map(({passwordHash,...account})=>({...account,passwordFingerprint:fingerprint(passwordHash)}))
+  }
+}finally{db.close()}
+
+if(state.integrity!=='ok')throw new Error(`Integrity check failed: ${state.integrity}`)
+if(state.schemaVersion!==EXPECTED_SCHEMA_VERSION)throw new Error(`Schema mismatch: code-only deployment requires v${EXPECTED_SCHEMA_VERSION}, found v${state.schemaVersion}`)
+
+const assertSafeSnapshotDirectory=directory=>{
+  if(!fs.existsSync(directory)){fs.mkdirSync(directory,{recursive:true,mode:0o700});return}
+  const stat=fs.statSync(directory)
+  if(!stat.isDirectory()||(stat.mode&0o077)!==0)throw new Error(`Snapshot directory must be a private directory (0700 or stricter): ${directory}`)
 }
-db.close()
-if(state.integrity!=='ok')throw new Error(`Production integrity check failed: ${state.integrity}`)
-if(!state.kcadmin)throw new Error('Preflight blocked: kcadmin is missing')
-if(!state.emp0003||state.emp0003.name!=='SUNDARAMUTI BIN MOHAMMAD')throw new Error('Preflight blocked: EMP0003 / SUNDARAMUTI BIN MOHAMMAD is missing or mismatched')
-if(!state.emp0003Account)throw new Error('Preflight blocked: EMP0003 login account is missing')
+const isRecord=value=>value!==null&&typeof value==='object'&&!Array.isArray(value)
+const validateSnapshot=before=>{
+  if(!isRecord(before))throw new Error('Malformed snapshot: root must be an object')
+  if(before.formatVersion!==SNAPSHOT_FORMAT_VERSION)throw new Error(`Unsupported snapshot formatVersion: ${before.formatVersion}`)
+  if(typeof before.databasePath!=='string')throw new Error('Malformed snapshot: databasePath is required')
+  let beforeDatabasePath
+  try{beforeDatabasePath=fs.realpathSync.native(before.databasePath)}catch{throw new Error('Malformed snapshot: databasePath does not exist')}
+  if(beforeDatabasePath!==databasePath)throw new Error(`Snapshot databasePath mismatch: expected ${databasePath}, found ${beforeDatabasePath}`)
+  if(before.schemaVersion!==EXPECTED_SCHEMA_VERSION)throw new Error(`Malformed snapshot: schemaVersion must be ${EXPECTED_SCHEMA_VERSION}`)
+  if(before.integrity!=='ok')throw new Error('Malformed snapshot: integrity must be ok')
+  if(!isRecord(before.counts))throw new Error('Malformed snapshot: counts is required')
+  for(const key of COUNT_KEYS)if(!Number.isSafeInteger(before.counts[key])||before.counts[key]<0)throw new Error(`Malformed snapshot: counts.${key} must be a non-negative integer`)
+  if(!Array.isArray(before.employeeSentinels)||before.employeeSentinels.length===0)throw new Error('Malformed snapshot: employeeSentinels must be a non-empty array')
+  if(!Array.isArray(before.accountSentinels)||before.accountSentinels.length===0)throw new Error('Malformed snapshot: accountSentinels must be a non-empty array')
+  for(const employee of before.employeeSentinels)if(!isRecord(employee)||!Number.isSafeInteger(employee.id)||typeof employee.employeeCode!=='string'||typeof employee.name!=='string'||typeof employee.employmentStatus!=='string'||![0,1].includes(employee.isActive))throw new Error('Malformed snapshot: invalid employee sentinel')
+  for(const account of before.accountSentinels)if(!isRecord(account)||!Number.isSafeInteger(account.id)||!Number.isSafeInteger(account.employeeId)||typeof account.username!=='string'||typeof account.role!=='string'||![0,1].includes(account.isActive)||!/^[a-f0-9]{64}$/.test(account.passwordFingerprint))throw new Error('Malformed snapshot: invalid account sentinel')
+  return before
+}
 
 if(mode==='before'){
-  if(state.schemaVersion!==16)throw new Error(`Preflight blocked: expected production schema v16 before deployment, found v${state.schemaVersion}`)
-  fs.mkdirSync(path.dirname(path.resolve(snapshotPath)),{recursive:true})
-  fs.writeFileSync(path.resolve(snapshotPath),JSON.stringify(state,null,2),{encoding:'utf8',flag:'wx',mode:0o600})
-  console.log(JSON.stringify({...state,authAccounts:publicAccounts},null,2))
+  assertSafeSnapshotDirectory(path.dirname(snapshotPath))
+  fs.writeFileSync(snapshotPath,`${JSON.stringify(state,null,2)}\n`,{encoding:'utf8',flag:'wx',mode:0o600})
+  console.log(JSON.stringify({ok:true,mode,snapshotPath,...state},null,2))
 }else{
-  const before=JSON.parse(fs.readFileSync(path.resolve(snapshotPath),'utf8'))
+  let before
+  try{before=validateSnapshot(JSON.parse(fs.readFileSync(snapshotPath,'utf8')))}catch(error){if(error instanceof SyntaxError)throw new Error(`Malformed snapshot JSON: ${error.message}`);throw error}
   const failures=[]
-  for(const [key,count] of Object.entries(before.counts))if(state.counts[key]<count)failures.push(`${key} decreased from ${count} to ${state.counts[key]}`)
-  for(const employee of before.employees){const current=state.employees.find(item=>item.id===employee.id);if(!current)failures.push(`employee id ${employee.id} missing`);else if(current.employeeCode!==employee.employeeCode||current.name!==employee.name||current.isActive!==employee.isActive)failures.push(`employee id ${employee.id} identity/status changed`)}
-  for(const account of before.authAccounts){const current=state.authAccounts.find(item=>item.id===account.id);if(!current)failures.push(`auth account id ${account.id} missing`);else if(current.employeeId!==account.employeeId||current.username!==account.username||current.isActive!==account.isActive||current.passwordFingerprint!==account.passwordFingerprint)failures.push(`auth account id ${account.id} identity/status/password changed`)}
-  if(state.schemaVersion<17)failures.push(`schema version is ${state.schemaVersion}, expected at least 17`)
-  if(!state.v17Columns.systemRole||!state.v17Columns.preferredLanguage)failures.push('v17 auth columns are missing')
-  if(failures.length)throw new Error(`Postflight preservation check failed:\n- ${failures.join('\n- ')}`)
-  console.log(JSON.stringify({ok:true,preserved:true,beforeCounts:before.counts,afterCounts:state.counts,emp0003:state.emp0003,emp0003Account:state.emp0003Account,kcadmin:state.kcadmin,schemaVersion:state.schemaVersion,integrity:state.integrity},null,2))
+  for(const key of COUNT_KEYS)if(state.counts[key]<before.counts[key])failures.push(`${key} count decreased from ${before.counts[key]} to ${state.counts[key]}`)
+  for(const employee of before.employeeSentinels){const current=state.employeeSentinels.find(item=>item.id===employee.id);if(!current)failures.push(`employee ${employee.id} is missing`);else if(JSON.stringify(current)!==JSON.stringify(employee))failures.push(`employee ${employee.id} identity/status changed`)}
+  for(const account of before.accountSentinels){const current=state.accountSentinels.find(item=>item.id===account.id);if(!current)failures.push(`account ${account.id} is missing`);else if(JSON.stringify(current)!==JSON.stringify(account))failures.push(`account ${account.id} identity/status/password fingerprint changed`)}
+  if(failures.length)throw new Error(`Code-only preservation check failed:\n- ${failures.join('\n- ')}`)
+  console.log(JSON.stringify({ok:true,mode,preserved:true,schemaVersion:state.schemaVersion,integrity:state.integrity,beforeCounts:before.counts,afterCounts:state.counts},null,2))
 }
