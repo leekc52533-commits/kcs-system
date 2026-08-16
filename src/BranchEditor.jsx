@@ -31,8 +31,8 @@ export default function BranchEditor({initial,lockId,onClose,onSave,fail,saving,
   const set=(key,value)=>setForm(current=>({...current,[key]:value}))
   const selectedDays=form.assignedWeekdays||[],frequencyWarning=EXPECTED_COLLECTION_DAYS[form.collectionFrequency]&&selectedDays.length&&selectedDays.length!==EXPECTED_COLLECTION_DAYS[form.collectionFrequency]?`${form.collectionFrequency} expects ${EXPECTED_COLLECTION_DAYS[form.collectionFrequency]} days; ${selectedDays.length} are selected.`:null
   const lifecycleChanged=lockId&&(lifecycle.status!==initialStatus||(lifecycle.status==='DUPLICATE_REPLACED'&&lifecycle.replacementId!==initialReplacement))
-  const reasonRequired=lifecycleChanged&&(lifecycle.status==='TEMPORARILY_PAUSED'||lifecycle.status==='NOT_COLLECTING'||(lifecycle.status==='ACTIVE'&&initialStatus!=='ACTIVE'))
-  const showReason=lifecycleChanged&&lifecycle.status!=='CLOSED'
+  const reasonRequired=lifecycleChanged
+  const showReason=lifecycleChanged
   const setStatus=status=>setLifecycle(current=>({...current,status,reason:'',replacementId:status==='DUPLICATE_REPLACED'?(initialStatus==='DUPLICATE_REPLACED'?initialReplacement:''):'',search:'',items:[]}))
   const searchReplacement=async value=>{setLifecycle(current=>({...current,search:value}));if(value.trim().length<2){setLifecycle(current=>({...current,items:[]}));return}try{const data=await api(`/api/branch-lifecycle-replacements?search=${encodeURIComponent(value)}`);setLifecycle(current=>({...current,items:data.items||[]}))}catch(error){setEditorError(error.message)}}
   const addMaterial=()=>set('materials',[...form.materials,{materialId:'',priceType:'standard'}])

@@ -13,7 +13,7 @@ export function listBranchLifecycleReview(params={},database=defaultDb){
   if(params.status&&BRANCH_LIFECYCLE_STATUSES.includes(params.status)&&params.status!=='ACTIVE'){where.push('b.lifecycle_status=?');args.push(params.status)}
   if(params.replacement==='with')where.push('b.replaced_by_branch_id IS NOT NULL')
   if(params.replacement==='without')where.push('b.replaced_by_branch_id IS NULL')
-  const rows=database.prepare(`SELECT b.id internalId,b.jodoo_branch_id branchId,b.branch_name branchName,c.jodoo_customer_id customerId,c.name customerName,a.name area,b.address,b.lifecycle_status lifecycleStatus,b.status_reason statusReason,b.status_changed_at statusChangedAt,b.status_changed_by statusChangedBy,rb.jodoo_branch_id replacedByBranchId,rb.branch_name replacedByBranchName,(SELECT MAX(ds.completed_at) FROM dispatch_stops ds WHERE ds.branch_id=b.id AND ds.status='completed') lastCollectionDate FROM branches b LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN branches rb ON rb.id=b.replaced_by_branch_id WHERE ${where.join(' AND ')} ORDER BY b.status_changed_at DESC,c.name,b.branch_name`).all(...args)
+  const rows=database.prepare(`SELECT b.id internalId,b.jodoo_branch_id branchId,b.branch_name branchName,c.jodoo_customer_id customerId,c.name customerName,a.name area,b.address,b.lifecycle_status lifecycleStatus,b.status_reason statusReason,b.status_changed_at statusChangedAt,b.status_changed_by statusChangedBy,rb.jodoo_branch_id replacedByBranchId,rb.branch_name replacedByBranchName,(SELECT MAX(ds.completed_at) FROM dispatch_stops ds WHERE ds.branch_id=b.id AND ds.status='completed') lastCollectionDate,(SELECT COUNT(*) FROM dispatch_stops ds WHERE ds.branch_id=b.id AND ds.status NOT IN ('completed','cancelled')) futureStops,(SELECT COUNT(DISTINCT ds.dispatch_id) FROM dispatch_stops ds WHERE ds.branch_id=b.id AND ds.status NOT IN ('completed','cancelled')) futureDispatches FROM branches b LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN branches rb ON rb.id=b.replaced_by_branch_id WHERE ${where.join(' AND ')} ORDER BY b.status_changed_at DESC,c.name,b.branch_name`).all(...args)
   const counts=Object.fromEntries(BRANCH_LIFECYCLE_STATUSES.filter(status=>status!=='ACTIVE').map(status=>[status,database.prepare('SELECT COUNT(*) n FROM branches WHERE lifecycle_status=?').get(status).n]))
   return{items:rows,counts,total:rows.length}
 }
@@ -24,8 +24,8 @@ export function applyBranchLifecycle(branchId,payload={},actor={},database=defau
   const status=text(payload.lifecycleStatus).toUpperCase(),changedBy=text(actor.changedBy||actor.employeeName)
   if(!BRANCH_LIFECYCLE_STATUSES.includes(status))throw Object.assign(new Error('Invalid Branch lifecycle status'),{statusCode:400})
   const before=database.prepare('SELECT * FROM branches WHERE jodoo_branch_id=?').get(String(branchId));if(!before)throw Object.assign(new Error('Branch not found'),{statusCode:404})
-  const previousStatus=before.lifecycle_status||'ACTIVE',requiresReason=status==='TEMPORARILY_PAUSED'||status==='NOT_COLLECTING'||(status==='ACTIVE'&&previousStatus!=='ACTIVE'),reason=status==='CLOSED'?'Closed / No Longer Operating':text(payload.reason)
-  if(requiresReason&&!reason)throw Object.assign(new Error(status==='ACTIVE'?'Restore reason is required':'Status change reason is required'),{statusCode:400})
+  const previousStatus=before.lifecycle_status||'ACTIVE',reason=text(payload.reason)
+  if(status!==previousStatus&&!reason)throw Object.assign(new Error(status==='ACTIVE'?'Restore reason is required':'Status change reason is required'),{statusCode:400})
   let replacement=null
   if(status==='DUPLICATE_REPLACED'){
     const replacementId=Number(payload.replacedByBranchId||payload.replacementInternalId)
