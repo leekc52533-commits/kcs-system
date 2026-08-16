@@ -94,6 +94,8 @@ test('historical v17 document retains the baseline operational material',()=>{
   assert.ok(historical.split('\n').length>200)
   for(const heading of ['## 目的与代码变更','## 重要环境区别','## 权限与安全影响','## 数据库变更与兼容','## Ubuntu 完整回滚','## 常见错误'])assert.match(historical,new RegExp(heading))
   assert.match(historical,/Historical command block — only for the original v16→v17 migration/)
+  assert.match(historical,/run cloud:rehearsal:v16-to-v17 -- --backup/)
+  assert.match(historical,/run migrate:v16-to-v17 -- --confirm-migration/)
 })
 
 test('postflight rejects malformed or foreign snapshots without writing either database',()=>{

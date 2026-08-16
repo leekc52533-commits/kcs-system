@@ -67,7 +67,7 @@ v17 只为 `auth_accounts` 增加：
 
 ## Ubuntu / AWS 正式部署（历史 v16→v17；本批次尚未执行）
 
-> **Historical command block — only for the original v16→v17 migration. Do not execute on schema v41.** 当前 v41 code-only 流程请改用 [`DEPLOY_V41_CODE_ONLY.md`](DEPLOY_V41_CODE_ONLY.md)。下列旧 `cloud-preflight`、rehearsal 与 `migrate:kcs` 调用依赖当时的 v16/v17 脚本契约，不是当前命令。
+> **Historical command block — only for the original v16→v17 migration. Do not execute on schema v41.** 当前 v41 code-only 流程请改用 [`DEPLOY_V41_CODE_ONLY.md`](DEPLOY_V41_CODE_ONLY.md)。历史 preflight snapshot 必须来自当时的 v16 工具；下列 rehearsal/migration 命令已写成当前 guard 可审计的显式 `16→17` 契约，但仍不得用于当前正式库。
 
 以下命令只可在维护时段由正式服务器管理员执行。不要使用 `npm run dev`，不要复制本机 SQLite。假设现有 App、Database、systemd 和 Caddy 路径保持不变：
 
@@ -106,7 +106,7 @@ sudo -u "$KCS_USER" env KCS_DB_PATH="$DB" \
 sudo -u "$KCS_USER" env KCS_DB_PATH="$DB" KCS_BACKUP_DIR="$BACKUP_DIR" \
   npm --prefix "$APP" run predeploy:kcs
 sudo -u "$KCS_USER" env KCS_DATA_DIR=/var/lib/kcs/data \
-  node "$APP/scripts/cloud-migration-rehearsal.mjs" --backup "$RAW_BACKUP" --snapshot "$SNAPSHOT"
+  npm --prefix "$APP" run cloud:rehearsal:v16-to-v17 -- --backup "$RAW_BACKUP" --snapshot "$SNAPSHOT"
 
 sudo -u "$APP_USER" -H npm --prefix "$APP" run lint
 sudo -u "$APP_USER" -H npm --prefix "$APP" run build
@@ -115,7 +115,7 @@ sudo -u "$APP_USER" -H npm --prefix "$APP" test
 # 以上全部通过后，才对原AWS数据库执行独立的schema-v17-only migration。
 # 此命令不会载入server/database.mjs，因此不会执行车辆规范化、seed或其他启动期资料整理。
 sudo -u "$KCS_USER" env KCS_DB_PATH="$DB" KCS_DATA_DIR=/var/lib/kcs/data \
-  npm --prefix "$APP" run migrate:kcs # HISTORICAL v16→v17 ONLY; NEVER RUN FOR v41 CODE-ONLY
+  npm --prefix "$APP" run migrate:v16-to-v17 -- --confirm-migration # HISTORICAL ONLY; NEVER RUN FOR v41 CODE-ONLY
 sudo -u "$KCS_USER" env KCS_DB_PATH="$DB" \
   node "$APP/scripts/cloud-preflight.mjs" --mode after --snapshot "$SNAPSHOT"
 
