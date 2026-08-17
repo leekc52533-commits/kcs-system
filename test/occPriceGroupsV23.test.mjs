@@ -5,7 +5,7 @@ import {schemaSql} from '../server/schema.mjs'
 import {seedFixedOccPriceGroups} from '../server/migrationV21.mjs'
 import {applyV23Migration} from '../server/migrationV23.mjs'
 import {assignBranchesToOccPriceGroup,createOccPriceGroup,listOccPriceGroups,updateOccPriceGroup} from '../server/occPriceGroupService.mjs'
-import {createPriceLevel,replaceBranchMaterials} from '../server/materialPriceService.mjs'
+import {createPriceLevel} from '../server/materialPriceService.mjs'
 import {accountCan,roleCan} from '../server/authService.mjs'
 import {apiErrorMessage,apiRequest,setApiLanguage} from '../src/apiClient.js'
 
@@ -15,7 +15,7 @@ const fixture=()=>{
   db.prepare("INSERT INTO customers(jodoo_customer_id,name) VALUES('C1','Customer')").run()
   db.prepare("INSERT INTO branches(jodoo_branch_id,customer_id,branch_name) VALUES('B1',1,'One'),('B2',1,'Two')").run()
   const occ=db.prepare("SELECT id FROM materials WHERE material_code='OCC'").get(),level=createPriceLevel(occ.id,{priceAmount:.19,effectiveDate:'2026-01-01',reason:'fixture'},db)
-  for(const id of [1,2])replaceBranchMaterials(id,[{materialId:occ.id,priceLevelId:level.id}],{},db)
+  for(const id of [1,2])db.prepare("INSERT INTO branch_material_prices(branch_id,material_id,price_level_id,effective_date,status,assigned_by) VALUES(?,?,?,'2026-01-01','active','Historical fixture')").run(id,occ.id,level.id)
   return db
 }
 
@@ -29,27 +29,9 @@ test('v23 preserves stable Group IDs while managed creation blocks duplicate pri
   assert.equal(applyV23Migration(db).schemaVersion,23)
 })
 
-test('repricing changes one stable Group only, keeps Branch assignments and audits snapshot',()=>{
-  const db=fixture();applyV23Migration(db)
-  const groups=listOccPriceGroups(db).items,group19=groups.find(item=>item.priceAmount===.19),group20=groups.find(item=>item.priceAmount===.2)
-  assignBranchesToOccPriceGroup(group19.id,[1,2],{reason:'Initial',changedBy:'Owner'},db)
-  updateOccPriceGroup(group19.id,{priceAmount:.2,effectiveDate:'2026-07-01',reason:'Approved change',changedBy:'Owner'},db)
-  assert.equal(db.prepare('SELECT occ_price_group_id id FROM branch_occ_price_assignments WHERE branch_id=1').get().id,group19.id)
-  assert.equal(db.prepare('SELECT price_amount FROM occ_price_groups WHERE id=?').get(group20.id).price_amount,.2)
-  assert.equal(db.prepare('SELECT COUNT(*) count FROM occ_price_groups WHERE price_amount=.2').get().count,2)
-  const audit=db.prepare('SELECT * FROM occ_price_group_price_history WHERE occ_price_group_id=?').get(group19.id)
-  assert.equal(audit.old_price_amount,.19);assert.equal(audit.new_price_amount,.2);assert.equal(audit.branch_count,2)
-})
+test('repricing changes one stable Group only, keeps Branch assignments and audits snapshot',()=>{const db=fixture();applyV23Migration(db);const group=listOccPriceGroups(db).items.find(item=>item.priceAmount===.19);db.prepare("INSERT INTO branch_occ_price_assignments(branch_id,occ_price_group_id,assigned_by) VALUES(1,?,'Historical')").run(group.id);assert.throws(()=>assignBranchesToOccPriceGroup(group.id,[2],{reason:'Forbidden'},db),/legacy read-only/);updateOccPriceGroup(group.id,{priceAmount:.2,effectiveDate:'2026-07-01',reason:'Approved Customer catalog change',changedBy:'Owner'},db);assert.equal(db.prepare('SELECT occ_price_group_id id FROM branch_occ_price_assignments WHERE branch_id=1').get().id,group.id);assert.equal(db.prepare('SELECT COUNT(*) n FROM branch_occ_price_assignment_history').get().n,0)})
 
-test('OCC home data exposes used groups and Price Not Set without creating RM0.00',()=>{
-  const db=fixture();applyV23Migration(db)
-  const group=listOccPriceGroups(db).items.find(item=>item.priceAmount===.19)
-  assignBranchesToOccPriceGroup(group.id,[1],{reason:'Assign one',changedBy:'Owner'},db)
-  const result=listOccPriceGroups(db)
-  assert.equal(result.items.filter(item=>item.branchCount>0).length,1)
-  assert.equal(result.priceNotSetCount,1)
-  assert.equal(db.prepare('SELECT COUNT(*) count FROM occ_price_groups WHERE price_amount=0').get().count,0)
-})
+test('OCC home data exposes used groups and Price Not Set without creating RM0.00',()=>{const db=fixture();applyV23Migration(db);const group=listOccPriceGroups(db).items.find(item=>item.priceAmount===.19);db.prepare("INSERT INTO branch_occ_price_assignments(branch_id,occ_price_group_id,assigned_by) VALUES(1,?,'Historical')").run(group.id);const result=listOccPriceGroups(db);assert.equal(result.items.find(item=>item.id===group.id).branchCount,1);assert.equal(result.priceNotSetCount,1);assert.throws(()=>assignBranchesToOccPriceGroup(group.id,[2],{reason:'Forbidden'},db),/legacy read-only/);assert.equal(db.prepare('SELECT COUNT(*) count FROM occ_price_groups WHERE price_amount=0').get().count,0)})
 
 test('UI sources use used-group cards, branch detail management and modal master creation',async()=>{
   const fs=await import('node:fs')
@@ -87,8 +69,8 @@ test('OCC move permission remains server-authorized and API errors are specific 
   const db=fixture();db.prepare("INSERT INTO employees(employee_code,name,job_role) VALUES('SUP-OCC','OCC Supervisor','Supervisor')").run();const account=db.prepare("INSERT INTO auth_accounts(employee_id,username,password_hash,role) VALUES(1,'supervisor-test','hash','supervisor')").run()
   assert.equal(accountCan({id:Number(account.lastInsertRowid),role:'supervisor'},'price_manage',db),false)
   const routes=(await import('node:fs')).readFileSync(new URL('../server/index.mjs',import.meta.url),'utf8')
-  assert.match(routes,/occ-price-groups\/bulk-transfer[\s\S]*accountCan\(session,'price_manage'\)/)
-  assert.match(routes,/bulkTransferOccBranches\([\s\S]*changedBy:session\.employeeName/)
+  assert.match(routes,/occ-price-groups\/bulk-transfer'\)\) return sendJson\(response,410/)
+  assert.match(routes,/Branch OCC assignments are legacy read-only data/)
   assert.match(routes,/X-Request-ID/)
   assert.match(routes,/event:'api_error'/)
   for(const language of ['en','ms','zh']){

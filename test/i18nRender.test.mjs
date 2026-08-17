@@ -235,3 +235,22 @@ test('当前生产路由初始组件在English与BM渲染时报告具体页面�
     for(const language of ['en','ms'])assertNoCjk(page,language,wrap(language,React.createElement(Component,props)))
   }
 })
+
+test('Branch inherited pricing detail renders without runtime errors and links to its Customer',()=>{
+  const item={branchId:'12',branchName:'Branch',customerId:'7',customerName:'Customer',materials:[{materialId:1,materialName:'OCC',priceType:'outstation',currentPrice:.44,resolutionState:'ready'}]}
+  const html=htmlText(wrap('en',React.createElement(masterModule.BranchReadOnlyDetail||(()=>null),{item,onClose:noop})))
+  assert.match(html,/customer=C7/)
+  assert.match(html,/Outstation/)
+  assert.match(html,/RM0\.44\/kg/)
+  assert.doesNotMatch(html,/form\.customerId/)
+})
+
+test('Customer pricing changed-flow labels render completely in English, Malay and Chinese',()=>{
+  for(const language of ['en','ms','zh']){
+    const html=htmlText(wrap(language,React.createElement(masterModule.CustomerEditor,{initial:{customerId:'7',customerName:'Customer',status:'active',materialPricing:[]},lockId:true,onClose:noop,onSave:noop,fail:noop,canManagePricing:true,saving:false})))
+    assert.match(html,new RegExp(translate(language,'customer.materialPricing')))
+    assert.match(html,new RegExp(translate(language,'customer.noPricing')))
+    assert.match(html,new RegExp(translate(language,'customer.save')))
+    assert.doesNotMatch(html,/Not Not set/)
+  }
+})

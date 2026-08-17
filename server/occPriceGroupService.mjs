@@ -53,55 +53,6 @@ export function setOccPriceGroupStatus(id,status,payload={},database=defaultDb){
   return groupRow(database,id)
 }
 
-const assertOccBranch=(database,branchId)=>{
-  const branch=database.prepare(`SELECT b.id,b.jodoo_branch_id branchId,b.branch_name branchName,c.name customerName FROM branches b LEFT JOIN customers c ON c.id=b.customer_id WHERE b.id=?`).get(branchId)
-  if(!branch)throw new Error(`Branch not found: ${branchId}`)
-  const hasOcc=database.prepare(`SELECT 1 FROM materials m WHERE m.material_code='OCC' AND (EXISTS(SELECT 1 FROM branch_material_price_selections s WHERE s.branch_id=? AND s.material_id=m.id) OR EXISTS(SELECT 1 FROM branch_material_prices p WHERE p.branch_id=? AND p.material_id=m.id AND p.status='active'))`).get(branchId,branchId)
-  if(!hasOcc)throw new Error(`Branch ${branch.branchId} does not have OCC in its price list`)
-  return branch
-}
+export function assignBranchesToOccPriceGroup(){throw new Error('Branch OCC assignments are legacy read-only data. Manage OCC pricing on the Customer.')}
 
-const assertAssignedOccBranch=(database,branchId)=>{
-  const branch=database.prepare(`SELECT b.id,b.jodoo_branch_id branchId,b.branch_name branchName,c.name customerName FROM branches b LEFT JOIN customers c ON c.id=b.customer_id WHERE b.id=?`).get(branchId)
-  if(!branch)throw occError('OCC_BRANCH_NOT_FOUND',`Branch not found: ${branchId}`,404)
-  return branch
-}
-
-export function assignBranchesToOccPriceGroup(groupId,branchIds,payload={},database=defaultDb){
-  const group=groupRow(database,groupId);if(!group||group.status!=='active')throw new Error('Target OCC Price Group is not active')
-  const ids=[...new Set((branchIds||[]).map(Number).filter(Boolean))],reason=text(payload.reason);if(!ids.length)throw new Error('Select at least one Branch');if(!reason)throw new Error('Reason is required')
-  const actor=text(payload.changedBy)||'Owner Admin',changed=[]
-  database.exec('BEGIN IMMEDIATE')
-  try{
-    for(const branchId of ids){const branch=assertOccBranch(database,branchId),old=database.prepare('SELECT occ_price_group_id id FROM branch_occ_price_assignments WHERE branch_id=?').get(branchId);if(old?.id===Number(groupId))continue;database.prepare(`INSERT INTO branch_occ_price_assignments(branch_id,occ_price_group_id,assigned_by) VALUES(?,?,?) ON CONFLICT(branch_id) DO UPDATE SET occ_price_group_id=excluded.occ_price_group_id,assigned_by=excluded.assigned_by,updated_at=CURRENT_TIMESTAMP`).run(branchId,groupId,actor);database.prepare(`INSERT INTO branch_occ_price_assignment_history(branch_id,old_occ_price_group_id,new_occ_price_group_id,reason,changed_by) VALUES(?,?,?,?,?)`).run(branchId,old?.id||null,groupId,reason,actor);changed.push(branch)}
-    database.exec('COMMIT');return{changedCount:changed.length,branches:changed,targetGroup:groupRow(database,groupId)}
-  }catch(error){database.exec('ROLLBACK');throw error}
-}
-
-export function bulkTransferOccBranches(sourceGroupId,targetGroupId,branchIds,payload={},database=defaultDb){
-  const sourceId=Number(sourceGroupId),targetId=Number(targetGroupId),ids=[...new Set((branchIds||[]).map(Number).filter(Boolean))],reason=text(payload.reason),actor=text(payload.changedBy)||'Owner Admin'
-  if(!ids.length)throw occError('OCC_NO_BRANCHES_SELECTED','No branches were selected.')
-  if(!reason)throw occError('OCC_MOVE_REASON_REQUIRED','A move reason is required.')
-  if(sourceId===targetId)throw occError('OCC_SAME_GROUP','Source and target price groups cannot be the same.')
-  database.exec('BEGIN IMMEDIATE')
-  try{
-    const source=groupRow(database,sourceId),target=groupRow(database,targetId)
-    if(!source||!target)throw occError('OCC_GROUP_NOT_FOUND','Source or target OCC Price Group not found.',404)
-    if(target.status!=='active')throw occError('OCC_TARGET_INACTIVE','Target OCC Price Group is not active.')
-    const changed=[]
-    for(const branchId of ids){
-      const assigned=database.prepare('SELECT occ_price_group_id groupId FROM branch_occ_price_assignments WHERE branch_id=?').get(branchId)
-      if(Number(assigned?.groupId)!==sourceId)throw occError('OCC_BRANCH_SOURCE_CHANGED','One or more branches no longer belong to the source OCC Price Group. Refresh and try again.',409)
-      // A stable OCC group assignment is the source of truth for a transfer.
-      // v22 converted assignments intentionally do not require a legacy
-      // branch_material_prices/selection row, so the old eligibility check
-      // must not reject them here.
-      const branch=assertAssignedOccBranch(database,branchId)
-      database.prepare('UPDATE branch_occ_price_assignments SET occ_price_group_id=?,assigned_by=?,updated_at=CURRENT_TIMESTAMP WHERE branch_id=?').run(targetId,actor,branchId)
-      database.prepare('INSERT INTO branch_occ_price_assignment_history(branch_id,old_occ_price_group_id,new_occ_price_group_id,reason,changed_by) VALUES(?,?,?,?,?)').run(branchId,sourceId,targetId,reason,actor)
-      changed.push(branch)
-    }
-    database.exec('COMMIT')
-    return{sourceGroup:groupRow(database,sourceId),targetGroup:groupRow(database,targetId),changedCount:changed.length,branches:changed}
-  }catch(error){database.exec('ROLLBACK');throw error}
-}
+export function bulkTransferOccBranches(){throw new Error('Branch OCC assignments are legacy read-only data. Manage OCC pricing on the Customer.')}

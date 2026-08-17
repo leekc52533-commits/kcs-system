@@ -18,7 +18,7 @@ const parseMigrationArgs=items=>{
   if(parsed['--from']!=='16'||parsed['--to']!=='17'||parsed.confirm!==true)throw new Error('Required arguments are --from 16 --to 17 --confirm-migration')
   return parsed
 }
-try{parseMigrationArgs(args)}catch(error){throw new Error(`Legacy migrate:kcs is v16→v17 only and refuses implicit execution. Use migrate:v16-to-v17 with --confirm-migration after backup rehearsal and human approval; never use it for a v41 code-only deployment. ${error.message}`)}
+try{parseMigrationArgs(args)}catch(error){throw new Error(`Legacy migrate:kcs is v16→v17 only and refuses implicit execution. Use migrate:v16-to-v17 with --confirm-migration after backup rehearsal and human approval; never use it for the current v41-to-v42 Customer pricing deployment. ${error.message}`)}
 if(!process.env.KCS_DB_PATH)throw new Error('KCS_DB_PATH is required; migration never uses a default or local database')
 const databasePath=path.resolve(process.env.KCS_DB_PATH)
 if(!fs.existsSync(databasePath))throw new Error(`Database not found: ${databasePath}`)

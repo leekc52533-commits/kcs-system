@@ -13,33 +13,19 @@ export function seedBranchBaseProducts(branchId,{actor='Branch base products'}={
 export function listBranchProducts(branchId,database){
   if(!database)throw new Error('Database connection is required')
   return database.prepare(`
-    SELECT a.id availabilityId,b.id branchInternalId,b.jodoo_branch_id branchId,
+    SELECT NULL availabilityId,b.id branchInternalId,b.jodoo_branch_id branchId,
       m.id materialId,m.material_code materialCode,COALESCE(m.full_name,m.material_name) materialFullName,
       p.id productId,p.product_code productCode,p.full_name fullName,p.short_form shortForm,p.unit,
-      a.is_selectable isSelectable,a.price_type priceType,
-      CASE
-        WHEN p.product_code='OCC' THEN og.id
-        WHEN a.price_type='outstation' THEN cpp.outstation_price_level_id
-        ELSE cpp.standard_price_level_id
-      END priceGroupId,
-      CASE
-        WHEN p.product_code='OCC' THEN og.price_amount
-        WHEN a.price_type='outstation' THEN opl.price_amount
-        ELSE spl.price_amount
-      END currentPrice,
-      CASE WHEN p.product_code='OCC' THEN og.item_code END itemCode,
-      CASE WHEN p.product_code='OCC' THEN 0
-           WHEN a.price_type='outstation' THEN cpp.outstation_enabled
-           ELSE 1 END priceConfigurationEnabled
-    FROM branch_product_availability a
-    JOIN branches b ON b.id=a.branch_id
-    JOIN material_products p ON p.id=a.product_id
-    JOIN materials m ON m.id=p.material_id
-    LEFT JOIN branch_occ_price_assignments boa ON boa.branch_id=b.id AND p.product_code='OCC'
-    LEFT JOIN occ_price_groups og ON og.id=boa.occ_price_group_id
-    LEFT JOIN customer_product_pricing cpp ON cpp.customer_id=b.customer_id AND cpp.product_id=p.id AND cpp.status='active'
-    LEFT JOIN material_price_levels spl ON spl.id=cpp.standard_price_level_id
-    LEFT JOIN material_price_levels opl ON opl.id=cpp.outstation_price_level_id
+      1 isSelectable,cmp.price_type priceType,
+      CASE WHEN cmp.price_type='outstation' THEN cmp.outstation_price_level_id ELSE cmp.standard_price_level_id END priceGroupId,
+      CASE WHEN cmp.price_type='outstation' THEN COALESCE(cmp.outstation_special_price,opl.price_amount) ELSE COALESCE(cmp.standard_special_price,spl.price_amount) END currentPrice,
+      NULL itemCode,1 priceConfigurationEnabled
+    FROM branches b
+    JOIN customer_material_pricing cmp ON cmp.customer_id=b.customer_id AND cmp.status='active' AND cmp.resolution_state='ready'
+    JOIN materials m ON m.id=cmp.material_id
+    JOIN material_products p ON p.material_id=m.id AND p.status='active'
+    LEFT JOIN material_price_levels spl ON spl.id=cmp.standard_price_level_id
+    LEFT JOIN material_price_levels opl ON opl.id=cmp.outstation_price_level_id
     WHERE b.id=? OR b.jodoo_branch_id=?
     ORDER BY m.material_name,p.full_name
   `).all(Number(branchId)||-1,String(branchId)).map(row=>({
@@ -62,31 +48,26 @@ export function materialIssueReport(database){
   const baseCodes=BASE_PRODUCT_CODES
   const branchCount=database.prepare('SELECT COUNT(*) count FROM branches').get().count
   const coverage=database.prepare(`
-    SELECT p.product_code productCode,p.full_name fullName,COUNT(DISTINCT a.branch_id) coveredBranches
-    FROM material_products p LEFT JOIN branch_product_availability a ON a.product_id=p.id AND a.is_selectable=1
+    SELECT p.product_code productCode,p.full_name fullName,COUNT(DISTINCT b.id) coveredBranches
+    FROM material_products p LEFT JOIN customer_material_pricing cmp ON cmp.material_id=p.material_id AND cmp.status='active' AND cmp.resolution_state='ready' LEFT JOIN branches b ON b.customer_id=cmp.customer_id
     WHERE p.product_code IN (${baseCodes.map(()=>'?').join(',')})
     GROUP BY p.id ORDER BY p.product_code
   `).all(...baseCodes).map(row=>({...row,missingBranches:branchCount-row.coveredBranches}))
   const rows=database.prepare(`
     SELECT b.jodoo_branch_id branchId,b.branch_name branchName,m.material_code materialCode,
       COALESCE(m.full_name,m.material_name) material,p.product_code productCode,p.full_name fullName,
-      p.short_form shortForm,p.unit,COALESCE(a.is_selectable,0) isSelectable,a.price_type priceType,
-      CASE WHEN p.product_code='OCC' THEN og.id ELSE cpp.standard_price_level_id END standardPriceGroup,
-      CASE WHEN p.product_code='OCC' THEN NULL ELSE cpp.outstation_price_level_id END outstationPriceGroup,
-      CASE WHEN p.product_code='OCC' THEN og.price_amount
-           WHEN a.price_type='outstation' THEN opl.price_amount ELSE spl.price_amount END currentPrice,
-      CASE WHEN p.product_code='OCC' THEN og.item_code END itemCode,
+      p.short_form shortForm,p.unit,CASE WHEN cmp.id IS NULL THEN 0 ELSE 1 END isSelectable,cmp.price_type priceType,
+      cmp.standard_price_level_id standardPriceGroup,cmp.outstation_price_level_id outstationPriceGroup,
+      CASE WHEN cmp.price_type='outstation' THEN COALESCE(cmp.outstation_special_price,opl.price_amount) ELSE COALESCE(cmp.standard_special_price,spl.price_amount) END currentPrice,
+      NULL itemCode,
       GROUP_CONCAT(DISTINCT lm.legacy_item_id) legacyItemIds,
       GROUP_CONCAT(DISTINCT lm.legacy_item_name) legacyNames
     FROM branches b
     CROSS JOIN material_products p
     JOIN materials m ON m.id=p.material_id
-    LEFT JOIN branch_product_availability a ON a.branch_id=b.id AND a.product_id=p.id
-    LEFT JOIN branch_occ_price_assignments boa ON boa.branch_id=b.id AND p.product_code='OCC'
-    LEFT JOIN occ_price_groups og ON og.id=boa.occ_price_group_id
-    LEFT JOIN customer_product_pricing cpp ON cpp.customer_id=b.customer_id AND cpp.product_id=p.id AND cpp.status='active'
-    LEFT JOIN material_price_levels spl ON spl.id=cpp.standard_price_level_id
-    LEFT JOIN material_price_levels opl ON opl.id=cpp.outstation_price_level_id
+    LEFT JOIN customer_material_pricing cmp ON cmp.customer_id=b.customer_id AND cmp.material_id=p.material_id AND cmp.status='active' AND cmp.resolution_state='ready'
+    LEFT JOIN material_price_levels spl ON spl.id=cmp.standard_price_level_id
+    LEFT JOIN material_price_levels opl ON opl.id=cmp.outstation_price_level_id
     LEFT JOIN legacy_item_product_mappings lm ON lm.product_id=p.id
     GROUP BY b.id,p.id
     ORDER BY b.jodoo_branch_id,p.product_code

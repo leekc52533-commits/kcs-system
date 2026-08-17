@@ -19,35 +19,55 @@ const specialPriceAmount=value=>{
 }
 
 export function listBranchMaterials(branchId,database=defaultDb){
-  const items=database.prepare(`SELECT s.id,s.branch_id branchInternalId,m.id materialId,m.material_code materialCode,m.material_name materialName,m.unit,
-    s.price_type priceType,s.customer_material_pricing_id customerMaterialPricingId,s.uses_legacy_price usesLegacyPrice,
-    CASE WHEN s.uses_legacy_price=1 THEN s.legacy_price_level_id WHEN s.price_type='outstation' THEN cmp.outstation_price_level_id ELSE cmp.standard_price_level_id END priceLevelId,
-    CASE WHEN s.uses_legacy_price=1 THEN s.legacy_special_price WHEN s.price_type='outstation' THEN cmp.outstation_special_price ELSE cmp.standard_special_price END specialPrice,
-    CASE WHEN s.uses_legacy_price=1 THEN COALESCE(s.legacy_special_price,legacy.price_amount) WHEN s.price_type='outstation' THEN COALESCE(cmp.outstation_special_price,outstation.price_amount) ELSE COALESCE(cmp.standard_special_price,standard.price_amount) END currentPrice,
-    CASE WHEN s.uses_legacy_price=1 THEN 'legacy_compatibility' WHEN (s.price_type='outstation' AND cmp.outstation_special_price IS NOT NULL) OR (s.price_type='standard' AND cmp.standard_special_price IS NOT NULL) THEN 'customer_special_price' ELSE 'customer_price_level' END priceSource,
-    CASE WHEN s.uses_legacy_price=1 THEN COALESCE(s.legacy_effective_date,legacy.effective_date) WHEN s.price_type='outstation' THEN COALESCE(cmp.outstation_effective_date,outstation.effective_date) ELSE COALESCE(cmp.standard_effective_date,standard.effective_date) END effectiveDate,
-    'active' status
-    FROM branch_material_price_selections s JOIN materials m ON m.id=s.material_id
-    LEFT JOIN customer_material_pricing cmp ON cmp.id=s.customer_material_pricing_id
-    LEFT JOIN material_price_levels legacy ON legacy.id=s.legacy_price_level_id
+  const branch=database.prepare('SELECT id,customer_id FROM branches WHERE id=?').get(branchId)
+  if(!branch?.customer_id)return[]
+  const items=database.prepare(`SELECT cmp.id,? branchInternalId,m.id materialId,m.material_code materialCode,m.material_name materialName,m.unit,
+    cmp.price_type priceType,cmp.id customerMaterialPricingId,0 usesLegacyPrice,
+    CASE WHEN cmp.price_type='outstation' THEN cmp.outstation_price_level_id ELSE cmp.standard_price_level_id END priceLevelId,
+    CASE WHEN cmp.price_type='outstation' THEN cmp.outstation_special_price ELSE cmp.standard_special_price END specialPrice,
+    CASE WHEN cmp.price_type='outstation' THEN COALESCE(cmp.outstation_special_price,outstation.price_amount) ELSE COALESCE(cmp.standard_special_price,standard.price_amount) END currentPrice,
+    CASE WHEN (cmp.price_type='outstation' AND cmp.outstation_special_price IS NOT NULL) OR (cmp.price_type='standard' AND cmp.standard_special_price IS NOT NULL) THEN 'customer_special_price' ELSE 'customer_price_level' END priceSource,
+    CASE WHEN cmp.price_type='outstation' THEN COALESCE(cmp.outstation_effective_date,outstation.effective_date) ELSE COALESCE(cmp.standard_effective_date,standard.effective_date) END effectiveDate,cmp.status,cmp.resolution_state resolutionState
+    FROM customer_material_pricing cmp JOIN materials m ON m.id=cmp.material_id
     LEFT JOIN material_price_levels standard ON standard.id=cmp.standard_price_level_id
     LEFT JOIN material_price_levels outstation ON outstation.id=cmp.outstation_price_level_id
-    WHERE s.branch_id=?
-    UNION ALL
-    SELECT bmp.id,bmp.branch_id,m.id,m.material_code,m.material_name,m.unit,'standard',NULL,1,bmp.price_level_id,bmp.special_price,
-      COALESCE(bmp.special_price,pl.price_amount),'legacy_compatibility',COALESCE(bmp.effective_date,pl.effective_date),bmp.status
-    FROM branch_material_prices bmp JOIN materials m ON m.id=bmp.material_id LEFT JOIN material_price_levels pl ON pl.id=bmp.price_level_id
-    WHERE bmp.branch_id=? AND NOT EXISTS(SELECT 1 FROM branch_material_price_selections s WHERE s.branch_id=bmp.branch_id AND s.material_id=bmp.material_id)
-    ORDER BY materialName`).all(branchId,branchId).map(item=>({...item,usesLegacyPrice:Boolean(item.usesLegacyPrice)}))
-  const group=database.prepare(`SELECT g.id occPriceGroupId,g.item_code itemCode,g.price_amount currentPrice,g.updated_at effectiveDate FROM branch_occ_price_assignments a JOIN occ_price_groups g ON g.id=a.occ_price_group_id WHERE a.branch_id=? AND g.status='active'`).get(branchId)
-  if(group){const occ=items.find(item=>item.materialCode==='OCC');if(occ)Object.assign(occ,group,{priceSource:'occ_price_group',priceLevelId:null,specialPrice:null,usesLegacyPrice:false})}
-  return sortMaterials(items)
+    WHERE cmp.customer_id=? AND cmp.status='active' AND cmp.resolution_state='ready' ORDER BY m.material_name`).all(branch.id,branch.customer_id)
+  return sortMaterials(items.map(item=>({...item,usesLegacyPrice:false,inheritedFromCustomer:true})))
+}
+
+export function resolveCustomerOccPrice(customerId,database=defaultDb){
+  const customer=database.prepare('SELECT id,occ_price occPrice FROM customers WHERE id=? OR jodoo_customer_id=?').get(Number(customerId)||-1,String(customerId))
+  if(!customer)return null
+  return database.prepare(`SELECT CASE WHEN cmp.price_type='outstation' THEN COALESCE(cmp.outstation_special_price,opl.price_amount) ELSE COALESCE(cmp.standard_special_price,spl.price_amount) END price
+    FROM customer_material_pricing cmp JOIN materials m ON m.id=cmp.material_id AND m.material_code='OCC'
+    LEFT JOIN material_price_levels spl ON spl.id=cmp.standard_price_level_id LEFT JOIN material_price_levels opl ON opl.id=cmp.outstation_price_level_id
+    WHERE cmp.customer_id=? AND cmp.status='active' AND cmp.resolution_state='ready'`).get(customer.id)?.price??customer.occPrice??null
+}
+
+export function previewLegacyBranchPricing(customerId,database=defaultDb){
+  const customer=database.prepare('SELECT id,jodoo_customer_id customerId,name customerName FROM customers WHERE id=? OR jodoo_customer_id=?').get(Number(customerId)||-1,String(customerId))
+  if(!customer)throw new Error('Customer not found')
+  const rows=database.prepare(`SELECT b.id branchInternalId,b.jodoo_branch_id branchId,b.branch_name branchName,m.id materialId,m.material_code materialCode,m.material_name materialName,
+    COALESCE(s.price_type,'standard') priceType,COALESCE(s.legacy_special_price,legacy.price_amount,bmp.special_price,bpl.price_amount,g.price_amount) price
+    FROM branches b
+    LEFT JOIN branch_material_price_selections s ON s.branch_id=b.id
+    LEFT JOIN materials m ON m.id=s.material_id
+    LEFT JOIN material_price_levels legacy ON legacy.id=s.legacy_price_level_id
+    LEFT JOIN branch_material_prices bmp ON bmp.branch_id=b.id AND (s.material_id IS NULL OR bmp.material_id=s.material_id) AND bmp.status='active'
+    LEFT JOIN material_price_levels bpl ON bpl.id=bmp.price_level_id
+    LEFT JOIN branch_occ_price_assignments boa ON boa.branch_id=b.id
+    LEFT JOIN occ_price_groups g ON g.id=boa.occ_price_group_id AND g.status='active'
+    WHERE b.customer_id=? AND (s.id IS NOT NULL OR bmp.id IS NOT NULL OR g.id IS NOT NULL)`).all(customer.id)
+  const groups=new Map()
+  for(const row of rows){if(!Number.isFinite(Number(row.price)))continue;const materialId=row.materialId||database.prepare("SELECT id FROM materials WHERE material_code='OCC'").get()?.id,key=`${materialId}:${row.priceType}`;if(!groups.has(key))groups.set(key,{materialId,materialCode:row.materialCode||'OCC',materialName:row.materialName||'OCC',priceType:row.priceType,legacy:[]});groups.get(key).legacy.push({branchInternalId:row.branchInternalId,branchId:row.branchId,branchName:row.branchName,price:Number(row.price)})}
+  const proposals=[...groups.values()].map(group=>{const prices=[...new Set(group.legacy.map(item=>item.price))].sort((a,b)=>a-b);return{...group,proposedPrice:Math.max(...prices),conflict:prices.length>1,conflictingPrices:prices}})
+  return{customer,readOnly:true,rule:'highest_valid_legacy_price',proposals,conflicts:proposals.filter(item=>item.conflict)}
 }
 
 export function listCustomerMaterialPricing(customerId,database=defaultDb){
   const customer=database.prepare('SELECT id,jodoo_customer_id customerId,name customerName FROM customers WHERE id=? OR jodoo_customer_id=?').get(Number(customerId)||-1,String(customerId))
   if(!customer)return null
-  const items=database.prepare(`SELECT cmp.id,m.id materialId,m.material_code materialCode,m.material_name materialName,m.unit,cmp.status,
+  const items=database.prepare(`SELECT cmp.id,m.id materialId,m.material_code materialCode,m.material_name materialName,m.unit,cmp.status,cmp.price_type priceType,cmp.resolution_state resolutionState,
     cmp.standard_price_level_id standardPriceLevelId,cmp.standard_special_price standardSpecialPrice,COALESCE(cmp.standard_special_price,spl.price_amount) standardPrice,COALESCE(cmp.standard_effective_date,spl.effective_date) standardEffectiveDate,
     cmp.outstation_enabled outstationEnabled,cmp.outstation_price_level_id outstationPriceLevelId,cmp.outstation_special_price outstationSpecialPrice,COALESCE(cmp.outstation_special_price,opl.price_amount) outstationPrice,COALESCE(cmp.outstation_effective_date,opl.effective_date) outstationEffectiveDate,
     (SELECT COUNT(*) FROM branch_material_price_selections s JOIN branches b ON b.id=s.branch_id WHERE s.customer_material_pricing_id=cmp.id AND b.customer_id=cmp.customer_id AND s.price_type='standard') standardBranchCount,
@@ -72,27 +92,36 @@ const priceChoice=(item,prefix,database)=>{
   return{levelId,special,effectiveDate:text(item[`${prefix}EffectiveDate`])||(special!=null?new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kuching'}):level.effective_date)}
 }
 
+const pricingComparable=item=>({materialId:Number(item.materialId),priceType:text(item.priceType||'standard').toLowerCase(),standardPriceLevelId:Number(item.standardPriceLevelId)||null,standardSpecialPrice:item.standardSpecialPrice===''||item.standardSpecialPrice==null?null:Number(item.standardSpecialPrice),standardEffectiveDate:text(item.standardEffectiveDate)||null,outstationEnabled:Boolean(item.outstationEnabled),outstationPriceLevelId:Number(item.outstationPriceLevelId)||null,outstationSpecialPrice:item.outstationSpecialPrice===''||item.outstationSpecialPrice==null?null:Number(item.outstationSpecialPrice),outstationEffectiveDate:text(item.outstationEffectiveDate)||null})
+export function customerMaterialPricingHasDelta(customerId,items,removedMaterialIds=[],database=defaultDb){
+  if((removedMaterialIds||[]).map(Number).filter(Boolean).length)return true
+  if(!Array.isArray(items))return false
+  const current=listCustomerMaterialPricing(customerId,database)?.items||[]
+  const normalize=values=>values.map(pricingComparable).sort((a,b)=>a.materialId-b.materialId)
+  return JSON.stringify(normalize(items))!==JSON.stringify(normalize(current))
+}
+
 export function saveCustomerMaterialPricing(customerId,items,{changedBy='Administrator',reason='Customer material pricing update',confirmed=false,removedMaterialIds=[]}={},database=defaultDb){
   const removals=[...new Set((Array.isArray(removedMaterialIds)?removedMaterialIds:[]).map(Number).filter(Boolean))]
   if(!Array.isArray(items)&&removals.length===0)return{changed:false,...listCustomerMaterialPricing(customerId,database)}
   const customer=database.prepare('SELECT id,jodoo_customer_id FROM customers WHERE id=? OR jodoo_customer_id=?').get(Number(customerId)||-1,String(customerId));if(!customer)throw new Error('Customer not found')
   const submittedItems=Array.isArray(items)?items:[],materialIds=submittedItems.map(item=>Number(item.materialId));if(materialIds.some(id=>!id)||new Set(materialIds).size!==materialIds.length)throw new Error('The same Material cannot be added more than once')
   if(removals.some(materialId=>materialIds.includes(materialId)))throw new Error('A Material cannot be updated and removed in the same request')
-  const before=listCustomerMaterialPricing(customer.id,database),upsert=database.prepare(`INSERT INTO customer_material_pricing(customer_id,material_id,standard_price_level_id,standard_special_price,standard_effective_date,outstation_enabled,outstation_price_level_id,outstation_special_price,outstation_effective_date,status,updated_by)
-    VALUES(?,?,?,?,?,?,?,?,?,'active',?) ON CONFLICT(customer_id,material_id) DO UPDATE SET standard_price_level_id=excluded.standard_price_level_id,standard_special_price=excluded.standard_special_price,standard_effective_date=excluded.standard_effective_date,outstation_enabled=excluded.outstation_enabled,outstation_price_level_id=excluded.outstation_price_level_id,outstation_special_price=excluded.outstation_special_price,outstation_effective_date=excluded.outstation_effective_date,status='active',updated_by=excluded.updated_by,updated_at=CURRENT_TIMESTAMP`)
+  const before=listCustomerMaterialPricing(customer.id,database),upsert=database.prepare(`INSERT INTO customer_material_pricing(customer_id,material_id,standard_price_level_id,standard_special_price,standard_effective_date,outstation_enabled,outstation_price_level_id,outstation_special_price,outstation_effective_date,price_type,resolution_state,status,updated_by)
+    VALUES(?,?,?,?,?,?,?,?,?,?,'ready','active',?) ON CONFLICT(customer_id,material_id) DO UPDATE SET standard_price_level_id=excluded.standard_price_level_id,standard_special_price=excluded.standard_special_price,standard_effective_date=excluded.standard_effective_date,outstation_enabled=excluded.outstation_enabled,outstation_price_level_id=excluded.outstation_price_level_id,outstation_special_price=excluded.outstation_special_price,outstation_effective_date=excluded.outstation_effective_date,price_type=excluded.price_type,resolution_state='ready',status='active',updated_by=excluded.updated_by,updated_at=CURRENT_TIMESTAMP`)
   let changed=false
   for(const item of submittedItems){
     const materialId=Number(item.materialId);if(!database.prepare('SELECT id FROM materials WHERE id=?').get(materialId))throw new Error('Material not found')
-    const standard=priceChoice(item,'standard',database),outstationEnabled=Boolean(item.outstationEnabled),outstation=outstationEnabled?priceChoice(item,'outstation',database):{levelId:null,special:null,effectiveDate:null}
-    const old=before.items.find(entry=>entry.materialId===materialId),next={standardPriceLevelId:standard.levelId,standardSpecialPrice:standard.special,standardEffectiveDate:standard.effectiveDate,outstationEnabled,outstationPriceLevelId:outstation.levelId,outstationSpecialPrice:outstation.special,outstationEffectiveDate:outstation.effectiveDate}
-    if(old?.outstationBranchCount&&!outstationEnabled)throw new Error('Move all Outstation Branches to Standard before disabling Outstation Price')
-    const oldComparable=old&&{standardPriceLevelId:old.standardPriceLevelId,standardSpecialPrice:old.standardSpecialPrice,standardEffectiveDate:old.standardEffectiveDate,outstationEnabled:old.outstationEnabled,outstationPriceLevelId:old.outstationPriceLevelId,outstationSpecialPrice:old.outstationSpecialPrice,outstationEffectiveDate:old.outstationEffectiveDate}
-    const configChanged=!old||JSON.stringify(oldComparable)!==JSON.stringify(next),activatingLegacy=Boolean(old?.legacyBranchCount)
-    if(old&&(configChanged||activatingLegacy)&&(old.standardBranchCount+old.outstationBranchCount)>0&&!confirmed)throw new Error(`Second confirmation is required: ${old.standardBranchCount} Standard and ${old.outstationBranchCount} Outstation Branches are affected`)
-    upsert.run(customer.id,materialId,standard.levelId,standard.special,standard.effectiveDate,outstationEnabled?1:0,outstation.levelId,outstation.special,outstation.effectiveDate,changedBy)
+    const standard=priceChoice(item,'standard',database),outstationEnabled=Boolean(item.outstationEnabled),outstation=outstationEnabled?priceChoice(item,'outstation',database):{levelId:null,special:null,effectiveDate:null},priceType=text(item.priceType||'standard').toLowerCase()
+    if(!['standard','outstation'].includes(priceType))throw new Error('Customer Price Type must be Standard or Outstation')
+    if(priceType==='outstation'&&!outstationEnabled)throw new Error('Outstation pricing must be enabled before selecting it as the Customer Price Type')
+    const old=before.items.find(entry=>entry.materialId===materialId),next={priceType,standardPriceLevelId:standard.levelId,standardSpecialPrice:standard.special,standardEffectiveDate:standard.effectiveDate,outstationEnabled,outstationPriceLevelId:outstation.levelId,outstationSpecialPrice:outstation.special,outstationEffectiveDate:outstation.effectiveDate}
+    const oldComparable=old&&{priceType:old.priceType,standardPriceLevelId:old.standardPriceLevelId,standardSpecialPrice:old.standardSpecialPrice,standardEffectiveDate:old.standardEffectiveDate,outstationEnabled:old.outstationEnabled,outstationPriceLevelId:old.outstationPriceLevelId,outstationSpecialPrice:old.outstationSpecialPrice,outstationEffectiveDate:old.outstationEffectiveDate}
+    const configChanged=!old||JSON.stringify(oldComparable)!==JSON.stringify(next)
+    if(old&&configChanged&&(old.standardBranchCount+old.outstationBranchCount)>0&&!confirmed)throw new Error(`Second confirmation is required: ${old.standardBranchCount} Standard and ${old.outstationBranchCount} Outstation Branches are affected`)
+    upsert.run(customer.id,materialId,standard.levelId,standard.special,standard.effectiveDate,outstationEnabled?1:0,outstation.levelId,outstation.special,outstation.effectiveDate,priceType,changedBy)
     const current=database.prepare('SELECT * FROM customer_material_pricing WHERE customer_id=? AND material_id=?').get(customer.id,materialId)
-    if(configChanged||confirmed)database.prepare('UPDATE branch_material_price_selections SET customer_material_pricing_id=?,uses_legacy_price=0,updated_at=CURRENT_TIMESTAMP WHERE material_id=? AND branch_id IN(SELECT id FROM branches WHERE customer_id=?)').run(current.id,materialId,customer.id)
-    if(configChanged||activatingLegacy){
+    if(configChanged){
       database.prepare(`INSERT INTO customer_material_pricing_history(customer_material_pricing_id,customer_id,material_id,before_json,after_json,affected_standard_branch_count,affected_outstation_branch_count,reason,changed_by) VALUES(?,?,?,?,?,?,?,?,?)`).run(current.id,customer.id,materialId,old?JSON.stringify(oldComparable):null,JSON.stringify(next),old?.standardBranchCount||0,old?.outstationBranchCount||0,text(reason)||'Customer material pricing update',changedBy)
       changed=true
     }
@@ -100,8 +129,6 @@ export function saveCustomerMaterialPricing(customerId,items,{changedBy='Adminis
   for(const materialId of removals){
     const current=database.prepare('SELECT * FROM customer_material_pricing WHERE customer_id=? AND material_id=?').get(customer.id,materialId)
     if(!current||current.status==='inactive')continue
-    const branchCount=database.prepare(`SELECT COUNT(DISTINCT s.branch_id) count FROM branch_material_price_selections s JOIN branches b ON b.id=s.branch_id WHERE b.customer_id=? AND s.material_id=?`).get(customer.id,materialId).count
-    if(branchCount>0)throw new Error(`Cannot remove Customer Material Pricing while ${branchCount} Branches still use it`)
     const old=before.items.find(entry=>entry.materialId===materialId),after={...(old||current),status:'inactive',removed:true}
     database.prepare("UPDATE customer_material_pricing SET status='inactive',updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND customer_id=?").run(changedBy,current.id,customer.id)
     database.prepare(`INSERT INTO customer_material_pricing_history(customer_material_pricing_id,customer_id,material_id,before_json,after_json,affected_standard_branch_count,affected_outstation_branch_count,reason,changed_by) VALUES(?,?,?,?,?,?,?,?,?)`).run(current.id,customer.id,materialId,JSON.stringify(old||current),JSON.stringify(after),old?.standardBranchCount||0,old?.outstationBranchCount||0,text(reason)||'Customer material pricing removed',changedBy)
@@ -110,67 +137,9 @@ export function saveCustomerMaterialPricing(customerId,items,{changedBy='Adminis
   return{changed,...listCustomerMaterialPricing(customer.id,database)}
 }
 
-export function replaceBranchMaterialSelections(branchId,items,{changedBy='Supervisor',reason='Branch material price type update'}={},database=defaultDb){
-  if(!Array.isArray(items))return{changed:false,items:listBranchMaterials(branchId,database)}
-  const branch=database.prepare('SELECT id,customer_id FROM branches WHERE id=?').get(branchId);if(!branch)throw new Error('Branch not found')
-  const materialIds=items.map(item=>Number(item.materialId));if(materialIds.some(id=>!id)||new Set(materialIds).size!==materialIds.length)throw new Error('The same Material cannot be added more than once')
-  const legacyPayload=items.length>0&&items.every(item=>!Object.hasOwn(item,'priceType')&&(item.priceLevelId||item.specialPrice!==undefined))
-  if(legacyPayload){
-    const result=replaceBranchMaterials(branchId,items,{changedBy,reason},database)
-    for(const item of items){
-      const legacy=database.prepare('SELECT * FROM branch_material_prices WHERE branch_id=? AND material_id=?').get(branchId,Number(item.materialId))
-      let pricing=database.prepare('SELECT * FROM customer_material_pricing WHERE customer_id=? AND material_id=?').get(branch.customer_id,Number(item.materialId))
-      if(!pricing){saveCustomerMaterialPricing(branch.customer_id,[{materialId:item.materialId,standardPriceLevelId:legacy.price_level_id,standardSpecialPrice:legacy.special_price}],{changedBy,reason,confirmed:true},database);pricing=database.prepare('SELECT * FROM customer_material_pricing WHERE customer_id=? AND material_id=?').get(branch.customer_id,Number(item.materialId))}
-      database.prepare(`INSERT INTO branch_material_price_selections(branch_id,material_id,customer_material_pricing_id,price_type,uses_legacy_price,legacy_price_level_id,legacy_special_price,legacy_effective_date,assigned_by)
-        VALUES(?,?,?,'standard',1,?,?,?,?) ON CONFLICT(branch_id,material_id) DO UPDATE SET customer_material_pricing_id=excluded.customer_material_pricing_id,price_type='standard',uses_legacy_price=1,legacy_price_level_id=excluded.legacy_price_level_id,legacy_special_price=excluded.legacy_special_price,legacy_effective_date=excluded.legacy_effective_date,assigned_by=excluded.assigned_by,updated_at=CURRENT_TIMESTAMP`).run(branchId,Number(item.materialId),pricing.id,legacy.price_level_id,legacy.special_price,legacy.effective_date,changedBy)
-    }
-    return{...result,items:listBranchMaterials(branchId,database)}
-  }
-  const before=listBranchMaterials(branchId,database),keep=new Set()
-  for(const item of items){
-    const materialId=Number(item.materialId),priceType=text(item.priceType||'standard').toLowerCase();if(!['standard','outstation'].includes(priceType))throw new Error('Price Type must be Standard or Outstation')
-    let pricing=database.prepare('SELECT * FROM customer_material_pricing WHERE customer_id=? AND material_id=? AND status=?').get(branch.customer_id,materialId,'active')
-    if(!pricing&&(item.priceLevelId||item.specialPrice!==undefined)){
-      saveCustomerMaterialPricing(branch.customer_id,[{materialId,standardPriceLevelId:item.priceLevelId,standardSpecialPrice:item.specialPrice}],{changedBy,reason,confirmed:true},database)
-      pricing=database.prepare('SELECT * FROM customer_material_pricing WHERE customer_id=? AND material_id=? AND status=?').get(branch.customer_id,materialId,'active')
-    }
-    if(!pricing)throw new Error('Please configure this Material under Customer Material Pricing first')
-    if(priceType==='outstation'&&!pricing.outstation_enabled)throw new Error('Outstation Price is not enabled for this Customer and Material')
-    const old=before.find(entry=>entry.materialId===materialId),preserveLegacy=old?.usesLegacyPrice&&old.priceType===priceType?1:0
-    database.prepare(`INSERT INTO branch_material_price_selections(branch_id,material_id,customer_material_pricing_id,price_type,uses_legacy_price,assigned_by)
-      VALUES(?,?,?,?,?,?) ON CONFLICT(branch_id,material_id) DO UPDATE SET customer_material_pricing_id=excluded.customer_material_pricing_id,price_type=excluded.price_type,uses_legacy_price=excluded.uses_legacy_price,assigned_by=excluded.assigned_by,updated_at=CURRENT_TIMESTAMP`).run(branchId,materialId,pricing.id,priceType,preserveLegacy,changedBy)
-    if(!old||old.priceType!==priceType||old.customerMaterialPricingId!==pricing.id)database.prepare(`INSERT INTO branch_material_price_selection_history(branch_id,material_id,old_price_type,new_price_type,old_customer_material_pricing_id,new_customer_material_pricing_id,reason,changed_by) VALUES(?,?,?,?,?,?,?,?)`).run(branchId,materialId,old?.priceType||null,priceType,old?.customerMaterialPricingId||null,pricing.id,text(reason)||'Branch material price type update',changedBy)
-    keep.add(materialId)
-  }
-  for(const old of before)if(!keep.has(old.materialId)){database.prepare('DELETE FROM branch_material_price_selections WHERE branch_id=? AND material_id=?').run(branchId,old.materialId);database.prepare('DELETE FROM branch_material_prices WHERE branch_id=? AND material_id=?').run(branchId,old.materialId)}
-  const after=listBranchMaterials(branchId,database);return{changed:JSON.stringify(before)!==JSON.stringify(after),items:after,before}
-}
+export function replaceBranchMaterialSelections(){throw new Error('Branch material pricing is inherited from Customer and is read-only.')}
 
-export function replaceBranchMaterials(branchId,items,{changedBy='Supervisor',reason='Branch material price update'}={},database=defaultDb){
-  if(!Array.isArray(items))return{changed:false,items:listBranchMaterials(branchId,database)}
-  const materialIds=items.map(item=>Number(item.materialId))
-  if(materialIds.some(id=>!id)||new Set(materialIds).size!==materialIds.length)throw new Error('The same Material cannot be added more than once')
-  const before=listBranchMaterials(branchId,database),beforeBy=new Map(before.map(item=>[item.materialId,item]))
-  const keep=new Set()
-  const upsert=database.prepare(`INSERT INTO branch_material_prices(branch_id,material_id,price_level_id,special_price,effective_date,status,assigned_by)
-    VALUES(?,?,?,?,?,'active',?) ON CONFLICT(branch_id,material_id) DO UPDATE SET price_level_id=excluded.price_level_id,special_price=excluded.special_price,effective_date=excluded.effective_date,status='active',assigned_by=excluded.assigned_by,updated_at=CURRENT_TIMESTAMP`)
-  const history=database.prepare(`INSERT INTO branch_material_price_history(branch_id,material_id,old_price_level_id,new_price_level_id,old_special_price,new_special_price,reason,changed_by) VALUES(?,?,?,?,?,?,?,?)`)
-  for(const item of items){
-    const materialId=Number(item.materialId),material=database.prepare('SELECT * FROM materials WHERE id=?').get(materialId);if(!material)throw new Error('Material not found')
-    const special=item.specialPrice!==''&&item.specialPrice!=null?specialPriceAmount(item.specialPrice):null
-    const priceLevelId=special==null?Number(item.priceLevelId)||null:null
-    let level=null
-    if(priceLevelId){level=database.prepare('SELECT * FROM material_price_levels WHERE id=? AND material_id=?').get(priceLevelId,materialId);if(!level)throw new Error('Price Level does not belong to the selected Material')}
-    if(!priceLevelId&&special==null)throw new Error(`Select a Price Level or Special Price for ${material.material_name}`)
-    const effectiveDate=text(item.effectiveDate)||(special!=null?new Date().toISOString().slice(0,10):level.effective_date),old=beforeBy.get(materialId)
-    upsert.run(branchId,materialId,priceLevelId,special,effectiveDate,changedBy)
-    if(!old||old.priceLevelId!==priceLevelId||old.specialPrice!==special)history.run(branchId,materialId,old?.priceLevelId||null,priceLevelId,old?.specialPrice??null,special,reason,changedBy)
-    keep.add(materialId)
-  }
-  for(const old of before)if(!keep.has(old.materialId)){database.prepare('DELETE FROM branch_material_prices WHERE branch_id=? AND material_id=?').run(branchId,old.materialId);history.run(branchId,old.materialId,old.priceLevelId,null,old.specialPrice??null,null,reason,changedBy)}
-  const after=listBranchMaterials(branchId,database)
-  return{changed:JSON.stringify(before)!==JSON.stringify(after),items:after,before}
-}
+export function replaceBranchMaterials(){throw new Error('Branch material pricing is inherited from Customer and is read-only.')}
 
 const tableExists=(database,name)=>Boolean(database.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name))
 const materialNameColumns=database=>{
