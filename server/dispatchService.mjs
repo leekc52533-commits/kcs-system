@@ -130,7 +130,7 @@ export function generateDay(payload={},database=defaultDb){return generateRange(
 
 function stopRows(database, dayId) {
   return database.prepare(`SELECT ds.id,ds.stop_sequence stopSequence,ds.sequence_locked sequenceLocked,ds.estimated_weight_kg estimatedWeightKg,
-    ds.source_special_request_id specialRequestId,b.jodoo_branch_id branchId,b.branch_name branchName,c.name customerName,c.payment_type paymentType,c.occ_price occPrice,
+    ds.source_special_request_id specialRequestId,b.jodoo_branch_id branchId,b.branch_name branchName,c.name customerName,c.payment_type paymentType,COALESCE((SELECT CASE WHEN cmp.price_type='outstation' THEN COALESCE(cmp.outstation_special_price,opl.price_amount) ELSE COALESCE(cmp.standard_special_price,spl.price_amount) END FROM customer_material_pricing cmp JOIN materials om ON om.id=cmp.material_id AND om.material_code='OCC' LEFT JOIN material_price_levels spl ON spl.id=cmp.standard_price_level_id LEFT JOIN material_price_levels opl ON opl.id=cmp.outstation_price_level_id WHERE cmp.customer_id=c.id AND cmp.status='active' AND cmp.resolution_state='ready'),c.occ_price) occPrice,
     b.area_id areaId,COALESCE(ds.area_name_snapshot,a.name) area,COALESCE(ds.zone_group_id_snapshot,a.zone_group_id) zoneGroupId,COALESCE(ds.zone_group_name_snapshot,z.name,'待确认') zoneGroup,z.sort_order zoneSortOrder,b.latitude,b.longitude,b.time_restriction timeRestriction,
     dt.id tripId,dt.trip_number tripNumber,d.vehicle_id vehicleId,v.vehicle_code vehicle,d.driver_id driverId,dr.name driver,d.assistant_id assistantId,asst.name assistant
     FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id JOIN dispatches d ON d.id=dt.dispatch_id

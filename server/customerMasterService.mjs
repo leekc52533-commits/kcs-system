@@ -1,7 +1,7 @@
 import { db as defaultDb } from './database.mjs'
 import { invalidateDispatchDay } from './dispatchService.mjs'
 import { addTemporaryLocation, adoptTemporaryLocation } from './specialRequestService.mjs'
-import { listBranchMaterials, listCustomerMaterialPricing, normalizeCollectionSettings, replaceBranchMaterialSelections, saveCustomerMaterialPricing } from './materialPriceService.mjs'
+import { listBranchMaterials, listCustomerMaterialPricing, normalizeCollectionSettings, saveCustomerMaterialPricing } from './materialPriceService.mjs'
 import {assertLocationFields} from '../shared/locationText.js'
 import {formatBranchId,formatBuyerBranchId,formatBuyerId,formatCustomerId,parseTypedId} from '../shared/typedIds.js'
 import {applyBranchLifecycle} from './branchLifecycleService.mjs'
@@ -106,11 +106,7 @@ const branchSelect=`SELECT b.id internalId,b.jodoo_branch_id branchId,c.jodoo_cu
   (SELECT tl.latitude FROM temporary_locations tl WHERE tl.branch_id=b.id ORDER BY tl.id DESC LIMIT 1) temporaryLatitude,
   (SELECT tl.longitude FROM temporary_locations tl WHERE tl.branch_id=b.id ORDER BY tl.id DESC LIMIT 1) temporaryLongitude,
   (SELECT tl.verification_status FROM temporary_locations tl WHERE tl.branch_id=b.id ORDER BY tl.id DESC LIMIT 1) temporaryGpsStatus,
-  COUNT(DISTINCT s.id) scheduleCount,(SELECT COUNT(*) FROM (
-    SELECT material_id FROM branch_material_price_selections bmps WHERE bmps.branch_id=b.id
-    UNION
-    SELECT material_id FROM branch_material_prices bmp WHERE bmp.branch_id=b.id AND bmp.status='active'
-  )) materialCount,b.created_by createdBy,b.created_at createdAt,b.updated_at updatedAt
+  COUNT(DISTINCT s.id) scheduleCount,(SELECT COUNT(*) FROM customer_material_pricing cmp WHERE cmp.customer_id=b.customer_id AND cmp.status='active') materialCount,b.created_by createdBy,b.created_at createdAt,b.updated_at updatedAt
   FROM branches b LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN zone_groups z ON z.id=COALESCE(a.confirmed_zone_group_id,a.zone_group_id) LEFT JOIN branches rb ON rb.id=b.replaced_by_branch_id LEFT JOIN branch_schedules s ON s.branch_id=b.id`
 
 export function listBranches(params={},database=defaultDb){
@@ -137,6 +133,7 @@ export function getBranch(branchId,database=defaultDb){
 }
 
 export function createBranch(payload,database=defaultDb){
+  if(['materials','occPriceGroupId','occPrice'].some(key=>Object.hasOwn(payload,key)))throw new Error('Branch pricing is inherited from Customer and cannot be edited.')
   assertLocationFields(payload,['address'])
   const customerId=text(payload.customerId),name=text(payload.branchName);if(!customerId)throw new Error('Parent Customer is required');if(!name)throw new Error('Branch Name is required')
   const customer=database.prepare('SELECT id FROM customers WHERE jodoo_customer_id=?').get(customerId);if(!customer)throw new Error('Customer ID was not found')
@@ -144,9 +141,8 @@ export function createBranch(payload,database=defaultDb){
   const status=statusValue(payload.status),payment=paymentValue(payload.paymentType),actor=text(payload.changedBy||payload.createdBy)||'Supervisor',settings=normalizeCollectionSettings(payload.collectionFrequency,payload.assignedWeekdays);if(status!=='active')throw new Error('Create the Branch as Active, then use Change Status with a reason')
   database.exec('SAVEPOINT create_branch');try{
     const branchId=text(payload.branchId)||nextMasterId(database,'branches','jodoo_branch_id','branch')
-    const result=database.prepare(`INSERT INTO branches(jodoo_branch_id,customer_id,area_id,source_customer_id,source_area_id,branch_name,address,latitude,longitude,gps_status,gps_verified_at,contact_person,phone,collection_frequency,assigned_weekdays,time_restriction,occ_price,payment_type,proof_requirements,vehicle_restriction,status,notes,source_system,created_by,created_at,is_active)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'KCS',?,CURRENT_TIMESTAMP,?)`).run(branchId,customer.id,area?.id||null,customerId,payload.areaId?text(payload.areaId):null,name,nullable(payload.address),payload.officialLatitude??null,payload.officialLongitude??null,nullable(payload.gpsVerificationStatus),payload.gpsVerifiedAt||null,nullable(payload.contactPerson),nullable(payload.phone),settings.collectionFrequency,settings.assignedWeekdaysStorage,nullable(payload.collectionTimeConstraint),payload.occPrice??null,payment,nullable(payload.proofRequirements),nullable(payload.vehicleRestriction),status,nullable(payload.notes),actor,status==='active'?1:0)
-    replaceBranchMaterialSelections(Number(result.lastInsertRowid),payload.materials,{changedBy:actor,reason:payload.reason||'Branch created'},database)
+    database.prepare(`INSERT INTO branches(jodoo_branch_id,customer_id,area_id,source_customer_id,source_area_id,branch_name,address,latitude,longitude,gps_status,gps_verified_at,contact_person,phone,collection_frequency,assigned_weekdays,time_restriction,occ_price,payment_type,proof_requirements,vehicle_restriction,status,notes,source_system,created_by,created_at,is_active)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'KCS',?,CURRENT_TIMESTAMP,?)`).run(branchId,customer.id,area?.id||null,customerId,payload.areaId?text(payload.areaId):null,name,nullable(payload.address),payload.officialLatitude??null,payload.officialLongitude??null,nullable(payload.gpsVerificationStatus),payload.gpsVerifiedAt||null,nullable(payload.contactPerson),nullable(payload.phone),settings.collectionFrequency,settings.assignedWeekdaysStorage,nullable(payload.collectionTimeConstraint),null,payment,nullable(payload.proofRequirements),nullable(payload.vehicleRestriction),status,nullable(payload.notes),actor,status==='active'?1:0)
     const item=getBranch(branchId,database);history(database,'branch',branchId,'created',null,item,{changedBy:actor,reason:payload.reason});database.exec('RELEASE create_branch');return item
   }catch(error){database.exec('ROLLBACK TO create_branch; RELEASE create_branch');throw error}
 }
@@ -174,6 +170,7 @@ export function linkBranchToCustomer(branchId,payload,database=defaultDb){
 }
 
 export function updateBranch(branchId,payload,database=defaultDb){
+  if(['materials','occPriceGroupId','occPrice'].some(key=>Object.hasOwn(payload,key)))throw new Error('Branch pricing is inherited from Customer and cannot be edited.')
   assertLocationFields(payload,['address'])
   const before=database.prepare('SELECT * FROM branches WHERE jodoo_branch_id=?').get(branchId);if(!before)throw new Error('Branch not found')
   if(payload.branchId&&text(payload.branchId)!==branchId)throw new Error('Branch ID cannot be changed after creation')
@@ -185,11 +182,10 @@ export function updateBranch(branchId,payload,database=defaultDb){
   const settings=payload.collectionFrequency!==undefined||payload.assignedWeekdays!==undefined?normalizeCollectionSettings(payload.collectionFrequency??before.collection_frequency,payload.assignedWeekdays??before.assigned_weekdays):null
   database.exec('SAVEPOINT update_branch');try{
     database.prepare(`UPDATE branches SET customer_id=?,area_id=?,source_customer_id=?,source_area_id=?,branch_name=?,address=?,latitude=?,longitude=?,gps_status=?,gps_verified_at=?,contact_person=?,phone=?,collection_frequency=?,assigned_weekdays=?,time_restriction=?,occ_price=?,payment_type=?,proof_requirements=?,vehicle_restriction=?,status=?,notes=?,is_active=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(
-      customer?.id??before.customer_id,area?.id??before.area_id,payload.customerId??before.source_customer_id,area?.jodoo_area_id??before.source_area_id,text(payload.branchName??before.branch_name),submittedNullable(payload,'address',before.address),payload.officialLatitude===undefined?before.latitude:payload.officialLatitude,payload.officialLongitude===undefined?before.longitude:payload.officialLongitude,submittedNullable(payload,'gpsVerificationStatus',before.gps_status),payload.gpsVerifiedAt===undefined?before.gps_verified_at:payload.gpsVerifiedAt||null,submittedNullable(payload,'contactPerson',before.contact_person),submittedNullable(payload,'phone',before.phone),settings?settings.collectionFrequency:before.collection_frequency,settings?settings.assignedWeekdaysStorage:before.assigned_weekdays,submittedNullable(payload,'collectionTimeConstraint',before.time_restriction),payload.occPrice===undefined?before.occ_price:payload.occPrice,payment,submittedNullable(payload,'proofRequirements',before.proof_requirements),submittedNullable(payload,'vehicleRestriction',before.vehicle_restriction),status,submittedNullable(payload,'notes',before.notes),status==='active'?1:0,before.id)
-    const priceResult=replaceBranchMaterialSelections(before.id,payload.materials,{changedBy:actor,reason:payload.reason||'Branch material price type update'},database)
-    const after=database.prepare('SELECT * FROM branches WHERE id=?').get(before.id);history(database,'branch',branchId,'updated',before,{...after,materials:priceResult.items},{changedBy:actor,reason:payload.reason})
+      customer?.id??before.customer_id,area?.id??before.area_id,payload.customerId??before.source_customer_id,area?.jodoo_area_id??before.source_area_id,text(payload.branchName??before.branch_name),submittedNullable(payload,'address',before.address),payload.officialLatitude===undefined?before.latitude:payload.officialLatitude,payload.officialLongitude===undefined?before.longitude:payload.officialLongitude,submittedNullable(payload,'gpsVerificationStatus',before.gps_status),payload.gpsVerifiedAt===undefined?before.gps_verified_at:payload.gpsVerifiedAt||null,submittedNullable(payload,'contactPerson',before.contact_person),submittedNullable(payload,'phone',before.phone),settings?settings.collectionFrequency:before.collection_frequency,settings?settings.assignedWeekdaysStorage:before.assigned_weekdays,submittedNullable(payload,'collectionTimeConstraint',before.time_restriction),before.occ_price,payment,submittedNullable(payload,'proofRequirements',before.proof_requirements),submittedNullable(payload,'vehicleRestriction',before.vehicle_restriction),status,submittedNullable(payload,'notes',before.notes),status==='active'?1:0,before.id)
+    const after=database.prepare('SELECT * FROM branches WHERE id=?').get(before.id);history(database,'branch',branchId,'updated',before,after,{changedBy:actor,reason:payload.reason})
     const critical=['customer_id','area_id','branch_name','address','latitude','longitude','collection_frequency','assigned_weekdays','time_restriction','occ_price','payment_type','status','is_active'],changed=critical.some(key=>before[key]!==after[key])
-    if(changed||priceResult.changed)invalidateBranches(database,[before.id],'branch_master_changed','branch',branchId,before,{...after,materials:priceResult.items},actor)
+    if(changed)invalidateBranches(database,[before.id],'branch_master_changed','branch',branchId,before,after,actor)
     database.exec('RELEASE update_branch');return getBranch(branchId,database)
   }catch(error){database.exec('ROLLBACK TO update_branch; RELEASE update_branch');throw error}
 }

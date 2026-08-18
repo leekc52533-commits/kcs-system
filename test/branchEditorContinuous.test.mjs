@@ -57,6 +57,7 @@ function pricingFixture(db) {
     standardPriceLevelId: standard.id,
     outstationEnabled: true,
     outstationPriceLevelId: outstation.id,
+    priceType: 'outstation',
   }], {changedBy: 'QA', reason: 'Continuous editor fixture'}, db)
   return {materialId}
 }
@@ -192,7 +193,6 @@ test('ten Branches can be edited continuously without carrying prior state, freq
       branchName: `Branch ${index}`,
       collectionFrequency: index % 3 === 0 ? 'Twice a week' : null,
       assignedWeekdays: index % 3 === 0 ? ['Monday', 'Thursday'] : [],
-      materials: [{materialId, priceType: 'standard'}],
     }, db)
   }
 
@@ -230,8 +230,9 @@ test('ten Branches can be edited continuously without carrying prior state, freq
     const reopened = getBranch(branchId, db)
     assert.equal(reopened.branchId, branchId)
     assert.equal(reopened.notes, `saved-${index}`)
-    assert.equal(reopened.materials[0].priceType, priceType)
-    assert.equal(reopened.materials[0].currentPrice, priceType === 'outstation' ? 0.17 : 0.19)
+    assert.equal(Object.hasOwn(payload, 'materials'), false)
+    assert.equal(reopened.materials[0].priceType, 'outstation')
+    assert.equal(reopened.materials[0].currentPrice, 0.17)
     if (frequencyTouched) {
       assert.equal(reopened.collectionFrequency, 'Once a week')
       assert.deepEqual(reopened.assignedWeekdays, ['Friday'])

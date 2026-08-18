@@ -4,8 +4,8 @@ import fs from 'node:fs'
 import {DatabaseSync} from 'node:sqlite'
 import {schemaSql} from '../server/schema.mjs'
 import {applyV18Migration,syncLegacyOccPrices} from '../server/migrationV18.mjs'
-import {bulkUpdatePriceLevel,captureDispatchStopPriceSnapshot,createPriceLevel,getMaterial,normalizeCollectionSettings} from '../server/materialPriceService.mjs'
-import {createBranch,createCustomer,getBranch,updateBranch} from '../server/customerMasterService.mjs'
+import {bulkUpdatePriceLevel,captureDispatchStopPriceSnapshot,createPriceLevel,getMaterial,normalizeCollectionSettings,saveCustomerMaterialPricing} from '../server/materialPriceService.mjs'
+import {createBranch,createCustomer,getBranch} from '../server/customerMasterService.mjs'
 import {accountCan,roleCan} from '../server/authService.mjs'
 
 const database=()=>{
@@ -28,31 +28,9 @@ test('schema v17 upgrades to v18 and shared legacy OCC levels are idempotent',()
   assert.equal(db.prepare('SELECT COUNT(*) count FROM branch_material_prices').get().count,3)
 })
 
-test('new Branch saves multiple Materials and reopens without losing Price Level or Special Price',()=>{
-  const db=database();syncLegacyOccPrices(db);createCustomer({customerId:'C10',customerName:'Customer Ten'},db)
-  const occ=getMaterial(db.prepare("SELECT id FROM materials WHERE material_code='OCC'").get().id,db),plasticId=db.prepare("SELECT id FROM materials WHERE material_code='PLASTIC'").get().id
-  const occLevel=createPriceLevel(occ.id,{priceAmount:.25,effectiveDate:'2026-08-01',reason:'New customer list'},db)
-  createBranch({branchId:'B10',customerId:'C10',branchName:'Branch Ten',collectionFrequency:'Twice a week',assignedWeekdays:['Monday','Thursday'],materials:[{materialId:occ.id,priceLevelId:occLevel.id},{materialId:plasticId,specialPrice:.18}],paymentType:'Cash'},db)
-  const branch=getBranch('B10',db)
-  assert.equal(branch.materials.length,2);assert.equal(branch.assignedWeekdays.join(','),'Monday,Thursday')
-  assert.equal(branch.materials.find(item=>item.materialCode==='OCC').priceLevelId,occLevel.id)
-  assert.equal(branch.materials.find(item=>item.materialCode==='PLASTIC').specialPrice,.18)
-  assert.throws(()=>updateBranch('B10',{materials:[{materialId:occ.id,priceLevelId:occLevel.id},{materialId:occ.id,priceLevelId:occLevel.id}]},db),/same Material/)
-  assert.equal(getBranch('B10',db).materials.length,2)
-})
+test('new Branch saves multiple Materials and reopens without losing Price Level or Special Price',()=>{const db=database();syncLegacyOccPrices(db);createCustomer({customerId:'C10',customerName:'Customer Ten'},db);const occ=getMaterial(db.prepare("SELECT id FROM materials WHERE material_code='OCC'").get().id,db),plasticId=db.prepare("SELECT id FROM materials WHERE material_code='PLASTIC'").get().id,occLevel=createPriceLevel(occ.id,{priceAmount:.25,effectiveDate:'2026-08-01',reason:'New customer list'},db);saveCustomerMaterialPricing('C10',[{materialId:occ.id,standardPriceLevelId:occLevel.id},{materialId:plasticId,standardSpecialPrice:.18}],{reason:'Customer agreement',changedBy:'Admin'},db);createBranch({branchId:'B10',customerId:'C10',branchName:'Branch Ten',collectionFrequency:'Twice a week',assignedWeekdays:['Monday','Thursday'],paymentType:'Cash'},db);const branch=getBranch('B10',db);assert.equal(branch.materials.length,2);assert.equal(branch.assignedWeekdays.join(','),'Monday,Thursday');assert.equal(branch.materials.find(item=>item.materialCode==='OCC').priceLevelId,occLevel.id);assert.equal(branch.materials.find(item=>item.materialCode==='PLASTIC').specialPrice,.18);assert.equal(db.prepare('SELECT COUNT(*) n FROM branch_material_price_selections').get().n,0)})
 
-test('bulk adjustment preserves audit history, branch special price and completed stop snapshot',()=>{
-  const db=database();syncLegacyOccPrices(db);createCustomer({customerId:'C20',customerName:'Customer Twenty'},db)
-  const occId=db.prepare("SELECT id FROM materials WHERE material_code='OCC'").get().id,level=createPriceLevel(occId,{priceAmount:.2,effectiveDate:'2026-07-01',reason:'Opening price'},db)
-  createBranch({branchId:'B20',customerId:'C20',branchName:'Branch Twenty',materials:[{materialId:occId,priceLevelId:level.id}]},db)
-  const branch=db.prepare("SELECT id FROM branches WHERE jodoo_branch_id='B20'").get(),dispatch=db.prepare("INSERT INTO dispatches(dispatch_date,status) VALUES('2026-08-01','draft')").run(),stop=db.prepare('INSERT INTO dispatch_stops(dispatch_id,branch_id,stop_sequence) VALUES(?,?,1)').run(dispatch.lastInsertRowid,branch.id)
-  captureDispatchStopPriceSnapshot(Number(stop.lastInsertRowid),db)
-  const result=bulkUpdatePriceLevel(level.id,{newPrice:.3,effectiveDate:'2026-08-15',reason:'Market adjustment',confirmed:true,changedBy:'Admin'},db)
-  assert.equal(result.affectedBranchCount,1);assert.equal(db.prepare('SELECT COUNT(*) count FROM material_price_history').get().count,1)
-  assert.equal(db.prepare('SELECT price_snapshot price FROM dispatch_stop_material_prices WHERE dispatch_stop_id=?').get(stop.lastInsertRowid).price,.2)
-  updateBranch('B20',{materials:[{materialId:occId,specialPrice:.27}]},db)
-  assert.equal(getBranch('B20',db).materials[0].currentPrice,.27)
-})
+test('bulk adjustment preserves audit history, branch special price and completed stop snapshot',()=>{const db=database();syncLegacyOccPrices(db);createCustomer({customerId:'C20',customerName:'Customer Twenty'},db);const occId=db.prepare("SELECT id FROM materials WHERE material_code='OCC'").get().id,level=createPriceLevel(occId,{priceAmount:.2,effectiveDate:'2026-07-01',reason:'Opening price'},db);saveCustomerMaterialPricing('C20',[{materialId:occId,standardPriceLevelId:level.id}],{reason:'Customer agreement',changedBy:'Admin'},db);createBranch({branchId:'B20',customerId:'C20',branchName:'Branch Twenty'},db);const branch=db.prepare("SELECT id FROM branches WHERE jodoo_branch_id='B20'").get(),dispatch=db.prepare("INSERT INTO dispatches(dispatch_date,status) VALUES('2026-08-01','draft')").run(),stop=db.prepare('INSERT INTO dispatch_stops(dispatch_id,branch_id,stop_sequence) VALUES(?,?,1)').run(dispatch.lastInsertRowid,branch.id);captureDispatchStopPriceSnapshot(Number(stop.lastInsertRowid),db);bulkUpdatePriceLevel(level.id,{newPrice:.3,effectiveDate:'2026-08-15',reason:'Market adjustment',confirmed:true,changedBy:'Admin'},db);assert.equal(db.prepare('SELECT COUNT(*) count FROM material_price_history').get().count,1);assert.equal(db.prepare('SELECT price_snapshot price FROM dispatch_stop_material_prices WHERE dispatch_stop_id=?').get(stop.lastInsertRowid).price,.2);assert.equal(getBranch('B20',db).materials[0].currentPrice,.3)})
 
 test('Collection Frequency accepts undecided weekdays, warns mismatch and excludes days for On Call or Paused',()=>{
   assert.deepEqual(normalizeCollectionSettings('Once a week',[]).assignedWeekdays,[])

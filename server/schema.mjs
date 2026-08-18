@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 41
+export const SCHEMA_VERSION = 42
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -1233,6 +1233,8 @@ CREATE TABLE IF NOT EXISTS customer_material_pricing (
   outstation_price_level_id INTEGER REFERENCES material_price_levels(id),
   outstation_special_price REAL CHECK(outstation_special_price>=0 OR outstation_special_price IS NULL),
   outstation_effective_date TEXT,
+  price_type TEXT NOT NULL DEFAULT 'standard' CHECK(price_type IN ('standard','outstation')),
+  resolution_state TEXT NOT NULL DEFAULT 'ready' CHECK(resolution_state IN ('ready','review_required')),
   status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','inactive')),
   updated_by TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
