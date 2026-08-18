@@ -4,7 +4,9 @@ import {DatabaseSync} from 'node:sqlite'
 import {schemaSql} from '../server/schema.mjs'
 import {seedFixedOccPriceGroups} from '../server/migrationV21.mjs'
 import {applyV22Migration,BASE_PRODUCT_CODES} from '../server/migrationV22.mjs'
-import {listBranchProducts,materialIssueReport,requireBranchProductPrice} from '../server/materialProductService.mjs'
+import {ensureV24Tables} from '../server/migrationV24.mjs'
+import {runApprovedCustomerProductPricingBatch} from '../server/customerProductPricingBatchService.mjs'
+import {listBranchProducts,listCustomerProductPricing,materialIssueReport,requireBranchProductPrice,saveCustomerProductPricing} from '../server/materialProductService.mjs'
 import {runMaterialConversion} from '../server/materialConversionService.mjs'
 import {materialDisplayName} from '../shared/materialDisplay.js'
 
@@ -71,6 +73,43 @@ test('v22 master contains 19 non-OCC products, 21 groups and controlled units',(
 test('every current and newly created Branch receives five selectable base products without invented prices',()=>{const database=fixture({branchCount:3});applyV22Migration(database);selectCustomerBaseMaterials(database);for(const branch of database.prepare('SELECT id FROM branches').all()){const products=listBranchProducts(branch.id,database).filter(row=>BASE_PRODUCT_CODES.includes(row.productCode));assert.equal(products.length,5);assert.equal(products.every(row=>row.isSelectable),true);assert.equal(products.every(row=>row.currentPrice===.5),true)}database.prepare("INSERT INTO branches(jodoo_branch_id,customer_id,branch_name) VALUES('NEW-1',1,'New Branch')").run();assert.equal(listBranchProducts('NEW-1',database).filter(row=>BASE_PRODUCT_CODES.includes(row.productCode)).length,5);assert.equal(database.prepare("SELECT COUNT(*) n FROM branch_material_price_selections").get().n,0)})
 
 test('missing product price remains selectable and cannot silently become RM0.00',()=>{const database=fixture({branchCount:1});applyV22Migration(database);const g1=database.prepare("SELECT id FROM material_products WHERE product_code='G1'").get();assert.equal(listBranchProducts('10001',database).some(row=>row.productCode==='G1'),false);assert.throws(()=>requireBranchProductPrice('10001',g1.id,database),/not selectable/);assert.equal(database.prepare('SELECT COUNT(*) n FROM branch_material_price_selections').get().n,0)})
+
+test('Product pricing overrides shared Material pricing so Iron G1 and G2 can differ',()=>{
+  const database=fixture({branchCount:1});applyV22Migration(database);selectCustomerBaseMaterials(database)
+  const products=database.prepare("SELECT id,product_code FROM material_products WHERE product_code IN ('G1','G2') ORDER BY product_code").all()
+  const items=products.map(product=>({productId:product.id,standardPriceLevelId:database.prepare('SELECT id FROM material_price_levels WHERE product_id=?').get(product.id).id}))
+  const saved=saveCustomerProductPricing('C-FIXTURE',items,{changedBy:'KC',reason:'Approved grades',runId:'iron-grades'},database)
+  assert.equal(saved.changedCount,2)
+  const g1=products.find(product=>product.product_code==='G1'),g2=products.find(product=>product.product_code==='G2')
+  database.prepare('UPDATE material_price_levels SET price_amount=.6,price_cents=60 WHERE product_id=?').run(g1.id)
+  const rows=listBranchProducts('10001',database).filter(row=>['G1','G2'].includes(row.productCode)).sort((a,b)=>a.productCode.localeCompare(b.productCode))
+  assert.deepEqual(rows.map(row=>[row.productCode,row.currentPrice]),[['G1',.6],['G2',.4]])
+  assert.equal(database.prepare("SELECT COUNT(*) n FROM material_conversion_audit WHERE run_id='iron-grades'").get().n,2)
+  const wrong=database.prepare('SELECT id FROM material_price_levels WHERE product_id=?').get(g2.id)
+  assert.throws(()=>saveCustomerProductPricing('C-FIXTURE',[{productId:g1.id,standardPriceLevelId:wrong.id}],{reason:'Wrong link'},database),/does not belong/)
+})
+
+test('approved Product batch previews, applies and reruns without changing OCC',()=>{
+  const database=fixture({branchCount:1});applyV22Migration(database);ensureV24Tables(database)
+  const occ=database.prepare("SELECT id FROM materials WHERE material_code='OCC'").get()
+  database.prepare("INSERT INTO customer_material_pricing(customer_id,material_id,standard_special_price,price_type,resolution_state,status,updated_by) VALUES(1,?,.17,'standard','ready','active','KC')").run(occ.id)
+  const can=database.prepare("SELECT id FROM material_products WHERE product_code='ALUMINUM_CAN'").get(),low=database.prepare('SELECT id FROM material_price_levels WHERE product_id=? AND price_cents=450').get(can.id)
+  database.prepare("INSERT INTO customer_product_pricing(customer_id,product_id,standard_price_level_id,status,updated_by) VALUES(1,?,?,'active','legacy')").run(can.id,low.id)
+  const occBefore=JSON.stringify(database.prepare('SELECT * FROM customer_material_pricing').all())
+  const preview=runApprovedCustomerProductPricingBatch(database,{expectedTargetCount:1})
+  assert.deepEqual({mode:preview.mode,inserts:preview.inserts,updates:preview.updates,g1PriceChange:preview.g1PriceChange},{mode:'DRY_RUN',inserts:18,updates:1,g1PriceChange:true})
+  assert.equal(database.prepare('SELECT price_cents FROM material_price_levels WHERE product_id=(SELECT id FROM material_products WHERE product_code=\'G1\')').get().price_cents,50)
+  const applied=runApprovedCustomerProductPricingBatch(database,{apply:true,expectedTargetCount:1})
+  assert.deepEqual({ok:applied.ok,changed:applied.changedConnections,final:applied.finalConnections,history:applied.priceHistoryAdded},{ok:true,changed:19,final:19,history:1})
+  assert.equal(JSON.stringify(database.prepare('SELECT * FROM customer_material_pricing').all()),occBefore)
+  const branchProducts=listBranchProducts('10001',database),g1=branchProducts.find(item=>item.productCode==='G1'),g2=branchProducts.find(item=>item.productCode==='G2'),aluminum=branchProducts.find(item=>item.productCode==='ALUMINUM_CAN')
+  assert.deepEqual([g1.currentPrice,g2.currentPrice,aluminum.currentPrice],[.6,.4,5])
+  const customerProducts=listCustomerProductPricing('C-FIXTURE',database).items
+  assert.equal(customerProducts.length,20)
+  assert.deepEqual(customerProducts.filter(item=>['G1','G2'].includes(item.productCode)).map(item=>[item.productCode,item.standardPrice]),[['G1',.6],['G2',.4]])
+  const repeated=runApprovedCustomerProductPricingBatch(database,{apply:true,expectedTargetCount:1})
+  assert.deepEqual({changed:repeated.changedConnections,history:repeated.priceHistoryAdded},{changed:0,history:0})
+})
 
 test('material issue report finds missing base products, missing prices and wrong product links',()=>{const database=fixture({branchCount:2});applyV22Migration(database);selectCustomerBaseMaterials(database);const g1=database.prepare("SELECT id FROM material_products WHERE product_code='G1'").get(),g2=database.prepare("SELECT id FROM material_products WHERE product_code='G2'").get(),g2Level=database.prepare('SELECT id FROM material_price_levels WHERE product_id=?').get(g2.id);database.prepare('INSERT INTO customer_product_pricing(customer_id,product_id,standard_price_level_id,updated_by) VALUES(1,?,?,?)').run(g1.id,g2Level.id,'legacy');const report=materialIssueReport(database);assert.equal(report.summary.expectedBaseRelations,10);assert.equal(report.summary.actualBaseRelations,10);assert.equal(report.summary.missingRelations,0);assert.equal(report.summary.wrongPriceLinks,1);assert.equal(report.coverage.find(row=>row.productCode==='G1').missingBranches,0)})
 

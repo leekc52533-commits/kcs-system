@@ -2,6 +2,7 @@ import { db as defaultDb } from './database.mjs'
 import { invalidateDispatchDay } from './dispatchService.mjs'
 import { addTemporaryLocation, adoptTemporaryLocation } from './specialRequestService.mjs'
 import { listBranchMaterials, listCustomerMaterialPricing, normalizeCollectionSettings, saveCustomerMaterialPricing } from './materialPriceService.mjs'
+import {listCustomerProductPricing} from './materialProductService.mjs'
 import {assertLocationFields} from '../shared/locationText.js'
 import {formatBranchId,formatBuyerBranchId,formatBuyerId,formatCustomerId,parseTypedId} from '../shared/typedIds.js'
 import {applyBranchLifecycle} from './branchLifecycleService.mjs'
@@ -64,6 +65,7 @@ export function getCustomer(customerId,database=defaultDb){
   const item=database.prepare(`${customerSelect} WHERE c.jodoo_customer_id=? GROUP BY c.id`).get(customerId);if(!item)return null
   item.branches=listBranches({customerId,pageSize:500},database).items
   item.materialPricing=listCustomerMaterialPricing(item.customerId,database)?.items||[]
+  item.productPricing=listCustomerProductPricing(item.customerId,database).items
   item.audit=listMasterAudit({entityType:'customer',entityId:customerId},database)
   return item
 }
