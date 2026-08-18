@@ -25,3 +25,17 @@ test('deploy-v42 ignores and preserves .env.production but rejects every other u
 test('deploy-v42 rejects an existing unsafe backup directory without chmod or service stop',()=>{const f=fixture(),backup=path.join(f.outer,'backups');fs.mkdirSync(backup,{mode:0o755});fs.chmodSync(backup,0o755);const result=run(f);assert.notEqual(result.status,0);assert.match(result.stderr,/already be private/);assert.equal(fs.statSync(backup).mode&0o777,0o755);assert.equal(fs.existsSync(f.log),false)})
 
 test('deploy-v42 impact report fails closed before service stop for unresolved pricing',()=>{const f=fixture(),db=new DatabaseSync(f.dbPath);db.prepare('UPDATE customer_material_pricing SET outstation_enabled=1,outstation_price_level_id=1 WHERE id=1').run();db.close();const result=run(f);assert.notEqual(result.status,0);assert.match(result.stderr,/review_required/);const log=fs.readFileSync(f.log,'utf8');assert.doesNotMatch(log,/systemctl<stop>/);assert.equal(version(f.dbPath),41)})
+
+
+test('v42 before snapshot survives migration and real API startup vehicle normalization',()=>{
+  const f=fixture(),snapshotDir=path.join(f.outer,'snapshot'),snapshot=path.join(snapshotDir,'before.json')
+  fs.mkdirSync(snapshotDir,{mode:0o700})
+  const env={...process.env,KCS_DB_PATH:f.dbPath,KCS_DATA_DIR:f.outer},invoke=args=>spawnSync(realNode,args,{cwd:root,env,encoding:'utf8'})
+  let result=invoke(['--input-type=module','-e',"const m=await import('./server/database.mjs');m.db.close()"]);assert.equal(result.status,0,result.stderr)
+  const beforeDb=new DatabaseSync(f.dbPath);beforeDb.exec("UPDATE vehicles SET updated_at='2026-01-01 00:00:00'");const before=beforeDb.prepare('SELECT * FROM vehicles ORDER BY id').all();beforeDb.close()
+  result=invoke(['scripts/cloud-preflight.mjs','--mode','before','--snapshot',snapshot]);assert.equal(result.status,0,result.stderr)
+  result=invoke(['scripts/migrate-v42.mjs']);assert.equal(result.status,0,result.stderr)
+  result=invoke(['--input-type=module','-e',"const m=await import('./server/database.mjs');m.db.close()"]);assert.equal(result.status,0,result.stderr)
+  result=invoke(['scripts/cloud-preflight.mjs','--mode','after','--snapshot',snapshot]);assert.equal(result.status,0,result.stderr)
+  const afterDb=new DatabaseSync(f.dbPath),after=afterDb.prepare('SELECT * FROM vehicles ORDER BY id').all();afterDb.close();assert.deepEqual(after,before)
+})

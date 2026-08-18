@@ -297,11 +297,12 @@ function normalizeOfficialVehicles() {
         db.prepare('UPDATE vehicles SET vehicle_name=COALESCE(?,vehicle_name),capacity_kg=COALESCE(?,capacity_kg),default_base_location_id=COALESCE(?,default_base_location_id),remark=COALESCE(remark,?) WHERE id=?').run(plateMatch.vehicle_name,plateMatch.capacity_kg,plateMatch.default_base_location_id,`Merged legacy vehicle record #${plateMatch.id}`,target.id)
         db.prepare('DELETE FROM vehicles WHERE id=?').run(plateMatch.id)
       }
-      db.prepare(`UPDATE vehicles SET vehicle_code=?,registration_number=?,official_sequence=?,operational_status=?,is_common=?,status='available',is_temporary=0,temporary_date=NULL,vehicle_name=COALESCE(vehicle_name,?),updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(code,registration,sequence,operationalStatus,isCommon,existingName,target.id)
+      db.prepare(`UPDATE vehicles SET vehicle_code=?,registration_number=?,official_sequence=?,operational_status=?,is_common=?,status='available',is_temporary=0,temporary_date=NULL,vehicle_name=COALESCE(vehicle_name,?),updated_at=CURRENT_TIMESTAMP
+      WHERE id=? AND (vehicle_code IS NOT ? OR registration_number IS NOT ? OR official_sequence IS NOT ? OR operational_status IS NOT ? OR is_common IS NOT ? OR status IS NOT 'available' OR is_temporary IS NOT 0 OR temporary_date IS NOT NULL OR vehicle_name IS NOT COALESCE(vehicle_name,?))`).run(code,registration,sequence,operationalStatus,isCommon,existingName,target.id,code,registration,sequence,operationalStatus,isCommon,existingName)
     }
     let sold=db.prepare("SELECT * FROM vehicles WHERE REPLACE(REPLACE(UPPER(COALESCE(registration_number,'')),' ',''),'-','')='QTW2704'").get()
     if(!sold){const result=db.prepare("INSERT INTO vehicles(vehicle_code,registration_number,status,operational_status,is_common,sold_at,remark) VALUES('Former Vehicle','QTW2704','inactive','sold',0,CURRENT_TIMESTAMP,'Vehicle sold; retained for history only')").run();sold={id:Number(result.lastInsertRowid)}}
-    db.prepare("UPDATE vehicles SET operational_status='sold',status='inactive',official_sequence=NULL,is_common=0,sold_at=COALESCE(sold_at,CURRENT_TIMESTAMP),updated_at=CURRENT_TIMESTAMP WHERE id=?").run(sold.id)
+    db.prepare("UPDATE vehicles SET operational_status='sold',status='inactive',official_sequence=NULL,is_common=0,sold_at=COALESCE(sold_at,CURRENT_TIMESTAMP),updated_at=CURRENT_TIMESTAMP WHERE id=? AND (operational_status IS NOT 'sold' OR status IS NOT 'inactive' OR official_sequence IS NOT NULL OR is_common IS NOT 0 OR sold_at IS NULL)").run(sold.id)
     db.exec('COMMIT')
   } catch(error){db.exec('ROLLBACK');throw error}
 }
