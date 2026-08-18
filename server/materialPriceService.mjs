@@ -70,15 +70,16 @@ export function listCustomerMaterialPricing(customerId,database=defaultDb){
   const items=database.prepare(`SELECT cmp.id,m.id materialId,m.material_code materialCode,m.material_name materialName,m.unit,cmp.status,cmp.price_type priceType,cmp.resolution_state resolutionState,
     cmp.standard_price_level_id standardPriceLevelId,cmp.standard_special_price standardSpecialPrice,COALESCE(cmp.standard_special_price,spl.price_amount) standardPrice,COALESCE(cmp.standard_effective_date,spl.effective_date) standardEffectiveDate,
     cmp.outstation_enabled outstationEnabled,cmp.outstation_price_level_id outstationPriceLevelId,cmp.outstation_special_price outstationSpecialPrice,COALESCE(cmp.outstation_special_price,opl.price_amount) outstationPrice,COALESCE(cmp.outstation_effective_date,opl.effective_date) outstationEffectiveDate,
-    (SELECT COUNT(*) FROM branch_material_price_selections s JOIN branches b ON b.id=s.branch_id WHERE s.customer_material_pricing_id=cmp.id AND b.customer_id=cmp.customer_id AND s.price_type='standard') standardBranchCount,
-    (SELECT COUNT(*) FROM branch_material_price_selections s JOIN branches b ON b.id=s.branch_id WHERE s.customer_material_pricing_id=cmp.id AND b.customer_id=cmp.customer_id AND s.price_type='outstation') outstationBranchCount,
+    CASE WHEN cmp.resolution_state='ready' AND cmp.price_type='standard' THEN (SELECT COUNT(*) FROM branches b WHERE b.customer_id=cmp.customer_id) ELSE 0 END standardBranchCount,
+    CASE WHEN cmp.resolution_state='ready' AND cmp.price_type='outstation' THEN (SELECT COUNT(*) FROM branches b WHERE b.customer_id=cmp.customer_id) ELSE 0 END outstationBranchCount,
     (SELECT COUNT(*) FROM branch_material_price_selections s JOIN branches b ON b.id=s.branch_id WHERE s.customer_material_pricing_id=cmp.id AND b.customer_id=cmp.customer_id AND s.uses_legacy_price=1) legacyBranchCount
     FROM customer_material_pricing cmp JOIN materials m ON m.id=cmp.material_id LEFT JOIN material_price_levels spl ON spl.id=cmp.standard_price_level_id LEFT JOIN material_price_levels opl ON opl.id=cmp.outstation_price_level_id
     WHERE cmp.customer_id=? AND cmp.status='active' ORDER BY m.material_name`).all(customer.id)
   for(const item of items){
     item.outstationEnabled=Boolean(item.outstationEnabled)
-    item.standardBranches=database.prepare(`SELECT b.jodoo_branch_id branchId,b.branch_name branchName FROM branch_material_price_selections s JOIN branches b ON b.id=s.branch_id WHERE s.customer_material_pricing_id=? AND s.price_type='standard' ORDER BY b.branch_name`).all(item.id)
-    item.outstationBranches=database.prepare(`SELECT b.jodoo_branch_id branchId,b.branch_name branchName FROM branch_material_price_selections s JOIN branches b ON b.id=s.branch_id WHERE s.customer_material_pricing_id=? AND s.price_type='outstation' ORDER BY b.branch_name`).all(item.id)
+    const inherited=item.resolutionState==='ready'?database.prepare(`SELECT jodoo_branch_id branchId,branch_name branchName FROM branches WHERE customer_id=? ORDER BY branch_name`).all(customer.id):[]
+    item.standardBranches=item.priceType==='standard'?inherited:[]
+    item.outstationBranches=item.priceType==='outstation'?inherited:[]
   }
   return{...customer,items:sortMaterials(items)}
 }
@@ -150,8 +151,8 @@ const materialNameColumns=database=>{
 export function listMaterials({includeInactive=false}={},database=defaultDb){
   const names=materialNameColumns(database)
   return sortMaterials(database.prepare(`SELECT m.id,m.material_code materialCode,m.material_name materialName,${names.full} fullName,${names.short} shortForm,m.unit,m.status,
-    COUNT(DISTINCT pl.id) priceLevelCount,COUNT(DISTINCT COALESCE(s.branch_id,bmp.branch_id)) branchCount
-    FROM materials m LEFT JOIN material_price_levels pl ON pl.material_id=m.id LEFT JOIN branch_material_price_selections s ON s.material_id=m.id LEFT JOIN branch_material_prices bmp ON bmp.material_id=m.id AND bmp.status='active'
+    COUNT(DISTINCT pl.id) priceLevelCount,(SELECT COUNT(*) FROM customer_material_pricing cmp JOIN branches b ON b.customer_id=cmp.customer_id WHERE cmp.material_id=m.id AND cmp.status='active' AND cmp.resolution_state='ready') branchCount
+    FROM materials m LEFT JOIN material_price_levels pl ON pl.material_id=m.id
     WHERE (?=1 OR m.status='active') GROUP BY m.id`).all(includeInactive?1:0))
 }
 
@@ -160,8 +161,8 @@ export function getMaterial(materialId,database=defaultDb){
   const material=database.prepare(`SELECT m.id,m.material_code materialCode,m.material_name materialName,${names.full} fullName,${names.short} shortForm,m.unit,m.status,m.created_by createdBy,m.created_at createdAt,m.updated_at updatedAt FROM materials m WHERE m.id=?`).get(materialId)
   if(!material)return null
   material.priceLevels=database.prepare(`SELECT pl.id,pl.price_amount priceAmount,pl.effective_date effectiveDate,pl.status,pl.reason,pl.created_by createdBy,pl.created_at createdAt,pl.updated_at updatedAt,
-    COUNT(DISTINCT bmp.branch_id) affectedBranchCount FROM material_price_levels pl LEFT JOIN branch_material_prices bmp ON bmp.price_level_id=pl.id AND bmp.status='active' WHERE pl.material_id=? GROUP BY pl.id ORDER BY pl.status='active' DESC,pl.price_amount,pl.effective_date DESC`).all(materialId)
-  material.branches=database.prepare(`SELECT b.id internalId,b.jodoo_branch_id branchId,c.name customerName,b.branch_name branchName FROM branches b LEFT JOIN customers c ON c.id=b.customer_id WHERE EXISTS(SELECT 1 FROM branch_material_price_selections s WHERE s.branch_id=b.id AND s.material_id=?) OR EXISTS(SELECT 1 FROM branch_material_prices bmp WHERE bmp.branch_id=b.id AND bmp.material_id=? AND bmp.status='active') ORDER BY c.name,b.branch_name`).all(materialId,materialId).map(branch=>({...branch,...listBranchMaterials(branch.internalId,database).find(item=>item.materialId===Number(materialId))}))
+    (SELECT COUNT(*) FROM customer_material_pricing cmp JOIN branches b ON b.customer_id=cmp.customer_id WHERE cmp.material_id=pl.material_id AND cmp.status='active' AND cmp.resolution_state='ready' AND ((cmp.price_type='standard' AND cmp.standard_price_level_id=pl.id) OR (cmp.price_type='outstation' AND cmp.outstation_price_level_id=pl.id))) affectedBranchCount FROM material_price_levels pl WHERE pl.material_id=? GROUP BY pl.id ORDER BY pl.status='active' DESC,pl.price_amount,pl.effective_date DESC`).all(materialId)
+  material.branches=database.prepare(`SELECT b.id internalId,b.jodoo_branch_id branchId,c.name customerName,b.branch_name branchName FROM customer_material_pricing cmp JOIN branches b ON b.customer_id=cmp.customer_id JOIN customers c ON c.id=cmp.customer_id WHERE cmp.material_id=? AND cmp.status='active' AND cmp.resolution_state='ready' ORDER BY c.name,b.branch_name`).all(materialId).map(branch=>({...branch,...listBranchMaterials(branch.internalId,database).find(item=>item.materialId===Number(materialId))}))
   material.history=database.prepare(`SELECT h.*,pl.material_id materialId FROM material_price_history h JOIN material_price_levels pl ON pl.id=h.price_level_id WHERE pl.material_id=? ORDER BY h.id DESC`).all(materialId)
   material.products=tableExists(database,'material_products')?database.prepare(`SELECT id,product_code productCode,full_name fullName,short_form shortForm,unit,status FROM material_products WHERE material_id=? ORDER BY full_name`).all(materialId):[]
   return material
@@ -196,11 +197,10 @@ export function bulkUpdatePriceLevel(priceLevelId,payload,database=defaultDb){
   const reason=text(payload.reason),effectiveDate=text(payload.effectiveDate),newPrice=amount(payload.newPrice)
   if(!reason||!effectiveDate)throw new Error('Effective Date and modification reason are required')
   const before=database.prepare('SELECT * FROM material_price_levels WHERE id=?').get(priceLevelId);if(!before)throw new Error('Price Level not found')
-  const branches=database.prepare(`SELECT DISTINCT b.jodoo_branch_id branchId,c.name customerName,b.branch_name branchName
-    FROM branches b LEFT JOIN customers c ON c.id=b.customer_id
-    WHERE EXISTS(SELECT 1 FROM branch_material_prices bmp WHERE bmp.branch_id=b.id AND bmp.price_level_id=? AND bmp.status='active')
-      OR EXISTS(SELECT 1 FROM branch_material_price_selections s JOIN customer_material_pricing cmp ON cmp.id=s.customer_material_pricing_id WHERE s.branch_id=b.id AND s.uses_legacy_price=0 AND ((s.price_type='standard' AND cmp.standard_price_level_id=?) OR (s.price_type='outstation' AND cmp.outstation_price_level_id=?)))
-    ORDER BY c.name,b.branch_name`).all(priceLevelId,priceLevelId,priceLevelId)
+  const branches=database.prepare(`SELECT b.jodoo_branch_id branchId,c.name customerName,b.branch_name branchName
+    FROM customer_material_pricing cmp JOIN branches b ON b.customer_id=cmp.customer_id JOIN customers c ON c.id=cmp.customer_id
+    WHERE cmp.status='active' AND cmp.resolution_state='ready' AND ((cmp.price_type='standard' AND cmp.standard_price_level_id=?) OR (cmp.price_type='outstation' AND cmp.outstation_price_level_id=?))
+    ORDER BY c.name,b.branch_name`).all(priceLevelId,priceLevelId)
   database.exec('BEGIN IMMEDIATE')
   try{
     database.prepare('UPDATE material_price_levels SET price_amount=?,effective_date=?,reason=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(newPrice,effectiveDate,reason,priceLevelId)
