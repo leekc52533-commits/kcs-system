@@ -25,8 +25,12 @@ sqlite3 "$KCS_DB_PATH" ".backup '$BACKUP'"; chmod 0600 "$BACKUP"; [[ "$(sqlite3 
 KCS_DB_PATH="$KCS_DB_PATH" node scripts/migrate-v42.mjs; MIGRATED=1
 npm ci; npm run build; [[ -f dist/index.html ]] || { echo 'Production build did not create dist/index.html' >&2; exit 1; }
 systemctl start "$KCS_SERVICE"; SERVICE_STOPPED=0
-curl --fail --silent --show-error --retry 10 --retry-delay 2 "$KCS_INTERNAL_HEALTH" >/dev/null
-curl --fail --silent --show-error --retry 10 --retry-delay 2 "$KCS_HTTPS_HEALTH" >/dev/null
+HEALTH_TIMEOUT_SECONDS="${KCS_HEALTH_TIMEOUT_SECONDS:-60}"; HEALTH_RETRY_DELAY_SECONDS="${KCS_HEALTH_RETRY_DELAY_SECONDS:-2}"
+[[ "$HEALTH_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ && "$HEALTH_RETRY_DELAY_SECONDS" =~ ^[0-9]+$ ]] || { echo 'Health timeout must be positive and retry delay must be non-negative' >&2; exit 2; }
+HEALTH_DEADLINE=$((SECONDS+HEALTH_TIMEOUT_SECONDS))
+wait_for_health(){ local label="$1" url="$2"; while true;do if curl --fail --silent --show-error --connect-timeout 3 --max-time 5 "$url" >/dev/null;then return 0;fi; if ((SECONDS>=HEALTH_DEADLINE));then echo "$label health check did not become ready within the ${HEALTH_TIMEOUT_SECONDS}s deployment readiness window" >&2;return 1;fi;sleep "$HEALTH_RETRY_DELAY_SECONDS";done; }
+wait_for_health Internal "$KCS_INTERNAL_HEALTH"
+wait_for_health Public "$KCS_HTTPS_HEALTH"
 KCS_DB_PATH="$KCS_DB_PATH" node scripts/cloud-preflight.mjs --mode after --snapshot "$SNAPSHOT"
 trap - EXIT
 echo "Schema v42 deployment verified at the reviewed target; private backup retained"
