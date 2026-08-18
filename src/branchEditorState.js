@@ -32,9 +32,11 @@ export function buildBranchSavePayload(form, {
 } = {}) {
   const payload = {
     ...form,
-    materials: (form.materials || []).map(item => ({...item})),
     assignedWeekdays: [...(form.assignedWeekdays || [])],
   }
+  delete payload.materials
+  delete payload.occPrice
+  delete payload.occPriceGroupId
   for (const field of ['lifecycleStatus','statusReason','statusChangedAt','statusChangedBy','replacedByBranchId','replacedByBranchInternalId','replacedByBranchName','audit']) delete payload[field]
   if (!frequencyTouched && !weekdaysTouched) {
     delete payload.collectionFrequency
@@ -84,6 +86,13 @@ export function toggleCustomerSpecialPrice(items, index, prefix, enabled) {
     [`${prefix}SpecialPrice`]: enabled ? 0 : '',
     ...(enabled ? {[`${prefix}PriceLevelId`]: ''} : {}),
   })
+}
+
+const customerPricingComparable=item=>({materialId:Number(item.materialId),priceType:item.priceType==='outstation'?'outstation':'standard',standardPriceLevelId:Number(item.standardPriceLevelId)||null,standardSpecialPrice:item.standardSpecialPrice===''||item.standardSpecialPrice==null?null:Number(item.standardSpecialPrice),standardEffectiveDate:String(item.standardEffectiveDate||''),outstationEnabled:Boolean(item.outstationEnabled),outstationPriceLevelId:Number(item.outstationPriceLevelId)||null,outstationSpecialPrice:item.outstationSpecialPrice===''||item.outstationSpecialPrice==null?null:Number(item.outstationSpecialPrice),outstationEffectiveDate:String(item.outstationEffectiveDate||'')})
+export function customerPricingDraftHasDelta(initial,draft,removedMaterialIds=[]){
+  if((removedMaterialIds||[]).map(Number).filter(Boolean).length)return true
+  const normalize=items=>(items||[]).map(customerPricingComparable).sort((a,b)=>a.materialId-b.materialId)
+  return JSON.stringify(normalize(initial))!==JSON.stringify(normalize(draft))
 }
 
 export function validateSpecialPrice(value, label = 'Special Price') {

@@ -1,6 +1,8 @@
-# Schema v41 code-only 正式部署 Runbook
+# Historical Schema v41 code-only Runbook
 
-本流程只适用于 **schema v41 → schema v41 的 code-only deployment**。它不执行 migration、不导入资料，也不以副本覆盖正式库。任何 migration deployment 都必须使用独立、明确的 `--from` / `--to` 专用命令，完成 verified backup rehearsal，并取得人工确认。
+> Historical only. The current deployment entry point is `DEPLOY_V42_CUSTOMER_PRICING.md`.
+
+本流程只适用于 **schema v41 → schema v41 的 historical code-only deployment**。它不执行 migration、不导入资料，也不以副本覆盖正式库。任何 migration deployment 都必须使用独立、明确的 `--from` / `--to` 专用命令，完成 verified backup rehearsal，并取得人工确认。
 
 ## 固定正式环境与发布输入
 

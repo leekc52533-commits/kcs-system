@@ -3,7 +3,6 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import {DatabaseSync} from 'node:sqlite'
 import {schemaSql,SCHEMA_VERSION} from '../server/schema.mjs'
-import {V33_VERSION} from '../server/migrationV33.mjs'
 import {addCalendarDays,kuchingDate,shortcutForDate} from '../shared/kuchingTime.js'
 import {accountCan,bootstrapAccount,createAccount,login,roleCan,updateAccount,updateOwnPreferences} from '../server/authService.mjs'
 import {languageOptions,messages,translate} from '../src/translations.js'
@@ -141,7 +140,7 @@ test('password visibility control exists and schema uses the current explicit mi
   const source=fs.readFileSync(new URL('../src/PasswordInput.jsx',import.meta.url),'utf8')
   assert.match(source,/type=\{visible\?'text':'password'\}/)
   assert.match(source,/auth\.showPassword/)
-  assert.equal(SCHEMA_VERSION,V33_VERSION)
+  assert.equal(SCHEMA_VERSION,42)
 })
 
 test('account name opens Profile menu and voluntary password change is cancellable',()=>{

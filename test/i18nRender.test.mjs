@@ -235,3 +235,41 @@ test('当前生产路由初始组件在English与BM渲染时报告具体页面�
     for(const language of ['en','ms'])assertNoCjk(page,language,wrap(language,React.createElement(Component,props)))
   }
 })
+
+test('Branch inherited pricing detail renders without runtime errors and links to its Customer',()=>{
+  const item={branchId:'12',branchName:'Branch',customerId:'7',customerName:'Customer',materials:[{materialId:1,materialName:'OCC',priceType:'outstation',currentPrice:.44,resolutionState:'ready'}]}
+  const html=htmlText(wrap('en',React.createElement(masterModule.BranchReadOnlyDetail||(()=>null),{item,onClose:noop})))
+  assert.match(html,/customer=C7/)
+  assert.match(html,/Outstation/)
+  assert.match(html,/RM0\.44\/kg/)
+  assert.doesNotMatch(html,/form\.customerId/)
+})
+
+test('Customer pricing changed-flow labels render completely in English, Malay and Chinese',()=>{
+  for(const language of ['en','ms','zh']){
+    const html=htmlText(wrap(language,React.createElement(masterModule.CustomerEditor,{initial:{customerId:'7',customerName:'Customer',status:'active',materialPricing:[]},lockId:true,onClose:noop,onSave:noop,fail:noop,canManagePricing:true,saving:false})))
+    assert.match(html,new RegExp(translate(language,'customer.materialPricing')))
+    assert.match(html,new RegExp(translate(language,'customer.noPricing')))
+    assert.match(html,new RegExp(translate(language,'customer.save')))
+    assert.doesNotMatch(html,/Not Not set/)
+  }
+})
+
+test('legacy OCC archive hides mutation workflows and retains localized group and Branch history',async()=>{
+  const{LegacyOccArchive}=await vite.ssrLoadModule('/src/MaterialsPricesPage.jsx'),data={legacyReadOnly:true,items:[{id:7,itemCode:'OCC-020',priceAmount:.2,branchCount:1,status:'active',branches:[{branchInternalId:9,customerCode:'C001',customerName:'Archive Customer',branchName:'Archive Branch',areaName:'North'}]}]}
+  for(const language of ['en','ms','zh']){
+    const html=htmlText(wrap(language,React.createElement(LegacyOccArchive,{data,onBack:noop})))
+    assert.match(html,new RegExp(translate(language,'occLegacy.readOnly')))
+    assert.match(html,new RegExp(translate(language,'occLegacy.openCustomers')))
+    assert.match(html,/OCC-020/)
+    assert.doesNotMatch(html,/Add OCC Price Group|Save Price Change|Preview Move|Confirm Move|type="checkbox"|<form/)
+  }
+  const container=document.createElement('div'),root=createRoot(container)
+  await act(async()=>root.render(React.createElement(I18nProvider,{language:'en',setLanguage:noop},React.createElement(LegacyOccArchive,{data,onBack:noop}))))
+  await act(async()=>container.querySelector('article[role="button"]').click())
+  assert.match(container.textContent,/Archive Customer/)
+  assert.match(container.textContent,/Archive Branch/)
+  assert.match(container.textContent,/Historical Price/)
+  assert.equal(container.querySelectorAll('input,select,textarea,form').length,0)
+  await act(async()=>root.unmount())
+})
