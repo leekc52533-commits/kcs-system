@@ -4,7 +4,8 @@ import path from 'node:path'
 import {fileURLToPath} from 'node:url'
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..')
-const databasePath=path.resolve(process.env.KCS_DB_PATH||path.join(root,'data','kcs-dispatch.db'))
+if(!process.env.KCS_DB_PATH)throw new Error('KCS_DB_PATH is required; no database path is inferred')
+const databasePath=path.resolve(process.env.KCS_DB_PATH)
 const backupDir=path.resolve(process.env.KCS_BACKUP_DIR||path.join(root,'data','backups'))
 fs.mkdirSync(backupDir,{recursive:true,mode:0o700})
 fs.chmodSync(backupDir,0o700)

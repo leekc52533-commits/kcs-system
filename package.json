@@ -17,7 +17,6 @@
     "predeploy:kcs": "node scripts/predeploy.mjs",
     "rollback:kcs": "node scripts/rollback.mjs",
     "verify:data": "node scripts/verify-data.mjs",
-    "deploy:v41:check": "node scripts/cloud-preflight.mjs",
     "cloud:preflight": "node scripts/cloud-preflight.mjs",
     "cloud:rehearsal:v16-to-v17": "node scripts/cloud-migration-rehearsal.mjs --from 16 --to 17",
     "verify:v16-to-v17:postflight": "node scripts/verify-v17-postflight.mjs",
@@ -50,7 +49,10 @@
     "apply:vehicle-master-v29": "node scripts/apply-vehicle-master-v29.mjs",
     "backup:vehicle-data": "node scripts/backup-vehicle-data.mjs",
     "verify:vehicle-backup": "node scripts/verify-vehicle-backup.mjs",
-    "convert:materials": "node scripts/convert-material-prices.mjs"
+    "convert:materials": "node scripts/convert-material-prices.mjs",
+    "migrate:v42": "node scripts/migrate-v42.mjs",
+    "impact:v42": "node scripts/v42-impact-report.mjs",
+    "deploy:v42:check": "node scripts/cloud-preflight.mjs"
   },
   "dependencies": {
     "exceljs": "^4.4.0",

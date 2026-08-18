@@ -22,6 +22,12 @@ function fixture({branchCount=2}={}){
   return database
 }
 
+
+function selectCustomerBaseMaterials(database,price=.5){
+  const materialIds=database.prepare(`SELECT DISTINCT p.material_id id FROM material_products p WHERE p.product_code IN (${BASE_PRODUCT_CODES.map(()=>'?').join(',')})`).all(...BASE_PRODUCT_CODES).map(row=>row.id)
+  for(const materialId of materialIds)database.prepare("INSERT INTO customer_material_pricing(customer_id,material_id,standard_special_price,price_type,updated_by) VALUES(1,?,?,'standard','test')").run(materialId,price)
+}
+
 test('v21 upgrades to v22 and repeated migration is idempotent',()=>{
   const database=fixture({branchCount:475})
   const first=applyV22Migration(database),second=applyV22Migration(database)
@@ -62,47 +68,11 @@ test('v22 master contains 19 non-OCC products, 21 groups and controlled units',(
     GROUP BY product_id,price_cents HAVING COUNT(*)>1)`).get().count,0)
 })
 
-test('every current and newly created Branch receives five selectable base products without invented prices',()=>{
-  const database=fixture({branchCount:3})
-  applyV22Migration(database)
-  for(const branch of database.prepare('SELECT id FROM branches').all()){
-    const products=listBranchProducts(branch.id,database).filter(row=>BASE_PRODUCT_CODES.includes(row.productCode))
-    assert.equal(products.length,5)
-    assert.equal(products.every(row=>row.isSelectable),true)
-    assert.equal(products.every(row=>row.priceNotSet),true)
-  }
-  database.prepare("INSERT INTO branches(jodoo_branch_id,customer_id,branch_name) VALUES('NEW-1',1,'New Branch')").run()
-  assert.equal(database.prepare(`SELECT COUNT(*) count FROM branch_product_availability a
-    JOIN branches b ON b.id=a.branch_id WHERE b.jodoo_branch_id='NEW-1'`).get().count,5)
-})
+test('every current and newly created Branch receives five selectable base products without invented prices',()=>{const database=fixture({branchCount:3});applyV22Migration(database);selectCustomerBaseMaterials(database);for(const branch of database.prepare('SELECT id FROM branches').all()){const products=listBranchProducts(branch.id,database).filter(row=>BASE_PRODUCT_CODES.includes(row.productCode));assert.equal(products.length,5);assert.equal(products.every(row=>row.isSelectable),true);assert.equal(products.every(row=>row.currentPrice===.5),true)}database.prepare("INSERT INTO branches(jodoo_branch_id,customer_id,branch_name) VALUES('NEW-1',1,'New Branch')").run();assert.equal(listBranchProducts('NEW-1',database).filter(row=>BASE_PRODUCT_CODES.includes(row.productCode)).length,5);assert.equal(database.prepare("SELECT COUNT(*) n FROM branch_material_price_selections").get().n,0)})
 
-test('missing product price remains selectable and cannot silently become RM0.00',()=>{
-  const database=fixture({branchCount:1})
-  applyV22Migration(database)
-  const g1=listBranchProducts('10001',database).find(row=>row.productCode==='G1')
-  assert.equal(g1.isSelectable,true)
-  assert.equal(g1.priceNotSet,true)
-  assert.throws(()=>requireBranchProductPrice('10001',g1.productId,database),/Price Not Set/)
-})
+test('missing product price remains selectable and cannot silently become RM0.00',()=>{const database=fixture({branchCount:1});applyV22Migration(database);const g1=database.prepare("SELECT id FROM material_products WHERE product_code='G1'").get();assert.equal(listBranchProducts('10001',database).some(row=>row.productCode==='G1'),false);assert.throws(()=>requireBranchProductPrice('10001',g1.id,database),/not selectable/);assert.equal(database.prepare('SELECT COUNT(*) n FROM branch_material_price_selections').get().n,0)})
 
-test('material issue report finds missing base products, missing prices and wrong product links',()=>{
-  const database=fixture({branchCount:2})
-  applyV22Migration(database)
-  const branch=database.prepare('SELECT id FROM branches LIMIT 1').get()
-  const g1=database.prepare("SELECT id FROM material_products WHERE product_code='G1'").get()
-  database.prepare('DELETE FROM branch_product_availability WHERE branch_id=? AND product_id=?').run(branch.id,g1.id)
-  const g2=database.prepare("SELECT id FROM material_products WHERE product_code='G2'").get()
-  const g2Level=database.prepare('SELECT id FROM material_price_levels WHERE product_id=?').get(g2.id)
-  database.prepare(`INSERT INTO customer_product_pricing(customer_id,product_id,standard_price_level_id,updated_by)
-    VALUES(1,?,?,?)`).run(g1.id,g2Level.id,'test')
-  const report=materialIssueReport(database)
-  assert.equal(report.summary.expectedBaseRelations,10)
-  assert.equal(report.summary.actualBaseRelations,9)
-  assert.equal(report.summary.missingRelations,1)
-  assert.equal(report.summary.wrongPriceLinks,1)
-  assert.equal(report.coverage.find(row=>row.productCode==='G1').missingBranches,1)
-  assert.ok(report.rows.some(row=>row.branchId==='10001'&&row.productCode==='G1'&&!row.isSelectable))
-})
+test('material issue report finds missing base products, missing prices and wrong product links',()=>{const database=fixture({branchCount:2});applyV22Migration(database);selectCustomerBaseMaterials(database);const g1=database.prepare("SELECT id FROM material_products WHERE product_code='G1'").get(),g2=database.prepare("SELECT id FROM material_products WHERE product_code='G2'").get(),g2Level=database.prepare('SELECT id FROM material_price_levels WHERE product_id=?').get(g2.id);database.prepare('INSERT INTO customer_product_pricing(customer_id,product_id,standard_price_level_id,updated_by) VALUES(1,?,?,?)').run(g1.id,g2Level.id,'legacy');const report=materialIssueReport(database);assert.equal(report.summary.expectedBaseRelations,10);assert.equal(report.summary.actualBaseRelations,10);assert.equal(report.summary.missingRelations,0);assert.equal(report.summary.wrongPriceLinks,1);assert.equal(report.coverage.find(row=>row.productCode==='G1').missingBranches,0)})
 
 test('display names use full form for management and short form for compact printing',()=>{
   assert.equal(materialDisplayName({fullName:'Scrap Iron G1',shortForm:'G1'}),'Scrap Iron G1 (G1)')

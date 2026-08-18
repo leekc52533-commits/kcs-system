@@ -6,6 +6,7 @@ import { uploadsDir } from './database.mjs'
 import { recalculateRecommendations } from './gpsRecommendationService.mjs'
 import { createStop, invalidateDispatchDay, requestDedupeKey } from './dispatchService.mjs'
 import {DuplicateBranchServiceDateError,findBranchServiceDateStop,withImmediateTransaction} from './branchServiceDateGuard.mjs'
+import {resolveCustomerOccPrice} from './materialPriceService.mjs'
 
 const clean = (value) => String(value ?? '').trim()
 const rowView = (row) => row ? ({
@@ -29,7 +30,7 @@ export function searchCustomerBranches(params={},database=defaultDb){
   const search=clean(params.search),like=`%${search}%`
   const nearby=Number.isFinite(Number(params.latitude))&&Number.isFinite(Number(params.longitude)),limit=nearby?2000:30
   const rows=database.prepare(`SELECT b.id internalId,b.jodoo_branch_id branchId,b.branch_name branchName,b.address,b.latitude,b.longitude,
-    c.jodoo_customer_id customerId,c.name customerName,c.payment_type paymentType,c.occ_price occPrice,c.phone,c.whatsapp,a.name area,
+    c.jodoo_customer_id customerId,c.name customerName,c.payment_type paymentType,COALESCE((SELECT CASE WHEN cmp.price_type='outstation' THEN COALESCE(cmp.outstation_special_price,opl.price_amount) ELSE COALESCE(cmp.standard_special_price,spl.price_amount) END FROM customer_material_pricing cmp JOIN materials om ON om.id=cmp.material_id AND om.material_code='OCC' LEFT JOIN material_price_levels spl ON spl.id=cmp.standard_price_level_id LEFT JOIN material_price_levels opl ON opl.id=cmp.outstation_price_level_id WHERE cmp.customer_id=c.id AND cmp.status='active' AND cmp.resolution_state='ready'),c.occ_price) occPrice,c.phone,c.whatsapp,a.name area,
     COALESCE((SELECT json_group_array(json_object('scheduleId',s.jodoo_schedule_id,'frequency',s.frequency,'dayOfWeek',s.days_of_week)) FROM branch_schedules s WHERE s.branch_id=b.id),'[]') schedules
     FROM branches b LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas a ON a.id=b.area_id
     WHERE ?='' OR c.name LIKE ? OR b.branch_name LIKE ? OR c.jodoo_customer_id LIKE ? OR b.jodoo_branch_id LIKE ? OR c.phone LIKE ? OR c.whatsapp LIKE ? OR b.address LIKE ? LIMIT ?`).all(search,like,like,like,like,like,like,like,limit)
@@ -55,7 +56,8 @@ function accountStatus(payload,type){
 
 export function createSpecialRequest(payload,database=defaultDb){
   if(!payload.requestedCollectionDate)throw new Error('Requested Collection Date is required')
-  const branch=payload.existingBranchId?database.prepare(`SELECT b.*,c.jodoo_customer_id customer_id,c.payment_type,c.occ_price FROM branches b LEFT JOIN customers c ON c.id=b.customer_id WHERE b.id=? OR b.jodoo_branch_id=?`).get(payload.existingBranchId,payload.existingBranchId):null
+  const branch=payload.existingBranchId?database.prepare(`SELECT b.*,c.jodoo_customer_id customer_id,c.payment_type FROM branches b LEFT JOIN customers c ON c.id=b.customer_id WHERE b.id=? OR b.jodoo_branch_id=?`).get(payload.existingBranchId,payload.existingBranchId):null
+  if(branch)branch.occ_price=resolveCustomerOccPrice(branch.customer_id,database)
   const type=branch?'existing':'potential_new'
   if(type==='potential_new'&&!clean(payload.temporaryCustomerName))throw new Error('Temporary Customer Name is required')
   const normalized={...payload,existingBranchId:branch?.id||'',temporaryCustomerName:payload.temporaryCustomerName||branch?.branch_name||''}
@@ -91,7 +93,7 @@ export function scheduleSpecialRequest(id,payload,database=defaultDb){
 }
 
 export function convertToExisting(id,payload,database=defaultDb){
-  return withImmediateTransaction(database,()=>{const branch=database.prepare(`SELECT b.*,c.jodoo_customer_id customer_id,c.payment_type,c.occ_price FROM branches b LEFT JOIN customers c ON c.id=b.customer_id WHERE b.id=? OR b.jodoo_branch_id=?`).get(payload.branchId,payload.branchId);if(!branch)throw new Error('Existing Branch not found')
+  return withImmediateTransaction(database,()=>{const branch=database.prepare(`SELECT b.*,c.jodoo_customer_id customer_id,c.payment_type FROM branches b LEFT JOIN customers c ON c.id=b.customer_id WHERE b.id=? OR b.jodoo_branch_id=?`).get(payload.branchId,payload.branchId);if(!branch)throw new Error('Existing Branch not found');branch.occ_price=resolveCustomerOccPrice(branch.customer_id,database)
     const before=database.prepare('SELECT * FROM special_collection_requests WHERE id=?').get(id);if(!before)throw new Error('Special request not found')
     if(before.scheduled_date)createStop({date:before.scheduled_date,branchId:branch.jodoo_branch_id,tripNumber:before.trip_number||1,specialRequestId:Number(id),estimatedWeightKg:before.estimated_weight_kg,changedBy:payload.changedBy},database)
     database.prepare(`UPDATE special_collection_requests SET request_type='existing',existing_branch_id=?,linked_customer_id=?,linked_branch_id=?,occ_price=?,payment_type=?,account_status='ready_for_dispatch',updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(branch.id,branch.customer_id,branch.jodoo_branch_id,branch.occ_price,branch.payment_type,id)
@@ -100,7 +102,8 @@ export function convertToExisting(id,payload,database=defaultDb){
 }
 
 export function linkNewAccount(id,payload,database=defaultDb){
-  const branch=database.prepare(`SELECT b.*,c.jodoo_customer_id customer_id,c.payment_type,c.occ_price FROM branches b JOIN customers c ON c.id=b.customer_id WHERE b.jodoo_branch_id=? AND c.jodoo_customer_id=?`).get(payload.branchId,payload.customerId)
+  const branch=database.prepare(`SELECT b.*,c.jodoo_customer_id customer_id,c.payment_type FROM branches b JOIN customers c ON c.id=b.customer_id WHERE b.jodoo_branch_id=? AND c.jodoo_customer_id=?`).get(payload.branchId,payload.customerId)
+  if(branch)branch.occ_price=resolveCustomerOccPrice(branch.customer_id,database)
   if(!branch)throw new Error('请先从 Jodoo 导入正式 CustomerID 与 BranchID，再连接账号')
   return convertToExisting(id,{branchId:branch.id,changedBy:payload.changedBy},database)
 }
