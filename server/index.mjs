@@ -32,7 +32,7 @@ import {configureScheduleRecurrence,getScheduleRecurrence} from './scheduleRecur
 import {arriveAtStop,completeDriverStop,completeDriverTrip,confirmInvoiceCompleted,recordNoGoods,startDriverTrip} from './driverExecutionService.mjs'
 import {assertVehicleRegistrationEdit} from './vehicleRegistrationPermissions.mjs'
 import {changeBranchLifecycle,listBranchLifecycleReview,listReplacementBranches} from './branchLifecycleService.mjs'
-import {getAddressAnalysis,listAddressAnalysis,previewAddress,useSuggestedAddress} from './addressAnalysisService.mjs'
+import {applyAddressBatch,getAddressAnalysis,listAddressAnalysis,previewAddress,previewAddressBatch,useSuggestedAddress} from './addressAnalysisService.mjs'
 
 const port = Number(process.env.KCS_API_PORT || 8787)
 const host = process.env.KCS_API_HOST || '0.0.0.0'
@@ -152,6 +152,8 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && (/^\/api\/occ-price-groups\/\d+\/assign$/.test(url.pathname) || url.pathname === '/api/occ-price-groups/bulk-transfer')) return sendJson(response,410,{error:'Branch OCC assignments are legacy read-only data. Manage OCC pricing on the Customer.'})
     if (request.method === 'GET' && url.pathname === '/api/master/area-closeout') return sendJson(response,200,areaCloseout())
     if (request.method === 'GET' && url.pathname === '/api/address-analysis') {if(!accountCan(session,'gps_review'))return sendJson(response,403,{error:'GPS review permission is required'});return sendJson(response,200,listAddressAnalysis(Object.fromEntries(url.searchParams)))}
+    if (request.method === 'POST' && url.pathname === '/api/address-analysis/batch-preview') {if(!accountCan(session,'gps_review'))return sendJson(response,403,{error:'GPS review permission is required'});return sendJson(response,200,await previewAddressBatch())}
+    if (request.method === 'POST' && url.pathname === '/api/address-analysis/batch-apply') {if(!accountCan(session,'gps_review'))return sendJson(response,403,{error:'GPS review permission is required'});const payload=(await readJson(request)).payload;return sendJson(response,200,applyAddressBatch({...payload,changedBy:session.employeeName||session.username}))}
     if (request.method === 'GET' && /^\/api\/address-analysis\/[^/]+$/.test(url.pathname)) {if(!accountCan(session,'gps_review'))return sendJson(response,403,{error:'GPS review permission is required'});return sendJson(response,200,getAddressAnalysis(decodeURIComponent(url.pathname.split('/')[3])))}
     if (request.method === 'POST' && /^\/api\/address-analysis\/[^/]+\/reverse-geocode-preview$/.test(url.pathname)) {if(!accountCan(session,'gps_review'))return sendJson(response,403,{error:'GPS review permission is required'});return sendJson(response,200,await previewAddress(decodeURIComponent(url.pathname.split('/')[3]))) }
     if (request.method === 'POST' && /^\/api\/address-analysis\/[^/]+\/use-suggested-address$/.test(url.pathname)) {if(!accountCan(session,'gps_review'))return sendJson(response,403,{error:'GPS review permission is required'});const payload=(await readJson(request)).payload;return sendJson(response,200,useSuggestedAddress(decodeURIComponent(url.pathname.split('/')[3]),{...payload,changedBy:session.employeeName||session.username})) }

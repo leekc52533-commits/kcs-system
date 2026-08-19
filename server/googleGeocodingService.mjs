@@ -10,10 +10,12 @@ export async function reverseGeocodeGoogle(latitude,longitude,{fetchImpl=fetch,a
   try{response=await fetchImpl(endpoint)}catch{throw safeError('Address lookup is temporarily unavailable. GPS coordinates are still available.')}
   if(!response.ok)throw safeError('Address lookup is temporarily unavailable. GPS coordinates are still available.')
   const data=await response.json()
-  if(data.status==='ZERO_RESULTS')return{address:'',state:'',street:'',city:'',streetNumber:'',postalCode:'',provider:'Google Geocoding API'}
+  if(data.status==='ZERO_RESULTS')return{address:'',state:'',street:'',city:'',streetNumber:'',postalCode:'',country:'',countryCode:'',partialMatch:false,locationType:'',placeId:'',resultTypes:[],provider:'Google Geocoding API'}
   if(data.status!=='OK')throw safeError('Google could not return an address for this GPS. GPS coordinates are still available.')
   const result=data.results?.[0]||{},components=result.address_components||[]
-  const component=(...types)=>components.find(item=>types.some(type=>item.types?.includes(type)))?.long_name||''
+  const componentRow=(...types)=>components.find(item=>types.some(type=>item.types?.includes(type)))||{}
+  const component=(...types)=>componentRow(...types).long_name||''
+  const country=componentRow('country')
   return{
     address:result.formatted_address||'',
     state:component('administrative_area_level_1'),
@@ -23,6 +25,12 @@ export async function reverseGeocodeGoogle(latitude,longitude,{fetchImpl=fetch,a
     sublocality:component('sublocality_level_1','sublocality','neighborhood'),
     streetNumber:component('street_number'),
     postalCode:component('postal_code'),
+    country:country.long_name||'',
+    countryCode:country.short_name||'',
+    partialMatch:Boolean(result.partial_match),
+    locationType:result.geometry?.location_type||'',
+    placeId:result.place_id||'',
+    resultTypes:Array.isArray(result.types)?result.types:[],
     provider:'Google Geocoding API',
   }
 }

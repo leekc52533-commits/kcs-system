@@ -23,10 +23,10 @@ test('Google address search returns coordinates without exposing the server key'
   assert.equal(result.candidates.length,2);assert.deepEqual(result.candidates[0],{id:'one',name:'Kuching, Sarawak',address:'Kuching, Sarawak',latitude:'1.5',longitude:'110.3'});assert.match(requested,/address=Lee\+Sai\+Ker/);assert.doesNotMatch(readFileSync(new URL('../src/SharedGpsInput.jsx',import.meta.url),'utf8'),/GOOGLE_GEOCODING_API_KEY/)
 })
 
-test('Google reverse geocoding maps real address components and leaves missing fields empty',async()=>{
-  const fetchImpl=async()=>({ok:true,json:async()=>({status:'OK',results:[{formatted_address:'10 Main Road, Kuching, Sarawak',address_components:[{long_name:'10',types:['street_number']},{long_name:'Main Road',types:['route']},{long_name:'Kuching',types:['locality']},{long_name:'Sarawak',types:['administrative_area_level_1']}]}]})})
+test('Google reverse geocoding maps address and confidence components and leaves missing fields empty',async()=>{
+  const fetchImpl=async()=>({ok:true,json:async()=>({status:'OK',results:[{place_id:'place-1',types:['street_address'],formatted_address:'10 Main Road, Kuching, Sarawak',geometry:{location_type:'ROOFTOP'},address_components:[{long_name:'10',types:['street_number']},{long_name:'Main Road',types:['route']},{long_name:'Kuching',types:['locality']},{long_name:'Sarawak',types:['administrative_area_level_1']},{long_name:'Malaysia',short_name:'MY',types:['country']}]}]})})
   const result=await reverseGeocodeGoogle(1.5,110.3,{fetchImpl,apiKey:'test-key'})
-  assert.deepEqual(result,{address:'10 Main Road, Kuching, Sarawak',state:'Sarawak',street:'Main Road',city:'Kuching',streetNumber:'10',postalCode:'',provider:'Google Geocoding API'})
+  assert.deepEqual(result,{address:'10 Main Road, Kuching, Sarawak',state:'Sarawak',street:'Main Road',city:'Kuching',locality:'Kuching',sublocality:'',streetNumber:'10',postalCode:'',country:'Malaysia',countryCode:'MY',partialMatch:false,locationType:'ROOFTOP',placeId:'place-1',resultTypes:['street_address'],provider:'Google Geocoding API'})
   await assert.rejects(()=>reverseGeocodeGoogle(1.5,110.3,{fetchImpl:async()=>({ok:true,json:async()=>({status:'REQUEST_DENIED'})}),apiKey:'test-key'}),/Google could not return/)
   await assert.rejects(()=>reverseGeocodeGoogle(1.5,110.3,{fetchImpl,apiKey:''}),/not configured/)
 })

@@ -1,0 +1,10 @@
+.address-batch{display:grid;grid-template-columns:1fr auto;gap:14px;padding:16px;border:1px solid #91b9ac;border-radius:12px;background:#f3faf7}
+.address-batch h3{margin:0 0 5px}.address-batch p{margin:0;color:#64756f}
+.address-batch>button,.address-batch-apply button{align-self:start;padding:11px 14px;border:0;border-radius:8px;background:#16866f;color:#fff;font-weight:800}
+.address-batch-results{grid-column:1/-1;display:grid;gap:12px}
+.address-batch-counts{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.address-batch-counts span{display:grid;padding:10px;border-radius:8px;background:#fff;color:#64756f}.address-batch-counts b{font-size:22px;color:#17232e}.address-batch-counts .reliable{background:#e7f7ef}.address-batch-counts .review{background:#fff4dc}
+.address-batch-apply{display:flex;align-items:end;gap:9px}.address-batch-apply label{display:grid;flex:1;gap:5px;font-weight:750}.address-batch-apply input{padding:10px;border:1px solid #91b9ac;border-radius:8px}
+.address-batch-success{padding:10px;border-radius:8px;background:#e7f7ef;color:#08734f!important;font-weight:800}.address-batch-results summary{cursor:pointer;font-weight:800}
+.address-batch-review{display:grid;gap:6px;margin-top:8px}.address-batch-review button{display:flex;justify-content:space-between;gap:14px;padding:10px;border:1px solid #d3dfdb;border-radius:8px;background:#fff;text-align:left}.address-batch-review button span:first-child{display:grid}.address-batch-review small{color:#64756f}
+@media(max-width:650px){.address-batch,.address-batch-counts{grid-template-columns:1fr}.address-batch-apply,.address-batch-review button{align-items:stretch;flex-direction:column}}
