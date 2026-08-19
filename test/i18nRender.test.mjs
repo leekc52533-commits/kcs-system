@@ -236,12 +236,15 @@ test('当前生产路由初始组件在English与BM渲染时报告具体页面�
   }
 })
 
-test('Branch inherited pricing detail renders without runtime errors and links to its Customer',()=>{
+test('Branch detail stays compact and does not duplicate inherited Customer pricing',()=>{
   const item={branchId:'12',branchName:'Branch',customerId:'7',customerName:'Customer',materials:[{materialId:1,materialName:'OCC',priceType:'outstation',currentPrice:.44,resolutionState:'ready'}]}
   const html=htmlText(wrap('en',React.createElement(masterModule.BranchReadOnlyDetail||(()=>null),{item,onClose:noop})))
-  assert.match(html,/customer=C7/)
-  assert.match(html,/Outstation/)
-  assert.match(html,/RM0\.44\/kg/)
+  const source=readFileSync(new URL('../src/BranchEditor.jsx',import.meta.url),'utf8')
+  assert.match(html,/C7/)
+  assert.doesNotMatch(html,/Inherited Customer Materials/)
+  assert.doesNotMatch(html,/RM0\.44\/kg/)
+  assert.doesNotMatch(source,/className="branch-materials inherited-pricing"/)
+  assert.doesNotMatch(source,/customerPricing/)
   assert.doesNotMatch(html,/form\.customerId/)
 })
 
