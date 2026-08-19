@@ -8,16 +8,16 @@ const workspace=readFileSync(new URL('../src/WorkspaceHub.jsx',import.meta.url),
 const app=readFileSync(new URL('../src/App.jsx',import.meta.url),'utf8')
 
 test('new Customer opens its detail at the top and Branch refresh does not add history',()=>{
-  assert.match(master,/open\(saved,\{pushHistory:!edit,scrollTop:!edit\}\)/)
+  assert.match(master,/open\(saved,\{pushHistory:!edit,scrollTop:!edit,preserveTab:edit\}\)/)
   assert.match(master,/window\.scrollTo\(\{top:0,behavior:'auto'\}\)/)
   assert.match(master,/detailRef\.current\?\.scrollIntoView\(\{block:'start'\}\)/)
-  assert.match(master,/open\(selected,\{pushHistory:false\}\)/)
+  assert.match(master,/open\(selected,\{pushHistory:false,preserveTab:true\}\)/)
 })
 
 test('Customer Detail owns browser history but has no duplicate in-card Back button',()=>{
   assert.match(master,/url\.searchParams\.set\('customer',formatCustomerId\(detail\.customerId\)\)/)
   assert.match(master,/window\.history\.pushState\(\{kcsPage:'customers',customerDetail:true\}/)
-  const detail=master.match(/if\(selected\)return <section ref=\{detailRef\}[\s\S]*?return <section className="master-workspace customer"/)?.[0]||''
+  const detail=master.match(/if\(selected\)\{[\s\S]*?return <section ref=\{detailRef\}[\s\S]*?return <section className="master-workspace customer"/)?.[0]||''
   assert.ok(detail)
   assert.doesNotMatch(detail,/className="back-button"/)
   assert.match(app,/page!=='customers'\)return go\('dashboard'\)/)
