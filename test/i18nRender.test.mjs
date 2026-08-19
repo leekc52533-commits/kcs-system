@@ -255,17 +255,21 @@ test('Customer pricing changed-flow labels render completely in English, Malay a
   }
 })
 
-test('legacy OCC archive hides mutation workflows and retains localized group and Branch history',async()=>{
-  const{LegacyOccArchive}=await vite.ssrLoadModule('/src/MaterialsPricesPage.jsx'),data={legacyReadOnly:true,items:[{id:7,itemCode:'OCC-020',priceAmount:.2,branchCount:1,status:'active',branches:[{branchInternalId:9,customerCode:'C001',customerName:'Archive Customer',branchName:'Archive Branch',areaName:'North'}]}]}
+test('legacy OCC archive hides unused groups by default and retains localized Branch history',async()=>{
+  const{LegacyOccArchive}=await vite.ssrLoadModule('/src/MaterialsPricesPage.jsx'),data={legacyReadOnly:true,items:[{id:7,itemCode:'OCC-020',priceAmount:.2,branchCount:1,status:'active',branches:[{branchInternalId:9,customerCode:'C001',customerName:'Archive Customer',branchName:'Archive Branch',areaName:'North'}]},{id:8,itemCode:'OCC-021',priceAmount:.21,branchCount:0,status:'active',branches:[]}]}
   for(const language of ['en','ms','zh']){
     const html=htmlText(wrap(language,React.createElement(LegacyOccArchive,{data,onBack:noop})))
     assert.match(html,new RegExp(translate(language,'occLegacy.readOnly')))
     assert.match(html,new RegExp(translate(language,'occLegacy.openCustomers')))
+    assert.match(html,new RegExp(translate(language,'occLegacy.showUnused')))
     assert.match(html,/OCC-020/)
-    assert.doesNotMatch(html,/Add OCC Price Group|Save Price Change|Preview Move|Confirm Move|type="checkbox"|<form/)
+    assert.doesNotMatch(html,/OCC-021|Add OCC Price Group|Save Price Change|Preview Move|Confirm Move|<form/)
   }
   const container=document.createElement('div'),root=createRoot(container)
   await act(async()=>root.render(React.createElement(I18nProvider,{language:'en',setLanguage:noop},React.createElement(LegacyOccArchive,{data,onBack:noop}))))
+  assert.doesNotMatch(container.textContent,/OCC-021/)
+  await act(async()=>container.querySelector('input[type="checkbox"]').click())
+  assert.match(container.textContent,/OCC-021/)
   await act(async()=>container.querySelector('article[role="button"]').click())
   assert.match(container.textContent,/Archive Customer/)
   assert.match(container.textContent,/Archive Branch/)
