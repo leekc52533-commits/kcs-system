@@ -114,3 +114,28 @@
     transition-duration: 0.01ms;
   }
 }
+
+/* Standard form actions: secondary action first, primary action last. */
+.form-action-bar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.form-action-bar--sticky {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  margin-top: 20px;
+  padding: 14px 0;
+  border-top: 1px solid #dce7e3;
+  background: #fff;
+  box-shadow: 0 -8px 18px #173c330a;
+}
+
+.form-action-bar > button {
+  min-height: 42px;
+}
