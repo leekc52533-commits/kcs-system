@@ -54,7 +54,9 @@
     "impact:v42": "node scripts/v42-impact-report.mjs",
     "deploy:v42:check": "node scripts/cloud-preflight.mjs",
     "preview:customer-product-pricing": "node scripts/apply-customer-product-pricing-20260818.mjs",
-    "apply:customer-product-pricing": "node scripts/apply-customer-product-pricing-20260818.mjs --apply"
+    "apply:customer-product-pricing": "node scripts/apply-customer-product-pricing-20260818.mjs --apply",
+    "preview:assign-product-customers": "node scripts/assign-active-customers-to-product.mjs",
+    "apply:assign-product-customers": "node scripts/assign-active-customers-to-product.mjs --apply"
   },
   "dependencies": {
     "exceljs": "^4.4.0",
