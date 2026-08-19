@@ -6,27 +6,41 @@ const actor=payload=>clean(payload.changedBy)||'Owner Admin'
 const reason=payload=>{const value=clean(payload.reason);if(!value)fail('MATERIAL_REASON_REQUIRED','A reason is required.');return value}
 const categoryRow=(database,id)=>database.prepare(`SELECT c.*,COUNT(DISTINCT p.id) product_count FROM material_categories c LEFT JOIN material_products p ON p.category_id=c.id AND p.visibility_status<>'hidden' WHERE c.id=? GROUP BY c.id`).get(id)
 const productRow=(database,id)=>database.prepare(`SELECT p.*,c.category_name,c.category_code,m.material_name legacy_material_name FROM material_products p JOIN material_categories c ON c.id=p.category_id LEFT JOIN materials m ON m.id=p.material_id WHERE p.id=?`).get(id)
-const levelRow=(database,id)=>database.prepare(`SELECT l.*,p.full_name product_name,p.short_form,p.unit,p.category_id,c.category_name,COUNT(a.branch_id) branch_count FROM material_price_levels l JOIN material_products p ON p.id=l.product_id JOIN material_categories c ON c.id=p.category_id LEFT JOIN branch_product_price_assignments a ON a.price_level_id=l.id WHERE l.id=? GROUP BY l.id`).get(id)
+const levelRow=(database,id)=>database.prepare(`SELECT l.*,p.full_name product_name,p.short_form,p.unit,p.category_id,c.category_name,
+  COUNT(DISTINCT cpp.customer_id) customer_count,COUNT(DISTINCT b.id) branch_count
+  FROM material_price_levels l JOIN material_products p ON p.id=l.product_id JOIN material_categories c ON c.id=p.category_id
+  LEFT JOIN customer_product_pricing cpp ON cpp.status='active' AND (cpp.standard_price_level_id=l.id OR (cpp.outstation_enabled=1 AND cpp.outstation_price_level_id=l.id))
+  LEFT JOIN branches b ON b.customer_id=cpp.customer_id WHERE l.id=? GROUP BY l.id`).get(id)
+const automaticProductCode=(name,database)=>{const stem=clean(name).normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/&/g,' AND ').replace(/[^A-Z0-9]+/g,'_').replace(/^_+|_+$/g,'')||'PRODUCT';let code=stem,suffix=2;while(database.prepare('SELECT 1 FROM material_products WHERE LOWER(TRIM(product_code))=LOWER(?)').get(code))code=`${stem}_${suffix++}`;return code}
 
 export function listCategories(database=defaultDb){
-  const items=database.prepare(`SELECT c.*,COUNT(DISTINCT p.id) product_count,COUNT(DISTINCT l.id) price_group_count,COUNT(DISTINCT a.branch_id) branch_count FROM material_categories c LEFT JOIN material_products p ON p.category_id=c.id AND p.visibility_status<>'hidden' LEFT JOIN material_price_levels l ON l.product_id=p.id AND l.visibility_status<>'hidden' LEFT JOIN branch_product_price_assignments a ON a.price_level_id=l.id WHERE c.is_hidden=0 GROUP BY c.id ORDER BY c.sort_order,c.category_name`).all()
+  const items=database.prepare(`SELECT c.*,COUNT(DISTINCT p.id) product_count,COUNT(DISTINCT l.id) price_group_count,
+    COUNT(DISTINCT cpp.customer_id) customer_count,COUNT(DISTINCT b.id) branch_count
+    FROM material_categories c LEFT JOIN material_products p ON p.category_id=c.id AND p.visibility_status<>'hidden'
+    LEFT JOIN material_price_levels l ON l.product_id=p.id AND l.visibility_status<>'hidden'
+    LEFT JOIN customer_product_pricing cpp ON cpp.product_id=p.id AND cpp.status='active'
+    LEFT JOIN branches b ON b.customer_id=cpp.customer_id
+    WHERE c.is_hidden=0 GROUP BY c.id ORDER BY c.sort_order,c.category_name`).all()
   return{items}
 }
 export function getCategory(id,database=defaultDb){
   const category=categoryRow(database,id);if(!category)fail('MATERIAL_CATEGORY_NOT_FOUND','Material Category was not found.',404)
-  category.products=database.prepare(`SELECT p.*,COALESCE((SELECT CAST(json_extract(ma.after_json,'$.sortOrder') AS INTEGER) FROM material_master_audit ma WHERE ma.entity_type='product' AND ma.entity_id=p.id AND ma.action='create' ORDER BY ma.id DESC LIMIT 1),100) sort_order,COUNT(DISTINCT l.id) price_group_count,COUNT(DISTINCT a.branch_id) branch_count FROM material_products p LEFT JOIN material_price_levels l ON l.product_id=p.id AND l.visibility_status<>'hidden' LEFT JOIN branch_product_price_assignments a ON a.price_level_id=l.id WHERE p.category_id=? AND p.visibility_status<>'hidden' GROUP BY p.id ORDER BY sort_order,p.full_name`).all(id)
+  category.products=database.prepare(`SELECT p.*,COALESCE((SELECT CAST(json_extract(ma.after_json,'$.sortOrder') AS INTEGER) FROM material_master_audit ma WHERE ma.entity_type='product' AND ma.entity_id=p.id AND ma.action='create' ORDER BY ma.id DESC LIMIT 1),100) sort_order,
+    COUNT(DISTINCT l.id) price_group_count,COUNT(DISTINCT cpp.customer_id) customer_count,COUNT(DISTINCT b.id) branch_count
+    FROM material_products p LEFT JOIN material_price_levels l ON l.product_id=p.id AND l.visibility_status<>'hidden'
+    LEFT JOIN customer_product_pricing cpp ON cpp.product_id=p.id AND cpp.status='active'
+    LEFT JOIN branches b ON b.customer_id=cpp.customer_id
+    WHERE p.category_id=? AND p.visibility_status<>'hidden' GROUP BY p.id ORDER BY sort_order,p.full_name`).all(id)
   return category
 }
 export function createProduct(categoryId,payload={},database=defaultDb){
-  const category=categoryRow(database,Number(categoryId)),name=clean(payload.productName),code=clean(payload.productCode).toUpperCase(),unit=clean(payload.unit)||'kg',status=clean(payload.status)||'active',sort=Number(payload.sortOrder),why=reason(payload),who=actor(payload)
+  const category=categoryRow(database,Number(categoryId)),name=clean(payload.productName),unit=clean(payload.unit)||'kg',status=clean(payload.status)||'active',who=actor(payload)
   if(!category)fail('MATERIAL_CATEGORY_NOT_FOUND','Material Category was not found.',404)
   if(!name)fail('MATERIAL_PRODUCT_NAME_REQUIRED','Product Name is required.')
-  if(!code)fail('MATERIAL_PRODUCT_CODE_REQUIRED','Product Code is required.')
   if(!['kg','piece'].includes(unit))fail('MATERIAL_PRODUCT_UNIT_INVALID','Unit must be kg or piece.')
   if(!['active','inactive'].includes(status))fail('MATERIAL_PRODUCT_STATUS_INVALID','Status must be Active or Inactive.')
-  if(!Number.isInteger(sort))fail('MATERIAL_PRODUCT_SORT_INVALID','Sort Order must be a whole number.')
   if(database.prepare('SELECT id FROM material_products WHERE LOWER(TRIM(full_name))=LOWER(?)').get(name))fail('MATERIAL_PRODUCT_NAME_DUPLICATE','A Product with this name already exists.',409)
-  if(database.prepare('SELECT id FROM material_products WHERE LOWER(TRIM(product_code))=LOWER(?)').get(code))fail('MATERIAL_PRODUCT_CODE_DUPLICATE','A Product with this code already exists.',409)
+  const code=automaticProductCode(name,database),sort=(Number(category.product_count)||0)*10+10,why='New Product / Grade'
   database.exec('BEGIN IMMEDIATE')
   try{
     const materialCode=`PRODUCT_${code}`,materialName=`Product: ${name}`
@@ -40,15 +54,39 @@ export function createProduct(categoryId,payload={},database=defaultDb){
 }
 export function getProduct(id,database=defaultDb){
   const product=productRow(database,id);if(!product)fail('MATERIAL_PRODUCT_NOT_FOUND','Product was not found.',404)
-  product.priceGroups=database.prepare(`SELECT l.*,COUNT(a.branch_id) branch_count FROM material_price_levels l LEFT JOIN branch_product_price_assignments a ON a.price_level_id=l.id WHERE l.product_id=? AND l.visibility_status<>'hidden' GROUP BY l.id ORDER BY l.price_cents,l.id`).all(id)
+  product.priceGroups=database.prepare(`SELECT l.*,COUNT(DISTINCT cpp.customer_id) customer_count,COUNT(DISTINCT b.id) branch_count
+    FROM material_price_levels l
+    LEFT JOIN customer_product_pricing cpp ON cpp.status='active' AND (cpp.standard_price_level_id=l.id OR (cpp.outstation_enabled=1 AND cpp.outstation_price_level_id=l.id))
+    LEFT JOIN branches b ON b.customer_id=cpp.customer_id
+    WHERE l.product_id=? AND l.visibility_status<>'hidden' GROUP BY l.id ORDER BY l.price_cents,l.id`).all(id)
   product.usesOccEngine=product.product_code==='OCC'
   return product
 }
 export function getPriceGroup(id,database=defaultDb){
   const group=levelRow(database,id);if(!group)fail('MATERIAL_PRICE_GROUP_NOT_FOUND','Price Group was not found.',404)
-  group.branches=database.prepare(`SELECT b.id branch_internal_id,b.jodoo_branch_id branch_id,b.branch_name,c.jodoo_customer_id customer_id,c.name customer_name,ar.name area_name FROM branch_product_price_assignments a JOIN branches b ON b.id=a.branch_id LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas ar ON ar.id=b.area_id WHERE a.price_level_id=? ORDER BY c.name,b.branch_name`).all(id)
-  group.candidates=database.prepare(`SELECT b.id branch_internal_id,b.jodoo_branch_id branch_id,b.branch_name,c.name customer_name,a.price_level_id current_price_level_id,l.price_amount current_price FROM branches b JOIN branch_product_availability v ON v.branch_id=b.id AND v.product_id=? AND v.is_selectable=1 LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN branch_product_price_assignments a ON a.branch_id=b.id AND a.product_id=? LEFT JOIN material_price_levels l ON l.id=a.price_level_id ORDER BY c.name,b.branch_name`).all(group.product_id,group.product_id)
+  group.customers=database.prepare(`SELECT c.id customer_internal_id,c.jodoo_customer_id customer_id,c.name customer_name,c.status,
+      COUNT(DISTINCT b.id) branch_count,
+      CASE WHEN MAX(CASE WHEN cpp.outstation_enabled=1 AND cpp.outstation_price_level_id=? THEN 1 ELSE 0 END)=1 THEN 'outstation' ELSE 'standard' END price_type
+    FROM customer_product_pricing cpp JOIN customers c ON c.id=cpp.customer_id LEFT JOIN branches b ON b.customer_id=c.id
+    WHERE cpp.product_id=? AND cpp.status='active' AND (cpp.standard_price_level_id=? OR (cpp.outstation_enabled=1 AND cpp.outstation_price_level_id=?))
+    GROUP BY c.id ORDER BY c.name,c.jodoo_customer_id`).all(group.id,group.product_id,group.id,group.id)
   return group
+}
+
+export function createProductPriceGroup(productId,payload={},database=defaultDb){
+  const product=productRow(database,Number(productId));if(!product)fail('MATERIAL_PRODUCT_NOT_FOUND','Product was not found.',404)
+  const amount=Number(payload.priceAmount),cents=Math.round(amount*100),date=clean(payload.effectiveDate),status=clean(payload.status)||'active',who=actor(payload),why='New Price Group'
+  if(!Number.isFinite(amount)||amount<=0||Math.abs(amount*100-cents)>.00001)fail('MATERIAL_INVALID_PRICE','Price must be greater than zero with at most two decimal places.')
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date))fail('MATERIAL_EFFECTIVE_DATE_REQUIRED','A valid Effective Date is required.')
+  if(!['active','inactive'].includes(status))fail('MATERIAL_PRICE_STATUS_INVALID','Status must be Active or Inactive.')
+  if(database.prepare('SELECT id FROM material_price_levels WHERE product_id=? AND price_cents=?').get(product.id,cents))fail('MATERIAL_PRICE_GROUP_DUPLICATE','This Product already has a Price Group with that price.',409)
+  database.exec('BEGIN IMMEDIATE')
+  try{
+    const id=Number(database.prepare(`INSERT INTO material_price_levels(material_id,product_id,price_amount,price_cents,is_fixed,effective_date,status,reason,created_by,visibility_status)
+      VALUES(?,?,?,?,1,?,?,?,?, 'active')`).run(product.material_id,product.id,amount,cents,date,status,why,who).lastInsertRowid)
+    database.prepare('INSERT INTO material_master_audit(entity_type,entity_id,action,after_json,reason,changed_by) VALUES(?,?,?,?,?,?)').run('priceGroup',id,'create',JSON.stringify({productId:product.id,priceAmount:amount,effectiveDate:date,status}),why,who)
+    database.exec('COMMIT');return getPriceGroup(id,database)
+  }catch(error){database.exec('ROLLBACK');if(String(error.message).includes('UNIQUE'))fail('MATERIAL_PRICE_GROUP_DUPLICATE','This Product already has a Price Group with that price.',409);throw error}
 }
 export function moveProductBranches(sourceId,targetId,branchIds,payload={},database=defaultDb){
   const source=levelRow(database,Number(sourceId)),target=levelRow(database,Number(targetId)),ids=[...new Set((branchIds||[]).map(Number).filter(Boolean))],why=reason(payload),who=actor(payload)
@@ -87,7 +125,7 @@ export function previewMoveProducts(sourceId,targetId,productIds,database=defaul
 export function entityPreview(type,id,database=defaultDb){
   if(type==='category'){const row=categoryRow(database,id);if(!row)fail('MATERIAL_ENTITY_NOT_FOUND','Category was not found.',404);const refs={products:row.product_count,systemReserved:row.system_reserved};return{entity:row,references:refs,deleteEligible:!refs.products&&!refs.systemReserved}}
   if(type==='product'){const row=productRow(database,id);if(!row)fail('MATERIAL_ENTITY_NOT_FOUND','Product was not found.',404);const refs={priceGroups:database.prepare('SELECT COUNT(*) count FROM material_price_levels WHERE product_id=?').get(id).count,branchRelations:database.prepare('SELECT COUNT(*) count FROM branch_product_availability WHERE product_id=?').get(id).count,assignments:database.prepare('SELECT COUNT(*) count FROM branch_product_price_assignments WHERE product_id=?').get(id).count};return{entity:row,references:refs,deleteEligible:Object.values(refs).every(value=>value===0)}}
-  const row=levelRow(database,id);if(!row)fail('MATERIAL_ENTITY_NOT_FOUND','Price Group was not found.',404);const refs={assignments:row.branch_count,history:database.prepare('SELECT COUNT(*) count FROM product_price_group_history WHERE price_level_id=?').get(id).count};return{entity:row,references:refs,deleteEligible:Object.values(refs).every(value=>value===0)}
+  const row=levelRow(database,id);if(!row)fail('MATERIAL_ENTITY_NOT_FOUND','Price Group was not found.',404);const refs={assignments:row.customer_count,affectedBranches:row.branch_count,history:database.prepare('SELECT COUNT(*) count FROM product_price_group_history WHERE price_level_id=?').get(id).count};return{entity:row,references:refs,deleteEligible:Object.values(refs).every(value=>value===0)}
 }
 export function setEntityVisibility(type,id,action,payload={},database=defaultDb){const why=reason(payload),who=actor(payload),preview=entityPreview(type,id,database);if(type==='category'&&preview.entity.system_reserved)fail('MATERIAL_RESERVED_CATEGORY','Uncategorized cannot be archived or hidden.');if(action==='hide'&&((preview.references.assignments||0)>0))fail('MATERIAL_ENTITY_IN_USE','An in-use record cannot be hidden.',409);const table=type==='category'?'material_categories':type==='product'?'material_products':'material_price_levels',column=type==='category'?'is_hidden':'visibility_status',value=type==='category'?1:(action==='archive'?'archived':'hidden');database.exec('BEGIN IMMEDIATE');try{database.prepare(`UPDATE ${table} SET ${column}=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(value,id);database.prepare('INSERT INTO material_master_audit(entity_type,entity_id,action,before_json,after_json,reason,changed_by) VALUES(?,?,?,?,?,?,?)').run(type,id,action,JSON.stringify(preview.entity),JSON.stringify({[column]:value}),why,who);database.exec('COMMIT');return{ok:true}}catch(error){database.exec('ROLLBACK');throw error}}
 
