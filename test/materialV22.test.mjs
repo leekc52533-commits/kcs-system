@@ -4,7 +4,7 @@ import {DatabaseSync} from 'node:sqlite'
 import {schemaSql} from '../server/schema.mjs'
 import {seedFixedOccPriceGroups} from '../server/migrationV21.mjs'
 import {applyV22Migration,BASE_PRODUCT_CODES} from '../server/migrationV22.mjs'
-import {ensureV24Tables} from '../server/migrationV24.mjs'
+import {ensureV24Tables,seedV24Data} from '../server/migrationV24.mjs'
 import {runApprovedCustomerProductPricingBatch} from '../server/customerProductPricingBatchService.mjs'
 import {listBranchProducts,listCustomerProductPricing,materialIssueReport,requireBranchProductPrice,saveCustomerProductPricing} from '../server/materialProductService.mjs'
 import {runMaterialConversion} from '../server/materialConversionService.mjs'
@@ -90,7 +90,7 @@ test('Product pricing overrides shared Material pricing so Iron G1 and G2 can di
 })
 
 test('approved Product batch previews, applies and reruns without changing OCC',()=>{
-  const database=fixture({branchCount:1});applyV22Migration(database);ensureV24Tables(database)
+  const database=fixture({branchCount:1});applyV22Migration(database);ensureV24Tables(database);seedV24Data(database)
   const occ=database.prepare("SELECT id FROM materials WHERE material_code='OCC'").get()
   database.prepare("INSERT INTO customer_material_pricing(customer_id,material_id,standard_special_price,price_type,resolution_state,status,updated_by) VALUES(1,?,.17,'standard','ready','active','KC')").run(occ.id)
   const can=database.prepare("SELECT id FROM material_products WHERE product_code='ALUMINUM_CAN'").get(),low=database.prepare('SELECT id FROM material_price_levels WHERE product_id=? AND price_cents=450').get(can.id)
@@ -106,6 +106,8 @@ test('approved Product batch previews, applies and reruns without changing OCC',
   assert.deepEqual([g1.currentPrice,g2.currentPrice,aluminum.currentPrice],[.6,.4,5])
   const customerProducts=listCustomerProductPricing('C-FIXTURE',database).items
   assert.equal(customerProducts.length,20)
+  assert.deepEqual([...new Set(customerProducts.map(item=>item.categoryName))],['Paper','Aluminium','Scrap Iron','Uncategorized'])
+  assert.equal(customerProducts.every(item=>Number.isInteger(item.categoryId)&&Number.isInteger(item.categorySortOrder)),true)
   assert.deepEqual(customerProducts.filter(item=>['G1','G2'].includes(item.productCode)).map(item=>[item.productCode,item.standardPrice]),[['G1',.6],['G2',.4]])
   const repeated=runApprovedCustomerProductPricingBatch(database,{apply:true,expectedTargetCount:1})
   assert.deepEqual({changed:repeated.changedConnections,history:repeated.priceHistoryAdded},{changed:0,history:0})

@@ -67,12 +67,14 @@ export function listCustomerProductPricing(customerId,database){
       )
     )
     SELECT p.id productId,p.product_code productCode,p.full_name materialName,p.short_form shortForm,p.unit,
+      c.id categoryId,COALESCE(c.category_name,'Uncategorized') categoryName,COALESCE(c.sort_order,9999) categorySortOrder,
       e.material_id materialId,e.pricing_source pricingSource,e.price_type priceType,e.standard_price_level_id standardPriceLevelId,
       e.standard_price standardPrice,e.standard_effective_date standardEffectiveDate,CAST(e.outstation_enabled AS INTEGER) outstationEnabled,
       e.outstation_price_level_id outstationPriceLevelId,e.outstation_price outstationPrice,e.outstation_effective_date outstationEffectiveDate,
       'ready' resolutionState
     FROM effective e JOIN material_products p ON p.id=e.product_id
-    ORDER BY CASE p.product_code WHEN 'OCC' THEN 0 WHEN 'MIXED_PAPER' THEN 1 WHEN 'G1' THEN 2 WHEN 'G2' THEN 3 WHEN 'ALUMINUM_CAN' THEN 4 WHEN 'MIX_PLASTIC' THEN 5 ELSE 10 END,p.full_name`).all(customer.id,customer.id).map(item=>({...item,outstationEnabled:Boolean(item.outstationEnabled)}))
+    LEFT JOIN material_categories c ON c.id=p.category_id
+    ORDER BY COALESCE(c.sort_order,9999),COALESCE(c.category_name,'Uncategorized') COLLATE NOCASE,p.full_name COLLATE NOCASE`).all(customer.id,customer.id).map(item=>({...item,outstationEnabled:Boolean(item.outstationEnabled)}))
   return{items}
 }
 
