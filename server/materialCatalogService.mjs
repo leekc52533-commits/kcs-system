@@ -1,4 +1,5 @@
 import {db as defaultDb} from './database.mjs'
+import {saveCustomerProductPricing} from './materialProductService.mjs'
 
 const clean=value=>String(value??'').trim()
 const fail=(code,message,statusCode=400)=>{const error=new Error(message);error.code=code;error.statusCode=statusCode;throw error}
@@ -65,12 +66,27 @@ export function getProduct(id,database=defaultDb){
 export function getPriceGroup(id,database=defaultDb){
   const group=levelRow(database,id);if(!group)fail('MATERIAL_PRICE_GROUP_NOT_FOUND','Price Group was not found.',404)
   group.customers=database.prepare(`SELECT c.id customer_internal_id,c.jodoo_customer_id customer_id,c.name customer_name,c.status,
-      COUNT(DISTINCT b.id) branch_count,
-      CASE WHEN MAX(CASE WHEN cpp.outstation_enabled=1 AND cpp.outstation_price_level_id=? THEN 1 ELSE 0 END)=1 THEN 'outstation' ELSE 'standard' END price_type
+      COUNT(DISTINCT b.id) branch_count,'standard' price_type
     FROM customer_product_pricing cpp JOIN customers c ON c.id=cpp.customer_id LEFT JOIN branches b ON b.customer_id=c.id
-    WHERE cpp.product_id=? AND cpp.status='active' AND (cpp.standard_price_level_id=? OR (cpp.outstation_enabled=1 AND cpp.outstation_price_level_id=?))
-    GROUP BY c.id ORDER BY c.name,c.jodoo_customer_id`).all(group.id,group.product_id,group.id,group.id)
+    WHERE cpp.product_id=? AND cpp.status='active' AND cpp.standard_price_level_id=?
+    GROUP BY c.id
+    UNION ALL
+    SELECT c.id,c.jodoo_customer_id,c.name,c.status,COUNT(DISTINCT b.id),'outstation'
+    FROM customer_product_pricing cpp JOIN customers c ON c.id=cpp.customer_id LEFT JOIN branches b ON b.customer_id=c.id
+    WHERE cpp.product_id=? AND cpp.status='active' AND cpp.outstation_enabled=1 AND cpp.outstation_price_level_id=?
+    GROUP BY c.id ORDER BY customer_name,customer_id,price_type`).all(group.product_id,group.id,group.product_id,group.id)
   return group
+}
+
+export function assignActiveCustomersToProductPriceGroup(priceGroupId,{changedBy='Administrator',reason='Assign new Product to all Active Customers',runId=`product-price-group-${priceGroupId}-${Date.now()}`,manageTransaction=true}={},database=defaultDb){
+  const group=levelRow(database,Number(priceGroupId));if(!group)fail('MATERIAL_PRICE_GROUP_NOT_FOUND','Price Group was not found.',404)
+  if(group.status!=='active')fail('MATERIAL_TARGET_PRICE_GROUP_INACTIVE','The target Price Group must be Active.')
+  const customers=database.prepare(`SELECT c.id FROM customers c WHERE c.status='active' AND NOT EXISTS(
+    SELECT 1 FROM customer_product_pricing cpp WHERE cpp.customer_id=c.id AND cpp.product_id=? AND cpp.status='active'
+  ) ORDER BY c.id`).all(group.product_id)
+  const apply=()=>{let changedCustomers=0,availabilityCreated=0;for(const customer of customers){const saved=saveCustomerProductPricing(customer.id,[{productId:group.product_id,standardPriceLevelId:group.id,outstationEnabled:false}],{changedBy,reason,runId,manageTransaction:false},database);changedCustomers+=saved.changedCount;availabilityCreated+=saved.availabilityCreated}return{targetCustomers:customers.length,changedCustomers,availabilityCreated,priceGroupId:group.id,productId:group.product_id,runId}}
+  if(!manageTransaction)return apply()
+  database.exec('BEGIN IMMEDIATE');try{const result=apply();database.exec('COMMIT');return result}catch(error){database.exec('ROLLBACK');throw error}
 }
 
 export function createProductPriceGroup(productId,payload={},database=defaultDb){
@@ -85,8 +101,23 @@ export function createProductPriceGroup(productId,payload={},database=defaultDb)
     const id=Number(database.prepare(`INSERT INTO material_price_levels(material_id,product_id,price_amount,price_cents,is_fixed,effective_date,status,reason,created_by,visibility_status)
       VALUES(?,?,?,?,1,?,?,?,?, 'active')`).run(product.material_id,product.id,amount,cents,date,status,why,who).lastInsertRowid)
     database.prepare('INSERT INTO material_master_audit(entity_type,entity_id,action,after_json,reason,changed_by) VALUES(?,?,?,?,?,?)').run('priceGroup',id,'create',JSON.stringify({productId:product.id,priceAmount:amount,effectiveDate:date,status}),why,who)
-    database.exec('COMMIT');return getPriceGroup(id,database)
+    const productPriceGroupCount=Number(database.prepare("SELECT COUNT(*) count FROM material_price_levels WHERE product_id=? AND visibility_status<>'hidden'").get(product.id).count)
+    const assignment=productPriceGroupCount===1&&status==='active'?assignActiveCustomersToProductPriceGroup(id,{changedBy:who,reason:'New Product first Price Group assigned to all Active Customers',runId:`new-product-price-group-${id}`,manageTransaction:false},database):{targetCustomers:0,changedCustomers:0,availabilityCreated:0}
+    database.exec('COMMIT');return{...getPriceGroup(id,database),autoAssignedCustomers:assignment.changedCustomers,availabilityCreated:assignment.availabilityCreated}
   }catch(error){database.exec('ROLLBACK');if(String(error.message).includes('UNIQUE'))fail('MATERIAL_PRICE_GROUP_DUPLICATE','This Product already has a Price Group with that price.',409);throw error}
+}
+
+export function moveProductCustomers(sourceId,targetId,assignments,payload={},database=defaultDb){
+  const source=levelRow(database,Number(sourceId)),target=levelRow(database,Number(targetId)),why=reason(payload),who=actor(payload),items=Array.isArray(assignments)?assignments:[]
+  if(!source||!target)fail('MATERIAL_PRICE_GROUP_NOT_FOUND','Source or target Price Group was not found.',404)
+  if(source.id===target.id)fail('MATERIAL_SAME_PRICE_GROUP','Source and target Price Groups cannot be the same.')
+  if(source.product_id!==target.product_id)fail('MATERIAL_PRODUCT_MISMATCH','Price Groups must belong to the same Product.')
+  if(target.status!=='active')fail('MATERIAL_TARGET_PRICE_GROUP_INACTIVE','The target Price Group must be Active.')
+  const normalized=[...new Map(items.map(item=>{const customerId=Number(item.customerId),priceType=clean(item.priceType);return[`${customerId}:${priceType}`,{customerId,priceType}]})).values()].filter(item=>item.customerId&&['standard','outstation'].includes(item.priceType))
+  if(!normalized.length)fail('MATERIAL_NO_CUSTOMERS_SELECTED','No Customers were selected.')
+  const runId=`product-price-move-${source.id}-${target.id}-${Date.now()}`
+  database.exec('BEGIN IMMEDIATE')
+  try{let changedCount=0;for(const item of normalized){const old=database.prepare("SELECT * FROM customer_product_pricing WHERE customer_id=? AND product_id=? AND status='active'").get(item.customerId,source.product_id);const current=item.priceType==='outstation'?(old?.outstation_enabled?old.outstation_price_level_id:null):old?.standard_price_level_id;if(Number(current)!==source.id)fail('MATERIAL_CUSTOMER_SOURCE_CHANGED','One or more Customers no longer belong to the source Price Group. Refresh and try again.',409);if(item.priceType==='outstation')database.prepare('UPDATE customer_product_pricing SET outstation_price_level_id=?,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(target.id,who,old.id);else database.prepare('UPDATE customer_product_pricing SET standard_price_level_id=?,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(target.id,who,old.id);const after=database.prepare('SELECT * FROM customer_product_pricing WHERE id=?').get(old.id);database.prepare(`INSERT INTO material_conversion_audit(run_id,action,entity_type,entity_id,before_json,after_json,changed_by) VALUES(?,'move_price_group','customer_product_pricing',?,?,?,?)`).run(runId,`${item.customerId}:${source.product_id}:${item.priceType}`,JSON.stringify(old),JSON.stringify({...after,reason:why,priceType:item.priceType}),who);changedCount++}database.exec('COMMIT');return{changedCount,source:getPriceGroup(source.id,database),target:getPriceGroup(target.id,database),runId}}catch(error){database.exec('ROLLBACK');throw error}
 }
 export function moveProductBranches(sourceId,targetId,branchIds,payload={},database=defaultDb){
   const source=levelRow(database,Number(sourceId)),target=levelRow(database,Number(targetId)),ids=[...new Set((branchIds||[]).map(Number).filter(Boolean))],why=reason(payload),who=actor(payload)
