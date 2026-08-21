@@ -56,7 +56,8 @@ test('Special Collection Request is removed only from the sidebar and remains av
   assert.match(workspace,/<WeeklyDispatchPage onOpenSpecial=\{onOpenSpecial\}/)
 })
 
-test('Customer and Branch remain separate and shared Back navigation remains active',()=>{
-  assert.match(workspace,/tabs=\[\['customers',t\('master\.customer'\)\],\['branch-review',t\('branchLifecycle\.reviewTitle'\)\],\['unlinked',t\('unlinked\.title'\)\]\]/)
+test('Customer and Branch search share one workspace while shared Back navigation remains active',()=>{
+  assert.match(workspace,/tabs=\[\['customers',t\('master\.customer'\)\],\['branch-review',t\('branchLifecycle\.reviewTitle'\)\]\]/)
+  assert.doesNotMatch(workspace,/\['unlinked',t\('unlinked\.title'\)\]/)
   assert.match(app,/<BackButton fallback=\{backFallback\}/)
 })

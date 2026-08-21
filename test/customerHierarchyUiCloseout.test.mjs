@@ -25,13 +25,21 @@ test('Customer Detail owns browser history but has no duplicate in-card Back but
   assert.match(app,/window\.dispatchEvent\(new PopStateEvent\('popstate'/)
 })
 
-test('Branch Directory is hidden from primary tabs but remains an internal valid route',()=>{
-  assert.match(workspace,/tabs=\[\['customers',[^\]]+\],\['branch-review',[^\]]+\],\['unlinked',[^\]]+\]\]/)
+test('Branch Directory remains internal and the empty Unlinked Branches tab is removed',()=>{
+  assert.match(workspace,/tabs=\[\['customers',[^\]]+\],\['branch-review',[^\]]+\]\]/)
   assert.match(workspace,/validTabs=\[\.\.\.tabs,\['branches',t\('master\.branch'\)\]\]/)
   assert.match(workspace,/tab==='branch-review'\?<BranchLifecycleReviewPage/)
-  assert.match(workspace,/tab==='unlinked'\?<UnlinkedBranchesPage/)
+  assert.doesNotMatch(workspace,/UnlinkedBranchesPage|\['unlinked'/)
+})
+
+test('Customer search also returns Branch matches and opens the parent Customer',()=>{
+  assert.match(master,/api\(`\/api\/master\/branches\?search=\$\{encodeURIComponent\(term\)\}&pageSize=100`\)/)
+  assert.match(master,/customerHierarchy\.branchMatches/)
+  assert.match(master,/formatBranchId\(branch\.branchId\)/)
+  assert.match(master,/formatCustomerId\(branch\.customerId\)/)
+  assert.match(master,/openBranchMatch=async branch=>\{await open\(\{customerId:branch\.customerId\}\);setExpanded\(branch\.branchId\)\}/)
 })
 
 test('Customer hierarchy navigation labels remain complete in EN BM and ZH',()=>{
-  for(const language of ['en','ms','zh'])for(const key of ['master.customer','branchLifecycle.reviewTitle','unlinked.title','customerHierarchy.addBranch','customerHierarchy.addFirstBranch'])assert.notEqual(translate(language,key),key)
+  for(const language of ['en','ms','zh'])for(const key of ['master.customer','branchLifecycle.reviewTitle','customerHierarchy.addBranch','customerHierarchy.addFirstBranch','customerHierarchy.search','customerHierarchy.branchMatches'])assert.notEqual(translate(language,key),key)
 })
