@@ -39,5 +39,7 @@ test('workspace navigation consolidates related pages and maps legacy entries',(
   assert.match(hub,/SchedulesPage/)
   assert.match(hub,/Employee Records|hub\.employeeRecords/)
   assert.match(hub,/System Accounts|hub\.systemAccounts/)
-  assert.match(hub,/Data tools/)
+  assert.doesNotMatch(hub,/Data tools/)
+  assert.match(hub,/className="workspace-tool-icon"/)
+  assert.match(hub,/aria-label=\{t\('nav\.gpsMigration'\)\}/)
 })
