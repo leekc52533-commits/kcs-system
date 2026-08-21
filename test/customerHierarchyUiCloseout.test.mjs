@@ -33,7 +33,7 @@ test('Branch Directory remains internal and the empty Unlinked Branches tab is r
 })
 
 test('Customer search also returns Branch matches and opens the parent Customer',()=>{
-  assert.match(master,/api\(\`\/api\/master\/branches\?search=\$\{encodeURIComponent\(term\)\}&pageSize=100\`\)/)
+  assert.match(master,/api\(`\/api\/master\/branches\?search=\$\{encodeURIComponent\(term\)\}&pageSize=100`\)/)
   assert.match(master,/customerHierarchy\.branchMatches/)
   assert.match(master,/formatBranchId\(branch\.branchId\)/)
   assert.match(master,/formatCustomerId\(branch\.customerId\)/)
