@@ -577,6 +577,13 @@ Object.assign(messages.zh,{
 
 for(const language of Object.keys(addressAnalysisMessages))Object.assign(messages[language],addressAnalysisMessages[language])
 
+const scheduleManagementMessages={
+ en:{'schedule.manageDescription':'Maintain future collection master settings. Existing Dispatch Stops remain unchanged.','schedule.weekdays':'Collection Weekdays','schedule.nextDate':'Next Collection Date','schedule.missing':'Missing Schedule','schedule.blocked':'Multiple Schedule / Blocked','schedule.edit':'Edit','schedule.currentFrequency':'Current Frequency','schedule.anchorDate':'Anchor Date','schedule.effectiveDate':'Effective Date','schedule.monthlyOccurrence':'Monthly Occurrence','schedule.reason':'Reason','schedule.preview':'Preview Changes','schedule.conflict':'Conflict.','schedule.reload':'Reload required.','schedule.saved':'Saved'},
+ ms:{'schedule.manageDescription':'Selenggara tetapan induk kutipan akan datang. Hentian Dispatch sedia ada tidak berubah.','schedule.weekdays':'Hari Kutipan','schedule.nextDate':'Tarikh Kutipan Seterusnya','schedule.missing':'Jadual Tiada','schedule.blocked':'Pelbagai Jadual / Disekat','schedule.edit':'Edit','schedule.currentFrequency':'Kekerapan Semasa','schedule.anchorDate':'Tarikh Sauh','schedule.effectiveDate':'Tarikh Berkuat Kuasa','schedule.monthlyOccurrence':'Kejadian Bulanan','schedule.reason':'Sebab','schedule.preview':'Pratonton Perubahan','schedule.conflict':'Konflik.','schedule.reload':'Muat semula diperlukan.','schedule.saved':'Disimpan'},
+ zh:{'schedule.manageDescription':'维护未来收货主档设置；现有Dispatch Stops不会更改。','schedule.weekdays':'收货星期','schedule.nextDate':'下次收货日期','schedule.missing':'没有排程','schedule.blocked':'多排程／已阻止','schedule.edit':'编辑','schedule.currentFrequency':'当前频率','schedule.anchorDate':'锚定日期','schedule.effectiveDate':'生效日期','schedule.monthlyOccurrence':'每月次序','schedule.reason':'原因','schedule.preview':'预览更改','schedule.conflict':'资料冲突。','schedule.reload':'请重新载入。','schedule.saved':'已保存'}
+}
+for(const language of Object.keys(scheduleManagementMessages))Object.assign(messages[language],scheduleManagementMessages[language])
+
 const sourceAliases=new Map()
 for(const language of Object.keys(messages)){
   for(const[key,value]of Object.entries(messages[language]))sourceAliases.set(String(value),key)

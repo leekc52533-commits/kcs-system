@@ -29,6 +29,7 @@ import {kuchingDate} from '../shared/kuchingTime.js'
 import {publicError} from './errorCodes.mjs'
 import {assertLocationFields} from '../shared/locationText.js'
 import {configureScheduleRecurrence,getScheduleRecurrence} from './scheduleRecurrenceService.mjs'
+import {getCollectionScheduleManagement,listCollectionScheduleManagement,saveCollectionScheduleManagement} from './collectionScheduleManagementService.mjs'
 import {arriveAtStop,completeDriverStop,completeDriverTrip,confirmInvoiceCompleted,recordNoGoods,startDriverTrip} from './driverExecutionService.mjs'
 import {assertVehicleRegistrationEdit} from './vehicleRegistrationPermissions.mjs'
 import {changeBranchLifecycle,listBranchLifecycleReview,listReplacementBranches} from './branchLifecycleService.mjs'
@@ -204,6 +205,9 @@ const server = http.createServer(async (request, response) => {
       return item ? sendJson(response, 200, item) : sendJson(response, 404, { error: 'Branch not found' })
     }
     if (request.method === 'GET' && url.pathname === '/api/schedules') return sendJson(response, 200, schedules(Object.fromEntries(url.searchParams)))
+    if (request.method === 'GET' && url.pathname === '/api/collection-schedule-management') return sendJson(response,200,{items:listCollectionScheduleManagement(Object.fromEntries(url.searchParams))})
+    if (request.method === 'GET' && /^\/api\/branches\/[^/]+\/collection-schedule$/.test(url.pathname)) {const item=getCollectionScheduleManagement(decodeURIComponent(url.pathname.split('/')[3]));return item?sendJson(response,200,item):sendJson(response,404,{error:'Active Branch not found.'})}
+    if (request.method === 'PATCH' && /^\/api\/branches\/[^/]+\/collection-schedule$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});const payload=(await readJson(request)).payload;return sendJson(response,200,saveCollectionScheduleManagement(decodeURIComponent(url.pathname.split('/')[3]),{...payload,changedBy:session.employeeName}))}
     if (request.method === 'GET' && url.pathname === '/api/data-quality/summary') return sendJson(response, 200, dataQualitySummary())
     if (request.method === 'GET' && url.pathname === '/api/dispatch/week') return sendJson(response, 200, getDispatchWeek(Object.fromEntries(url.searchParams)))
     if (request.method === 'GET' && url.pathname === '/api/dispatch/start-location-options') {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});const driverId=Number(url.searchParams.get('driverId'))||null,includeEmployeeHome=canManageEmployees(session);return sendJson(response,200,getStartLocationOptions({driverId,includeEmployeeHome}))}
