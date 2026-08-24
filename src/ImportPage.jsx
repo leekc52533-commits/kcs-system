@@ -35,7 +35,7 @@ export default function ImportPage({ onBack }) {
   }
   return <div className="page import-page">
     <button className="import-back" onClick={onBack}>← {t('common.back')}</button>
-    <div className="import-title"><div><em>JODOO DATA IMPORT</em><h1>{t('import.title')}</h1><p>{t('import.description')}</p></div><span className="safe-badge">{t('import.previewOnly')}</span></div>
+    <div className="import-title import-safety-mode"><span className="safe-badge">{t('import.previewOnly')}</span></div>
     <section className="drop-zone" onDragOver={(e)=>e.preventDefault()} onDrop={(e)=>{e.preventDefault();processFiles(e.dataTransfer.files)}}><span className="upload-icon">⇧</span><h2>{t('import.choose')}</h2><p>{t('import.systemRecognition')}</p><button onClick={()=>inputRef.current?.click()} disabled={busy}>{busy?t('common.processing'):t('import.selectFile')}</button><input ref={inputRef} hidden multiple type="file" accept=".xlsx" onChange={(e)=>processFiles(e.target.files)}/></section>
     {message&&<div className="import-message">{message}</div>}
     {preview&&<><section className="import-summary">{[['import.total','total'],['import.new','new'],['import.updated','update'],['import.unchanged','unchanged'],['import.errors','error'],['import.unmatched','unmatched']].map(([labelKey,key])=><article key={key}><span>{t(labelKey)}</span><strong>{preview.summary[key]}</strong></article>)}</section>
