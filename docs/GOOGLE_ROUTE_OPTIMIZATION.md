@@ -4,7 +4,9 @@ KCS uses **Route Optimization API** for fleet assignment/sequencing and **Routes
 
 ## Google setup and IAM
 
-Enable `routeoptimization.googleapis.com` and `routes.googleapis.com` in the configured Google Cloud project. The runtime service account needs the least-privilege **Route Optimization API User** role (`roles/routeoptimization.user`) and Service Usage Consumer (`roles/serviceusage.serviceUsageConsumer`). Restrict the Routes API key to the Routes API and the KCS server egress addresses. Prefer the AWS workload's existing Google federation/ADC configuration; do not place credential files in the repository.
+Enable `routeoptimization.googleapis.com` and `routes.googleapis.com` in the configured Google Cloud project. The runtime identity needs least-privilege access for route optimization and service use. Restrict the Routes API key to the Routes API and the KCS server egress addresses.
+
+On AWS, use Application Default Credentials (ADC): set `GOOGLE_APPLICATION_CREDENTIALS` to a server-readable credential configuration file stored outside git. The official Google authentication library supports both service-account JSON and compatible workload identity federation/external-account configuration. Prefer short-lived federated credentials where available, protect the file with least-privilege filesystem permissions, and grant the Google identity only the permissions it needs. The feature remains disabled until its server-only configuration is complete. `GOOGLE_ROUTE_OPTIMIZATION_ACCESS_TOKEN` is only a short-lived development/emergency override; it expires and is not recommended for production. KCS automatically caches and refreshes ADC access tokens and does not directly query the GCE metadata server.
 
 Environment variable names are documented in `.env.example`: `KCS_GOOGLE_ROUTE_OPTIMIZATION_ENABLED`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_ROUTE_OPTIMIZATION_ACCESS_TOKEN`, `GOOGLE_ROUTES_API_KEY`, `KCS_GOOGLE_ROUTE_TIMEOUT_MS`, `KCS_GOOGLE_ROUTE_RETRY_LIMIT`, `KCS_GOOGLE_ROUTE_CACHE_TTL_SECONDS`, `KCS_GOOGLE_ROUTE_DAILY_REQUEST_LIMIT`, `KCS_GOOGLE_ROUTE_DAILY_UNIT_LIMIT`, `KCS_GOOGLE_ROUTE_MAX_STOPS`, `KCS_GOOGLE_ROUTE_CIRCUIT_FAILURES`, `KCS_GOOGLE_ROUTE_CIRCUIT_RESET_MS`, `KCS_ROUTE_DEFAULT_START_TIME`, `KCS_ROUTE_DEFAULT_END_TIME`, `KCS_GOOGLE_ROUTE_NON_PREFERRED_VEHICLE_PENALTY`, `KCS_GOOGLE_ROUTE_AVOIDED_VEHICLE_PENALTY`, `KCS_ROUTE_RULE_PROPOSAL_MIN_OVERRIDES`, `KCS_ROUTE_RULE_PROPOSAL_WINDOW_DAYS`, and `KCS_ROUTE_MAX_KEEP_TOGETHER_STOPS`. Never use `VITE_` for these values.
 
@@ -22,7 +24,7 @@ No request is made when validation fails. Google timeout, quota, authentication,
 
 Disable `KCS_GOOGLE_ROUTE_OPTIMIZATION_ENABLED` immediately to stop requests. An applied optimization can be rolled back only while it is the immediately previous draft revision; rollback is atomic and audited. For a code rollback, disable the feature, restore the previous application artifact, and leave additive v43 tables in place. Restore a database backup only under the established incident procedure.
 
-Diagnostics expose only enabled/configured booleans, limits, provider, and circuit state—never secrets. Check structured application errors by correlation ID. `GOOGLE_QUOTA_EXHAUSTED`, `ROUTE_COST_GUARD`, `GOOGLE_CIRCUIT_OPEN`, and timeout errors are safe failures and require a fresh preview after correction.
+Diagnostics expose only enabled/readiness booleans, project configuration state, the auth mode (`adc`, `static_token`, or `none`), limits, provider, and circuit state—never credential values or paths. Check structured application errors by correlation ID. `GOOGLE_QUOTA_EXHAUSTED`, `ROUTE_COST_GUARD`, `GOOGLE_CIRCUIT_OPEN`, and timeout errors are safe failures and require a fresh preview after correction.
 
 ## Structured availability and controlled learning
 
