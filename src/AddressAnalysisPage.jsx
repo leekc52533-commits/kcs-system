@@ -22,7 +22,7 @@ export default function AddressAnalysisPage({onOpenRecommendations}){
   const keyOpen=(event,item)=>{if(['Enter',' '].includes(event.key)){event.preventDefault();open(item)}}
   const none=value=>value||t('common.notSet')
   return <section className="address-analysis">
-    <header><div><em>{t('addressAnalysis.eyebrow')}</em><h2>{t('addressAnalysis.title')}</h2><p>{t('addressAnalysis.safety')}</p></div><span>{t('addressAnalysis.safeBatch')}</span></header>
+    <header className="address-safety-mode"><span>{t('addressAnalysis.safeBatch')}</span></header>
     {error&&<div className="address-error" role="alert">{error}</div>}
     <section className="address-batch"><div><h3>{t('addressAnalysis.batchTitle')}</h3><p>{t('addressAnalysis.batchHelp')}</p></div><button disabled={batchBusy} onClick={previewBatch}>{batchBusy?t('common.processing'):t('addressAnalysis.batchAnalyze')}</button>
       {batch&&<div className="address-batch-results"><div className="address-batch-counts"><span><b>{batch.analyzed}</b>{t('addressAnalysis.batchAnalyzed')}</span><span className="reliable"><b>{batch.reliableCount}</b>{t('addressAnalysis.batchReliable')}</span><span className="review"><b>{batch.reviewCount}</b>{t('addressAnalysis.batchReview')}</span><span><b>{batch.errorCount}</b>{t('addressAnalysis.batchErrors')}</span></div>
