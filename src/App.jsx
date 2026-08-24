@@ -1,6 +1,7 @@
 import { Component, useEffect, useState } from 'react'
 import './App.css'
 import './interactive.css'
+import './readability.css'
 import ImportPage from './ImportPage.jsx'
 import SpecialRequestsPage from './SpecialRequestsPage.jsx'
 import ResourcePage from './ResourcePage.jsx'
