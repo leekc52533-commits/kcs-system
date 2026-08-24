@@ -1,0 +1,10 @@
+import {useEffect,useRef,useState} from 'react'
+import {loadGoogleMaps} from './googleMapsLoader.js'
+import {useI18n} from './i18n.jsx'
+
+const mapsKey=import.meta.env.VITE_GOOGLE_MAPS_API_KEY||''
+const colors=['#146c94','#c2410c','#15803d','#7e22ce','#be123c','#0f766e']
+function decodePolyline(value){let index=0,latitude=0,longitude=0,points=[];while(index<value.length){let shift=0,result=0,byte;do{byte=value.charCodeAt(index++)-63;result|=(byte&31)<<shift;shift+=5}while(byte>=32);latitude+=(result&1)?~(result>>1):(result>>1);shift=0;result=0;do{byte=value.charCodeAt(index++)-63;result|=(byte&31)<<shift;shift+=5}while(byte>=32);longitude+=(result&1)?~(result>>1):(result>>1);points.push({lat:latitude/1e5,lng:longitude/1e5})}return points}
+export default function RouteOptimizationMap({routes=[]}){const{t}=useI18n(),container=useRef(null),map=useRef(null),lines=useRef([]),[error,setError]=useState('')
+  useEffect(()=>{let current=true;if(!routes.some(route=>route.polyline))return;loadGoogleMaps(mapsKey).then(maps=>{if(!current||!container.current)return;lines.current.forEach(line=>line.setMap(null));lines.current=[];const bounds=new maps.LatLngBounds();if(!map.current)map.current=new maps.Map(container.current,{mapTypeId:'roadmap',gestureHandling:'greedy',mapTypeControl:true,streetViewControl:false,fullscreenControl:true});routes.forEach((route,index)=>{if(!route.polyline)return;const path=decodePolyline(route.polyline);path.forEach(point=>bounds.extend(point));lines.current.push(new maps.Polyline({map:map.current,path,strokeColor:colors[index%colors.length],strokeOpacity:.9,strokeWeight:5}))});if(!bounds.isEmpty())map.current.fitBounds(bounds);setError('')}).catch(reason=>{if(current)setError(reason.message==='missing-key'?t('gpsCollection.mapKeyMissing'):t('gpsCollection.mapLoadFailed'))});return()=>{current=false}},[routes,t])
+  if(!routes.some(route=>route.polyline))return null;return <div className="optimization-route-map">{error?<p role="status">{error}</p>:<div ref={container} aria-label={t('optimization.routeMap')}/>}</div>}

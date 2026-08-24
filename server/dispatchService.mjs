@@ -5,6 +5,7 @@ import {nextCollectionDate,scheduleMatchesDate} from '../shared/scheduleRecurren
 import {assertBranchServiceDateAvailable,assertRouteGenerationReady,duplicateResult,findBranchServiceDateStop,recordDuplicateDiagnostic,withImmediateTransaction} from './branchServiceDateGuard.mjs'
 import {resolveStartLocation,startLocationOptions,writeStartLocationSnapshot} from './dispatchStartLocationService.mjs'
 import {commercialOptions,resolveBuyerPayer,resolvePrimaryEndLocation,writeCommercialSnapshot} from './dispatchCommercialService.mjs'
+import {recordOptimizationFeedback} from './routeOptimizationService.mjs'
 
 const iso = (value = new Date()) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : kuchingDate(value)
 const addDays = addCalendarDays
@@ -348,7 +349,9 @@ export function updateStop(id,payload,database=defaultDb){
     if(targetDate!==before.dispatch_date&&!payload.suppressException&&before.source_schedule_id&&!database.prepare("SELECT id FROM schedule_exceptions WHERE schedule_id=? AND exception_type='move_date' AND original_date=? AND target_date=? AND permanent=0").get(before.source_schedule_id,before.dispatch_date,targetDate))database.prepare(`INSERT INTO schedule_exceptions(branch_id,schedule_id,exception_type,original_date,target_date,permanent,reason,created_by) VALUES(?,?,'move_date',?,?,0,?,?)`).run(before.branch_id,before.source_schedule_id,before.dispatch_date,targetDate,payload.reason||'Weekly planner drag-and-drop',actor(payload.changedBy))
     invalidateDispatchDay(database,before.dispatch_date,'stop_updated','dispatch_stop',id,before,payload,payload.changedBy)
     if(targetDate!==before.dispatch_date)invalidateDispatchDay(database,targetDate,'stop_moved_in','dispatch_stop',id,null,payload,payload.changedBy)
-    return database.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(id)
+    const updated=database.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(id)
+    recordOptimizationFeedback({stopId:id,before,after:updated,reason:payload.reason,actor:actor(payload.changedBy)},{db:database})
+    return updated
   })
 }
 export function deleteStop(id,{changedBy='Supervisor',reason='Weekly planner removal'}={},database=defaultDb){const before=database.prepare(`SELECT ds.*,dd.dispatch_date FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id JOIN dispatch_days dd ON dd.id=dt.dispatch_day_id WHERE ds.id=?`).get(id);if(!before)throw new Error('Stop not found');database.exec('BEGIN IMMEDIATE');try{if(before.source_schedule_id&&!database.prepare("SELECT id FROM schedule_exceptions WHERE schedule_id=? AND exception_type='cancel_date' AND original_date=? AND permanent=0").get(before.source_schedule_id,before.dispatch_date))database.prepare(`INSERT INTO schedule_exceptions(branch_id,schedule_id,exception_type,original_date,permanent,reason,created_by) VALUES(?,?,'cancel_date',?,0,?,?)`).run(before.branch_id,before.source_schedule_id,before.dispatch_date,reason,actor(changedBy));database.prepare('DELETE FROM dispatch_stops WHERE id=?').run(id);invalidateDispatchDay(database,before.dispatch_date,'stop_removed','dispatch_stop',id,before,null,changedBy);database.exec('COMMIT');return{deleted:true,id:Number(id)}}catch(error){database.exec('ROLLBACK');throw error}}

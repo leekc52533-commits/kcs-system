@@ -272,7 +272,6 @@ else if(!hasMaterialCategories||materialSchemaVersion===24)seedV24Data(db)
 if(!hasMaterialCategories||Number(db.prepare('SELECT COALESCE(MAX(version),0) version FROM schema_meta').get().version)<25)applyV25Migration(db)
 if(Number(db.prepare('SELECT COALESCE(MAX(version),0) version FROM schema_meta').get().version)<26)applyV26Migration(db)
 else ensureV26Schema(db)
-
 const officialVehicles = [
   ['Lorry 1','QAV3468','available',0,null],
   ['Lorry 2','QAA4293N','active',1,null],
