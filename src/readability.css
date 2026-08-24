@@ -1,0 +1,92 @@
+/* System-wide readability floor. Loaded after feature styles so dense legacy
+   screens cannot silently shrink operational text back to 7–12px. */
+:root {
+  --font-body: 1.0625rem;
+  --font-control: 1rem;
+  --font-meta: 0.875rem;
+}
+
+body {
+  font-size: var(--font-body);
+  line-height: 1.5;
+}
+
+button,
+input,
+select,
+textarea {
+  font-size: var(--font-control) !important;
+  line-height: 1.35;
+}
+
+label,
+small,
+table,
+th,
+td,
+dt,
+dd,
+.status-pill,
+[class*="status"],
+[class*="badge"],
+[class*="metric"],
+[class*="warning"],
+[class*="help"],
+[class*="note"],
+.topbar,
+.sidebar nav,
+.workspace-tabs,
+.planner-toolbar,
+.trip-head,
+.trip-resources,
+.route-stop,
+.special-route,
+.unassigned-pool,
+.area-pool,
+.zone-pool,
+.vehicle-board,
+.vehicle-crew,
+.vehicle-trips,
+.picker-panel,
+.trip-commercial,
+.approval-modal,
+.start-location-dialog,
+.request-form,
+.request-list,
+.recommendation-list,
+.recommendation-detail,
+.boundary-toolbar,
+.boundary-side,
+.compact-data-table,
+.master-table,
+.master-list {
+  font-size: var(--font-meta) !important;
+}
+
+/* Allow long translated labels and enlarged controls to wrap rather than clip. */
+button,
+label,
+th,
+td,
+.workspace-tabs,
+.planner-toolbar,
+.vehicle-crew,
+.day-actions {
+  min-width: 0;
+}
+
+button,
+.status-pill,
+[class*="badge"] {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  body {
+    font-size: 1rem;
+  }
+
+  .workspace-tabs {
+    overflow-x: auto;
+  }
+}
