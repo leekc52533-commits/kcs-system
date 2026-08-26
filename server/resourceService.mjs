@@ -13,11 +13,13 @@ function replacePreferredAreas(database, vehicleId, areaIds) {
   for (const areaId of areaIds) if (Number(areaId)) insert.run(vehicleId, Number(areaId))
 }
 
-function replacePreferredZones(database,vehicleId,zoneGroupIds){
-  if(!Array.isArray(zoneGroupIds))return
-  database.prepare('DELETE FROM vehicle_preferred_zones WHERE vehicle_id=?').run(vehicleId)
-  const insert=database.prepare('INSERT OR IGNORE INTO vehicle_preferred_zones(vehicle_id,zone_group_id) VALUES(?,?)')
-  for(const zoneId of zoneGroupIds)if(Number(zoneId))insert.run(vehicleId,Number(zoneId))
+// Zone ownership has one authoritative source: Area / Zone Assignment.
+// vehicle_preferred_zones is retained only as legacy schema data and must not
+// drive Vehicle Management, dispatch, optimization or exports.
+function assignedZones(database,vehicleId){
+  return database.prepare(`SELECT DISTINCT z.id,z.code,z.name,z.sort_order sortOrder
+    FROM zone_default_vehicles zdv JOIN zone_groups z ON z.id=zdv.zone_group_id
+    WHERE zdv.vehicle_id=? ORDER BY z.sort_order,z.id`).all(vehicleId)
 }
 
 function vehicleRows(database) {
@@ -27,13 +29,20 @@ function vehicleRows(database) {
     GROUP_CONCAT(a.id) preferredAreaIds,GROUP_CONCAT(a.name,'|') preferredAreaNames
     FROM vehicles v LEFT JOIN operational_locations base ON base.id=v.default_base_location_id
     LEFT JOIN vehicle_preferred_areas vpa ON vpa.vehicle_id=v.id LEFT JOIN areas a ON a.id=vpa.area_id
-    GROUP BY v.id ORDER BY v.operational_status='sold',COALESCE(v.official_sequence,999),v.vehicle_code`).all().map((item) => ({
-      ...item,
-      preferredAreaIds: item.preferredAreaIds ? item.preferredAreaIds.split(',').map(Number) : [],
-      preferredAreas: item.preferredAreaNames ? item.preferredAreaNames.split('|') : [],
-      preferredZoneIds:database.prepare('SELECT zone_group_id id FROM vehicle_preferred_zones WHERE vehicle_id=? ORDER BY zone_group_id').all(item.id).map(row=>row.id),
-      preferredZones:database.prepare('SELECT z.name FROM vehicle_preferred_zones vpz JOIN zone_groups z ON z.id=vpz.zone_group_id WHERE vpz.vehicle_id=? ORDER BY z.sort_order').all(item.id).map(row=>row.name)
-    }))
+    GROUP BY v.id ORDER BY v.operational_status='sold',COALESCE(v.official_sequence,999),v.vehicle_code`).all().map((item) => {
+      const zones=assignedZones(database,item.id)
+      return{
+        ...item,
+        preferredAreaIds:item.preferredAreaIds?item.preferredAreaIds.split(',').map(Number):[],
+        preferredAreas:item.preferredAreaNames?item.preferredAreaNames.split('|'):[],
+        assignedZoneIds:zones.map(row=>row.id),
+        assignedZones:zones.map(row=>row.name),
+        // Compatibility aliases for existing clients. These are read-only and
+        // contain the same canonical Area / Zone assignment data.
+        preferredZoneIds:zones.map(row=>row.id),
+        preferredZones:zones.map(row=>row.name)
+      }
+    })
 }
 
 function employeeRows(database) {
@@ -218,10 +227,20 @@ export function mergeZoneGroups(payload,database=defaultDb){
   const target=database.prepare('SELECT * FROM zone_groups WHERE id=?').get(targetId);if(!target||!sourceIds.length)throw new Error('Target Zone and at least one different source Zone are required')
   const marks=sourceIds.map(()=>'?').join(','),sources=database.prepare(`SELECT * FROM zone_groups WHERE id IN (${marks})`).all(...sourceIds);if(sources.length!==sourceIds.length)throw new Error('One or more source Zones were not found')
   const areas=database.prepare(`SELECT * FROM areas WHERE zone_group_id IN (${marks})`).all(...sourceIds)
+  const mergedVehicleIds=database.prepare(`SELECT vehicle_id id,MIN(priority) priority FROM (
+    SELECT vehicle_id,position priority FROM zone_default_vehicles WHERE zone_group_id=?
+    UNION ALL
+    SELECT vehicle_id,1000+position priority FROM zone_default_vehicles WHERE zone_group_id IN (${marks})
+  ) GROUP BY vehicle_id ORDER BY priority,id`).all(targetId,...sourceIds).map(row=>row.id)
+  if(mergedVehicleIds.length>3)throw new Error('Merged Zone would exceed the maximum 3 Default Vehicles; adjust the vehicle pools first')
   database.exec('BEGIN IMMEDIATE');try{
     database.prepare(`UPDATE areas SET confirmed_zone_group_id=COALESCE(confirmed_zone_group_id,zone_group_id),zone_group_id=?,zone_assignment_status='pending_confirmation',updated_at=CURRENT_TIMESTAMP WHERE zone_group_id IN (${marks})`).run(targetId,...sourceIds)
     for(const before of areas)auditArea(database,'area_zone_moved',before.id,before,{zoneGroupId:targetId,zoneAssignmentStatus:'pending_confirmation',source:'zone_merge'},payload.changedBy)
-    for(const sourceId of sourceIds){database.prepare('INSERT OR IGNORE INTO vehicle_preferred_zones(vehicle_id,zone_group_id) SELECT vehicle_id,? FROM vehicle_preferred_zones WHERE zone_group_id=?').run(targetId,sourceId);database.prepare('DELETE FROM vehicle_preferred_zones WHERE zone_group_id=?').run(sourceId)}
+    database.prepare(`DELETE FROM zone_default_vehicles WHERE zone_group_id=? OR zone_group_id IN (${marks})`).run(targetId,...sourceIds)
+    const insertDefault=database.prepare('INSERT INTO zone_default_vehicles(zone_group_id,vehicle_id,position,created_by) VALUES(?,?,?,?)')
+    mergedVehicleIds.forEach((vehicleId,index)=>insertDefault.run(targetId,vehicleId,index+1,text(payload.changedBy)||'Supervisor'))
+    database.prepare('UPDATE zone_groups SET default_vehicle_id=? WHERE id=?').run(mergedVehicleIds[0]??null,targetId)
+    for(const sourceId of sourceIds){database.prepare('UPDATE zone_groups SET default_vehicle_id=NULL WHERE id=?').run(sourceId);database.prepare('INSERT OR IGNORE INTO vehicle_preferred_zones(vehicle_id,zone_group_id) SELECT vehicle_id,? FROM vehicle_preferred_zones WHERE zone_group_id=?').run(targetId,sourceId);database.prepare('DELETE FROM vehicle_preferred_zones WHERE zone_group_id=?').run(sourceId)}
     database.prepare(`UPDATE zone_groups SET is_active=0,updated_at=CURRENT_TIMESTAMP WHERE id IN (${marks})`).run(...sourceIds)
     if(payload.name)database.prepare('UPDATE zone_groups SET name=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(text(payload.name),targetId)
     auditZone(database,'zones_merged',targetId,sources,zoneRow(database,targetId),payload.changedBy);database.exec('COMMIT');return listZoneGroups(database)
@@ -234,7 +253,8 @@ export function splitZoneGroup(payload,database=defaultDb){
   const marks=areaIds.map(()=>'?').join(','),matched=database.prepare(`SELECT id FROM areas WHERE zone_group_id=? AND id IN (${marks})`).all(sourceId,...areaIds);if(matched.length!==areaIds.length)throw new Error('All selected Areas must currently belong to the source Zone')
   database.exec('BEGIN IMMEDIATE');try{
     const next=database.prepare('SELECT COALESCE(MAX(id),0)+1 value FROM zone_groups').get().value,code=text(payload.code)||`ZONE-${next}`,sortOrder=Number(payload.sortOrder??source.sort_order+1)
-    const created=database.prepare('INSERT INTO zone_groups(code,name,sort_order,is_active) VALUES(?,?,?,1)').run(code,text(payload.name),sortOrder),newId=Number(created.lastInsertRowid)
+    const created=database.prepare('INSERT INTO zone_groups(code,name,sort_order,is_active,default_vehicle_id) VALUES(?,?,?,1,?)').run(code,text(payload.name),sortOrder,source.default_vehicle_id),newId=Number(created.lastInsertRowid)
+    database.prepare('INSERT INTO zone_default_vehicles(zone_group_id,vehicle_id,position,created_by) SELECT ?,vehicle_id,position,? FROM zone_default_vehicles WHERE zone_group_id=? ORDER BY position').run(newId,text(payload.changedBy)||'Supervisor',sourceId)
     const beforeAreas=database.prepare(`SELECT * FROM areas WHERE id IN (${marks})`).all(...areaIds)
     database.prepare(`UPDATE areas SET confirmed_zone_group_id=COALESCE(confirmed_zone_group_id,zone_group_id),zone_group_id=?,zone_assignment_status='pending_confirmation',updated_at=CURRENT_TIMESTAMP WHERE id IN (${marks})`).run(newId,...areaIds)
     for(const before of beforeAreas)auditArea(database,'area_zone_moved',before.id,before,{zoneGroupId:newId,zoneAssignmentStatus:'pending_confirmation',source:'zone_split'},payload.changedBy)
@@ -290,7 +310,6 @@ export function createVehicle(payload, database = defaultDb) {
     const result = database.prepare(`INSERT INTO vehicles(vehicle_code,vehicle_name,registration_number,capacity_kg,default_base_location_id,status,operational_status,is_temporary,temporary_date,brand,model,manufacture_year,registration_date,vehicle_type,chassis_number,engine_number,gross_vehicle_weight_kg,unladen_weight_kg,registered_owner,fuel_type,engine_capacity_cc,vehicle_origin,vehicle_class,remark,is_common)
       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(text(payload.vehicleCode),text(payload.vehicleName)||null,text(payload.registrationNumber)||null,payload.capacityKg??null,idOrNull(payload.defaultBaseLocationId),legacyStatus,operationalStatus,payload.isTemporary?1:0,payload.temporaryDate||null,text(payload.brand)||null,text(payload.model)||null,payload.manufactureYear||null,payload.registrationDate||null,text(payload.vehicleType)||null,text(payload.chassisNumber)||null,text(payload.engineNumber)||null,payload.grossVehicleWeightKg??null,payload.unladenWeightKg??null,text(payload.registeredOwner)||null,text(payload.fuelType)||null,payload.engineCapacityCc??null,text(payload.vehicleOrigin)||null,text(payload.vehicleClass)||null,text(payload.remark)||null,payload.isCommon?1:0)
     replacePreferredAreas(database, result.lastInsertRowid, payload.preferredAreaIds || [])
-    replacePreferredZones(database,result.lastInsertRowid,payload.preferredZoneIds||[])
     database.exec('COMMIT')
     return vehicleRows(database).find((item) => item.id === Number(result.lastInsertRowid))
   } catch (error) { database.exec('ROLLBACK'); throw error }
@@ -318,7 +337,6 @@ export function updateVehicle(id, payload, database = defaultDb) {
       payload.capacityKg===undefined?before.capacity_kg:payload.capacityKg,payload.defaultBaseLocationId===undefined?before.default_base_location_id:idOrNull(payload.defaultBaseLocationId),nextLegacy,nextStatus,
       payload.brand===undefined?before.brand:text(payload.brand)||null,payload.model===undefined?before.model:text(payload.model)||null,payload.manufactureYear===undefined?before.manufacture_year:payload.manufactureYear||null,payload.registrationDate===undefined?before.registration_date:payload.registrationDate||null,payload.vehicleType===undefined?before.vehicle_type:text(payload.vehicleType)||null,payload.chassisNumber===undefined?before.chassis_number:text(payload.chassisNumber)||null,payload.engineNumber===undefined?before.engine_number:text(payload.engineNumber)||null,payload.grossVehicleWeightKg===undefined?before.gross_vehicle_weight_kg:payload.grossVehicleWeightKg,payload.unladenWeightKg===undefined?before.unladen_weight_kg:payload.unladenWeightKg,payload.registeredOwner===undefined?before.registered_owner:text(payload.registeredOwner)||null,payload.fuelType===undefined?before.fuel_type:text(payload.fuelType)||null,payload.engineCapacityCc===undefined?before.engine_capacity_cc:payload.engineCapacityCc??null,payload.vehicleOrigin===undefined?before.vehicle_origin:text(payload.vehicleOrigin)||null,payload.vehicleClass===undefined?before.vehicle_class:text(payload.vehicleClass)||null,payload.remark===undefined?before.remark:text(payload.remark)||null,payload.isCommon===undefined?before.is_common:Number(Boolean(payload.isCommon)),nextStatus,id)
     replacePreferredAreas(database, id, payload.preferredAreaIds)
-    replacePreferredZones(database,id,payload.preferredZoneIds)
     if (nextStatus !== currentStatus) {
       database.prepare('INSERT INTO vehicle_status_history(vehicle_id,previous_status,new_status,reason,changed_by) VALUES(?,?,?,?,?)').run(id,currentStatus,nextStatus,text(payload.statusReason)||null,text(payload.changedBy)||'Supervisor')
       const dates = database.prepare(`SELECT DISTINCT dd.dispatch_date FROM dispatch_days dd JOIN dispatch_trips dt ON dt.dispatch_day_id=dd.id JOIN dispatches d ON d.id=dt.dispatch_id WHERE d.vehicle_id=? AND dd.dispatch_date>=date('now','+8 hours')`).all(id)
