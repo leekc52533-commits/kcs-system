@@ -46,9 +46,9 @@ function effectiveStop(stop,rules,vehicleIds){
   }
   return next
 }
-function warningsFor(stops,vehicles){const hasCapacity=vehicles.some(vehicle=>vehicle.capacityKg!=null);return stops.flatMap(stop=>[
+function warningsFor(stops,vehicles){return stops.flatMap(stop=>[
   ...(!validGps(stop.latitude,stop.longitude)?[{code:'GPS_MISSING',severity:'blocking',stopId:stop.id,message:`${stop.branchName}: set entrance/service-point GPS before optimization.`}]:[]),
-  ...(stop.weight==null?[{code:'WEIGHT_MISSING',severity:hasCapacity?'blocking':'warning',stopId:stop.id,message:`${stop.branchName}: estimated weight is missing${hasCapacity?'; capacity-safe assignment is blocked.':'.'}`}]:[]),
+  ...(stop.weight==null?[{code:'WEIGHT_MISSING',severity:'warning',stopId:stop.id,message:`${stop.branchName}: estimated weight is missing; vehicle capacity will be treated as advisory until an actual weight is recorded.`}]:[]),
   ...(stop.branchStatus&&stop.branchStatus!=='active'?[{code:'BRANCH_INACTIVE',severity:'blocking',stopId:stop.id,message:`${stop.branchName}: branch is not active.`}]:[]),
   ...(String(stop.timeWindow||'').trim()&&!stop.parsedWindow?[{code:'TIME_WINDOW_UNSTRUCTURED',severity:'blocking',stopId:stop.id,message:`${stop.branchName}: approve a structured preferred time-window rule for “${stop.timeWindow}”.`}]:[]),
   ...(String(stop.vehicleRestriction||'').trim()&&!stop.allowedVehicleIds?[{code:'TRUCK_RESTRICTION_UNSTRUCTURED',severity:'blocking',stopId:stop.id,message:`${stop.branchName}: approve a route-access rule for “${stop.vehicleRestriction}”.`}]:[]),
