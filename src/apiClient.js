@@ -26,6 +26,7 @@ export async function apiRequest(url,options={}){
     error.code=data.errorCode||data.code||'UNKNOWN_ERROR'
     error.status=response.status
     error.requestId=requestId
+    error.details=data.details||null
     throw error
   }
   return data
