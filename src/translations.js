@@ -706,6 +706,10 @@ export function translateSource(language,value){
   return translated
 }
 
+Object.assign(messages.en,{'optimization.weekTitle':'Automatic seven-day fleet scheduling','optimization.weekHelp':'The system directly assigns every scheduled customer to available vehicles and orders stops by Google roads. Make manual changes only if needed afterward.','optimization.weekAction':'Automatically arrange all 7 days','optimization.weekWorking':'Arranging and saving seven days…','apiError.route_unassigned':'Google could not assign every stop. No draft routes were changed; review the listed stops.','apiError.route_validation':'Some route data must be corrected first. No draft routes were changed.'})
+Object.assign(messages.ms,{'optimization.weekTitle':'Jadual armada tujuh hari automatik','optimization.weekHelp':'Sistem terus menetapkan semua pelanggan berjadual kepada kenderaan tersedia dan menyusun hentian mengikut jalan Google. Buat perubahan manual selepas itu hanya jika perlu.','optimization.weekAction':'Susun semua 7 hari secara automatik','optimization.weekWorking':'Menyusun dan menyimpan tujuh hari…','apiError.route_unassigned':'Google tidak dapat menetapkan semua hentian. Tiada laluan draf diubah; semak hentian yang disenaraikan.','apiError.route_validation':'Sesetengah data laluan perlu dibetulkan dahulu. Tiada laluan draf diubah.'})
+Object.assign(messages.zh,{'optimization.weekTitle':'未来7天自动排车','optimization.weekHelp':'系统根据已设星期、客户资料和可用车辆，直接按 Google 道路分车及排列拜访顺序；完成后只有不满意才人工调整。','optimization.weekAction':'自动安排并保存未来7天','optimization.weekWorking':'正在安排并保存未来7天…','apiError.route_unassigned':'Google 无法安排全部站点，草稿没有被修改；请查看下面列出的站点。','apiError.route_validation':'部分路线资料必须先修正，草稿没有被修改。'})
+
 export function translate(language,key,variables={}){
   const selected=messages[language]||messages.en
   let value=selected[key]
