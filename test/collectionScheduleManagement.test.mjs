@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import {readFileSync} from 'node:fs'
 import {DatabaseSync} from 'node:sqlite'
 import {schemaSql} from '../server/schema.mjs'
 import {getCollectionScheduleManagement,listCollectionScheduleManagement,saveCollectionScheduleManagement} from '../server/collectionScheduleManagementService.mjs'
@@ -19,4 +20,6 @@ test('final save writes both audit systems',()=>{const db=fixture(),item=getColl
 test('expectedUpdatedAt conflict returns 409 and commits nothing',()=>{const db=fixture(),item=getCollectionScheduleManagement('1001',db);db.exec(`UPDATE branches SET updated_at='2099-01-01' WHERE id=101`);assert.throws(()=>saveCollectionScheduleManagement('1001',payload(item),db),error=>error.statusCode===409);assert.equal(db.prepare('SELECT frequency FROM branch_schedules').get().frequency,'Once a week')})
 test('existing Dispatch Stops are unchanged and reported',()=>{const db=fixture(),item=getCollectionScheduleManagement('1001',db);db.exec(`INSERT INTO dispatches(id,dispatch_date,status) VALUES(1,'2099-01-01','released');INSERT INTO dispatch_stops(id,dispatch_id,branch_id,stop_sequence,status) VALUES(1,1,101,1,'locked')`);const result=saveCollectionScheduleManagement('1001',payload(item,{effectiveDate:'2026-01-01'}),db);assert.equal(result.futureStopCount,1);assert.deepEqual({...db.prepare('SELECT branch_id,status FROM dispatch_stops WHERE id=1').get()},{branch_id:101,status:'locked'})})
 test('list includes active missing Schedule, excludes non-ACTIVE, and resolves confirmed Zone',()=>{const items=listCollectionScheduleManagement({},fixture());assert.deepEqual(items.map(x=>x.branchId),['1001','1002']);assert.equal(items[1].scheduleCount,0);assert.equal(items[0].zone,'Confirmed')})
+test('list search accepts Branch ID with uppercase or lowercase B prefix',()=>{const db=fixture();for(const search of ['1001','B1001','b1001'])assert.deepEqual(listCollectionScheduleManagement({search},db).map(x=>x.branchId),['1001'])})
+test('Schedule editor allows direct save once a reason is entered while preview remains optional',()=>{const source=readFileSync(new URL('../src/DataPages.jsx',import.meta.url),'utf8'),editor=source.slice(source.indexOf('function ScheduleEditor'),source.indexOf('const groupKeys'));assert.match(editor,/className="primary" disabled=\{busy\|\|!form\.reason\.trim\(\)\}/);assert.doesNotMatch(editor,/className="primary" disabled=\{busy\|\|!preview\}/)})
 test('management PATCH route enforces schedule permission server-side',async()=>{const source=await import('node:fs').then(fs=>fs.readFileSync(new URL('../server/index.mjs',import.meta.url),'utf8'));assert.match(source,/PATCH.*collection-schedule[\s\S]{0,250}!canManageSchedules\(session\).*403/)})
