@@ -52,6 +52,7 @@
     "convert:materials": "node scripts/convert-material-prices.mjs",
     "migrate:v42": "node scripts/migrate-v42.mjs",
     "migrate:v43": "node scripts/migrate-v43.mjs",
+    "migrate:v44": "node scripts/migrate-v44.mjs",
     "impact:v42": "node scripts/v42-impact-report.mjs",
     "deploy:v42:check": "node scripts/cloud-preflight.mjs",
     "preview:customer-product-pricing": "node scripts/apply-customer-product-pricing-20260818.mjs",
