@@ -30,7 +30,7 @@ import {publicError} from './errorCodes.mjs'
 import {assertLocationFields} from '../shared/locationText.js'
 import {configureScheduleRecurrence,getScheduleRecurrence} from './scheduleRecurrenceService.mjs'
 import {getCollectionScheduleManagement,listCollectionScheduleManagement,saveCollectionScheduleManagement} from './collectionScheduleManagementService.mjs'
-import {arriveAtStop,completeDriverStop,completeDriverTrip,isArrivalTestMode,recordNoGoods,startDriverTrip} from './driverExecutionService.mjs'
+import {arriveAtStop,completeDriverStop,completeDriverTrip,deferDriverStop,isArrivalTestMode,recordNoGoods,startDriverTrip} from './driverExecutionService.mjs'
 import {createPurchaseBill,getPurchaseBilling,purchasePaymentProofFile,uploadPurchasePaymentProof} from './purchaseBillingService.mjs'
 import {assertVehicleRegistrationEdit} from './vehicleRegistrationPermissions.mjs'
 import {changeBranchLifecycle,listBranchLifecycleReview,listReplacementBranches} from './branchLifecycleService.mjs'
@@ -105,6 +105,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'GET' && url.pathname === '/api/mobile/today') return sendJson(response,200,{...driverToday({employeeId:session.employeeId,role:session.role}),arrivalTestMode:isArrivalTestMode()})
     if (request.method === 'POST' && /^\/api\/mobile\/trips\/\d+\/start$/.test(url.pathname)) return sendJson(response,200,startDriverTrip(Number(url.pathname.split('/')[4]),{employeeId:session.employeeId,role:session.role}))
     if (request.method === 'POST' && /^\/api\/mobile\/stops\/\d+\/arrive$/.test(url.pathname)) return sendJson(response,200,arriveAtStop(Number(url.pathname.split('/')[4]),(await readJson(request)).payload,{employeeId:session.employeeId,role:session.role,remoteArrivalTestMode:isArrivalTestMode()}))
+    if (request.method === 'POST' && /^\/api\/mobile\/stops\/\d+\/defer$/.test(url.pathname)) return sendJson(response,200,deferDriverStop(Number(url.pathname.split('/')[4]),(await readJson(request)).payload,{employeeId:session.employeeId,role:session.role}))
     if (request.method === 'GET' && /^\/api\/mobile\/stops\/\d+\/billing$/.test(url.pathname)) return sendJson(response,200,getPurchaseBilling(Number(url.pathname.split('/')[4]),{employeeId:session.employeeId,role:session.role}))
     if (request.method === 'POST' && /^\/api\/mobile\/stops\/\d+\/bills$/.test(url.pathname)) return sendJson(response,201,createPurchaseBill(Number(url.pathname.split('/')[4]),(await readJson(request)).payload,{employeeId:session.employeeId,role:session.role}))
     if (request.method === 'POST' && /^\/api\/mobile\/stops\/\d+\/payment-proof$/.test(url.pathname)) return sendJson(response,201,uploadPurchasePaymentProof(Number(url.pathname.split('/')[4]),(await readJson(request)).payload,{employeeId:session.employeeId,role:session.role},db,{uploadsRoot:uploadsDir}))
