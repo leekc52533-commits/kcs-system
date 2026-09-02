@@ -30,7 +30,7 @@ import {publicError} from './errorCodes.mjs'
 import {assertLocationFields} from '../shared/locationText.js'
 import {configureScheduleRecurrence,getScheduleRecurrence} from './scheduleRecurrenceService.mjs'
 import {getCollectionScheduleManagement,listCollectionScheduleManagement,saveCollectionScheduleManagement} from './collectionScheduleManagementService.mjs'
-import {arriveAtStop,completeDriverStop,completeDriverTrip,recordNoGoods,startDriverTrip} from './driverExecutionService.mjs'
+import {arriveAtStop,completeDriverStop,completeDriverTrip,isArrivalTestMode,recordNoGoods,startDriverTrip} from './driverExecutionService.mjs'
 import {createPurchaseBill,getPurchaseBilling,purchasePaymentProofFile,uploadPurchasePaymentProof} from './purchaseBillingService.mjs'
 import {assertVehicleRegistrationEdit} from './vehicleRegistrationPermissions.mjs'
 import {changeBranchLifecycle,listBranchLifecycleReview,listReplacementBranches} from './branchLifecycleService.mjs'
@@ -102,9 +102,9 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'PATCH' && /^\/api\/auth\/accounts\/\d+$/.test(url.pathname)) {const payload=(await readJson(request)).payload;if(Array.isArray(payload.permissions)&&session.role!=='owner_admin')return sendJson(response,403,{error:'只有Owner Admin可以授权敏感资料权限'});return sendJson(response,200,updateAccount(Number(url.pathname.split('/').at(-1)),payload,session,meta(request)))}
     if (request.method === 'GET' && url.pathname === '/api/auth/audit') return sendJson(response,200,{items:listAuthAudit(Object.fromEntries(url.searchParams))})
     if (request.method === 'GET' && url.pathname === '/api/system/network') return sendJson(response,200,{host,apiPort:port,lanUrls:networkUrls(),httpsRequiredForGps:true})
-    if (request.method === 'GET' && url.pathname === '/api/mobile/today') return sendJson(response,200,driverToday({employeeId:session.employeeId,role:session.role}))
+    if (request.method === 'GET' && url.pathname === '/api/mobile/today') return sendJson(response,200,{...driverToday({employeeId:session.employeeId,role:session.role}),arrivalTestMode:isArrivalTestMode()})
     if (request.method === 'POST' && /^\/api\/mobile\/trips\/\d+\/start$/.test(url.pathname)) return sendJson(response,200,startDriverTrip(Number(url.pathname.split('/')[4]),{employeeId:session.employeeId,role:session.role}))
-    if (request.method === 'POST' && /^\/api\/mobile\/stops\/\d+\/arrive$/.test(url.pathname)) return sendJson(response,200,arriveAtStop(Number(url.pathname.split('/')[4]),(await readJson(request)).payload,{employeeId:session.employeeId,role:session.role}))
+    if (request.method === 'POST' && /^\/api\/mobile\/stops\/\d+\/arrive$/.test(url.pathname)) return sendJson(response,200,arriveAtStop(Number(url.pathname.split('/')[4]),(await readJson(request)).payload,{employeeId:session.employeeId,role:session.role,remoteArrivalTestMode:isArrivalTestMode()}))
     if (request.method === 'GET' && /^\/api\/mobile\/stops\/\d+\/billing$/.test(url.pathname)) return sendJson(response,200,getPurchaseBilling(Number(url.pathname.split('/')[4]),{employeeId:session.employeeId,role:session.role}))
     if (request.method === 'POST' && /^\/api\/mobile\/stops\/\d+\/bills$/.test(url.pathname)) return sendJson(response,201,createPurchaseBill(Number(url.pathname.split('/')[4]),(await readJson(request)).payload,{employeeId:session.employeeId,role:session.role}))
     if (request.method === 'POST' && /^\/api\/mobile\/stops\/\d+\/payment-proof$/.test(url.pathname)) return sendJson(response,201,uploadPurchasePaymentProof(Number(url.pathname.split('/')[4]),(await readJson(request)).payload,{employeeId:session.employeeId,role:session.role},db,{uploadsRoot:uploadsDir}))
