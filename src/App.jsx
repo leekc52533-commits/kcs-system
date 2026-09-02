@@ -17,7 +17,7 @@ import {translate} from './translations.js'
 import {CustomerBranchHub,DispatchScheduleHub,LocationGpsZoneHub,StaffAccountHub} from './WorkspaceHub.jsx'
 import PurchaseBillsPage from './PurchaseBillsPage.jsx'
 
-const navigation=[['dashboard','⌂','nav.dashboard'],['operations','↗','nav.dispatchSchedule'],['purchase-bills','▤','nav.purchaseBills'],['customers','◎','nav.customers'],['buyers','◉','nav.buyers'],['location-zone','⌖','nav.locationGpsZone'],['vehicles','◇','nav.vehicles'],['materials','▦','nav.materials'],['staff','♙','nav.staffAccounts']]
+const navigation=[['dashboard','⌂','nav.dashboard'],['operations','↗','nav.dispatchSchedule'],['purchase-bills','▤','Purchase Bills'],['customers','◎','nav.customers'],['buyers','◉','nav.buyers'],['location-zone','⌖','nav.locationGpsZone'],['vehicles','◇','nav.vehicles'],['materials','▦','nav.materials'],['staff','♙','nav.staffAccounts']]
 const modules=[['operations','↗','','','','green'],['special','＋','','','','rose'],['customers','◎','','','','blue'],['location-zone','⌖','','','','violet'],['vehicles','◇','','','','cyan'],['materials','▦','','','','orange'],['staff','♙','','','','green']]
 const pageTitleKeys={special:'nav.special'}
 const legacyPages={dispatch:['operations','weekly'],schedule:['operations','schedules'],data:['location-zone','data-quality'],'gps-zone':['location-zone','recommendations'],resources:['vehicles','vehicles'],accounts:['staff','accounts'],'gps-migration':['location-zone','legacy-gps']}
