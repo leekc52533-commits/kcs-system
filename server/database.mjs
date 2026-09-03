@@ -16,6 +16,7 @@ import { applyV25Migration } from './migrationV25.mjs'
 import { applyV26Migration, ensureV26Schema } from './migrationV26.mjs'
 import {applyV45Migration,ensureV45Schema} from './migrationV45.mjs'
 import {applyV46Migration,ensureV46Schema} from './migrationV46.mjs'
+import {applyV47Migration,ensureV47Schema} from './migrationV47.mjs'
 
 const serverDir = path.dirname(fileURLToPath(import.meta.url))
 const projectDir = path.resolve(serverDir, '..')
@@ -280,6 +281,9 @@ else if(finalSchemaVersion>=45)ensureV45Schema(db)
 const postV45SchemaVersion=Number(db.prepare('SELECT COALESCE(MAX(version),0) version FROM schema_meta').get().version)
 if(postV45SchemaVersion===45)applyV46Migration(db)
 else if(postV45SchemaVersion>=46)ensureV46Schema(db)
+const postV46SchemaVersion=Number(db.prepare('SELECT COALESCE(MAX(version),0) version FROM schema_meta').get().version)
+if(postV46SchemaVersion===46)applyV47Migration(db)
+else if(postV46SchemaVersion>=47)ensureV47Schema(db)
 const officialVehicles = [
   ['Lorry 1','QAV3468','available',0,null],
   ['Lorry 2','QAA4293N','active',1,null],

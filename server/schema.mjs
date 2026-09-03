@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 46
+export const SCHEMA_VERSION = 47
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -1548,6 +1548,13 @@ CREATE TABLE IF NOT EXISTS cash_float_alerts (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS cash_float_one_active_alert_idx ON cash_float_alerts(employee_id) WHERE status='active';
 CREATE INDEX IF NOT EXISTS cash_float_alerts_status_idx ON cash_float_alerts(status,triggered_at DESC);
+CREATE TABLE IF NOT EXISTS cash_float_members (
+  employee_id INTEGER PRIMARY KEY REFERENCES employees(id),
+  is_selected INTEGER NOT NULL DEFAULT 1 CHECK(is_selected IN (0,1)),
+  updated_by_employee_id INTEGER REFERENCES employees(id),
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS cash_float_members_selected_idx ON cash_float_members(is_selected,employee_id);
 
 INSERT OR IGNORE INTO zone_groups(id,code,name,sort_order) VALUES
   (1,'KUCHING-A','Kuching A — BDC',1),

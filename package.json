@@ -55,6 +55,7 @@
     "migrate:v44": "node scripts/migrate-v44.mjs",
     "migrate:v45": "node scripts/migrate-v45.mjs",
     "migrate:v46": "node scripts/migrate-v46.mjs",
+    "migrate:v47": "node scripts/migrate-v47.mjs",
     "impact:v42": "node scripts/v42-impact-report.mjs",
     "deploy:v42:check": "node scripts/cloud-preflight.mjs",
     "preview:customer-product-pricing": "node scripts/apply-customer-product-pricing-20260818.mjs",

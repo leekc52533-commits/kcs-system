@@ -41,17 +41,40 @@ function saveImage(photo,uploadsRoot){const file=image(photo);if(!file)return{};
 export function listCashFloatAccounts(filters={},database=defaultDb){
   const date=validDate(filters.date),rows=database.prepare(`SELECT e.id employeeId,e.employee_code employeeCode,e.name employeeName,a.target_float_cents targetFloatCents,a.low_balance_threshold_cents lowBalanceThresholdCents,COALESCE(a.is_active,0) isActive,
     COALESCE((SELECT SUM(t.amount_cents) FROM cash_float_transactions t WHERE t.employee_id=e.id),0) balanceCents
-    FROM employees e LEFT JOIN cash_float_accounts a ON a.employee_id=e.id
-    WHERE e.is_active=1 AND e.employment_status='active' AND (lower(COALESCE(e.job_role,'')) IN ('driver','crew','assistant') OR EXISTS(SELECT 1 FROM employee_job_roles r WHERE r.employee_id=e.id AND r.is_active=1 AND r.role IN ('Driver','Attendant / Crew')))
+    FROM cash_float_members m JOIN employees e ON e.id=m.employee_id LEFT JOIN cash_float_accounts a ON a.employee_id=e.id
+    WHERE m.is_selected=1 AND e.is_active=1 AND e.employment_status='active'
     ORDER BY CASE WHEN lower(COALESCE(e.job_role,''))='driver' THEN 0 ELSE 1 END,e.name`).all()
   return{date,items:rows.map(row=>row.targetFloatCents==null?{employeeId:Number(row.employeeId),employeeCode:row.employeeCode,employeeName:row.employeeName,configured:false}: {...serializeAccount(row,database,date),configured:true})}
+}
+
+export function listCashFloatEmployees(database=defaultDb){return{items:database.prepare(`SELECT e.id employeeId,e.employee_code employeeCode,e.name employeeName,e.job_role jobRole,
+  CASE WHEN m.is_selected=1 THEN 1 ELSE 0 END selected,CASE WHEN a.employee_id IS NULL THEN 0 ELSE 1 END configured,
+  COALESCE((SELECT SUM(t.amount_cents) FROM cash_float_transactions t WHERE t.employee_id=e.id),0) balanceCents
+  FROM employees e LEFT JOIN cash_float_members m ON m.employee_id=e.id LEFT JOIN cash_float_accounts a ON a.employee_id=e.id
+  WHERE e.is_active=1 AND e.employment_status='active'
+  ORDER BY CASE WHEN lower(COALESCE(e.job_role,''))='driver' THEN 0 WHEN lower(COALESCE(e.job_role,'')) IN ('crew','assistant') THEN 1 ELSE 2 END,e.name`).all().map(item=>({...item,employeeId:Number(item.employeeId),selected:Boolean(item.selected),configured:Boolean(item.configured),balanceCents:Number(item.balanceCents)}))}}
+
+export function setCashFloatEmployees(employeeIds=[],context={},database=defaultDb){
+  if(!Array.isArray(employeeIds))throw fail('Employee selection must be a list.')
+  const selected=[...new Set(employeeIds.map(Number).filter(Number.isInteger).filter(id=>id>0))],when=nowKuching(context.now),actorId=Number(context.employeeId)||null
+  const valid=selected.length?database.prepare(`SELECT id FROM employees WHERE is_active=1 AND employment_status='active' AND id IN (${selected.map(()=>'?').join(',')})`).all(...selected).map(item=>Number(item.id)):[]
+  if(valid.length!==selected.length)throw fail('One or more selected employees are not active.','INVALID_EMPLOYEE')
+  return withImmediateTransaction(database,()=>{
+    database.prepare('UPDATE cash_float_members SET is_selected=0,updated_by_employee_id=?,updated_at=? WHERE is_selected=1').run(actorId,when)
+    const save=database.prepare(`INSERT INTO cash_float_members(employee_id,is_selected,updated_by_employee_id,updated_at) VALUES(?,1,?,?) ON CONFLICT(employee_id) DO UPDATE SET is_selected=1,updated_by_employee_id=excluded.updated_by_employee_id,updated_at=excluded.updated_at`)
+    for(const employeeId of selected)save.run(employeeId,actorId,when)
+    database.prepare('UPDATE cash_float_accounts SET is_active=CASE WHEN employee_id IN (SELECT employee_id FROM cash_float_members WHERE is_selected=1) THEN 1 ELSE 0 END,updated_at=?').run(when)
+    database.prepare(`UPDATE cash_float_alerts SET status='resolved',resolved_at=?,last_checked_at=? WHERE status='active' AND employee_id NOT IN (SELECT employee_id FROM cash_float_members WHERE is_selected=1)`).run(when,when)
+    for(const employeeId of selected)if(accountRow(database,employeeId))refreshAlert(database,employeeId,when)
+    return listCashFloatEmployees(database)
+  })
 }
 
 export function configureCashFloat(employeeId,payload={},context={},database=defaultDb){
   const employee=database.prepare("SELECT id,name FROM employees WHERE id=? AND is_active=1 AND employment_status='active'").get(Number(employeeId));if(!employee)throw fail('Active employee not found.','NOT_FOUND',404)
   const target=positiveCents(payload.targetFloat,'Target Float'),threshold=cents(payload.lowBalanceThreshold,'Low Balance Alert');if(threshold>=target)throw fail('Low Balance Alert must be lower than Target Float.')
   const existing=accountRow(database,employeeId),opening=existing?null:cents(payload.currentBalance,'Current Balance'),when=nowKuching(context.now),actorId=Number(context.employeeId)||null,actorName=String(context.employeeName||'Office')
-  return withImmediateTransaction(database,()=>{database.prepare(`INSERT INTO cash_float_accounts(employee_id,target_float_cents,low_balance_threshold_cents,is_active,updated_by_employee_id,updated_at) VALUES(?,?,?,1,?,?) ON CONFLICT(employee_id) DO UPDATE SET target_float_cents=excluded.target_float_cents,low_balance_threshold_cents=excluded.low_balance_threshold_cents,is_active=1,updated_by_employee_id=excluded.updated_by_employee_id,updated_at=excluded.updated_at`).run(employeeId,target,threshold,actorId,when);if(opening>0)database.prepare(`INSERT INTO cash_float_transactions(employee_id,transaction_type,amount_cents,service_date,payment_channel,description,created_by_employee_id,created_by_name_snapshot,created_at) VALUES(?,'opening_balance',?,?,'Adjustment','Opening balance when Cash Float was activated',?,?,?)`).run(employeeId,opening,validDate(payload.serviceDate),actorId,actorName,when);refreshAlert(database,employeeId,when);return serializeAccount(accountRow(database,employeeId),database)})
+  return withImmediateTransaction(database,()=>{database.prepare(`INSERT INTO cash_float_members(employee_id,is_selected,updated_by_employee_id,updated_at) VALUES(?,1,?,?) ON CONFLICT(employee_id) DO UPDATE SET is_selected=1,updated_by_employee_id=excluded.updated_by_employee_id,updated_at=excluded.updated_at`).run(employeeId,actorId,when);database.prepare(`INSERT INTO cash_float_accounts(employee_id,target_float_cents,low_balance_threshold_cents,is_active,updated_by_employee_id,updated_at) VALUES(?,?,?,1,?,?) ON CONFLICT(employee_id) DO UPDATE SET target_float_cents=excluded.target_float_cents,low_balance_threshold_cents=excluded.low_balance_threshold_cents,is_active=1,updated_by_employee_id=excluded.updated_by_employee_id,updated_at=excluded.updated_at`).run(employeeId,target,threshold,actorId,when);if(opening>0)database.prepare(`INSERT INTO cash_float_transactions(employee_id,transaction_type,amount_cents,service_date,payment_channel,description,created_by_employee_id,created_by_name_snapshot,created_at) VALUES(?,'opening_balance',?,?,'Adjustment','Opening balance when Cash Float was activated',?,?,?)`).run(employeeId,opening,validDate(payload.serviceDate),actorId,actorName,when);refreshAlert(database,employeeId,when);return serializeAccount(accountRow(database,employeeId),database)})
 }
 
 function addTransaction(employeeId,type,signedAmount,payload,context,database,uploadsRoot){
@@ -74,7 +97,7 @@ export function mobileCashFloat(employeeId,database=defaultDb){const row=account
 
 export function listCashFloatTransactions(filters={},database=defaultDb){const clauses=['1=1'],params=[],from=String(filters.from||''),to=String(filters.to||'');if(/^\d{4}-\d{2}-\d{2}$/.test(from)){clauses.push('t.service_date>=?');params.push(from)}if(/^\d{4}-\d{2}-\d{2}$/.test(to)){clauses.push('t.service_date<=?');params.push(to)}const employeeId=Number(filters.employeeId);if(employeeId>0){clauses.push('t.employee_id=?');params.push(employeeId)}const items=database.prepare(`SELECT t.id,t.employee_id employeeId,e.name employeeName,t.transaction_type transactionType,t.amount_cents amountCents,t.service_date serviceDate,t.payment_channel paymentChannel,t.description,t.reference_number referenceNumber,t.proof_storage_key proofStorageKey,t.created_by_name_snapshot createdBy,t.created_at createdAt,t.voided_at voidedAt,pb.bill_number billNumber FROM cash_float_transactions t JOIN employees e ON e.id=t.employee_id LEFT JOIN purchase_bills pb ON pb.id=t.purchase_bill_id WHERE ${clauses.join(' AND ')} ORDER BY t.service_date DESC,t.id DESC LIMIT 2000`).all(...params);return{items:items.map(item=>({...item,id:Number(item.id),employeeId:Number(item.employeeId),amountCents:Number(item.amountCents),hasProof:Boolean(item.proofStorageKey)}))}}
 
-export function listCashFloatAlerts(database=defaultDb){return{items:database.prepare(`SELECT a.id,a.employee_id employeeId,e.name employeeName,a.balance_cents balanceCents,a.threshold_cents thresholdCents,a.target_float_cents targetFloatCents,a.triggered_at triggeredAt FROM cash_float_alerts a JOIN employees e ON e.id=a.employee_id WHERE a.status='active' ORDER BY a.triggered_at`).all().map(item=>({...item,id:Number(item.id),employeeId:Number(item.employeeId),balanceCents:Number(item.balanceCents),thresholdCents:Number(item.thresholdCents),targetFloatCents:Number(item.targetFloatCents),suggestedTopUpCents:Math.max(0,Number(item.targetFloatCents)-Number(item.balanceCents))}))}}
+export function listCashFloatAlerts(database=defaultDb){return{items:database.prepare(`SELECT a.id,a.employee_id employeeId,e.name employeeName,a.balance_cents balanceCents,a.threshold_cents thresholdCents,a.target_float_cents targetFloatCents,a.triggered_at triggeredAt FROM cash_float_alerts a JOIN employees e ON e.id=a.employee_id JOIN cash_float_members m ON m.employee_id=a.employee_id AND m.is_selected=1 JOIN cash_float_accounts f ON f.employee_id=a.employee_id AND f.is_active=1 WHERE a.status='active' ORDER BY a.triggered_at`).all().map(item=>({...item,id:Number(item.id),employeeId:Number(item.employeeId),balanceCents:Number(item.balanceCents),thresholdCents:Number(item.thresholdCents),targetFloatCents:Number(item.targetFloatCents),suggestedTopUpCents:Math.max(0,Number(item.targetFloatCents)-Number(item.balanceCents))}))}}
 
 export function cashFloatProofFile(transactionId,database=defaultDb){return database.prepare('SELECT proof_storage_key storageKey,proof_content_type contentType FROM cash_float_transactions WHERE id=? AND proof_storage_key IS NOT NULL').get(Number(transactionId))||null}
 
