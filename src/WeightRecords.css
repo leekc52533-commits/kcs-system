@@ -1,0 +1,4 @@
+.archive-actions button.secondary{border:1px solid #176f60;background:#fff!important;color:#176f60!important}
+.weight-record-filters{grid-template-columns:150px 150px}
+.weight-record-table{min-width:1450px!important}
+@media(max-width:560px){.weight-record-filters{grid-template-columns:1fr}}
