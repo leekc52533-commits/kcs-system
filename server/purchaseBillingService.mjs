@@ -5,6 +5,7 @@ import {db as defaultDb} from './database.mjs'
 import {withImmediateTransaction} from './branchServiceDateGuard.mjs'
 import {listBranchProducts,requireBranchProductPrice} from './materialProductService.mjs'
 import {kuchingDate} from '../shared/kuchingTime.js'
+import {recordCashPurchase} from './cashFloatService.mjs'
 
 const fail=(message,code='INVALID_BILL',statusCode=409)=>{const error=new Error(message);error.code=code;error.statusCode=statusCode;return error}
 const nowKuching=(input=new Date())=>{const parts=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuching',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(input)).map(part=>[part.type,part.value]));return`${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}+08:00`}
@@ -85,6 +86,7 @@ export function createPurchaseBill(stopId,payload={},context={},database=default
     const totalWeight=items.filter(item=>/kg|kilogram/i.test(String(item.unit||'kg'))).reduce((sum,item)=>sum+item.quantity,0)
     database.prepare('UPDATE dispatch_stops SET invoice_number=?,payment_status=?,collected_weight_kg=CASE WHEN ?>0 THEN ? ELSE collected_weight_kg END WHERE id=?').run(billNumber,stop.paymentMethod==='Cash'?'pending_proof':'credit',totalWeight,totalWeight,stop.id)
     database.prepare(`INSERT OR REPLACE INTO stop_step_records(dispatch_stop_id,step_key,completed_by,completed_at,payload_json) VALUES(?,'invoice_driver_confirmed',NULL,?,?)`).run(stop.id,issuedAt,JSON.stringify({method:'electronic_purchase_bill',billId:purchaseBillId,billNumber,paymentMethod:stop.paymentMethod,driverEmployeeId:Number(employeeId)}))
+    recordCashPurchase({id:purchaseBillId,billNumber,paymentMethod:stop.paymentMethod,totalCents,serviceDate:stop.serviceDate,driverEmployeeId:Number(employeeId),driverName:stop.driverName},database,{now})
     return{...bill(database,stop.id),idempotent:false}
   })
 }

@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 45
+export const SCHEMA_VERSION = 46
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -1502,6 +1502,52 @@ CREATE TABLE IF NOT EXISTS unloading_weight_records (
 );
 CREATE INDEX IF NOT EXISTS unloading_weights_date_idx ON unloading_weight_records(service_date,driver_employee_id,status);
 CREATE INDEX IF NOT EXISTS unloading_weights_vehicle_idx ON unloading_weight_records(vehicle_id,weighed_at DESC);
+
+CREATE TABLE IF NOT EXISTS cash_float_accounts (
+  employee_id INTEGER PRIMARY KEY REFERENCES employees(id),
+  target_float_cents INTEGER NOT NULL CHECK(target_float_cents>=0),
+  low_balance_threshold_cents INTEGER NOT NULL CHECK(low_balance_threshold_cents>=0),
+  is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0,1)),
+  updated_by_employee_id INTEGER REFERENCES employees(id),
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS cash_float_transactions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL REFERENCES employees(id),
+  transaction_type TEXT NOT NULL CHECK(transaction_type IN ('opening_balance','top_up','cash_purchase','expense','reversal','adjustment')),
+  amount_cents INTEGER NOT NULL CHECK(amount_cents<>0),
+  service_date TEXT NOT NULL,
+  purchase_bill_id INTEGER REFERENCES purchase_bills(id),
+  reversed_transaction_id INTEGER REFERENCES cash_float_transactions(id),
+  payment_channel TEXT CHECK(payment_channel IN ('Cash','TNG','Bank Transfer','System','Adjustment') OR payment_channel IS NULL),
+  description TEXT,
+  reference_number TEXT,
+  proof_storage_key TEXT UNIQUE,
+  proof_original_name TEXT,
+  proof_content_type TEXT,
+  proof_size_bytes INTEGER CHECK(proof_size_bytes>0 OR proof_size_bytes IS NULL),
+  created_by_employee_id INTEGER REFERENCES employees(id),
+  created_by_name_snapshot TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  voided_at TEXT,
+  voided_by_employee_id INTEGER REFERENCES employees(id),
+  UNIQUE(purchase_bill_id)
+);
+CREATE INDEX IF NOT EXISTS cash_float_transactions_employee_idx ON cash_float_transactions(employee_id,service_date DESC,id DESC);
+CREATE INDEX IF NOT EXISTS cash_float_transactions_bill_idx ON cash_float_transactions(purchase_bill_id);
+CREATE TABLE IF NOT EXISTS cash_float_alerts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL REFERENCES employees(id),
+  balance_cents INTEGER NOT NULL,
+  threshold_cents INTEGER NOT NULL,
+  target_float_cents INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','resolved')),
+  triggered_at TEXT NOT NULL,
+  resolved_at TEXT,
+  last_checked_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS cash_float_one_active_alert_idx ON cash_float_alerts(employee_id) WHERE status='active';
+CREATE INDEX IF NOT EXISTS cash_float_alerts_status_idx ON cash_float_alerts(status,triggered_at DESC);
 
 INSERT OR IGNORE INTO zone_groups(id,code,name,sort_order) VALUES
   (1,'KUCHING-A','Kuching A — BDC',1),

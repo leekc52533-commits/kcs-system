@@ -10,6 +10,7 @@ import GoogleMapPreview from './GoogleMapPreview.jsx'
 import SharedGpsInput from './SharedGpsInput.jsx'
 import {collectHighAccuracyPosition} from './highAccuracyGps.js'
 import GpsRemainingGroups from './GpsRemainingGroups.jsx'
+import './MobileCashFloat.css'
 
 const fileData=file=>new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve({name:file.name,dataUrl:reader.result});reader.onerror=reject;reader.readAsDataURL(file)})
 
@@ -120,6 +121,15 @@ function PurchaseBillPanel({stop,onChanged,readOnly=false}){
 
 const stopMapUrl=stop=>stop.latitude!=null&&stop.longitude!=null?'https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(stop.latitude+','+stop.longitude)+'&travelmode=driving':''
 
+function CashFloatMobileCard(){
+  const[data,setData]=useState(null),[open,setOpen]=useState(false),[form,setForm]=useState({amount:'',description:'',proof:null}),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState('')
+  const load=()=>api('/api/mobile/cash-float').then(setData).catch(()=>{})
+  useEffect(()=>{load();const timer=setInterval(load,30000);return()=>clearInterval(timer)},[])
+  if(!data?.configured)return null
+  const submit=async event=>{event.preventDefault();setBusy(true);setError('');setMessage('');try{await api('/api/mobile/cash-float/expenses',{method:'POST',body:JSON.stringify({amount:form.amount,description:form.description,proof:form.proof?await fileData(form.proof):undefined})});setForm({amount:'',description:'',proof:null});setOpen(false);setMessage('Expense recorded.');await load()}catch(item){setError(item.message)}finally{setBusy(false)}}
+  return <article className={'mobile-cash-float '+(data.lowBalance?'low':'')}><header><div><small>Cash Float</small><b>Current Balance</b></div><strong>RM {(data.balanceCents/100).toFixed(2)}</strong></header><div><span>Today Top Up <b>RM {(data.today.topUpCents/100).toFixed(2)}</b></span><span>Purchases <b>RM {(data.today.purchaseCents/100).toFixed(2)}</b></span><span>Expenses <b>RM {(data.today.expenseCents/100).toFixed(2)}</b></span></div>{data.lowBalance&&<p>Low balance. Supervisor has been notified.</p>}{message&&<p className="route-ok">{message}</p>}{error&&<div className="auth-error" role="alert">{error}</div>}<button type="button" className="secondary-mobile" onClick={()=>setOpen(!open)}>{open?'Cancel':'Record Expense'}</button>{open&&<form onSubmit={submit}><label>Amount (RM)<input required min="0.01" step="0.01" type="number" inputMode="decimal" value={form.amount} onChange={event=>setForm({...form,amount:event.target.value})}/></label><label>Description<input required value={form.description} onChange={event=>setForm({...form,description:event.target.value})}/></label><label>Receipt photo (optional)<input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={event=>setForm({...form,proof:event.target.files[0]||null})}/></label><button className="primary-mobile" disabled={busy}>{busy?'Saving…':'Save Expense'}</button></form>}</article>
+}
+
 function TodayView({data}){
   const{t}=useI18n(),[route,setRoute]=useState(data),[busy,setBusy]=useState(''),[error,setError]=useState(''),[message,setMessage]=useState(''),[proofs,setProofs]=useState({}),[openStopId,setOpenStopId]=useState(null),[deferReasons,setDeferReasons]=useState({})
   useEffect(()=>setRoute(data),[data])
@@ -133,10 +143,11 @@ function TodayView({data}){
   const updateProof=(id,values)=>setProofs(current=>({...current,[id]:{reason:'',photo:null,...current[id],...values}}))
   const toggleStop=id=>setOpenStopId(current=>current===id?null:id)
   const noGoods=async stop=>{const proof=proofs[stop.id]||{};if(!String(proof.reason||'').trim()){setError('No Goods reason is required.');return}if(!proof.photo){setError('A No Goods photo is required.');return}if(proof.photo.size>8*1024*1024){setError('Photo must be no larger than 8 MB.');return}setBusy('no-goods-'+stop.id);setError('');setMessage('');try{await api('/api/mobile/stops/'+stop.id+'/no-goods',{method:'POST',body:JSON.stringify({reason:proof.reason,photo:await fileData(proof.photo)})});updateProof(stop.id,{reason:'',photo:null});await refresh();setOpenStopId(null);setMessage('No Goods proof saved. Next Stop is now available.')}catch(item){setError(item.message)}finally{setBusy('')}}
-  if(!route)return <section><h1>{t('mobile.today')}</h1><p>{t('mobile.routeLoading')}</p></section>
-  if(!route.routeAvailable)return <section><h1>{t('mobile.today')}</h1><p>{t(route.reason==='NO_VEHICLE_ASSIGNED'?'mobile.noVehicleAssigned':'mobile.notApproved')}</p></section>
+  if(!route)return <section><h1>{t('mobile.today')}</h1><CashFloatMobileCard/><p>{t('mobile.routeLoading')}</p></section>
+  if(!route.routeAvailable)return <section><h1>{t('mobile.today')}</h1><CashFloatMobileCard/><p>{t(route.reason==='NO_VEHICLE_ASSIGNED'?'mobile.noVehicleAssigned':'mobile.notApproved')}</p></section>
   return <section className="driver-route">
     <h1>{t('mobile.today')}</h1>
+    <CashFloatMobileCard/>
     {route.arrivalTestMode&&<div className="test-mode-warning">REMOTE ARRIVAL TEST MODE</div>}
     {message&&<div className="mobile-message" role="status">{message}</div>}
     {error&&<div className="auth-error" role="alert">{error}</div>}

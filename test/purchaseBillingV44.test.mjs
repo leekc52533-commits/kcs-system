@@ -11,6 +11,7 @@ import {seedV22MasterData} from '../server/migrationV22.mjs'
 import {approveDay,generateWeek,saveDraftAdjustments} from '../server/dispatchService.mjs'
 import {arriveAtStop,completeDriverStop,startDriverTrip} from '../server/driverExecutionService.mjs'
 import {createPurchaseBill,getPurchaseBilling,uploadPurchasePaymentProof} from '../server/purchaseBillingService.mjs'
+import {configureCashFloat,mobileCashFloat} from '../server/cashFloatService.mjs'
 
 const date='2026-09-07',now=new Date('2026-09-07T01:00:00Z'),context={employeeId:1,role:'driver',today:date,now}
 const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
@@ -39,9 +40,10 @@ test('v44 migration is additive, preserves dispatch counts and is idempotent',()
 })
 
 test('Cash requires electronic Bill and payment proof before next Stop',()=>{
-  const{db,stops,productId}=fixture();arrive(db,stops[0]);assert.throws(()=>completeDriverStop(stops[0],context,db),/electronic Purchase Bill/)
+  const{db,stops,productId}=fixture();configureCashFloat(1,{targetFloat:500,lowBalanceThreshold:200,currentBalance:500,serviceDate:date},{employeeId:1,employeeName:'Supervisor',now},db);arrive(db,stops[0]);assert.throws(()=>completeDriverStop(stops[0],context,db),/electronic Purchase Bill/)
   const billing=getPurchaseBilling(stops[0],context,db);assert.equal(billing.stop.paymentMethod,'Cash');assert.equal(billing.products[0].productCode,'OCC');assert.equal(billing.products[0].currentPrice,0.2)
   const created=createPurchaseBill(stops[0],{weightMethod:'on_site',printChoice:'print',items:[{productId,quantity:61.6}]},context,db);assert.equal(created.totalCents,1232);assert.match(created.billNumber,/^P20260907-/);assert.equal(created.printChoice,'print')
+  assert.equal(mobileCashFloat(1,db).balanceCents,50000-created.totalCents)
   assert.throws(()=>completeDriverStop(stops[0],context,db),/payment proof/)
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'kcs-pay-'));const proof=uploadPurchasePaymentProof(stops[0],{photo:{name:'bank.png',dataUrl:png}},context,db,{uploadsRoot:root});assert.equal(proof.idempotent,false);assert.equal(uploadPurchasePaymentProof(stops[0],{photo:{name:'again.png',dataUrl:png}},context,db,{uploadsRoot:root}).idempotent,true)
   assert.equal(completeDriverStop(stops[0],context,db).nextStopId,stops[1]);assert.equal(db.prepare('SELECT payment_status FROM dispatch_stops WHERE id=?').get(stops[0]).payment_status,'verified_for_route');fs.rmSync(root,{recursive:true,force:true})
@@ -53,7 +55,7 @@ test('Credit always saves an electronic Bill but permits Print or No Print and n
 })
 
 test('electronic Bill stores immutable price snapshots and duplicate submission is idempotent',()=>{
-  const{db,stops,productId}=fixture();arrive(db,stops[0]);const first=createPurchaseBill(stops[0],{weightMethod:'estimated',printChoice:'no_print',items:[{productId,quantity:10}]},context,db);db.prepare('UPDATE material_price_levels SET price_amount=0.30 WHERE product_id=?').run(productId);const second=createPurchaseBill(stops[0],{weightMethod:'estimated',printChoice:'no_print',items:[{productId,quantity:99}]},context,db);assert.equal(second.idempotent,true);assert.equal(second.totalCents,first.totalCents);assert.equal(second.items[0].unitPriceCents,20);assert.equal(SCHEMA_VERSION,45)
+  const{db,stops,productId}=fixture();arrive(db,stops[0]);const first=createPurchaseBill(stops[0],{weightMethod:'estimated',printChoice:'no_print',items:[{productId,quantity:10}]},context,db);db.prepare('UPDATE material_price_levels SET price_amount=0.30 WHERE product_id=?').run(productId);const second=createPurchaseBill(stops[0],{weightMethod:'estimated',printChoice:'no_print',items:[{productId,quantity:99}]},context,db);assert.equal(second.idempotent,true);assert.equal(second.totalCents,first.totalCents);assert.equal(second.items[0].unitPriceCents,20);assert.equal(SCHEMA_VERSION,46)
 })
 
 test('driver Purchase Bill UI stays English-only, shows only the Branch name and removes only added Items',()=>{const source=fs.readFileSync(new URL('../src/AuthPages.jsx',import.meta.url),'utf8'),css=fs.readFileSync(new URL('../src/App.css',import.meta.url),'utf8'),start=source.indexOf('function PurchaseReceipt'),end=source.indexOf('const stopMapUrl'),billing=source.slice(start,end);assert.match(billing,/<p>PURCHASE<\/p>/);assert.match(billing,/translate="no"/);assert.match(billing,/notranslate/);assert.match(billing,/receipt-total-label/);assert.match(billing,/PaymentMethodLabel/);assert.match(css,/receipt-total-label::before\{content:"Total"\}/);assert.match(css,/payment-method-label\.payment-cash::before\{content:"Cash"\}/);assert.match(css,/payment-method-label\.payment-credit::before\{content:"Credit"\}/);assert.match(billing,/const removeItem=/);assert.match(billing,/index>0&&<button type="button" className="bill-item-remove"/);assert.match(billing,/>Remove<\/button>/);assert.match(billing,/Paper option/);assert.doesNotMatch(billing,/Company:|Branch ID:|ELECTRONIC PURCHASE BILL/);assert.doesNotMatch(billing,/purchase\./);assert.doesNotMatch(billing,/weightMethod,setWeightMethod|How weight was determined|重量取得方式/);assert.match(billing,/weightMethod:'on_site'/)})
