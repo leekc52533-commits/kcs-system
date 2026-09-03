@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 47
+export const SCHEMA_VERSION = 48
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -1555,6 +1555,24 @@ CREATE TABLE IF NOT EXISTS cash_float_members (
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS cash_float_members_selected_idx ON cash_float_members(is_selected,employee_id);
+CREATE TABLE IF NOT EXISTS admin_expense_records (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  service_date TEXT NOT NULL,
+  category TEXT NOT NULL CHECK(category IN ('Fuel','Services','Repair','Spare Parts','Road Tax','Puspakom','Insurance','Other')),
+  description TEXT NOT NULL,
+  amount_cents INTEGER NOT NULL CHECK(amount_cents>0),
+  payment_method TEXT NOT NULL CHECK(payment_method IN ('Cash','Bank Transfer','TNG','Card')),
+  reference_number TEXT,
+  receipt_storage_key TEXT UNIQUE,
+  receipt_original_name TEXT,
+  receipt_content_type TEXT,
+  receipt_size_bytes INTEGER CHECK(receipt_size_bytes>0 OR receipt_size_bytes IS NULL),
+  created_by_employee_id INTEGER REFERENCES employees(id),
+  created_by_name_snapshot TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS admin_expense_date_idx ON admin_expense_records(service_date DESC,id DESC);
+CREATE INDEX IF NOT EXISTS admin_expense_category_idx ON admin_expense_records(category,service_date DESC);
 
 INSERT OR IGNORE INTO zone_groups(id,code,name,sort_order) VALUES
   (1,'KUCHING-A','Kuching A — BDC',1),
