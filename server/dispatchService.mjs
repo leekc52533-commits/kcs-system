@@ -213,7 +213,9 @@ function dayView(database, day) {
     v.operational_status status,v.is_common isCommon,v.is_temporary isTemporary,v.temporary_date temporaryDate,v.default_base_location_id defaultBaseLocationId,base.name defaultBase,
     (SELECT GROUP_CONCAT(a.name,'|') FROM vehicle_preferred_areas vpa JOIN areas a ON a.id=vpa.area_id WHERE vpa.vehicle_id=v.id) preferredAreaNames
     FROM vehicles v LEFT JOIN operational_locations base ON base.id=v.default_base_location_id
-    WHERE v.operational_status IN ('available','active') AND v.status IN ('available','assigned') AND (v.is_temporary=0 OR v.temporary_date=?) ORDER BY v.is_temporary,COALESCE(v.official_sequence,999),v.vehicle_code`).all(day.dispatch_date).map(item=>({...item,preferredAreas:item.preferredAreaNames?item.preferredAreaNames.split('|'):[]}))
+    WHERE v.operational_status IN ('available','active') AND v.status IN ('available','assigned') AND (v.is_temporary=0 OR v.temporary_date=?)
+    AND NOT EXISTS(SELECT 1 FROM route_vehicle_availability va WHERE va.vehicle_id=v.id AND va.availability_date=? AND va.status<>'available')
+    ORDER BY v.is_temporary,COALESCE(v.official_sequence,999),v.vehicle_code`).all(day.dispatch_date,day.dispatch_date).map(item=>({...item,preferredAreas:item.preferredAreaNames?item.preferredAreaNames.split('|'):[]}))
   const availableIds=new Set(vehicles.map(item=>item.id)),assignedTrips=allTrips.filter(item=>item.vehicleId&&availableIds.has(item.vehicleId))
   const assistantRows=database.prepare(`SELECT dva.vehicle_id vehicleId,e.id,e.employee_code employeeCode,e.name FROM dispatch_vehicle_assistants dva JOIN employees e ON e.id=dva.employee_id WHERE dva.dispatch_day_id=? ORDER BY e.name`).all(day.id)
   const boardVehicles=vehicles.filter(vehicle=>vehicle.isCommon||assignedTrips.some(item=>item.vehicleId===vehicle.id))
@@ -223,7 +225,7 @@ function dayView(database, day) {
     const areas=[...new Set(slots.flatMap(slot=>slot.stops.map(stop=>stop.area).filter(Boolean)))]
     const assistants=assistantRows.filter(item=>item.vehicleId===vehicle.id)
     if(!assistants.length&&basis.assistantId)assistants.push({id:basis.assistantId,name:basis.assistant,employeeCode:null,vehicleId:vehicle.id})
-    return{...vehicle,driverId:basis.driverId??null,driver:basis.driver??null,assistantIds:assistants.map(item=>item.id),assistants,startLocationId:basis.startLocationId??null,startLocation:basis.startLocation??null,endLocationId:basis.endLocationId??null,endLocation:basis.endLocation??null,areas,slots,customerCount:slots.reduce((sum,slot)=>sum+slot.stopCount,0),estimatedWeightKg:slots.reduce((sum,slot)=>sum+slot.estimatedWeightKg,0),weightedStopCount:slots.reduce((sum,slot)=>sum+slot.weightedStopCount,0),missingWeightCount:slots.reduce((sum,slot)=>sum+slot.missingWeightCount,0)}
+    const estimatedWeightKg=slots.reduce((sum,slot)=>sum+slot.estimatedWeightKg,0);return{...vehicle,driverId:basis.driverId??null,driver:basis.driver??null,assistantIds:assistants.map(item=>item.id),assistants,startLocationId:basis.startLocationId??null,startLocation:basis.startLocation??null,endLocationId:basis.endLocationId??null,endLocation:basis.endLocation??null,areas,slots,customerCount:slots.reduce((sum,slot)=>sum+slot.stopCount,0),estimatedWeightKg,weightedStopCount:slots.reduce((sum,slot)=>sum+slot.weightedStopCount,0),missingWeightCount:slots.reduce((sum,slot)=>sum+slot.missingWeightCount,0),overCapacity:Boolean(vehicle.capacityKg&&estimatedWeightKg>vehicle.capacityKg)}
   })
   const unassignedStops=stops.filter(stop=>!stop.vehicleId||!availableIds.has(stop.vehicleId))
   const unassignedGroups=[...new Map(unassignedStops.map(stop=>[stop.areaId??'unassigned',{areaId:stop.areaId??null,areaName:stop.area||'未分区',zoneGroupId:stop.zoneGroupId??'pending',zoneGroupName:stop.zoneGroup||'待确认',zoneSortOrder:stop.zoneSortOrder??9999}])).values()].map(group=>{
@@ -240,7 +242,7 @@ function dayView(database, day) {
       missingGpsCount:areas.reduce((sum,group)=>sum+group.missingGpsCount,0),timeRestrictionCount:areas.reduce((sum,group)=>sum+group.timeRestrictionCount,0),stops:zoneStops,areas}
   }).sort((a,b)=>a.zoneSortOrder-b.zoneSortOrder||String(a.zoneGroupName).localeCompare(String(b.zoneGroupName)))
   const weightedStops=stops.filter(stop=>stop.estimatedWeightKg!=null),missingGpsCount=stops.filter(stop=>!Number.isFinite(stop.latitude)||!Number.isFinite(stop.longitude)||stop.latitude===0||stop.longitude===0).length,timeRestrictionCount=stops.filter(stop=>Boolean(String(stop.timeRestriction||'').trim())).length,missingWeightCount=stops.length-weightedStops.length
-  const warningCount=missingGpsCount+missingWeightCount+timeRestrictionCount+vehicleBoards.filter(board=>board.customerCount>0&&!board.driverId).length+specials.filter(x=>x.requestType==='potential_new'&&newCustomerMissing(x).length).length
+  const warningCount=missingGpsCount+missingWeightCount+timeRestrictionCount+vehicleBoards.filter(board=>board.customerCount>0&&!board.driverId).length+vehicleBoards.filter(board=>board.overCapacity).length+specials.filter(x=>x.requestType==='potential_new'&&newCustomerMissing(x).length).length
   const previewSummary={stopCount:stops.length,estimatedWeightKg:weightedStops.reduce((sum,stop)=>sum+Number(stop.estimatedWeightKg),0),weightedStopCount:weightedStops.length,missingWeightCount,missingGpsCount,timeRestrictionCount,unassignedCount:unassignedStops.length,warningCount}
   const approval=database.prepare("SELECT actor approvedBy,created_at approvedAt,reason approvalReason FROM dispatch_approvals WHERE dispatch_day_id=? AND action IN ('approve','reapprove') ORDER BY id DESC LIMIT 1").get(day.id)||{}
   return {...day,...approval,stops,trips:assignedTrips,vehicleBoards,unassignedStops,unassignedGroups,unassignedZones,specialRequests:specials,warningCount,previewSummary,legacyUnassignedTripCount:allTrips.filter(item=>!item.vehicleId).length}
@@ -411,6 +413,34 @@ export function updateStop(id,payload,database=defaultDb){
     const updated=database.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(id)
     recordOptimizationFeedback({stopId:id,before,after:updated,reason:payload.reason,actor:actor(payload.changedBy)},{db:database})
     return updated
+  })
+}
+
+export function moveRouteStop(id,payload,database=defaultDb){
+  return withImmediateTransaction(database,()=>{
+    const before=database.prepare(`SELECT ds.*,dd.id dispatch_day_id,dd.dispatch_date,dd.status day_status,dd.revision,d.vehicle_id source_vehicle_id,dt.trip_number
+      FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id JOIN dispatch_days dd ON dd.id=dt.dispatch_day_id JOIN dispatches d ON d.id=ds.dispatch_id WHERE ds.id=?`).get(id)
+    if(!before)throw Object.assign(new Error('Route stop not found.'),{statusCode:404})
+    if(before.day_status!=='draft')throw Object.assign(new Error('Approved routes cannot be changed. Withdraw Approval first.'),{statusCode:409,code:'ROUTE_APPROVED'})
+    if(Number(payload.expectedRevision)!==Number(before.revision))throw Object.assign(new Error('The route was changed by another supervisor. Refresh and try again.'),{statusCode:409,code:'REVISION_CONFLICT'})
+    const targetVehicleId=Number(payload.targetVehicleId)
+    if(!targetVehicleId||targetVehicleId===Number(before.source_vehicle_id))throw Object.assign(new Error('Select a different target vehicle.'),{statusCode:400})
+    const target=database.prepare(`SELECT v.id,v.vehicle_code,v.registration_number FROM vehicles v
+      WHERE v.id=? AND v.operational_status IN ('available','active') AND v.status IN ('available','assigned')
+      AND (v.is_temporary=0 OR v.temporary_date=?)
+      AND NOT EXISTS(SELECT 1 FROM route_vehicle_availability a WHERE a.vehicle_id=v.id AND a.availability_date=? AND a.status<>'available')`).get(targetVehicleId,before.dispatch_date,before.dispatch_date)
+    if(!target)throw Object.assign(new Error('Target vehicle is unavailable for this date.'),{statusCode:409,code:'VEHICLE_UNAVAILABLE'})
+    const occupied=database.prepare(`SELECT dt.trip_number FROM dispatch_trips dt JOIN dispatches d ON d.id=dt.dispatch_id
+      WHERE dt.dispatch_day_id=? AND d.vehicle_id=? AND EXISTS(SELECT 1 FROM dispatch_stops s WHERE s.dispatch_trip_id=dt.id AND s.status<>'cancelled') ORDER BY dt.trip_number DESC LIMIT 1`).get(before.dispatch_day_id,targetVehicleId)
+    const targetTrip=ensureVehicleTrip(database,{id:before.dispatch_day_id,dispatch_date:before.dispatch_date},targetVehicleId,occupied?.trip_number||1)
+    const targetSequence=database.prepare("SELECT COALESCE(MAX(stop_sequence),0)+1 value FROM dispatch_stops WHERE dispatch_trip_id=? AND status<>'cancelled'").get(targetTrip.id).value
+    database.prepare('UPDATE dispatch_stops SET dispatch_id=?,dispatch_trip_id=?,stop_sequence=? WHERE id=? AND dispatch_trip_id=?').run(targetTrip.dispatch_id,targetTrip.id,targetSequence,id,before.dispatch_trip_id)
+    database.prepare("UPDATE dispatch_stops SET stop_sequence=stop_sequence-1 WHERE dispatch_trip_id=? AND status<>'cancelled' AND stop_sequence>?").run(before.dispatch_trip_id,before.stop_sequence)
+    const after=database.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(id)
+    invalidateDispatchDay(database,before.dispatch_date,'route_stop_vehicle_moved','dispatch_stop',id,
+      {date:before.dispatch_date,stopId:Number(id),vehicleId:before.source_vehicle_id,tripId:before.dispatch_trip_id,stopSequence:before.stop_sequence},
+      {date:before.dispatch_date,stopId:Number(id),vehicleId:targetVehicleId,tripId:targetTrip.id,stopSequence:targetSequence,reason:payload.reason||null},payload.changedBy)
+    return{stopId:Number(id),date:before.dispatch_date,sourceVehicleId:before.source_vehicle_id,targetVehicleId,previousSequence:before.stop_sequence,newSequence:targetSequence,revision:before.revision+1,stop:after}
   })
 }
 export function deleteStop(id,{changedBy='Supervisor',reason='Weekly planner removal'}={},database=defaultDb){const before=database.prepare(`SELECT ds.*,dd.dispatch_date FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id JOIN dispatch_days dd ON dd.id=dt.dispatch_day_id WHERE ds.id=?`).get(id);if(!before)throw new Error('Stop not found');database.exec('BEGIN IMMEDIATE');try{if(before.source_schedule_id&&!database.prepare("SELECT id FROM schedule_exceptions WHERE schedule_id=? AND exception_type='cancel_date' AND original_date=? AND permanent=0").get(before.source_schedule_id,before.dispatch_date))database.prepare(`INSERT INTO schedule_exceptions(branch_id,schedule_id,exception_type,original_date,permanent,reason,created_by) VALUES(?,?,'cancel_date',?,0,?,?)`).run(before.branch_id,before.source_schedule_id,before.dispatch_date,reason,actor(changedBy));database.prepare('DELETE FROM dispatch_stops WHERE id=?').run(id);invalidateDispatchDay(database,before.dispatch_date,'stop_removed','dispatch_stop',id,before,null,changedBy);database.exec('COMMIT');return{deleted:true,id:Number(id)}}catch(error){database.exec('ROLLBACK');throw error}}

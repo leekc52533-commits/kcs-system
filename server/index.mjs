@@ -7,7 +7,7 @@ import { db, databasePath, getSystemStatus, uploadsDir } from './database.mjs'
 import { getJodooIntegrationStatus, recordJodooWebhook, verifyJodooWebhookToken } from './jodoo.mjs'
 import { commitImport, previewImport } from './importService.mjs'
 import { customerBranchDetail, customerBranches, dashboardSummary, dataQualitySummary, importBatches, importErrors, schedules } from './queryService.mjs'
-import { approveDay, assignAreaStops, assignVehicleDay, createScheduleException, createStop, createTrip, dailyApprovalCheck, deleteStop, driverToday, generateDay, generateWeek, getDispatchDay, getDispatchWeek, getStartLocationOptions, promisedCheck, publishDay, reopenDay, saveDraftAdjustments, transferVehicleDay, updateStop, updateTrip } from './dispatchService.mjs'
+import { approveDay, assignAreaStops, assignVehicleDay, createScheduleException, createStop, createTrip, dailyApprovalCheck, deleteStop, driverToday, generateDay, generateWeek, getDispatchDay, getDispatchWeek, getStartLocationOptions, moveRouteStop, promisedCheck, publishDay, reopenDay, saveDraftAdjustments, transferVehicleDay, updateStop, updateTrip } from './dispatchService.mjs'
 import {setDefaultVehicle,setZoneDefaultVehicles} from './defaultVehicleService.mjs'
 import {getRouteTemplate,saveRouteTemplate} from './routeTemplateService.mjs'
 import {analyzeArea,analyzeZoneAreas,confirmAreaRefinement,getAreaRefinement,updateAreaRefinement} from './areaRefinementService.mjs'
@@ -70,7 +70,7 @@ async function readJson(request, maxBytes = 15_000_000) {
   let total = 0
   for await (const chunk of request) {
     total += chunk.length
-    if (total > maxBytes) throw new Error('Request body is too large')
+    if (total > maxBytes) throw Object.assign(new Error('Request body is too large. Compress the photo and try again.'),{statusCode:413,code:'PAYLOAD_TOO_LARGE'})
     chunks.push(chunk)
   }
   const rawBody = Buffer.concat(chunks).toString('utf8'),payload=JSON.parse(rawBody || '{}')
@@ -280,6 +280,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && url.pathname === '/api/dispatch/stops') {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});return sendJson(response,201,createStop((await readJson(request)).payload))}
     if (request.method === 'POST' && url.pathname === '/api/dispatch/trips') {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});return sendJson(response,201,createTrip((await readJson(request)).payload))}
     if (request.method === 'PATCH' && /^\/api\/dispatch\/stops\/\d+$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});return sendJson(response,200,updateStop(Number(url.pathname.split('/').at(-1)),(await readJson(request)).payload))}
+    if (request.method === 'POST' && /^\/api\/dispatch\/stops\/\d+\/move-vehicle$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});const payload=(await readJson(request)).payload;return sendJson(response,200,moveRouteStop(Number(url.pathname.split('/')[4]),{...payload,changedBy:session.employeeName}))}
     if (request.method === 'DELETE' && /^\/api\/dispatch\/stops\/\d+$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});return sendJson(response,200,deleteStop(Number(url.pathname.split('/').at(-1)),(await readJson(request)).payload))}
     if (request.method === 'PATCH' && /^\/api\/dispatch\/trips\/\d+$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});const payload=(await readJson(request)).payload;return sendJson(response,200,updateTrip(Number(url.pathname.split('/').at(-1)),{...payload,changedBy:session.employeeName,canViewEmployeeHome:canManageEmployees(session)}))}
     if (request.method === 'PATCH' && /^\/api\/dispatch\/day\/[^/]+\/vehicle\/\d+$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});const parts=url.pathname.split('/'),payload=(await readJson(request)).payload;return sendJson(response,200,assignVehicleDay(decodeURIComponent(parts[4]),Number(parts[6]),{...payload,changedBy:session.employeeName,canViewEmployeeHome:canManageEmployees(session)}))}
