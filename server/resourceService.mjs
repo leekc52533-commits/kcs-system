@@ -310,6 +310,7 @@ export function createVehicle(payload, database = defaultDb) {
     const result = database.prepare(`INSERT INTO vehicles(vehicle_code,vehicle_name,registration_number,capacity_kg,default_base_location_id,status,operational_status,is_temporary,temporary_date,brand,model,manufacture_year,registration_date,vehicle_type,chassis_number,engine_number,gross_vehicle_weight_kg,unladen_weight_kg,registered_owner,fuel_type,engine_capacity_cc,vehicle_origin,vehicle_class,remark,is_common)
       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(text(payload.vehicleCode),text(payload.vehicleName)||null,text(payload.registrationNumber)||null,payload.capacityKg??null,idOrNull(payload.defaultBaseLocationId),legacyStatus,operationalStatus,payload.isTemporary?1:0,payload.temporaryDate||null,text(payload.brand)||null,text(payload.model)||null,payload.manufactureYear||null,payload.registrationDate||null,text(payload.vehicleType)||null,text(payload.chassisNumber)||null,text(payload.engineNumber)||null,payload.grossVehicleWeightKg??null,payload.unladenWeightKg??null,text(payload.registeredOwner)||null,text(payload.fuelType)||null,payload.engineCapacityCc??null,text(payload.vehicleOrigin)||null,text(payload.vehicleClass)||null,text(payload.remark)||null,payload.isCommon?1:0)
     replacePreferredAreas(database, result.lastInsertRowid, payload.preferredAreaIds || [])
+    database.prepare('INSERT INTO vehicle_status_history(vehicle_id,previous_status,new_status,reason,changed_by) VALUES(?,NULL,?,?,?)').run(result.lastInsertRowid,operationalStatus,'Vehicle created',text(payload.changedBy)||'Supervisor')
     database.exec('COMMIT')
     return vehicleRows(database).find((item) => item.id === Number(result.lastInsertRowid))
   } catch (error) { database.exec('ROLLBACK'); throw error }
@@ -318,7 +319,7 @@ export function createVehicle(payload, database = defaultDb) {
 export function createTemporaryVehicle(payload, database = defaultDb) {
   if (!payload.date) throw new Error('Temporary vehicle date is required')
   const count = database.prepare('SELECT COUNT(*) count FROM vehicles WHERE is_temporary=1 AND temporary_date=?').get(payload.date).count + 1
-  return createVehicle({ vehicleCode: payload.vehicleCode || `Temporary Lorry ${count} (${payload.date})`, vehicleName: payload.vehicleName || '临时车辆', status: 'available', isTemporary: true, temporaryDate: payload.date }, database)
+  return createVehicle({ vehicleCode: payload.vehicleCode || `Temporary Lorry ${count} (${payload.date})`, vehicleName: payload.vehicleName || '临时车辆', status: 'available', isTemporary: true, temporaryDate: payload.date, isCommon: true, changedBy: payload.changedBy }, database)
 }
 
 export function updateVehicle(id, payload, database = defaultDb) {
