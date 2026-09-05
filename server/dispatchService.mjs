@@ -7,6 +7,7 @@ import {resolveStartLocation,startLocationOptions,writeStartLocationSnapshot} fr
 import {commercialOptions,resolveBuyerPayer,resolvePrimaryEndLocation,writeCommercialSnapshot} from './dispatchCommercialService.mjs'
 import {recordOptimizationFeedback} from './routeOptimizationService.mjs'
 import {MAX_ASSIGNED_CREW} from '../shared/dispatchRules.js'
+import {normalizePlate} from './weeklyRoutePlanService.mjs'
 
 const iso = (value = new Date()) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : kuchingDate(value)
 const addDays = addCalendarDays
@@ -106,6 +107,54 @@ function assignExistingUnassignedStops(database,day){
   return assigned
 }
 
+const weekdayForDate=date=>new Date(`${date}T00:00:00Z`).getUTCDay()
+
+function routePlanVehicleMap(database){
+  const map=new Map()
+  for(const vehicle of database.prepare("SELECT id,vehicle_code,registration_number FROM vehicles WHERE is_temporary=0 AND operational_status IN ('available','active') AND status IN ('available','assigned')").all()){
+    map.set(normalizePlate(vehicle.registration_number||vehicle.vehicle_code),vehicle.id)
+  }
+  return map
+}
+
+export function applyWeeklyRoutePlanToDay(database,day){
+  const plan=database.prepare('SELECT id FROM weekly_route_plans WHERE is_active=1 ORDER BY id DESC LIMIT 1').get()
+  if(!plan)return{applied:false,assigned:0,pendingVehiclePlates:[]}
+  const routes=database.prepare(`SELECT wr.branch_id branchId,wr.vehicle_registration_number plate,wr.trip_number tripNumber,wr.stop_sequence stopSequence
+    FROM weekly_route_plan_stops wr WHERE wr.plan_id=? AND wr.weekday=?
+    ORDER BY wr.vehicle_registration_number,wr.trip_number,wr.stop_sequence`).all(plan.id,weekdayForDate(day.dispatch_date))
+  if(!routes.length)return{applied:true,assigned:0,pendingVehiclePlates:[]}
+  const allStops=database.prepare(`SELECT ds.id,ds.branch_id branchId,ds.dispatch_id dispatchId,ds.dispatch_trip_id tripId,ds.stop_sequence oldSequence,ds.status
+    FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id WHERE dt.dispatch_day_id=?
+    ORDER BY ds.dispatch_id,ds.stop_sequence,ds.id`).all(day.id)
+  if(!allStops.length)return{applied:true,assigned:0,pendingVehiclePlates:[]}
+  const stopByBranch=new Map(allStops.filter(row=>row.status!=='cancelled').map(row=>[row.branchId,row]))
+  const vehicles=routePlanVehicleMap(database),pending=new Set(),plannedIds=new Set(),sequenceCounters=new Map()
+  database.prepare(`UPDATE dispatch_stops SET stop_sequence=-id WHERE dispatch_trip_id IN(SELECT id FROM dispatch_trips WHERE dispatch_day_id=?)`).run(day.id)
+  let assigned=0
+  for(const route of routes){
+    const stop=stopByBranch.get(route.branchId)
+    if(!stop)continue
+    const plate=normalizePlate(route.plate),vehicleId=vehicles.get(plate)
+    let target
+    if(vehicleId)target=ensureVehicleTrip(database,day,vehicleId,route.tripNumber)
+    else{pending.add(plate);target=ensureUnassignedTrip(database,day)}
+    const key=target.dispatch_id,sequence=(sequenceCounters.get(key)||0)+1
+    sequenceCounters.set(key,sequence)
+    database.prepare('UPDATE dispatch_stops SET dispatch_id=?,dispatch_trip_id=?,stop_sequence=? WHERE id=?').run(target.dispatch_id,target.id,sequence,stop.id)
+    plannedIds.add(stop.id);assigned+=1
+  }
+  const remaining=allStops.filter(stop=>!plannedIds.has(stop.id))
+  const nextByDispatch=new Map()
+  for(const stop of remaining){
+    let next=nextByDispatch.get(stop.dispatchId)
+    if(next==null){next=database.prepare('SELECT COALESCE(MAX(stop_sequence),0)+1 value FROM dispatch_stops WHERE dispatch_id=? AND stop_sequence>0').get(stop.dispatchId).value}
+    database.prepare('UPDATE dispatch_stops SET stop_sequence=? WHERE id=?').run(next,stop.id)
+    nextByDispatch.set(stop.dispatchId,next+1)
+  }
+  return{applied:true,assigned,pendingVehiclePlates:[...pending].sort()}
+}
+
 function generateRange({startDate=iso(),generatedBy='Supervisor',count=7}={}, database=defaultDb) {
   const start=iso(startDate)
   database.exec('BEGIN IMMEDIATE')
@@ -130,6 +179,7 @@ function generateRange({startDate=iso(),generatedBy='Supervisor',count=7}={}, da
         database.prepare(`UPDATE dispatch_stops SET status='cancelled',superseded_reason='Schedule exception',superseded_at=CURRENT_TIMESTAMP,superseded_by='System' WHERE source_schedule_id=? AND dispatch_trip_id IN(SELECT id FROM dispatch_trips WHERE dispatch_day_id=?) AND status<>'completed'`).run(item.schedule_id,day.id)
       }
       assignExistingUnassignedStops(database,day)
+      applyWeeklyRoutePlanToDay(database,day)
     }
     database.exec('COMMIT')
     return {weekStart:start,dayCount:count,createdStops,reusedStops,protectedDays,duplicateStops,...(count===1?{day:getDispatchDay(start,database)}:getDispatchWeek({startDate:start},database))}

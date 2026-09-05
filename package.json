@@ -57,6 +57,8 @@
     "migrate:v46": "node scripts/migrate-v46.mjs",
     "migrate:v47": "node scripts/migrate-v47.mjs",
     "migrate:v48": "node scripts/migrate-v48.mjs",
+    "migrate:v49": "node scripts/migrate-v49.mjs",
+    "apply:weekly-route-plan:v49": "node scripts/apply-weekly-route-plan-v49.mjs",
     "impact:v42": "node scripts/v42-impact-report.mjs",
     "deploy:v42:check": "node scripts/cloud-preflight.mjs",
     "preview:customer-product-pricing": "node scripts/apply-customer-product-pricing-20260818.mjs",
