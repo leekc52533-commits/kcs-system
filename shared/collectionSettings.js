@@ -34,6 +34,22 @@ export const EXPECTED_COLLECTION_DAYS = {
   Monthly: 1,
 }
 
+export function toggleCollectionWeekday(frequency, weekdays, day) {
+  const selected = parseCollectionWeekdays(weekdays)
+  if (selected.includes(day)) return selected.filter(item => item !== day)
+  const limit = EXPECTED_COLLECTION_DAYS[frequency]
+  if (limit === 1) return [day]
+  if (limit && selected.length >= limit) return selected
+  return COLLECTION_WEEKDAYS.filter(item => selected.includes(item) || item === day)
+}
+
+export function isCollectionWeekdayDisabled(frequency, weekdays, day) {
+  if (['On Call', 'Paused'].includes(frequency)) return true
+  const selected = parseCollectionWeekdays(weekdays)
+  const limit = EXPECTED_COLLECTION_DAYS[frequency]
+  return Boolean(limit && limit > 1 && !selected.includes(day) && selected.length >= limit)
+}
+
 const frequencyAliases = new Map([
   ['weekly', 'Once a week'],
   ['once weekly', 'Once a week'],

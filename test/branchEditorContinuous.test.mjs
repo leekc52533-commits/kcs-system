@@ -5,8 +5,10 @@ import {DatabaseSync} from 'node:sqlite'
 import {schemaSql} from '../server/schema.mjs'
 import {
   COLLECTION_FREQUENCIES,
+  isCollectionWeekdayDisabled,
   normalizeCollectionFrequency,
   normalizeCollectionSettings,
+  toggleCollectionWeekday,
 } from '../shared/collectionSettings.js'
 import {
   buildBranchSavePayload,
@@ -84,6 +86,17 @@ test('Collection Frequency uses one canonical frontend/backend contract and give
     () => normalizeCollectionSettings('Weekly,On Call', []),
     /Invalid Collection Frequency "Weekly,On Call".*Allowed values/,
   )
+})
+
+test('weekday picker enforces the selected collection frequency limit', () => {
+  assert.deepEqual(toggleCollectionWeekday('Once a week', ['Monday'], 'Friday'), ['Friday'])
+  assert.deepEqual(toggleCollectionWeekday('Once a week', ['Friday'], 'Friday'), [])
+  assert.deepEqual(toggleCollectionWeekday('Twice a week', ['Monday'], 'Wednesday'), ['Monday', 'Wednesday'])
+  assert.deepEqual(toggleCollectionWeekday('Twice a week', ['Monday', 'Wednesday'], 'Friday'), ['Monday', 'Wednesday'])
+  assert.equal(isCollectionWeekdayDisabled('Twice a week', ['Monday', 'Wednesday'], 'Friday'), true)
+  assert.equal(isCollectionWeekdayDisabled('Twice a week', ['Monday', 'Wednesday'], 'Monday'), false)
+  assert.equal(isCollectionWeekdayDisabled('Once a week', ['Monday'], 'Friday'), false)
+  assert.equal(isCollectionWeekdayDisabled('On Call', [], 'Monday'), true)
 })
 
 test('price labels immediately expose Standard, Outstation and Special Price values', () => {
