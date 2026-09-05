@@ -35,6 +35,8 @@ test('bulk adjustment preserves audit history, branch special price and complete
 test('Collection Frequency accepts undecided weekdays, warns mismatch and excludes days for On Call or Paused',()=>{
   assert.deepEqual(normalizeCollectionSettings('Once a week',[]).assignedWeekdays,[])
   assert.match(normalizeCollectionSettings('Twice a week',['Monday']).frequencyWarning,/expects 2/)
+  assert.equal(normalizeCollectionSettings('Six times a week',['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']).collectionFrequency,'6 times a week')
+  assert.equal(normalizeCollectionSettings('6 times a week',['Monday','Tuesday','Wednesday','Thursday','Friday']).frequencyWarning,'6 times a week expects 6 weekdays, but 5 selected.')
   assert.deepEqual(normalizeCollectionSettings('On Call',['Monday']).assignedWeekdays,[])
   assert.deepEqual(normalizeCollectionSettings('Paused',['Tuesday']).assignedWeekdays,[])
   assert.deepEqual(normalizeCollectionSettings('Once a week',['Thurday']).assignedWeekdays,['Thursday'])

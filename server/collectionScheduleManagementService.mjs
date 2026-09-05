@@ -21,7 +21,7 @@ export function getCollectionScheduleManagement(id,database=defaultDb){const b=b
 function normalized(payload,before,b){
   const settings=normalizeCollectionSettings(payload.frequency,payload.weekdays)
   if(!settings.collectionFrequency)throw new Error('Collection Frequency is required.')
-  const expected={ 'Once a week':1,'Twice a week':2,'3 times a week':3,'4 times a week':4,Daily:7,'Every 2 Weeks':1,'Every 3 Weeks':1,Monthly:1,'On Call':0,Paused:0}[settings.collectionFrequency]
+  const expected={ 'Once a week':1,'Twice a week':2,'3 times a week':3,'4 times a week':4,'6 times a week':6,Daily:7,'Every 2 Weeks':1,'Every 3 Weeks':1,Monthly:1,'On Call':0,Paused:0}[settings.collectionFrequency]
   if(settings.assignedWeekdays.length!==expected)throw new Error(`${settings.collectionFrequency} requires exactly ${expected} collection weekday${expected===1?'':'s'}.`)
   if(settings.frequencyWarning)throw new Error(settings.frequencyWarning)
   if(settings.assignedWeekdays.includes('Sunday')&&!before?.weekdays.includes('Sunday')&&!isSundayCustomerAllowed({customerName:b.customer_name,branchName:b.branch_name}))throw new Error('Sunday is restricted to approved customers.')
