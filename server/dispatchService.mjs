@@ -6,6 +6,7 @@ import {assertBranchServiceDateAvailable,assertRouteGenerationReady,duplicateRes
 import {resolveStartLocation,startLocationOptions,writeStartLocationSnapshot} from './dispatchStartLocationService.mjs'
 import {commercialOptions,resolveBuyerPayer,resolvePrimaryEndLocation,writeCommercialSnapshot} from './dispatchCommercialService.mjs'
 import {recordOptimizationFeedback} from './routeOptimizationService.mjs'
+import {MAX_ASSIGNED_CREW} from '../shared/dispatchRules.js'
 
 const iso = (value = new Date()) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : kuchingDate(value)
 const addDays = addCalendarDays
@@ -382,6 +383,7 @@ export function assignVehicleDay(date,vehicleId,payload,database=defaultDb){
     if(assistantConflict)throw new Error('该员工当天已担任 Attendant，不能同时担任 Driver')
   }
   const assistantIds=payload.assistantIds===undefined?null:[...new Set((payload.assistantIds||[]).map(Number).filter(Boolean))]
+  if(assistantIds&&assistantIds.length>MAX_ASSIGNED_CREW)throw new Error(`每辆车最多只能安排 ${MAX_ASSIGNED_CREW} 名 Assistant/Crew`)
   if(assistantIds)for(const employeeId of assistantIds){if(Number(payload.driverId)===employeeId)throw new Error('同一员工同一天不能同时担任 Driver 与 Attendant');const employee=database.prepare(`SELECT id FROM employees e WHERE id=? AND is_active=1 AND employment_status='active' AND (lower(job_role) IN ('assistant','crew','attendant / crew') OR EXISTS(SELECT 1 FROM employee_job_roles r WHERE r.employee_id=e.id AND r.role='Attendant / Crew' AND r.is_active=1))`).get(employeeId);if(!employee)throw new Error('所选员工不是可用 Assistant/Crew');const driving=database.prepare(`SELECT 1 FROM dispatch_trips dt JOIN dispatches d ON d.id=dt.dispatch_id WHERE dt.dispatch_day_id=? AND d.driver_id=? LIMIT 1`).get(day.id,employeeId);if(driving)throw new Error('该员工当天已担任 Driver，不能同时担任 Attendant');const otherVehicle=database.prepare(`SELECT v.vehicle_code vehicle FROM dispatch_vehicle_assistants dva JOIN vehicles v ON v.id=dva.vehicle_id WHERE dva.dispatch_day_id=? AND dva.employee_id=? AND dva.vehicle_id<>? LIMIT 1`).get(day.id,employeeId,vehicleId);if(otherVehicle)throw new Error(`该跟车员当天已分配给 ${otherVehicle.vehicle}，请先解除原分配`)}
   database.exec('BEGIN IMMEDIATE')
   try{
