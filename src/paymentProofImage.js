@@ -1,20 +1,30 @@
 const SOURCE_LIMIT=25*1024*1024
 const OUTPUT_LIMIT=3*1024*1024
 const MAX_EDGE=2200
-const supported=new Set(['image/jpeg','image/png','image/webp','image/heic','image/heif'])
+const supported=new Set(['image/jpeg','image/jpg','image/png','image/webp','image/heic','image/heif'])
 
 const canvasBlob=(canvas,type,quality)=>new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('The browser could not compress this photo.')) ,type,quality))
 
-export async function processPaymentProof(file,{createBitmap=globalThis.createImageBitmap,createCanvas=()=>document.createElement('canvas')}={}){
+const htmlImage=file=>new Promise((resolve,reject)=>{
+  if(typeof Image!=='function'||!globalThis.URL?.createObjectURL)return reject(new Error('This browser cannot decode camera photos.'))
+  const url=URL.createObjectURL(file),image=new Image()
+  image.onload=()=>{URL.revokeObjectURL(url);resolve({width:image.naturalWidth,height:image.naturalHeight,source:image,close(){}})}
+  image.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('This photo could not be read.'))}
+  image.src=url
+})
+
+export async function processPaymentProof(file,{createBitmap=globalThis.createImageBitmap,createCanvas=()=>document.createElement('canvas'),loadImage=htmlImage}={}){
   if(!file)throw new Error('Select a payment proof photo.')
   const type=String(file.type||'').toLowerCase()
   if(!supported.has(type))throw new Error('Unsupported photo format. Use JPEG, PNG, HEIC or WebP.')
   if(!file.size||file.size>SOURCE_LIMIT)throw new Error('The original photo is too large. Use a photo smaller than 25 MB.')
-  if(typeof createBitmap!=='function')throw new Error('This browser cannot process camera photos. Update Chrome or choose a JPEG screenshot.')
   let bitmap
-  try{bitmap=await createBitmap(file,{imageOrientation:'from-image'})}catch{throw new Error(type==='image/heic'||type==='image/heif'?'This phone cannot decode HEIC. Set the camera to JPEG or upload a screenshot.':'This photo could not be read. Retake it or choose a JPEG/PNG image.')}
+  if(typeof createBitmap==='function'){
+    try{bitmap=await createBitmap(file,{imageOrientation:'from-image'})}catch{try{bitmap=await createBitmap(file)}catch{/* Use the broadly supported HTML Image fallback below. */}}
+  }
+  if(!bitmap){try{bitmap=await loadImage(file)}catch{throw new Error(type==='image/heic'||type==='image/heif'?'This phone cannot decode HEIC. Set the camera to JPEG or upload a screenshot.':'This photo could not be read. Retake it or choose a JPEG/PNG image.')}}
   try{
-    const scale=Math.min(1,MAX_EDGE/Math.max(bitmap.width,bitmap.height)),canvas=createCanvas();canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));const context=canvas.getContext('2d',{alpha:false});if(!context)throw new Error('The browser could not prepare this photo.');context.fillStyle='#fff';context.fillRect(0,0,canvas.width,canvas.height);context.drawImage(bitmap,0,0,canvas.width,canvas.height)
+    const source=bitmap.source||bitmap,scale=Math.min(1,MAX_EDGE/Math.max(bitmap.width,bitmap.height)),canvas=createCanvas();canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));const context=canvas.getContext('2d',{alpha:false});if(!context)throw new Error('The browser could not prepare this photo.');context.fillStyle='#fff';context.fillRect(0,0,canvas.width,canvas.height);context.drawImage(source,0,0,canvas.width,canvas.height)
     let blob
     for(const quality of [.88,.8,.72,.64]){blob=await canvasBlob(canvas,'image/jpeg',quality);if(blob.size<=OUTPUT_LIMIT)break}
     if(!blob||blob.size>OUTPUT_LIMIT)throw new Error('The compressed proof is still too large. Retake it at a lower camera resolution.')
