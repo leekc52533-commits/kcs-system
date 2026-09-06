@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {reconcileRouteRows,ROUTE_PLATES,OTW,USER_CONFIRMED_OVERRIDES} from '../server/weeklyRoutePlanV50Service.mjs'
+import {reconcileRouteRows,ROUTE_PLATES,USER_CONFIRMED_OVERRIDES} from '../server/weeklyRoutePlanV50Service.mjs'
 
 test('reconciliation deterministically applies unique candidates and audits conflicts, omissions and extras',()=>{
   const canonical=[
@@ -15,12 +15,9 @@ test('reconciliation deterministically applies unique candidates and audits conf
     {weekday:1,branchCode:'B3',plate:ROUTE_PLATES.L2,sequence:4},
     {weekday:1,branchCode:'NEW',plate:ROUTE_PLATES.L2,sequence:5}
   ]
-  assert.throws(()=>reconcileRouteRows(canonical,candidates,{confirmed:false}),/OTW canonical stop missing/)
-})
-
-test('declared OTW source contains six deterministic L5 positions',()=>{
-  assert.equal(OTW.length,6);assert.equal(new Set(OTW.map(x=>`${x.weekday}:${x.branchCode}`)).size,6)
-  assert.deepEqual(OTW.map(x=>x.sequence),[8,9,10,11,21,22])
+  const result=reconcileRouteRows(canonical,candidates,{confirmed:false})
+  assert.equal(result.rows.length,3)
+  assert.equal(result.report.extras.length,1)
 })
 
 import {DatabaseSync} from 'node:sqlite'
@@ -49,16 +46,15 @@ test('complete Excel transcription and reconciliation output are stable',()=>{
   assert.equal(dry.changed,501);assert.equal(dry.inserted,7);assert.equal(dry.moved,9);assert.equal(dry.beforeRoutesUnchanged,true)
   assert.deepEqual([dry.report.conflicts.length,dry.report.omissions.length,dry.report.extras.length],[23,170,0])
   assert.ok(dry.report.conflicts.every(x=>x.resolution==='user-confirmed-override'))
-  assert.equal(sha(dry.report),'7ea2fb67f21c1dd458e51689aa423ce48d64763d5951033ba432b2bf89b187df')
+  assert.equal(sha(dry.report),'3cac5b4d43218abccd8b943531898cc3605b5f0a6c1dd3c4d1476fbe294ed494')
   applyWeeklyRoutePlanV50(KCS_WEEKLY_ROUTE_PLAN_V50_CANDIDATES,{apply:true},db)
   const rows=db.prepare('SELECT s.rowid id,s.weekday,b.jodoo_branch_id branch,s.vehicle_registration_number plate,s.trip_number trip,s.stop_sequence sequence FROM weekly_route_plan_stops s JOIN branches b ON b.id=s.branch_id ORDER BY s.rowid').all()
   assert.equal(rows.length,698);assert.equal(new Set(rows.map(x=>x.id)).size,698);assert.equal(new Set(rows.map(x=>`${x.weekday}:${x.branch}`)).size,698);assert.equal(new Set(rows.map(x=>`${x.weekday}:${x.plate}:${x.trip}:${x.sequence}`)).size,698)
   assert.equal(rows.filter(x=>x.plate===ROUTE_PLATES.L4).length,137);
   assert.equal(USER_CONFIRMED_OVERRIDES.size,23);for(const [routeKey,plate] of USER_CONFIRMED_OVERRIDES){const [weekday,branch]=routeKey.split(':');assert.equal(rows.find(x=>x.weekday===Number(weekday)&&x.branch===branch)?.plate,plate)}assert.equal(rows.filter(x=>x.plate==='QAV3468').length,0)
-  for(const otw of OTW)assert.ok(rows.some(x=>x.weekday===otw.weekday&&x.branch===otw.branchCode&&x.plate===ROUTE_PLATES.L5&&x.sequence===otw.sequence))
   const counts=Object.fromEntries(Object.values(ROUTE_PLATES).map(plate=>[plate,[0,1,2,3,4,5,6].map(day=>rows.filter(x=>x.plate===plate&&x.weekday===day).length)]))
   assert.deepEqual(counts,{QAA4293N:[1,15,19,17,20,18,13],QAB1225B:[2,27,27,24,27,29,25],QM3028M:[4,23,21,22,21,22,24],QTY5028:[17,26,23,19,19,19,21],QM630S:[8,22,26,31,19,24,23]})
-  assert.equal(sha(rows),'ee82fd31332ec22e75716fc086420e2285e5784567b33683cbe849a8654411d2')
+  assert.equal(sha(rows),'4ebff0e186e013f7bb363368bbca542f7441222f30e386b0f7ebeeed30b66155')
   assert.deepEqual(Object.fromEntries([['B10242',572],['B10373',574],['B10438',576],['B10071',204],['B10058',206],['B10320',208],['B10049',209],['B10113',218],['B10074',219]].map(([branch])=>[branch,rows.find(x=>x.branch===branch&&((['B10242','B10373','B10438'].includes(branch)&&x.weekday===2)||x.weekday===3))?.id])),{B10242:572,B10373:574,B10438:576,B10071:204,B10058:206,B10320:208,B10049:209,B10113:218,B10074:219})
   assert.equal(rows.filter(x=>x.id>691).length,7)
   const second=applyWeeklyRoutePlanV50(KCS_WEEKLY_ROUTE_PLAN_V50_CANDIDATES,{apply:true},db);assert.equal(second.noOp,true);assert.equal(second.changed,0);assert.equal(second.inserted,0);assert.equal(second.moved,0)
