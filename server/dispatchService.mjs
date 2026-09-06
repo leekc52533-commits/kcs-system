@@ -211,7 +211,8 @@ function dayView(database, day) {
   })
   const unassignedStops=stops.filter(stop=>!stop.vehicleId||!availableIds.has(stop.vehicleId))
   const assignmentRows=database.prepare('SELECT route_number routeNumber,vehicle_id vehicleId,assigned_by assignedBy,updated_at updatedAt FROM daily_route_assignments WHERE dispatch_day_id=?').all(day.id),assignmentByRoute=new Map(assignmentRows.map(row=>[row.routeNumber,row]))
-  const routeBoards=[1,2,3,4,5].map(routeNumber=>{const assignment=assignmentByRoute.get(routeNumber)||{},vehicle=vehicles.find(item=>item.id===assignment.vehicleId),routeStops=stops.filter(stop=>stop.routeNumber===routeNumber).sort((a,b)=>(a.routeStopSequence??999999)-(b.routeStopSequence??999999)||a.id-b.id);return{routeNumber,name:`Route ${routeNumber}`,vehicleId:assignment.vehicleId??null,vehicle:vehicle?.vehicle??null,registrationNumber:vehicle?.registrationNumber??null,assignedBy:assignment.assignedBy??null,updatedAt:assignment.updatedAt??null,customerCount:routeStops.length,stops:routeStops}})
+  const definitionRows=database.prepare(`SELECT d.route_number routeNumber,d.display_name displayName FROM weekly_route_definitions d JOIN weekly_route_plans p ON p.id=d.plan_id WHERE p.is_active=1`).all(),definitionByRoute=new Map(definitionRows.map(row=>[row.routeNumber,row.displayName]))
+  const routeBoards=[1,2,3,4,5].map(routeNumber=>{const assignment=assignmentByRoute.get(routeNumber)||{},vehicle=vehicles.find(item=>item.id===assignment.vehicleId),routeStops=stops.filter(stop=>stop.routeNumber===routeNumber).sort((a,b)=>(a.routeStopSequence??999999)-(b.routeStopSequence??999999)||a.id-b.id);return{routeNumber,name:definitionByRoute.get(routeNumber)||`Route ${routeNumber}`,vehicleId:assignment.vehicleId??null,vehicle:vehicle?.vehicle??null,registrationNumber:vehicle?.registrationNumber??null,assignedBy:assignment.assignedBy??null,updatedAt:assignment.updatedAt??null,customerCount:routeStops.length,stops:routeStops}})
   const extraUnassignedStops=unassignedStops.filter(stop=>stop.routeNumber==null)
   const unassignedGroups=[...new Map(extraUnassignedStops.map(stop=>[stop.areaId??'unassigned',{areaId:stop.areaId??null,areaName:stop.area||'未分区',zoneGroupId:stop.zoneGroupId??'pending',zoneGroupName:stop.zoneGroup||'待确认',zoneSortOrder:stop.zoneSortOrder??9999}])).values()].map(group=>{
     const groupedStops=extraUnassignedStops.filter(stop=>(stop.areaId??null)===group.areaId),weights=groupedStops.filter(stop=>stop.estimatedWeightKg!=null)
@@ -434,6 +435,61 @@ export function deleteStop(id,{changedBy='Supervisor',reason='Weekly planner rem
 export function updateTrip(id,payload,database=defaultDb){return withImmediateTransaction(database,()=>{const before=database.prepare(`SELECT dt.*,dd.dispatch_date,d.* FROM dispatch_trips dt JOIN dispatch_days dd ON dd.id=dt.dispatch_day_id JOIN dispatches d ON d.id=dt.dispatch_id WHERE dt.id=?`).get(id);if(!before)throw new Error('Trip not found');database.prepare(`UPDATE dispatches SET vehicle_id=?,driver_id=?,assistant_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(payload.vehicleId??before.vehicle_id,payload.driverId??before.driver_id,payload.assistantId??before.assistant_id,before.dispatch_id);if(payload.startLocation){const resolved=resolveStartLocation(payload.startLocation,{driverId:payload.driverId??before.driver_id,canViewEmployeeHome:Boolean(payload.canViewEmployeeHome)},database);writeStartLocationSnapshot(database,before.dispatch_id,resolved)}const commercialChanged=Object.hasOwn(payload,'buyerPayer')||Object.hasOwn(payload,'primaryEndLocation');if(commercialChanged){const buyer=Object.hasOwn(payload,'buyerPayer')?resolveBuyerPayer(payload.buyerPayer,database):(before.buyer_reference_id?{buyerReferenceId:before.buyer_reference_id,buyerCode:before.buyer_code,buyerName:before.buyer_name}:null),endLocation=Object.hasOwn(payload,'primaryEndLocation')?resolvePrimaryEndLocation(payload.primaryEndLocation,database):(before.end_location_reference_id?{endLocationId:before.end_location_id,endLocationReferenceType:before.end_location_reference_type,endLocationReferenceId:before.end_location_reference_id,endLocationName:before.end_location_name,endLocationParentName:before.end_location_parent_name,endAddress:before.end_address,endLatitude:before.end_latitude,endLongitude:before.end_longitude}:null);writeCommercialSnapshot(database,before.dispatch_id,{buyer,endLocation})}database.prepare('UPDATE dispatch_trips SET trip_number=COALESCE(?,trip_number),estimated_weight_kg=COALESCE(?,estimated_weight_kg),updated_at=CURRENT_TIMESTAMP WHERE id=?').run(payload.tripNumber??null,payload.estimatedWeightKg??null,id);const after=database.prepare('SELECT * FROM dispatches WHERE id=?').get(before.dispatch_id),changeType=payload.startLocation?'trip_start_location_updated':commercialChanged?'trip_commercial_route_updated':'trip_updated';invalidateDispatchDay(database,before.dispatch_date,changeType,'dispatch_trip',id,before,{...after,reason:payload.reason||null},payload.changedBy);return database.prepare('SELECT * FROM dispatch_trips WHERE id=?').get(id)})}
 
 export function getStartLocationOptions(payload={},database=defaultDb){return startLocationOptions(payload,database)}
+
+export function renameRoute(routeNumber,payload={},database=defaultDb){
+  const route=Number(routeNumber),name=String(payload.name||'').trim(),changedBy=actor(payload.changedBy)
+  if(!Number.isInteger(route)||route<1||route>5)throw new Error('Route must be between 1 and 5')
+  if(!name)throw new Error('Route name is required')
+  if(name.length>60)throw new Error('Route name must not exceed 60 characters')
+  const plan=database.prepare('SELECT id FROM weekly_route_plans WHERE is_active=1 ORDER BY id DESC LIMIT 1').get()
+  if(!plan)throw new Error('Active weekly route plan not found')
+  const duplicate=database.prepare('SELECT route_number routeNumber FROM weekly_route_definitions WHERE plan_id=? AND route_number<>? AND lower(trim(display_name))=lower(?)').get(plan.id,route,name)
+  if(duplicate)throw new Error(`This name is already used by Route ${duplicate.routeNumber}`)
+  const before=database.prepare('SELECT display_name displayName FROM weekly_route_definitions WHERE plan_id=? AND route_number=?').get(plan.id,route)?.displayName||`Route ${route}`
+  database.prepare(`INSERT INTO weekly_route_definitions(plan_id,route_number,display_name,updated_by) VALUES(?,?,?,?)
+    ON CONFLICT(plan_id,route_number) DO UPDATE SET display_name=excluded.display_name,updated_by=excluded.updated_by,updated_at=CURRENT_TIMESTAMP`).run(plan.id,route,name,changedBy)
+  database.prepare("INSERT INTO master_change_history(entity_type,entity_id,change_type,old_value,new_value,before_json,after_json,reason,changed_by) VALUES('weekly_route_definition',?,'RENAME',?,?,?,?,?,?)")
+    .run(`${plan.id}:${route}`,before,name,JSON.stringify({routeNumber:route,name:before}),JSON.stringify({routeNumber:route,name}),'Route display name changed',changedBy)
+  return{routeNumber:route,name}
+}
+
+export function reorderRouteStop(date,routeNumber,payload={},database=defaultDb){
+  const serviceDate=iso(date),route=Number(routeNumber),stopId=Number(payload.stopId),direction=payload.direction,changedBy=actor(payload.changedBy)
+  if(!Number.isInteger(route)||route<1||route>5)throw new Error('Route must be between 1 and 5')
+  if(!Number.isInteger(stopId)||stopId<1)throw new Error('Stop is required')
+  if(!['up','down'].includes(direction))throw new Error('Direction must be up or down')
+  const day=dayByDate(database,serviceDate)
+  if(!day)throw new Error('Dispatch day not found')
+  const protection=protectedDayReason(database,day)
+  if(protection||!['draft','reapproval_required'].includes(day.status))throw new Error(`Route order is protected: ${protection||day.status}`)
+  const visible=database.prepare(`SELECT ds.id,ds.branch_id branchId,ds.route_stop_sequence routeStopSequence FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id
+    WHERE dt.dispatch_day_id=? AND ds.route_number=? AND ds.status<>'cancelled' ORDER BY ds.route_stop_sequence,ds.id`).all(day.id,route)
+  const index=visible.findIndex(row=>row.id===stopId),targetIndex=index+(direction==='up'?-1:1)
+  if(index<0)throw new Error('Customer is not in this Route')
+  if(targetIndex<0||targetIndex>=visible.length)return getDispatchDay(serviceDate,database)
+  const plan=database.prepare('SELECT id FROM weekly_route_plans WHERE is_active=1 ORDER BY id DESC LIMIT 1').get()
+  if(!plan)throw new Error('Active weekly route plan not found')
+  const weekday=weekdayForDate(serviceDate),template=database.prepare(`SELECT rowid rowId,branch_id branchId,trip_number tripNumber,stop_sequence stopSequence FROM weekly_route_plan_stops
+    WHERE plan_id=? AND weekday=? AND route_number=? ORDER BY trip_number,stop_sequence,rowid`).all(plan.id,weekday,route)
+  const sourceIndex=template.findIndex(row=>row.branchId===visible[index].branchId),anchorIndex=template.findIndex(row=>row.branchId===visible[targetIndex].branchId)
+  if(sourceIndex<0||anchorIndex<0)throw new Error('Route template customer not found')
+  const reordered=[...template],moved=reordered.splice(sourceIndex,1)[0],anchor=reordered.findIndex(row=>row.branchId===visible[targetIndex].branchId)
+  reordered.splice(direction==='up'?anchor:anchor+1,0,moved)
+  database.exec('BEGIN IMMEDIATE')
+  try{
+    database.prepare('UPDATE weekly_route_plan_stops SET stop_sequence=stop_sequence+10000 WHERE plan_id=? AND weekday=? AND route_number=?').run(plan.id,weekday,route)
+    const updateTemplate=database.prepare('UPDATE weekly_route_plan_stops SET trip_number=?,stop_sequence=? WHERE rowid=?')
+    reordered.forEach((row,position)=>updateTemplate.run(row.tripNumber,position+1,row.rowId))
+    const sequenceByBranch=new Map(reordered.map((row,position)=>[row.branchId,position+1]))
+    const editableDays=database.prepare(`SELECT id FROM dispatch_days WHERE status IN ('draft','reapproval_required') AND CAST(strftime('%w',dispatch_date) AS INTEGER)=?`).all(weekday)
+    const updateDay=database.prepare(`UPDATE dispatch_stops SET route_stop_sequence=? WHERE branch_id=? AND route_number=? AND dispatch_trip_id IN(SELECT id FROM dispatch_trips WHERE dispatch_day_id=?) AND status<>'cancelled'`)
+    for(const editableDay of editableDays)for(const [branchId,sequence] of sequenceByBranch)updateDay.run(sequence,branchId,route,editableDay.id)
+    database.prepare("INSERT INTO master_change_history(entity_type,entity_id,change_type,before_json,after_json,reason,changed_by) VALUES('weekly_route_stop',?,'REORDER',?,?,?,?)")
+      .run(`${plan.id}:${weekday}:${visible[index].branchId}`,JSON.stringify({routeNumber:route,weekday,branchId:visible[index].branchId,position:index+1}),JSON.stringify({routeNumber:route,weekday,branchId:visible[index].branchId,position:targetIndex+1}),'Route customer order changed',changedBy)
+    database.exec('COMMIT')
+    return getDispatchDay(serviceDate,database)
+  }catch(error){database.exec('ROLLBACK');throw error}
+}
 
 /** Assigns one complete Route to a vehicle for this date only. Route membership and order never change. */
 export function assignRouteVehicle(date,routeNumber,payload={},database=defaultDb){
