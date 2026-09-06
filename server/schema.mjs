@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 49
+export const SCHEMA_VERSION = 50
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -511,6 +511,25 @@ CREATE TABLE IF NOT EXISTS dispatch_stops (
   area_name_snapshot TEXT,
   UNIQUE(dispatch_id, stop_sequence)
 );
+
+CREATE TABLE IF NOT EXISTS driver_defer_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  dispatch_stop_id INTEGER NOT NULL REFERENCES dispatch_stops(id) ON DELETE CASCADE,
+  dispatch_trip_id INTEGER NOT NULL REFERENCES dispatch_trips(id) ON DELETE CASCADE,
+  dispatch_day_id INTEGER NOT NULL REFERENCES dispatch_days(id) ON DELETE CASCADE,
+  driver_employee_id INTEGER NOT NULL REFERENCES employees(id),
+  reason TEXT NOT NULL CHECK(reason IN ('customer_requested_return','no_space_available','other')),
+  expected_return_time TEXT NOT NULL CHECK(expected_return_time GLOB '[0-2][0-9]:[0-5][0-9]'),
+  expected_return_at TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected','cancelled')),
+  requested_at TEXT NOT NULL,
+  reviewed_by_employee_id INTEGER REFERENCES employees(id),
+  reviewed_by_name_snapshot TEXT,
+  review_reason TEXT,
+  reviewed_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS driver_defer_requests_one_pending_idx ON driver_defer_requests(dispatch_stop_id) WHERE status='pending';
+CREATE INDEX IF NOT EXISTS driver_defer_requests_day_status_idx ON driver_defer_requests(dispatch_day_id,status,requested_at);
 
 CREATE TABLE IF NOT EXISTS stop_step_records (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
