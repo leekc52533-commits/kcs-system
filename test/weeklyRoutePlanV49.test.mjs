@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {DatabaseSync} from 'node:sqlite'
 import {schemaSql} from '../server/schema.mjs'
 import {applyV49Migration} from '../server/migrationV49.mjs'
-import {installWeeklyRoutePlan,validateWeeklyRoutePlan} from '../server/weeklyRoutePlanService.mjs'
+import {inspectWeeklyRoutePlan,installWeeklyRoutePlan,validateWeeklyRoutePlan} from '../server/weeklyRoutePlanService.mjs'
 import {KCS_WEEKLY_ROUTE_PLAN_V49} from '../server/weeklyRoutePlanV49Data.mjs'
 import {generateDay,getDispatchDay} from '../server/dispatchService.mjs'
 
@@ -40,6 +40,20 @@ test('all 691 workbook rows import atomically when their 328 Branch IDs exist',(
   assert.equal(result.entryCount,691);assert.equal(result.branchCount,328);assert.equal(db.prepare('SELECT COUNT(*) n FROM weekly_route_plan_stops').get().n,691)
   assert.deepEqual(result.pendingVehiclePlates,['QAA4293N','QAB1225B','QM3028M','QM630S','QTY5028'])
   assert.equal(db.prepare('PRAGMA foreign_key_check').get(),undefined)
+})
+
+test('same-size route drift is replaced instead of incorrectly returning no-op',()=>{
+  const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON;'+schemaSql)
+  const codes=[...new Set(KCS_WEEKLY_ROUTE_PLAN_V49.entries.map(item=>item[4]))],insert=db.prepare('INSERT INTO branches(jodoo_branch_id,branch_name) VALUES(?,?)')
+  for(const code of codes)insert.run(code,code)
+  installWeeklyRoutePlan(KCS_WEEKLY_ROUTE_PLAN_V49,{},db)
+  const active=db.prepare('SELECT id FROM weekly_route_plans WHERE is_active=1').get()
+  db.prepare('UPDATE weekly_route_plan_stops SET stop_sequence=999 WHERE plan_id=? AND rowid=(SELECT MIN(rowid) FROM weekly_route_plan_stops WHERE plan_id=?)').run(active.id,active.id)
+  assert.equal(inspectWeeklyRoutePlan(KCS_WEEKLY_ROUTE_PLAN_V49,db).matchesExact,false)
+  const corrected=installWeeklyRoutePlan(KCS_WEEKLY_ROUTE_PLAN_V49,{},db)
+  assert.equal(corrected.noOp,false)
+  assert.equal(inspectWeeklyRoutePlan(KCS_WEEKLY_ROUTE_PLAN_V49,db).matchesExact,true)
+  assert.equal(installWeeklyRoutePlan(KCS_WEEKLY_ROUTE_PLAN_V49,{},db).noOp,true)
 })
 
 test('weekday plan assigns an available plate and holds a missing plate unassigned until added',()=>{

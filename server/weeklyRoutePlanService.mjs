@@ -44,13 +44,31 @@ function availablePlates(database){
   return result
 }
 
-export function installWeeklyRoutePlan(plan=KCS_WEEKLY_ROUTE_PLAN_V49,{changedBy='Owner Admin'}={},database){
-  if(!database)throw new Error('Database is required')
+const routeValue=item=>[Number(item.weekday),Number(item.branchId),normalizePlate(item.plate),Number(item.trip),Number(item.sequence),clean(item.zoneName),clean(item.areaName)]
+const routeSort=(a,b)=>a[0]-b[0]||a[1]-b[1]||a[2].localeCompare(b[2])||a[3]-b[3]||a[4]-b[4]
+const routeSnapshot=rows=>JSON.stringify(rows.map(routeValue).sort(routeSort))
+
+function resolvedWeeklyRoutePlan(plan,database){
   const checked=validateWeeklyRoutePlan(plan),branches=branchMap(database),missingBranches=[]
   const resolved=checked.entries.map(item=>{const branchId=branches.get(item.branchCode);if(!branchId)missingBranches.push(item.branchCode);return{...item,branchId}})
   if(missingBranches.length)throw new Error(`Route plan Branch IDs not found: ${[...new Set(missingBranches)].slice(0,20).join(', ')}`)
+  return{checked,resolved}
+}
+
+export function inspectWeeklyRoutePlan(plan=KCS_WEEKLY_ROUTE_PLAN_V49,database){
+  if(!database)throw new Error('Database is required')
+  const {checked,resolved}=resolvedWeeklyRoutePlan(plan,database)
+  const active=database.prepare('SELECT id,name,source_name sourceName FROM weekly_route_plans WHERE is_active=1 ORDER BY id DESC LIMIT 1').get()
+  const current=active?database.prepare(`SELECT s.weekday,s.branch_id branchId,s.vehicle_registration_number plate,s.trip_number trip,s.stop_sequence sequence,s.zone_name_snapshot zoneName,s.area_name_snapshot areaName FROM weekly_route_plan_stops s WHERE s.plan_id=?`).all(active.id):[]
+  const expectedSnapshot=routeSnapshot(resolved),currentSnapshot=routeSnapshot(current)
+  return{matchesExact:Boolean(active)&&active.name===checked.name&&active.sourceName===checked.sourceName&&currentSnapshot===expectedSnapshot,planId:active?.id??null,entryCount:resolved.length,activeRouteCount:current.length,branchCount:checked.branchCount,vehiclePlates:checked.vehiclePlates,expectedSnapshot,currentSnapshot}
+}
+
+export function installWeeklyRoutePlan(plan=KCS_WEEKLY_ROUTE_PLAN_V49,{changedBy='Owner Admin'}={},database){
+  if(!database)throw new Error('Database is required')
+  const {checked,resolved}=resolvedWeeklyRoutePlan(plan,database)
   const existing=database.prepare('SELECT id FROM weekly_route_plans WHERE is_active=1 AND name=? AND source_name=?').get(checked.name,checked.sourceName)
-  if(existing&&database.prepare('SELECT COUNT(*) n FROM weekly_route_plan_stops WHERE plan_id=?').get(existing.id).n===resolved.length){
+  if(existing&&inspectWeeklyRoutePlan(plan,database).matchesExact){
     const present=availablePlates(database),pendingVehiclePlates=checked.vehiclePlates.filter(plate=>!present.has(plate))
     return{planId:existing.id,noOp:true,entryCount:resolved.length,branchCount:checked.branchCount,vehiclePlates:checked.vehiclePlates,pendingVehiclePlates}
   }
