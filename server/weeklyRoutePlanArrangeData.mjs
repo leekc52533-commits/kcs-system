@@ -42,7 +42,7 @@ if(new Set(entries.map(row=>`${row[0]}:${row[4]}`)).size!==entries.length)throw 
 
 export const KCS_WEEKLY_ROUTE_PLAN_ARRANGE=Object.freeze({
   name:'KCS 7-Day / 5-Vehicle Route Plan — Arrange',
-  sourceName:'KCS_7Day_5Vehicle_Route_Plan(1).xlsx [vehicle sheets Arrange]',
+  sourceName:'KCS_7Day_5Vehicle_Route_Plan(2).xlsx [vehicle sheets Arrange]',
   sourceStartDate:'2026-08-26',
   entries:Object.freeze(entries)
 })
