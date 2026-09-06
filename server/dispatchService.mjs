@@ -8,6 +8,7 @@ import {commercialOptions,resolveBuyerPayer,resolvePrimaryEndLocation,writeComme
 import {recordOptimizationFeedback} from './routeOptimizationService.mjs'
 import {MAX_ASSIGNED_CREW} from '../shared/dispatchRules.js'
 import {normalizePlate} from './weeklyRoutePlanService.mjs'
+import {effectiveWeeklyRoutePlate} from './weeklyRouteAlternation.mjs'
 import {listDeferRequestsForDay} from './deferApprovalService.mjs'
 
 const iso = (value = new Date()) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : kuchingDate(value)
@@ -121,8 +122,9 @@ function routePlanVehicleMap(database){
 export function applyWeeklyRoutePlanToDay(database,day){
   const plan=database.prepare('SELECT id FROM weekly_route_plans WHERE is_active=1 ORDER BY id DESC LIMIT 1').get()
   if(!plan)return{applied:false,assigned:0,pendingVehiclePlates:[]}
-  const routes=database.prepare(`SELECT wr.branch_id branchId,wr.vehicle_registration_number plate,wr.trip_number tripNumber,wr.stop_sequence stopSequence
-    FROM weekly_route_plan_stops wr WHERE wr.plan_id=? AND wr.weekday=?
+  const weekday=weekdayForDate(day.dispatch_date)
+  const routes=database.prepare(`SELECT wr.branch_id branchId,b.jodoo_branch_id branchCode,wr.vehicle_registration_number plate,wr.trip_number tripNumber,wr.stop_sequence stopSequence
+    FROM weekly_route_plan_stops wr JOIN branches b ON b.id=wr.branch_id WHERE wr.plan_id=? AND wr.weekday=?
     ORDER BY wr.vehicle_registration_number,wr.trip_number,wr.stop_sequence`).all(plan.id,weekdayForDate(day.dispatch_date))
   if(!routes.length)return{applied:true,assigned:0,pendingVehiclePlates:[]}
   const allStops=database.prepare(`SELECT ds.id,ds.branch_id branchId,ds.dispatch_id dispatchId,ds.dispatch_trip_id tripId,ds.stop_sequence oldSequence,ds.status
@@ -136,7 +138,7 @@ export function applyWeeklyRoutePlanToDay(database,day){
   for(const route of routes){
     const stop=stopByBranch.get(route.branchId)
     if(!stop)continue
-    const plate=normalizePlate(route.plate),vehicleId=vehicles.get(plate)
+    const plate=effectiveWeeklyRoutePlate({date:day.dispatch_date,weekday,branchCode:route.branchCode,plate:route.plate}),vehicleId=vehicles.get(plate)
     let target
     if(vehicleId)target=ensureVehicleTrip(database,day,vehicleId,route.tripNumber)
     else{pending.add(plate);target=ensureUnassignedTrip(database,day)}

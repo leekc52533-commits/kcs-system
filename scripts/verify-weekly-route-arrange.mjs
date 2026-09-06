@@ -1,6 +1,7 @@
 import {DatabaseSync} from 'node:sqlite'
 import path from 'node:path'
 import {KCS_WEEKLY_ROUTE_PLAN_ARRANGE} from '../server/weeklyRoutePlanArrangeData.mjs'
+import {effectiveWeeklyRoutePlate,SUNDAY_ROUTE_ALTERNATION,sundayRoutePlateForDate} from '../server/weeklyRouteAlternation.mjs'
 
 const databasePath=path.resolve(process.env.KCS_DB_PATH||'data/kcs-dispatch.db')
 const startDate=process.env.ROUTE_REFRESH_START
@@ -12,6 +13,7 @@ const weekday=date=>new Date(`${date}T00:00:00Z`).getUTCDay()
 const routePlates=[...new Set(KCS_WEEKLY_ROUTE_PLAN_ARRANGE.entries.map(row=>normalize(row[1])))].sort()
 const expectedFor=(plate,day)=>KCS_WEEKLY_ROUTE_PLAN_ARRANGE.entries.filter(row=>normalize(row[1])===plate&&row[0]===day).sort((a,b)=>a[2]-b[2]||a[3]-b[3]).map(row=>branchCode(row[4]))
 const counts=Object.fromEntries(routePlates.map(plate=>[plate,[0,1,2,3,4,5,6].map(day=>expectedFor(plate,day).length)]))
+const expectedForDate=(plate,date)=>KCS_WEEKLY_ROUTE_PLAN_ARRANGE.entries.filter(row=>row[0]===weekday(date)&&effectiveWeeklyRoutePlate({date,weekday:row[0],branchCode:row[4],plate:row[1]})===plate).sort((a,b)=>a[2]-b[2]||a[3]-b[3]).map(row=>branchCode(row[4]))
 const db=new DatabaseSync(databasePath)
 db.exec('PRAGMA foreign_keys=ON;PRAGMA busy_timeout=5000')
 try{
@@ -26,11 +28,11 @@ try{
   for(let offset=0;offset<7;offset+=1){
     const date=addDays(startDate,offset),day=weekday(date),dayRows=rows.filter(row=>row.date===date)
     const expectedOwner=new Map()
-    for(const plate of routePlates)for(const code of expectedFor(plate,day))expectedOwner.set(code,plate)
+    for(const plate of routePlates)for(const code of expectedForDate(plate,date))expectedOwner.set(code,plate)
     const misplaced=dayRows.map(row=>({plate:normalize(row.plate),branchCode:branchCode(row.branchCode)})).filter(row=>expectedOwner.has(row.branchCode)&&expectedOwner.get(row.branchCode)!==row.plate)
     const vehicles={}
     for(const plate of routePlates){
-      const expected=expectedFor(plate,day),actual=dayRows.filter(row=>normalize(row.plate)===plate).map(row=>branchCode(row.branchCode))
+      const expected=expectedForDate(plate,date),actual=dayRows.filter(row=>normalize(row.plate)===plate).map(row=>branchCode(row.branchCode))
       const actualSet=new Set(actual),expectedDue=expected.filter(code=>actualSet.has(code))
       const unexpected=actual.filter(code=>!expected.includes(code))
       const orderMatches=unexpected.length===0&&JSON.stringify(actual)===JSON.stringify(expectedDue)
@@ -40,5 +42,6 @@ try{
   }
   const allVehiclesMatch=days.every(day=>day.misplaced.length===0&&Object.values(day.vehicles).every(vehicle=>vehicle.orderMatches))
   if(!allVehiclesMatch)throw new Error(`Daily route verification failed: ${JSON.stringify(days)}`)
-  console.log(JSON.stringify({sourceName:KCS_WEEKLY_ROUTE_PLAN_ARRANGE.sourceName,templateCountsSunToSat:counts,startDate,allVehiclesMatch,days},null,2))
+  const sundays=days.filter(day=>day.weekday===0).map(day=>({date:day.date,plate:sundayRoutePlateForDate(day.date),branchCount:SUNDAY_ROUTE_ALTERNATION.branchCodes.length}))
+  console.log(JSON.stringify({sourceName:KCS_WEEKLY_ROUTE_PLAN_ARRANGE.sourceName,templateCountsSunToSat:counts,startDate,allVehiclesMatch,sundays,days},null,2))
 }finally{db.close()}
