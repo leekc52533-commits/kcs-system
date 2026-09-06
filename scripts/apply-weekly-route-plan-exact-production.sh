@@ -6,6 +6,7 @@ DB=/var/lib/kcs/data/kcs-dispatch.db
 APPLY=/tmp/kcs-route-exact-apply.json
 NOOP=/tmp/kcs-route-exact-noop.json
 REFRESH=/tmp/kcs-route-arrange-refresh.json
+VERIFY=/tmp/kcs-route-arrange-verify.json
 TARGET="${EXPECTED_COMMIT:?EXPECTED_COMMIT is required}"
 
 install -d -m 750 /var/lib/kcs/data/backups
@@ -55,6 +56,8 @@ env KCS_DB_PATH="$DB" ROUTE_REFRESH_START="${ROUTE_REFRESH_START:-2026-09-07}" n
 node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));const monday=r.days[0];if(!(r.startDate==="2026-09-07"&&r.protectedDays.length===0&&monday&&monday.vehicles.QM630S===19))process.exit(1)' "$REFRESH"
 LIVE_QM630S_MON="$(sqlite3 "$DB" "SELECT GROUP_CONCAT(branch_code,'|') FROM (SELECT UPPER(CASE WHEN b.jodoo_branch_id GLOB '[0-9]*' THEN 'B'||b.jodoo_branch_id ELSE b.jodoo_branch_id END) branch_code FROM dispatch_days dd JOIN dispatch_trips dt ON dt.dispatch_day_id=dd.id JOIN dispatches d ON d.id=dt.dispatch_id JOIN vehicles v ON v.id=d.vehicle_id JOIN dispatch_stops ds ON ds.dispatch_trip_id=dt.id JOIN branches b ON b.id=ds.branch_id WHERE dd.dispatch_date='2026-09-07' AND UPPER(REPLACE(v.registration_number,' ',''))='QM630S' AND ds.status<>'cancelled' ORDER BY dt.trip_number,ds.stop_sequence);")"
 test "$LIVE_QM630S_MON" = "$QM630S_MON"
+env KCS_DB_PATH="$DB" ROUTE_REFRESH_START="${ROUTE_REFRESH_START:-2026-09-07}" node "$APP/scripts/verify-weekly-route-arrange.mjs" >"$VERIFY"
+node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));const c=r.templateCountsSunToSat;if(!(r.sourceName==="KCS_7Day_5Vehicle_Route_Plan(2).xlsx [vehicle sheets Arrange]"&&r.allVehiclesMatch===true&&c.QAA4293N.join(",")==="1,15,19,17,20,18,13"&&c.QAB1225B.join(",")==="0,27,27,24,26,29,25"&&c.QM3028M.join(",")==="4,23,21,22,21,22,24"&&c.QM630S.join(",")==="8,19,22,29,16,19,20"&&c.QTY5028.join(",")==="12,24,23,19,19,19,18"))process.exit(1)' "$VERIFY"
 test "$(sqlite3 "$DB" 'PRAGMA integrity_check;')" = "ok"
 test "$(sqlite3 "$DB" 'SELECT COUNT(*) FROM pragma_foreign_key_check;')" = "0"
 DATA_OK=1
@@ -90,6 +93,11 @@ echo "ROUTE_COUNT=$ROUTES"
 echo "QM630S_SUN_TO_SAT=$QM630S"
 echo "QM630S_MONDAY=$QM630S_MON"
 echo "LIVE_2026_09_07_QM630S=$LIVE_QM630S_MON"
+echo "QAA4293N_SUN_TO_SAT=1,15,19,17,20,18,13"
+echo "QAB1225B_SUN_TO_SAT=0,27,27,24,26,29,25"
+echo "QM3028M_SUN_TO_SAT=4,23,21,22,21,22,24"
+echo "QTY5028_SUN_TO_SAT=12,24,23,19,19,19,18"
+echo "ALL_VEHICLES_EXCEL_ORDER=true"
 echo "DAILY_DRAFT_REFRESH=ok"
 echo "INTEGRITY=ok"
 echo "FOREIGN_KEY_ERRORS=0"
