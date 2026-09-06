@@ -146,12 +146,12 @@ export function applyWeeklyRoutePlanToDay(database,day){
     plannedIds.add(stop.id);assigned+=1
   }
   const remaining=allStops.filter(stop=>!plannedIds.has(stop.id))
-  const nextByDispatch=new Map()
+  if(!remaining.length)return{applied:true,assigned,pendingVehiclePlates:[...pending].sort()}
+  const unassigned=ensureUnassignedTrip(database,day)
+  let next=database.prepare('SELECT COALESCE(MAX(stop_sequence),0)+1 value FROM dispatch_stops WHERE dispatch_id=? AND stop_sequence>0').get(unassigned.dispatch_id).value
   for(const stop of remaining){
-    let next=nextByDispatch.get(stop.dispatchId)
-    if(next==null){next=database.prepare('SELECT COALESCE(MAX(stop_sequence),0)+1 value FROM dispatch_stops WHERE dispatch_id=? AND stop_sequence>0').get(stop.dispatchId).value}
-    database.prepare('UPDATE dispatch_stops SET stop_sequence=? WHERE id=?').run(next,stop.id)
-    nextByDispatch.set(stop.dispatchId,next+1)
+    database.prepare('UPDATE dispatch_stops SET dispatch_id=?,dispatch_trip_id=?,stop_sequence=? WHERE id=?').run(unassigned.dispatch_id,unassigned.id,next,stop.id)
+    next+=1
   }
   return{applied:true,assigned,pendingVehiclePlates:[...pending].sort()}
 }

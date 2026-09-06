@@ -1,7 +1,7 @@
 import crypto from 'node:crypto'
 import {DatabaseSync} from 'node:sqlite'
 import path from 'node:path'
-import {KCS_WEEKLY_ROUTE_PLAN_V49} from '../server/weeklyRoutePlanV49Data.mjs'
+import {KCS_WEEKLY_ROUTE_PLAN_ARRANGE} from '../server/weeklyRoutePlanArrangeData.mjs'
 import {inspectWeeklyRoutePlan,installWeeklyRoutePlan} from '../server/weeklyRoutePlanService.mjs'
 
 const databasePath=path.resolve(process.env.KCS_DB_PATH||'data/kcs-dispatch.db')
@@ -11,9 +11,9 @@ db.exec('PRAGMA foreign_keys=ON;PRAGMA busy_timeout=5000')
 const hash=value=>crypto.createHash('sha256').update(value).digest('hex')
 
 try{
-  const before=inspectWeeklyRoutePlan(KCS_WEEKLY_ROUTE_PLAN_V49,db)
-  const result=apply?installWeeklyRoutePlan(KCS_WEEKLY_ROUTE_PLAN_V49,{changedBy:'Owner Admin'},db):null
-  const after=inspectWeeklyRoutePlan(KCS_WEEKLY_ROUTE_PLAN_V49,db)
+  const before=inspectWeeklyRoutePlan(KCS_WEEKLY_ROUTE_PLAN_ARRANGE,db)
+  const result=apply?installWeeklyRoutePlan(KCS_WEEKLY_ROUTE_PLAN_ARRANGE,{changedBy:'Owner Admin'},db):null
+  const after=inspectWeeklyRoutePlan(KCS_WEEKLY_ROUTE_PLAN_ARRANGE,db)
   console.log(JSON.stringify({
     mode:apply?'apply':'inspect',
     databasePath,
