@@ -67,3 +67,13 @@ test('confirmed additions roll back moves and inserts when one insert fails',()=
   assert.throws(()=>applyWeeklyRoutePlanV50(KCS_WEEKLY_ROUTE_PLAN_V50_CANDIDATES,{apply:true},db),/injected failure/)
   assert.equal(JSON.stringify(db.prepare('SELECT * FROM weekly_route_plan_stops ORDER BY rowid').all()),before)
 })
+
+test('numeric production Branch IDs match B-prefixed route candidates',()=>{
+  const db=realFixture()
+  db.prepare("UPDATE branches SET jodoo_branch_id=SUBSTR(jodoo_branch_id,2) WHERE jodoo_branch_id IN ('B10204','B10137')").run()
+  const dry=applyWeeklyRoutePlanV50(KCS_WEEKLY_ROUTE_PLAN_V50_CANDIDATES,{},db)
+  assert.equal(dry.routeCount,698);assert.equal(dry.inserted,7);assert.equal(dry.moved,9);assert.equal(dry.report.extras.length,0);assert.equal(dry.beforeRoutesUnchanged,true)
+  const applied=applyWeeklyRoutePlanV50(KCS_WEEKLY_ROUTE_PLAN_V50_CANDIDATES,{apply:true},db)
+  assert.equal(applied.routeCount,698)
+  for(const [branch,weekday] of [['10204',0],['10137',2],['10137',5]])assert.equal(db.prepare('SELECT COUNT(*) n FROM weekly_route_plan_stops s JOIN branches b ON b.id=s.branch_id WHERE b.jodoo_branch_id=? AND s.weekday=?').get(branch,weekday).n,1)
+})
