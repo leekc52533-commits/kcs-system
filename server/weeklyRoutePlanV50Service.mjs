@@ -1,11 +1,6 @@
 import {normalizePlate} from './weeklyRoutePlanService.mjs'
 
 export const ROUTE_PLATES={L2:'QAA4293N',L3:'QAB1225B',L4:'QM3028M',L5:'QTY5028',L6:'QM630S'}
-export const OTW=[
-  {weekday:0,sequence:8,branchCode:'B10075'},{weekday:0,sequence:9,branchCode:'B10118'},
-  {weekday:0,sequence:10,branchCode:'B10092'},{weekday:0,sequence:11,branchCode:'B10093'},
-  {weekday:1,sequence:21,branchCode:'B10457'},{weekday:1,sequence:22,branchCode:'B10480'}
-]
 export const USER_CONFIRMED_OVERRIDES=new Map([
   ...'B10151 B10142 B10164 B10104 B10134 B10135 B10167 B10145 B10177 B10144 B10275 B10310'.split(' ').map(branch=>[`0:${branch}`,ROUTE_PLATES.L5]),
   ...'B10123 B10125 B10140 B10141 B10048 B10149 B10147 B10148'.split(' ').map(branch=>[`0:${branch}`,ROUTE_PLATES.L6]),
@@ -62,11 +57,9 @@ export function reconcileRouteRows(canonical,candidates,{confirmed=true}={}){
     report.additions.push({key:additionKey,plate:chosen.plate,sequence:chosen.sequence})
   }
   for(const [k,choices] of byKey)if(!canonicalKeys.has(k)&&!moveDestinations.has(k)&&!confirmedAdditions.has(k))for(const choice of choices)report.extras.push({key:k,plate:choice.plate,sequence:choice.sequence})
-  const otwKeys=new Set(OTW.map(x=>key(x.weekday,x.branchCode)))
-  for(const otw of OTW){const row=rows.find(x=>key(x.weekday,x.branchCode)===key(otw.weekday,otw.branchCode));if(!row)throw new Error(`OTW canonical stop missing: ${otw.branchCode}`);row.plate=ROUTE_PLATES.L5;row.sequence=otw.sequence}
   report.sequenceAdjustments=[]
   for(const weekday of [0,1,2,3,4,5,6])for(const plate of Object.values(ROUTE_PLATES)){
-    const group=rows.filter(x=>x.weekday===weekday&&x.plate===plate).sort((a,b)=>Number(otwKeys.has(key(b.weekday,b.branchCode)))-Number(otwKeys.has(key(a.weekday,a.branchCode)))||a.branchCode.localeCompare(b.branchCode)),used=new Set()
+    const group=rows.filter(x=>x.weekday===weekday&&x.plate===plate).sort((a,b)=>a.branchCode.localeCompare(b.branchCode)),used=new Set()
     for(const row of group){let sequence=row.sequence;while(used.has(`${row.trip}:${sequence}`))sequence++;if(sequence!==row.sequence){report.sequenceAdjustments.push({key:key(row.weekday,row.branchCode),from:row.sequence,to:sequence});row.sequence=sequence}used.add(`${row.trip}:${sequence}`)}
   }
   return{rows,report}
@@ -80,7 +73,6 @@ function assertFinal(rows){
   if(rows.filter(x=>x.plate===ROUTE_PLATES.L4).length!==137)throw new Error('L4 must remain exactly 137 stops')
   if(new Set(rows.map(x=>`${x.weekday}:${x.plate}:${x.trip}:${x.sequence}`)).size!==698)throw new Error('Final route positions are not unique')
   if(rows.some(x=>x.plate==='QAV3468'))throw new Error('Standby vehicle QAV3468 has a formal route')
-  for(const otw of OTW){const row=rows.find(x=>key(x.weekday,x.branchCode)===key(otw.weekday,otw.branchCode));if(row?.plate!==ROUTE_PLATES.L5||row.sequence!==otw.sequence)throw new Error(`OTW mapping failed: ${otw.branchCode}`)}
 }
 
 export function applyWeeklyRoutePlanV50(candidates,{apply=false}={},db){
