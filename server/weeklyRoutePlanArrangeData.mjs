@@ -1,6 +1,7 @@
 import {KCS_WEEKLY_ROUTE_PLAN_V49} from './weeklyRoutePlanV49Data.mjs'
 import {KCS_WEEKLY_ROUTE_PLAN_V50_CANDIDATES} from './weeklyRoutePlanV50CandidateData.mjs'
 import {ROUTE_PLATES,USER_CONFIRMED_OVERRIDES} from './weeklyRoutePlanV50Service.mjs'
+import {SUNDAY_ROUTE_ALTERNATION,isAlternatingSundayBranch} from './weeklyRouteAlternation.mjs'
 
 const normalizeBranch=value=>String(value??'').trim().toUpperCase().replace(/\s+/g,'')
 const routeKey=row=>`${row.weekday}:${normalizeBranch(row.branchCode)}`
@@ -28,9 +29,16 @@ for(const [weekday,plate,trip,sequence,branchCode,zoneName,areaName] of KCS_WEEK
   if(plate===ROUTE_PLATES.L4)selected.push({weekday,plate,trip,sequence,branchCode,zoneName,areaName})
 }
 
+for(const row of selected)if(row.weekday===0&&isAlternatingSundayBranch(row.branchCode))row.plate=SUNDAY_ROUTE_ALTERNATION.anchorPlate
+
+const sundaySequence=new Map(SUNDAY_ROUTE_ALTERNATION.branchCodes.map((branchCode,index)=>[branchCode,index+1]))
+
 const entries=[]
 for(const weekday of [0,1,2,3,4,5,6])for(const plate of Object.values(ROUTE_PLATES)){
-  const group=selected.filter(row=>row.weekday===weekday&&row.plate===plate).sort((a,b)=>a.sequence-b.sequence||normalizeBranch(a.branchCode).localeCompare(normalizeBranch(b.branchCode)))
+  const group=selected.filter(row=>row.weekday===weekday&&row.plate===plate).sort((a,b)=>{
+    if(weekday===0&&plate===SUNDAY_ROUTE_ALTERNATION.anchorPlate&&isAlternatingSundayBranch(a.branchCode)&&isAlternatingSundayBranch(b.branchCode))return sundaySequence.get(normalizeBranch(a.branchCode))-sundaySequence.get(normalizeBranch(b.branchCode))
+    return a.sequence-b.sequence||normalizeBranch(a.branchCode).localeCompare(normalizeBranch(b.branchCode))
+  })
   group.forEach((row,index)=>{
     const metadata=metadataByBranch.get(normalizeBranch(row.branchCode))||row
     entries.push([weekday,plate,Number(row.trip)||1,index+1,normalizeBranch(row.branchCode),metadata.zoneName||'',metadata.areaName||''])
@@ -42,7 +50,7 @@ if(new Set(entries.map(row=>`${row[0]}:${row[4]}`)).size!==entries.length)throw 
 
 export const KCS_WEEKLY_ROUTE_PLAN_ARRANGE=Object.freeze({
   name:'KCS 7-Day / 5-Vehicle Route Plan — Arrange',
-  sourceName:'KCS_7Day_5Vehicle_Route_Plan(2).xlsx [vehicle sheets Arrange]',
+  sourceName:'KCS_7Day_5Vehicle_Route_Plan(2).xlsx [vehicle sheets Arrange + confirmed Sunday alternation]',
   sourceStartDate:'2026-08-26',
   entries:Object.freeze(entries)
 })
