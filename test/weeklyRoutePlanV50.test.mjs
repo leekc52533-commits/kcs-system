@@ -76,4 +76,6 @@ test('numeric production Branch IDs match B-prefixed route candidates',()=>{
   const applied=applyWeeklyRoutePlanV50(KCS_WEEKLY_ROUTE_PLAN_V50_CANDIDATES,{apply:true},db)
   assert.equal(applied.routeCount,698)
   for(const [branch,weekday] of [['10204',0],['10137',2],['10137',5]])assert.equal(db.prepare('SELECT COUNT(*) n FROM weekly_route_plan_stops s JOIN branches b ON b.id=s.branch_id WHERE b.jodoo_branch_id=? AND s.weekday=?').get(branch,weekday).n,1)
+  const second=applyWeeklyRoutePlanV50(KCS_WEEKLY_ROUTE_PLAN_V50_CANDIDATES,{apply:true},db)
+  assert.equal(second.noOp,true);assert.equal(second.changed,0);assert.equal(second.inserted,0);assert.equal(second.moved,0)
 })
