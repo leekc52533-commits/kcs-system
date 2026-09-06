@@ -1,4 +1,4 @@
-import {normalizePlate} from './weeklyRoutePlanService.mjs'
+import {normalizePlate,ROUTE_NUMBER_BY_LEGACY_PLATE} from './weeklyRoutePlanService.mjs'
 
 export const ROUTE_PLATES={L2:'QAA4293N',L3:'QAB1225B',L4:'QM3028M',L5:'QTY5028',L6:'QM630S'}
 export const USER_CONFIRMED_OVERRIDES=new Map([
@@ -91,12 +91,12 @@ export function applyWeeklyRoutePlanV50(candidates,{apply=false}={},db){
     if(changed){
       const park=db.prepare('UPDATE weekly_route_plan_stops SET stop_sequence=stop_sequence+10000 WHERE plan_id=?')
       park.run(plan.id)
-      const update=db.prepare('UPDATE weekly_route_plan_stops SET weekday=?,vehicle_registration_number=?,stop_sequence=? WHERE rowid=?')
-      for(const row of rows)if(row.stopId)update.run(row.weekday,row.plate,row.sequence,row.stopId)
+      const update=db.prepare('UPDATE weekly_route_plan_stops SET weekday=?,vehicle_registration_number=?,stop_sequence=?,route_number=? WHERE rowid=?')
+      for(const row of rows)if(row.stopId)update.run(row.weekday,row.plate,row.sequence,ROUTE_NUMBER_BY_LEGACY_PLATE[row.plate],row.stopId)
     }
     if(inserted){
-      const findBranches=db.prepare("SELECT id FROM branches WHERE UPPER(REPLACE(jodoo_branch_id,' ','')) IN (?,?)"),insert=db.prepare('INSERT INTO weekly_route_plan_stops(plan_id,weekday,branch_id,vehicle_registration_number,trip_number,stop_sequence,zone_name_snapshot,area_name_snapshot) VALUES(?,?,?,?,?,?,?,?)')
-      for(const row of rows)if(!row.stopId){const matches=row.branchId?[]:findBranches.all(...branchAliases(row.branchCode)),branchId=row.branchId||(matches.length===1?matches[0].id:null);if(!branchId)throw new Error(matches.length>1?`Confirmed addition Branch ID is ambiguous: ${row.branchCode}`:`Confirmed addition Branch ID missing: ${row.branchCode}`);insert.run(plan.id,row.weekday,branchId,row.plate,row.trip,row.sequence,row.zoneName,row.areaName)}
+      const findBranches=db.prepare("SELECT id FROM branches WHERE UPPER(REPLACE(jodoo_branch_id,' ','')) IN (?,?)"),insert=db.prepare('INSERT INTO weekly_route_plan_stops(plan_id,weekday,branch_id,vehicle_registration_number,trip_number,stop_sequence,zone_name_snapshot,area_name_snapshot,route_number) VALUES(?,?,?,?,?,?,?,?,?)')
+      for(const row of rows)if(!row.stopId){const matches=row.branchId?[]:findBranches.all(...branchAliases(row.branchCode)),branchId=row.branchId||(matches.length===1?matches[0].id:null);if(!branchId)throw new Error(matches.length>1?`Confirmed addition Branch ID is ambiguous: ${row.branchCode}`:`Confirmed addition Branch ID missing: ${row.branchCode}`);insert.run(plan.id,row.weekday,branchId,row.plate,row.trip,row.sequence,row.zoneName,row.areaName,ROUTE_NUMBER_BY_LEGACY_PLATE[row.plate])}
     }
     if(Object.entries(beforeProtected).some(([t,value])=>snapshot(db,t)!==value))throw new Error('Protected non-route data changed')
     if(db.prepare('PRAGMA foreign_key_check').get())throw new Error('Foreign-key validation failed')

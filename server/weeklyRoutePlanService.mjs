@@ -3,20 +3,25 @@ import {KCS_WEEKLY_ROUTE_PLAN_V49} from './weeklyRoutePlanV49Data.mjs'
 const clean=value=>String(value??'').trim()
 export const normalizePlate=value=>clean(value).toUpperCase().replace(/[^A-Z0-9]/g,'')
 const normalizeBranch=value=>clean(value).toUpperCase().replace(/\s+/g,'')
+export const ROUTE_NUMBER_BY_LEGACY_PLATE=Object.freeze({QAA4293N:1,QAB1225B:2,QM3028M:3,QTY5028:4,QM630S:5})
 
 export function validateWeeklyRoutePlan(plan){
   if(!plan||!clean(plan.name)||!clean(plan.sourceName)||!Array.isArray(plan.entries)||!plan.entries.length)throw new Error('Weekly route plan is incomplete')
-  const branchDays=new Set(),positions=new Set(),plates=new Set(),branches=new Set()
+  const branchDays=new Set(),positions=new Set(),plates=new Set(),branches=new Set(),fallbackRoutes=new Map(),reservedRoutes=new Set(plan.entries.map(row=>ROUTE_NUMBER_BY_LEGACY_PLATE[normalizePlate(row?.[1])]).filter(Boolean))
   const entries=plan.entries.map((raw,index)=>{
     if(!Array.isArray(raw)||raw.length<7)throw new Error(`Weekly route row ${index+1} is incomplete`)
     const [weekday,plate,trip,sequence,branchCode,zoneName,areaName]=raw
-    const item={weekday:Number(weekday),plate:normalizePlate(plate),trip:Number(trip),sequence:Number(sequence),branchCode:normalizeBranch(branchCode),zoneName:clean(zoneName),areaName:clean(areaName)}
+    const normalizedPlate=normalizePlate(plate)
+    if(!ROUTE_NUMBER_BY_LEGACY_PLATE[normalizedPlate]&&!fallbackRoutes.has(normalizedPlate)){const available=[1,2,3,4,5].find(value=>!reservedRoutes.has(value)&&![...fallbackRoutes.values()].includes(value));fallbackRoutes.set(normalizedPlate,available)}
+    const routeNumber=ROUTE_NUMBER_BY_LEGACY_PLATE[normalizedPlate]??fallbackRoutes.get(normalizedPlate)
+    const item={weekday:Number(weekday),plate:normalizedPlate,routeNumber,trip:Number(trip),sequence:Number(sequence),branchCode:normalizeBranch(branchCode),zoneName:clean(zoneName),areaName:clean(areaName)}
     if(!Number.isInteger(item.weekday)||item.weekday<0||item.weekday>6)throw new Error(`Invalid weekday at route row ${index+1}`)
     if(!item.plate)throw new Error(`Missing vehicle plate at route row ${index+1}`)
+    if(!Number.isInteger(item.routeNumber)||item.routeNumber<1||item.routeNumber>5)throw new Error(`Weekly route plan must contain no more than five Routes`)
     if(!Number.isInteger(item.trip)||item.trip<1||item.trip>3)throw new Error(`Invalid Trip at route row ${index+1}`)
     if(!Number.isInteger(item.sequence)||item.sequence<1)throw new Error(`Invalid sequence at route row ${index+1}`)
     if(!item.branchCode)throw new Error(`Missing Branch ID at route row ${index+1}`)
-    const branchKey=`${item.weekday}:${item.branchCode}`,positionKey=`${item.weekday}:${item.plate}:${item.trip}:${item.sequence}`
+    const branchKey=`${item.weekday}:${item.branchCode}`,positionKey=`${item.weekday}:${item.routeNumber}:${item.trip}:${item.sequence}`
     if(branchDays.has(branchKey))throw new Error(`Duplicate Branch ${item.branchCode} on weekday ${item.weekday}`)
     if(positions.has(positionKey))throw new Error(`Duplicate route position ${positionKey}`)
     branchDays.add(branchKey);positions.add(positionKey);plates.add(item.plate);branches.add(item.branchCode)
@@ -44,8 +49,8 @@ function availablePlates(database){
   return result
 }
 
-const routeValue=item=>[Number(item.weekday),Number(item.branchId),normalizePlate(item.plate),Number(item.trip),Number(item.sequence),clean(item.zoneName),clean(item.areaName)]
-const routeSort=(a,b)=>a[0]-b[0]||a[1]-b[1]||a[2].localeCompare(b[2])||a[3]-b[3]||a[4]-b[4]
+const routeValue=item=>[Number(item.weekday),Number(item.branchId),Number(item.routeNumber),Number(item.trip),Number(item.sequence),clean(item.zoneName),clean(item.areaName)]
+const routeSort=(a,b)=>a[0]-b[0]||a[1]-b[1]||a[2]-b[2]||a[3]-b[3]||a[4]-b[4]
 const routeSnapshot=rows=>JSON.stringify(rows.map(routeValue).sort(routeSort))
 
 function resolvedWeeklyRoutePlan(plan,database){
@@ -59,7 +64,7 @@ export function inspectWeeklyRoutePlan(plan=KCS_WEEKLY_ROUTE_PLAN_V49,database){
   if(!database)throw new Error('Database is required')
   const {checked,resolved}=resolvedWeeklyRoutePlan(plan,database)
   const active=database.prepare('SELECT id,name,source_name sourceName FROM weekly_route_plans WHERE is_active=1 ORDER BY id DESC LIMIT 1').get()
-  const current=active?database.prepare(`SELECT s.weekday,s.branch_id branchId,s.vehicle_registration_number plate,s.trip_number trip,s.stop_sequence sequence,s.zone_name_snapshot zoneName,s.area_name_snapshot areaName FROM weekly_route_plan_stops s WHERE s.plan_id=?`).all(active.id):[]
+  const current=active?database.prepare(`SELECT s.weekday,s.branch_id branchId,s.vehicle_registration_number plate,s.route_number routeNumber,s.trip_number trip,s.stop_sequence sequence,s.zone_name_snapshot zoneName,s.area_name_snapshot areaName FROM weekly_route_plan_stops s WHERE s.plan_id=?`).all(active.id):[]
   const expectedSnapshot=routeSnapshot(resolved),currentSnapshot=routeSnapshot(current)
   return{matchesExact:Boolean(active)&&active.name===checked.name&&active.sourceName===checked.sourceName&&currentSnapshot===expectedSnapshot,planId:active?.id??null,entryCount:resolved.length,activeRouteCount:current.length,branchCount:checked.branchCount,vehiclePlates:checked.vehiclePlates,expectedSnapshot,currentSnapshot}
 }
@@ -76,8 +81,8 @@ export function installWeeklyRoutePlan(plan=KCS_WEEKLY_ROUTE_PLAN_V49,{changedBy
   try{
     database.prepare('UPDATE weekly_route_plans SET is_active=0,updated_at=CURRENT_TIMESTAMP WHERE is_active=1').run()
     const created=database.prepare('INSERT INTO weekly_route_plans(name,source_name,source_start_date,created_by) VALUES(?,?,?,?)').run(checked.name,checked.sourceName,checked.sourceStartDate,clean(changedBy)||'Owner Admin')
-    const planId=Number(created.lastInsertRowid),insert=database.prepare('INSERT INTO weekly_route_plan_stops(plan_id,weekday,branch_id,vehicle_registration_number,trip_number,stop_sequence,zone_name_snapshot,area_name_snapshot) VALUES(?,?,?,?,?,?,?,?)')
-    for(const item of resolved)insert.run(planId,item.weekday,item.branchId,item.plate,item.trip,item.sequence,item.zoneName,item.areaName)
+    const planId=Number(created.lastInsertRowid),insert=database.prepare('INSERT INTO weekly_route_plan_stops(plan_id,weekday,branch_id,vehicle_registration_number,trip_number,stop_sequence,zone_name_snapshot,area_name_snapshot,route_number) VALUES(?,?,?,?,?,?,?,?,?)')
+    for(const item of resolved)insert.run(planId,item.weekday,item.branchId,item.plate,item.trip,item.sequence,item.zoneName,item.areaName,item.routeNumber)
     database.prepare("INSERT INTO master_change_history(entity_type,entity_id,change_type,new_value,after_json,reason,changed_by) VALUES('weekly_route_plan',?,'INSTALL',?,?,?,?)").run(String(planId),checked.name,JSON.stringify({sourceName:checked.sourceName,entryCount:resolved.length,branchCount:checked.branchCount,vehiclePlates:checked.vehiclePlates}),'Approved Excel route plan',clean(changedBy)||'Owner Admin')
     if(database.prepare('PRAGMA foreign_key_check').get())throw new Error('Foreign-key validation failed after installing route plan')
     database.exec('COMMIT')

@@ -7,8 +7,6 @@ import {resolveStartLocation,startLocationOptions,writeStartLocationSnapshot} fr
 import {commercialOptions,resolveBuyerPayer,resolvePrimaryEndLocation,writeCommercialSnapshot} from './dispatchCommercialService.mjs'
 import {recordOptimizationFeedback} from './routeOptimizationService.mjs'
 import {MAX_ASSIGNED_CREW} from '../shared/dispatchRules.js'
-import {normalizePlate} from './weeklyRoutePlanService.mjs'
-import {effectiveWeeklyRoutePlate} from './weeklyRouteAlternation.mjs'
 import {listDeferRequestsForDay} from './deferApprovalService.mjs'
 
 const iso = (value = new Date()) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : kuchingDate(value)
@@ -66,8 +64,6 @@ function ensureUnassignedTrip(database,day){
 
 function branchZoneSnapshot(database,branchId){return database.prepare(`SELECT a.id areaId,a.name areaName,COALESCE(a.confirmed_zone_group_id,a.zone_group_id) zoneGroupId,z.name zoneGroupName,a.default_vehicle_id areaDefaultVehicleId,rta.vehicle_id routeVehicleId,rta.area_order routeAreaOrder,rtb.branch_order routeBranchOrder FROM branches b LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN zone_groups z ON z.id=COALESCE(a.confirmed_zone_group_id,a.zone_group_id) LEFT JOIN route_templates rt ON rt.zone_group_id=z.id AND rt.is_active=1 LEFT JOIN route_template_areas rta ON rta.route_template_id=rt.id AND rta.area_id=a.id LEFT JOIN route_template_branches rtb ON rtb.route_template_id=rt.id AND rtb.branch_id=b.id WHERE b.id=?`).get(branchId)||{}}
 
-function availableDefaultVehicleId(database,snapshot,day){let vehicleId=snapshot.routeVehicleId??snapshot.areaDefaultVehicleId;if(!vehicleId&&snapshot.zoneGroupId){const pool=database.prepare(`SELECT zdv.vehicle_id id,zdv.position,COUNT(ds.id) stop_count FROM zone_default_vehicles zdv JOIN vehicles v ON v.id=zdv.vehicle_id AND v.is_temporary=0 AND v.operational_status IN ('available','active') AND v.status IN ('available','assigned') LEFT JOIN dispatches d ON d.vehicle_id=zdv.vehicle_id AND d.dispatch_date=? LEFT JOIN dispatch_stops ds ON ds.dispatch_id=d.id AND ds.status<>'cancelled' WHERE zdv.zone_group_id=? GROUP BY zdv.vehicle_id,zdv.position ORDER BY stop_count,zdv.position`).all(day.dispatch_date,snapshot.zoneGroupId);vehicleId=pool[0]?.id??null}if(!vehicleId)return null;return database.prepare("SELECT id FROM vehicles WHERE id=? AND is_temporary=0 AND operational_status IN ('available','active') AND status IN ('available','assigned')").get(vehicleId)?.id??null}
-
 function ensureVehicleTrip(database,day,vehicleId,tripNumber){
   const found=database.prepare(`SELECT dt.* FROM dispatch_trips dt JOIN dispatches d ON d.id=dt.dispatch_id WHERE dt.dispatch_day_id=? AND d.vehicle_id=? AND dt.trip_number=?`).get(day.id,vehicleId,tripNumber)
   if(found)return found
@@ -91,8 +87,7 @@ function addScheduledStop(database, day, schedule, occurrenceSource='recurrence'
     if(!occurrence.changes){const other=database.prepare("SELECT * FROM schedule_occurrences WHERE branch_id=? AND planned_date=? AND status<>'cancelled' ORDER BY id LIMIT 1").get(schedule.branch_id,day.dispatch_date);return{created:false,result:'Already Exists',code:'DUPLICATE_BRANCH_SERVICE_DATE',branchId:schedule.branch_id,serviceDate:day.dispatch_date,existingOccurrenceId:other?.id??null,existingScheduleId:other?.schedule_id??null,attemptedScheduleId:schedule.id}}
   }
   const snapshot=branchZoneSnapshot(database,schedule.branch_id)
-  const defaultVehicleId=availableDefaultVehicleId(database,snapshot,day)
-  const trip=defaultVehicleId?ensureVehicleTrip(database,day,defaultVehicleId,1):ensureUnassignedTrip(database,day)
+  const trip=ensureUnassignedTrip(database,day)
   const sequence=database.prepare('SELECT COALESCE(MAX(stop_sequence),0)+1 value FROM dispatch_stops WHERE dispatch_id=?').get(trip.dispatch_id).value
   const estimatedWeightKg=latestExistingEstimatedWeight(database,schedule.branch_id)
   const stop=database.prepare(`INSERT INTO dispatch_stops(dispatch_id,branch_id,stop_sequence,status,dispatch_trip_id,source_schedule_id,service_date,dedupe_enforced,estimated_weight_kg,zone_group_id_snapshot,zone_group_name_snapshot,area_name_snapshot)
@@ -102,60 +97,43 @@ function addScheduledStop(database, day, schedule, occurrenceSource='recurrence'
   return {created:true,result:'Created',stopId:Number(stop.lastInsertRowid),scheduleId:schedule.id,branchId:schedule.branch_id,serviceDate:day.dispatch_date}
 }
 
-function assignExistingUnassignedStops(database,day){
-  const rows=database.prepare(`SELECT ds.id,ds.branch_id branchId FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id JOIN dispatches d ON d.id=dt.dispatch_id LEFT JOIN branches b ON b.id=ds.branch_id LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN zone_groups z ON z.id=COALESCE(a.confirmed_zone_group_id,a.zone_group_id) LEFT JOIN route_templates rt ON rt.zone_group_id=z.id AND rt.is_active=1 LEFT JOIN route_template_areas rta ON rta.route_template_id=rt.id AND rta.area_id=a.id LEFT JOIN route_template_branches rtb ON rtb.route_template_id=rt.id AND rtb.branch_id=b.id WHERE dt.dispatch_day_id=? AND d.vehicle_id IS NULL AND ds.status<>'cancelled' ORDER BY COALESCE(z.sort_order,999999),CASE WHEN rta.area_order IS NULL THEN 1 ELSE 0 END,rta.area_order,CASE WHEN rtb.branch_order IS NULL THEN 1 ELSE 0 END,rtb.branch_order,COALESCE(b.branch_name,''),b.id`).all(day.id)
-  let assigned=0
-  for(const row of rows){const snapshot=branchZoneSnapshot(database,row.branchId),vehicleId=availableDefaultVehicleId(database,snapshot,day);if(!vehicleId)continue;const target=ensureVehicleTrip(database,day,vehicleId,1),sequence=database.prepare('SELECT COALESCE(MAX(stop_sequence),0)+1 value FROM dispatch_stops WHERE dispatch_id=?').get(target.dispatch_id).value;database.prepare('UPDATE dispatch_stops SET dispatch_id=?,dispatch_trip_id=?,stop_sequence=? WHERE id=?').run(target.dispatch_id,target.id,sequence,row.id);assigned+=1}
-  return assigned
-}
-
 const weekdayForDate=date=>new Date(`${date}T00:00:00Z`).getUTCDay()
-
-function routePlanVehicleMap(database){
-  const map=new Map()
-  for(const vehicle of database.prepare("SELECT id,vehicle_code,registration_number FROM vehicles WHERE is_temporary=0 AND operational_status IN ('available','active') AND status IN ('available','assigned')").all()){
-    map.set(normalizePlate(vehicle.registration_number||vehicle.vehicle_code),vehicle.id)
-  }
-  return map
-}
 
 export function applyWeeklyRoutePlanToDay(database,day){
   const plan=database.prepare('SELECT id FROM weekly_route_plans WHERE is_active=1 ORDER BY id DESC LIMIT 1').get()
-  if(!plan)return{applied:false,assigned:0,pendingVehiclePlates:[]}
-  const weekday=weekdayForDate(day.dispatch_date)
-  const routes=database.prepare(`SELECT wr.branch_id branchId,b.jodoo_branch_id branchCode,wr.vehicle_registration_number plate,wr.trip_number tripNumber,wr.stop_sequence stopSequence
-    FROM weekly_route_plan_stops wr JOIN branches b ON b.id=wr.branch_id WHERE wr.plan_id=? AND wr.weekday=?
-    ORDER BY wr.vehicle_registration_number,wr.trip_number,wr.stop_sequence`).all(plan.id,weekdayForDate(day.dispatch_date))
-  if(!routes.length)return{applied:true,assigned:0,pendingVehiclePlates:[]}
+  if(!plan)return{applied:false,arranged:0,pendingRoutes:[]}
+  const routes=database.prepare(`SELECT wr.branch_id branchId,wr.route_number routeNumber,wr.trip_number tripNumber,wr.stop_sequence stopSequence
+    FROM weekly_route_plan_stops wr WHERE wr.plan_id=? AND wr.weekday=?
+    ORDER BY wr.route_number,wr.trip_number,wr.stop_sequence`).all(plan.id,weekdayForDate(day.dispatch_date))
+  if(!routes.length)return{applied:true,arranged:0,pendingRoutes:[]}
   const allStops=database.prepare(`SELECT ds.id,ds.branch_id branchId,ds.dispatch_id dispatchId,ds.dispatch_trip_id tripId,ds.stop_sequence oldSequence,ds.status
     FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id WHERE dt.dispatch_day_id=?
     ORDER BY ds.dispatch_id,ds.stop_sequence,ds.id`).all(day.id)
-  if(!allStops.length)return{applied:true,assigned:0,pendingVehiclePlates:[]}
+  if(!allStops.length)return{applied:true,arranged:0,pendingRoutes:[]}
   const stopByBranch=new Map(allStops.filter(row=>row.status!=='cancelled').map(row=>[row.branchId,row]))
-  const vehicles=routePlanVehicleMap(database),pending=new Set(),plannedIds=new Set(),sequenceCounters=new Map()
+  const assignments=new Map(database.prepare('SELECT route_number routeNumber,vehicle_id vehicleId FROM daily_route_assignments WHERE dispatch_day_id=?').all(day.id).map(row=>[row.routeNumber,row.vehicleId]))
+  const pending=new Set(),plannedIds=new Set(),sequenceCounters=new Map()
   database.prepare(`UPDATE dispatch_stops SET stop_sequence=-id WHERE dispatch_trip_id IN(SELECT id FROM dispatch_trips WHERE dispatch_day_id=?)`).run(day.id)
-  let assigned=0
+  let arranged=0
   for(const route of routes){
     const stop=stopByBranch.get(route.branchId)
     if(!stop)continue
-    const plate=effectiveWeeklyRoutePlate({date:day.dispatch_date,weekday,branchCode:route.branchCode,plate:route.plate}),vehicleId=vehicles.get(plate)
-    let target
-    if(vehicleId)target=ensureVehicleTrip(database,day,vehicleId,route.tripNumber)
-    else{pending.add(plate);target=ensureUnassignedTrip(database,day)}
+    const vehicleId=assignments.get(route.routeNumber),target=vehicleId?ensureVehicleTrip(database,day,vehicleId,route.tripNumber):ensureUnassignedTrip(database,day)
+    if(!vehicleId)pending.add(route.routeNumber)
     const key=target.dispatch_id,sequence=(sequenceCounters.get(key)||0)+1
     sequenceCounters.set(key,sequence)
-    database.prepare('UPDATE dispatch_stops SET dispatch_id=?,dispatch_trip_id=?,stop_sequence=? WHERE id=?').run(target.dispatch_id,target.id,sequence,stop.id)
-    plannedIds.add(stop.id);assigned+=1
+    database.prepare('UPDATE dispatch_stops SET dispatch_id=?,dispatch_trip_id=?,stop_sequence=?,route_number=?,route_stop_sequence=? WHERE id=?').run(target.dispatch_id,target.id,sequence,route.routeNumber,route.stopSequence,stop.id)
+    plannedIds.add(stop.id);arranged+=1
   }
   const remaining=allStops.filter(stop=>!plannedIds.has(stop.id))
-  if(!remaining.length)return{applied:true,assigned,pendingVehiclePlates:[...pending].sort()}
+  if(!remaining.length)return{applied:true,arranged,pendingRoutes:[...pending].sort()}
   const unassigned=ensureUnassignedTrip(database,day)
   let next=database.prepare('SELECT COALESCE(MAX(stop_sequence),0)+1 value FROM dispatch_stops WHERE dispatch_id=? AND stop_sequence>0').get(unassigned.dispatch_id).value
   for(const stop of remaining){
-    database.prepare('UPDATE dispatch_stops SET dispatch_id=?,dispatch_trip_id=?,stop_sequence=? WHERE id=?').run(unassigned.dispatch_id,unassigned.id,next,stop.id)
+    database.prepare('UPDATE dispatch_stops SET dispatch_id=?,dispatch_trip_id=?,stop_sequence=?,route_number=NULL,route_stop_sequence=NULL WHERE id=?').run(unassigned.dispatch_id,unassigned.id,next,stop.id)
     next+=1
   }
-  return{applied:true,assigned,pendingVehiclePlates:[...pending].sort()}
+  return{applied:true,arranged,pendingRoutes:[...pending].sort()}
 }
 
 function generateRange({startDate=iso(),generatedBy='Supervisor',count=7}={}, database=defaultDb) {
@@ -181,7 +159,6 @@ function generateRange({startDate=iso(),generatedBy='Supervisor',count=7}={}, da
         database.prepare("UPDATE schedule_occurrences SET dispatch_stop_id=NULL,status='cancelled',updated_at=CURRENT_TIMESTAMP WHERE schedule_id=? AND planned_date=?").run(item.schedule_id,date)
         database.prepare(`UPDATE dispatch_stops SET status='cancelled',superseded_reason='Schedule exception',superseded_at=CURRENT_TIMESTAMP,superseded_by='System' WHERE source_schedule_id=? AND dispatch_trip_id IN(SELECT id FROM dispatch_trips WHERE dispatch_day_id=?) AND status<>'completed'`).run(item.schedule_id,day.id)
       }
-      assignExistingUnassignedStops(database,day)
       applyWeeklyRoutePlanToDay(database,day)
     }
     database.exec('COMMIT')
@@ -192,7 +169,7 @@ export function generateWeek(payload={},database=defaultDb){return generateRange
 export function generateDay(payload={},database=defaultDb){return generateRange({...payload,count:1},database)}
 
 function stopRows(database, dayId) {
-  return database.prepare(`SELECT ds.id,ds.stop_sequence stopSequence,ds.sequence_locked sequenceLocked,ds.estimated_weight_kg estimatedWeightKg,
+  return database.prepare(`SELECT ds.id,ds.stop_sequence stopSequence,ds.sequence_locked sequenceLocked,ds.estimated_weight_kg estimatedWeightKg,ds.route_number routeNumber,ds.route_stop_sequence routeStopSequence,
     ds.source_special_request_id specialRequestId,b.jodoo_branch_id branchId,b.branch_name branchName,c.name customerName,c.payment_type paymentType,COALESCE((SELECT CASE WHEN cmp.price_type='outstation' THEN COALESCE(cmp.outstation_special_price,opl.price_amount) ELSE COALESCE(cmp.standard_special_price,spl.price_amount) END FROM customer_material_pricing cmp JOIN materials om ON om.id=cmp.material_id AND om.material_code='OCC' LEFT JOIN material_price_levels spl ON spl.id=cmp.standard_price_level_id LEFT JOIN material_price_levels opl ON opl.id=cmp.outstation_price_level_id WHERE cmp.customer_id=c.id AND cmp.status='active' AND cmp.resolution_state='ready'),c.occ_price) occPrice,
     b.area_id areaId,COALESCE(ds.area_name_snapshot,a.name) area,COALESCE(ds.zone_group_id_snapshot,a.zone_group_id) zoneGroupId,COALESCE(ds.zone_group_name_snapshot,z.name,'待确认') zoneGroup,z.sort_order zoneSortOrder,b.latitude,b.longitude,b.time_restriction timeRestriction,
     dt.id tripId,dt.trip_number tripNumber,d.vehicle_id vehicleId,v.vehicle_code vehicle,d.driver_id driverId,dr.name driver,d.assistant_id assistantId,asst.name assistant
@@ -233,24 +210,25 @@ function dayView(database, day) {
     const estimatedWeightKg=slots.reduce((sum,slot)=>sum+slot.estimatedWeightKg,0);return{...vehicle,driverId:basis.driverId??null,driver:basis.driver??null,assistantIds:assistants.map(item=>item.id),assistants,startLocationId:basis.startLocationId??null,startLocation:basis.startLocation??null,endLocationId:basis.endLocationId??null,endLocation:basis.endLocation??null,areas,slots,customerCount:slots.reduce((sum,slot)=>sum+slot.stopCount,0),estimatedWeightKg,weightedStopCount:slots.reduce((sum,slot)=>sum+slot.weightedStopCount,0),missingWeightCount:slots.reduce((sum,slot)=>sum+slot.missingWeightCount,0),overCapacity:Boolean(vehicle.capacityKg&&estimatedWeightKg>vehicle.capacityKg)}
   })
   const unassignedStops=stops.filter(stop=>!stop.vehicleId||!availableIds.has(stop.vehicleId))
-  const unassignedGroups=[...new Map(unassignedStops.map(stop=>[stop.areaId??'unassigned',{areaId:stop.areaId??null,areaName:stop.area||'未分区',zoneGroupId:stop.zoneGroupId??'pending',zoneGroupName:stop.zoneGroup||'待确认',zoneSortOrder:stop.zoneSortOrder??9999}])).values()].map(group=>{
-    const groupedStops=unassignedStops.filter(stop=>(stop.areaId??null)===group.areaId),weights=groupedStops.filter(stop=>stop.estimatedWeightKg!=null)
-    const defaults=database.prepare(`SELECT a.default_vehicle_id areaDefaultVehicleId,COALESCE(a.confirmed_zone_group_id,a.zone_group_id) zoneGroupId FROM areas a WHERE a.id=?`).get(group.areaId)||{},zonePool=defaults.zoneGroupId?database.prepare('SELECT vehicle_id id FROM zone_default_vehicles WHERE zone_group_id=? ORDER BY position').all(defaults.zoneGroupId).map(row=>row.id):[],defaultVehicleIds=defaults.areaDefaultVehicleId?[defaults.areaDefaultVehicleId]:zonePool
-    return{...group,...defaults,defaultVehicleIds,defaultVehicleId:defaultVehicleIds.length===1?defaultVehicleIds[0]:null,customerCount:groupedStops.length,estimatedWeightKg:weights.reduce((sum,stop)=>sum+Number(stop.estimatedWeightKg),0),weightedCustomerCount:weights.length,
+  const assignmentRows=database.prepare('SELECT route_number routeNumber,vehicle_id vehicleId,assigned_by assignedBy,updated_at updatedAt FROM daily_route_assignments WHERE dispatch_day_id=?').all(day.id),assignmentByRoute=new Map(assignmentRows.map(row=>[row.routeNumber,row]))
+  const routeBoards=[1,2,3,4,5].map(routeNumber=>{const assignment=assignmentByRoute.get(routeNumber)||{},vehicle=vehicles.find(item=>item.id===assignment.vehicleId),routeStops=stops.filter(stop=>stop.routeNumber===routeNumber).sort((a,b)=>(a.routeStopSequence??999999)-(b.routeStopSequence??999999)||a.id-b.id);return{routeNumber,name:`Route ${routeNumber}`,vehicleId:assignment.vehicleId??null,vehicle:vehicle?.vehicle??null,registrationNumber:vehicle?.registrationNumber??null,assignedBy:assignment.assignedBy??null,updatedAt:assignment.updatedAt??null,customerCount:routeStops.length,stops:routeStops}})
+  const extraUnassignedStops=unassignedStops.filter(stop=>stop.routeNumber==null)
+  const unassignedGroups=[...new Map(extraUnassignedStops.map(stop=>[stop.areaId??'unassigned',{areaId:stop.areaId??null,areaName:stop.area||'未分区',zoneGroupId:stop.zoneGroupId??'pending',zoneGroupName:stop.zoneGroup||'待确认',zoneSortOrder:stop.zoneSortOrder??9999}])).values()].map(group=>{
+    const groupedStops=extraUnassignedStops.filter(stop=>(stop.areaId??null)===group.areaId),weights=groupedStops.filter(stop=>stop.estimatedWeightKg!=null)
+    return{...group,customerCount:groupedStops.length,estimatedWeightKg:weights.reduce((sum,stop)=>sum+Number(stop.estimatedWeightKg),0),weightedCustomerCount:weights.length,
       missingGpsCount:groupedStops.filter(stop=>!Number.isFinite(stop.latitude)||!Number.isFinite(stop.longitude)||stop.latitude===0||stop.longitude===0).length,
       timeRestrictionCount:groupedStops.filter(stop=>Boolean(String(stop.timeRestriction||'').trim())).length,stops:groupedStops}
   }).sort((a,b)=>a.areaName.localeCompare(b.areaName))
   const unassignedZones=[...new Map(unassignedGroups.map(group=>[group.zoneGroupId,{zoneGroupId:group.zoneGroupId,zoneGroupName:group.zoneGroupName}])).values()].map(zone=>{
     const areas=unassignedGroups.filter(group=>group.zoneGroupId===zone.zoneGroupId),zoneStops=areas.flatMap(group=>group.stops)
-    const defaultVehicleIds=database.prepare('SELECT vehicle_id id FROM zone_default_vehicles WHERE zone_group_id=? ORDER BY position').all(zone.zoneGroupId).map(row=>row.id),defaultVehicleId=defaultVehicleIds.length===1?defaultVehicleIds[0]:null
-    return{...zone,defaultVehicleIds,defaultVehicleId,areaCount:areas.length,customerCount:zoneStops.length,estimatedWeightKg:areas.reduce((sum,group)=>sum+group.estimatedWeightKg,0),weightedCustomerCount:areas.reduce((sum,group)=>sum+group.weightedCustomerCount,0),
+    return{...zone,areaCount:areas.length,customerCount:zoneStops.length,estimatedWeightKg:areas.reduce((sum,group)=>sum+group.estimatedWeightKg,0),weightedCustomerCount:areas.reduce((sum,group)=>sum+group.weightedCustomerCount,0),
       missingGpsCount:areas.reduce((sum,group)=>sum+group.missingGpsCount,0),timeRestrictionCount:areas.reduce((sum,group)=>sum+group.timeRestrictionCount,0),stops:zoneStops,areas}
   }).sort((a,b)=>a.zoneSortOrder-b.zoneSortOrder||String(a.zoneGroupName).localeCompare(String(b.zoneGroupName)))
   const weightedStops=stops.filter(stop=>stop.estimatedWeightKg!=null),missingGpsCount=stops.filter(stop=>!Number.isFinite(stop.latitude)||!Number.isFinite(stop.longitude)||stop.latitude===0||stop.longitude===0).length,timeRestrictionCount=stops.filter(stop=>Boolean(String(stop.timeRestriction||'').trim())).length,missingWeightCount=stops.length-weightedStops.length
   const warningCount=missingGpsCount+missingWeightCount+timeRestrictionCount+vehicleBoards.filter(board=>board.customerCount>0&&!board.driverId).length+vehicleBoards.filter(board=>board.overCapacity).length+specials.filter(x=>x.requestType==='potential_new'&&newCustomerMissing(x).length).length
   const previewSummary={stopCount:stops.length,estimatedWeightKg:weightedStops.reduce((sum,stop)=>sum+Number(stop.estimatedWeightKg),0),weightedStopCount:weightedStops.length,missingWeightCount,missingGpsCount,timeRestrictionCount,unassignedCount:unassignedStops.length,warningCount}
   const approval=database.prepare("SELECT actor approvedBy,created_at approvedAt,reason approvalReason FROM dispatch_approvals WHERE dispatch_day_id=? AND action IN ('approve','reapprove') ORDER BY id DESC LIMIT 1").get(day.id)||{}
-  return {...day,...approval,stops,trips:assignedTrips,vehicleBoards,unassignedStops,unassignedGroups,unassignedZones,specialRequests:specials,deferRequests:listDeferRequestsForDay(day.id,database),warningCount,previewSummary,legacyUnassignedTripCount:allTrips.filter(item=>!item.vehicleId).length}
+  return {...day,...approval,stops,trips:assignedTrips,vehicleBoards,routeBoards,unassignedStops,extraUnassignedStops,unassignedGroups,unassignedZones,specialRequests:specials,deferRequests:listDeferRequestsForDay(day.id,database),warningCount,previewSummary,legacyUnassignedTripCount:allTrips.filter(item=>!item.vehicleId).length}
 }
 
 const resourceOptions=(database)=>({
@@ -391,6 +369,8 @@ export function createTrip(payload,database=defaultDb){
 
 export function updateStop(id,payload,database=defaultDb){
   const before=database.prepare(`SELECT ds.*,dd.dispatch_date FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id JOIN dispatch_days dd ON dd.id=dt.dispatch_day_id WHERE ds.id=?`).get(id);if(!before)throw new Error('Stop not found')
+  const routePlacementChange=payload.tripId!==undefined||payload.vehicleId!==undefined||payload.tripNumber!==undefined||payload.unassigned||payload.date!==undefined||payload.stopSequence!==undefined
+  if(before.route_number&&routePlacementChange)throw new Error(`Route ${before.route_number} 的客户与顺序已固定；请改派整条 Route，不要移动单个客户`)
   if(before.sequence_locked&&(payload.tripId!==undefined||payload.vehicleId!==undefined||payload.tripNumber!==undefined||payload.date!==undefined||payload.stopSequence!==undefined||payload.unassigned)&&payload.sequenceLocked!==false)throw new Error('此客户顺序已锁定，请先解除锁定')
   const targetDate=payload.date?iso(payload.date):before.dispatch_date
   return withImmediateTransaction(database,()=>{
@@ -426,6 +406,7 @@ export function moveRouteStop(id,payload,database=defaultDb){
     const before=database.prepare(`SELECT ds.*,dd.id dispatch_day_id,dd.dispatch_date,dd.status day_status,dd.revision,d.vehicle_id source_vehicle_id,dt.trip_number
       FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id JOIN dispatch_days dd ON dd.id=dt.dispatch_day_id JOIN dispatches d ON d.id=ds.dispatch_id WHERE ds.id=?`).get(id)
     if(!before)throw Object.assign(new Error('Route stop not found.'),{statusCode:404})
+    if(before.route_number)throw Object.assign(new Error(`Route ${before.route_number} 的客户必须整条换车，不能单独移动车站`),{statusCode:409,code:'WHOLE_ROUTE_REQUIRED'})
     if(before.day_status!=='draft')throw Object.assign(new Error('Approved routes cannot be changed. Withdraw Approval first.'),{statusCode:409,code:'ROUTE_APPROVED'})
     if(Number(payload.expectedRevision)!==Number(before.revision))throw Object.assign(new Error('The route was changed by another supervisor. Refresh and try again.'),{statusCode:409,code:'REVISION_CONFLICT'})
     const targetVehicleId=Number(payload.targetVehicleId)
@@ -453,6 +434,39 @@ export function deleteStop(id,{changedBy='Supervisor',reason='Weekly planner rem
 export function updateTrip(id,payload,database=defaultDb){return withImmediateTransaction(database,()=>{const before=database.prepare(`SELECT dt.*,dd.dispatch_date,d.* FROM dispatch_trips dt JOIN dispatch_days dd ON dd.id=dt.dispatch_day_id JOIN dispatches d ON d.id=dt.dispatch_id WHERE dt.id=?`).get(id);if(!before)throw new Error('Trip not found');database.prepare(`UPDATE dispatches SET vehicle_id=?,driver_id=?,assistant_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(payload.vehicleId??before.vehicle_id,payload.driverId??before.driver_id,payload.assistantId??before.assistant_id,before.dispatch_id);if(payload.startLocation){const resolved=resolveStartLocation(payload.startLocation,{driverId:payload.driverId??before.driver_id,canViewEmployeeHome:Boolean(payload.canViewEmployeeHome)},database);writeStartLocationSnapshot(database,before.dispatch_id,resolved)}const commercialChanged=Object.hasOwn(payload,'buyerPayer')||Object.hasOwn(payload,'primaryEndLocation');if(commercialChanged){const buyer=Object.hasOwn(payload,'buyerPayer')?resolveBuyerPayer(payload.buyerPayer,database):(before.buyer_reference_id?{buyerReferenceId:before.buyer_reference_id,buyerCode:before.buyer_code,buyerName:before.buyer_name}:null),endLocation=Object.hasOwn(payload,'primaryEndLocation')?resolvePrimaryEndLocation(payload.primaryEndLocation,database):(before.end_location_reference_id?{endLocationId:before.end_location_id,endLocationReferenceType:before.end_location_reference_type,endLocationReferenceId:before.end_location_reference_id,endLocationName:before.end_location_name,endLocationParentName:before.end_location_parent_name,endAddress:before.end_address,endLatitude:before.end_latitude,endLongitude:before.end_longitude}:null);writeCommercialSnapshot(database,before.dispatch_id,{buyer,endLocation})}database.prepare('UPDATE dispatch_trips SET trip_number=COALESCE(?,trip_number),estimated_weight_kg=COALESCE(?,estimated_weight_kg),updated_at=CURRENT_TIMESTAMP WHERE id=?').run(payload.tripNumber??null,payload.estimatedWeightKg??null,id);const after=database.prepare('SELECT * FROM dispatches WHERE id=?').get(before.dispatch_id),changeType=payload.startLocation?'trip_start_location_updated':commercialChanged?'trip_commercial_route_updated':'trip_updated';invalidateDispatchDay(database,before.dispatch_date,changeType,'dispatch_trip',id,before,{...after,reason:payload.reason||null},payload.changedBy);return database.prepare('SELECT * FROM dispatch_trips WHERE id=?').get(id)})}
 
 export function getStartLocationOptions(payload={},database=defaultDb){return startLocationOptions(payload,database)}
+
+/** Assigns one complete Route to a vehicle for this date only. Route membership and order never change. */
+export function assignRouteVehicle(date,routeNumber,payload={},database=defaultDb){
+  const day=dayByDate(database,iso(date)),route=Number(routeNumber),vehicleId=payload.vehicleId==null?null:Number(payload.vehicleId)
+  if(!day)throw new Error('Dispatch day not found')
+  if(!Number.isInteger(route)||route<1||route>5)throw new Error('Route must be between 1 and 5')
+  const protection=protectedDayReason(database,day);if(protection||day.status!=='draft')throw new Error(`Route assignment is protected: ${protection||day.status}`)
+  if(vehicleId){
+    const vehicle=database.prepare("SELECT id FROM vehicles WHERE id=? AND operational_status IN ('available','active') AND status IN ('available','assigned') AND (is_temporary=0 OR temporary_date=?)").get(vehicleId,day.dispatch_date)
+    if(!vehicle)throw new Error('Vehicle is not available for this date')
+    const conflict=database.prepare('SELECT route_number routeNumber FROM daily_route_assignments WHERE dispatch_day_id=? AND vehicle_id=? AND route_number<>?').get(day.id,vehicleId,route)
+    if(conflict)throw new Error(`This vehicle is already assigned to Route ${conflict.routeNumber}`)
+  }
+  const stops=database.prepare(`SELECT ds.id,ds.dispatch_trip_id tripId FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id
+    WHERE dt.dispatch_day_id=? AND ds.route_number=? AND ds.status<>'cancelled' ORDER BY ds.route_stop_sequence,ds.id`).all(day.id,route)
+  if(!stops.length)throw new Error(`Route ${route} has no customers on this date`)
+  const before=database.prepare('SELECT route_number routeNumber,vehicle_id vehicleId FROM daily_route_assignments WHERE dispatch_day_id=? AND route_number=?').get(day.id,route)||{routeNumber:route,vehicleId:null}
+  database.exec('BEGIN IMMEDIATE')
+  try{
+    const touched=stops.map(stop=>stop.tripId)
+    database.prepare(`UPDATE dispatch_stops SET stop_sequence=-id WHERE id IN (SELECT ds.id FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id WHERE dt.dispatch_day_id=? AND ds.route_number=?)`).run(day.id,route)
+    const target=vehicleId?ensureVehicleTrip(database,day,vehicleId,1):ensureUnassignedTrip(database,day)
+    let sequence=database.prepare('SELECT COALESCE(MAX(stop_sequence),0) value FROM dispatch_stops WHERE dispatch_id=? AND stop_sequence>0').get(target.dispatch_id).value
+    const move=database.prepare('UPDATE dispatch_stops SET dispatch_id=?,dispatch_trip_id=?,stop_sequence=? WHERE id=?')
+    for(const stop of stops){sequence+=1;move.run(target.dispatch_id,target.id,sequence,stop.id)}
+    if(vehicleId)database.prepare(`INSERT INTO daily_route_assignments(dispatch_day_id,route_number,vehicle_id,assigned_by) VALUES(?,?,?,?)
+      ON CONFLICT(dispatch_day_id,route_number) DO UPDATE SET vehicle_id=excluded.vehicle_id,assigned_by=excluded.assigned_by,updated_at=CURRENT_TIMESTAMP`).run(day.id,route,vehicleId,actor(payload.changedBy))
+    else database.prepare('DELETE FROM daily_route_assignments WHERE dispatch_day_id=? AND route_number=?').run(day.id,route)
+    normalizeTripSequences(database,[...touched,target.id])
+    invalidateDispatchDay(database,day.dispatch_date,'daily_route_vehicle_assigned','route',route,before,{routeNumber:route,vehicleId},payload.changedBy)
+    database.exec('COMMIT');return getDispatchDay(date,database)
+  }catch(error){database.exec('ROLLBACK');throw error}
+}
 
 export function assignVehicleDay(date,vehicleId,payload,database=defaultDb){
   const day=dayByDate(database,iso(date));if(!day)throw new Error('Dispatch day not found')
@@ -483,6 +497,8 @@ export function transferVehicleDay(date,sourceVehicleId,payload,database=default
   const targetId=Number(payload.targetVehicleId);if(!targetId||targetId===Number(sourceVehicleId))throw new Error('Please select a different target vehicle')
   const source=database.prepare('SELECT * FROM vehicles WHERE id=?').get(sourceVehicleId),target=database.prepare("SELECT * FROM vehicles WHERE id=? AND operational_status IN ('available','active')").get(targetId)
   if(!source||!target)throw new Error('Source or target vehicle is unavailable')
+  const targetRoute=database.prepare('SELECT route_number routeNumber FROM daily_route_assignments WHERE dispatch_day_id=? AND vehicle_id=?').get(day.id,targetId)
+  if(targetRoute)throw new Error(`Target vehicle is already assigned to Route ${targetRoute.routeNumber}`)
   const sourceTrips=database.prepare(`SELECT dt.*,d.driver_id,d.assistant_id,d.start_location_id,d.start_location_type,d.start_location_reference_type,d.start_location_reference_id,d.start_location_name,d.start_address,d.start_latitude,d.start_longitude,d.buyer_reference_id,d.buyer_code,d.buyer_name,d.end_location_id,d.end_location_reference_type,d.end_location_reference_id,d.end_location_name,d.end_location_parent_name,d.end_address,d.end_latitude,d.end_longitude FROM dispatch_trips dt JOIN dispatches d ON d.id=dt.dispatch_id WHERE dt.dispatch_day_id=? AND d.vehicle_id=? ORDER BY dt.trip_number,dt.id`).all(day.id,sourceVehicleId)
   if(!sourceTrips.length)throw new Error('Source vehicle has no route to transfer')
   const before={sourceVehicleId:Number(sourceVehicleId),targetVehicleId:targetId,tripIds:sourceTrips.map(item=>item.id),driverId:sourceTrips.find(item=>item.driver_id)?.driver_id??null}
@@ -502,6 +518,7 @@ export function transferVehicleDay(date,sourceVehicleId,payload,database=default
       for(const item of assistants)add.run(day.id,targetId,item.employee_id,currentEmploymentPeriod(database,item.employee_id))
       database.prepare('DELETE FROM dispatch_vehicle_assistants WHERE dispatch_day_id=? AND vehicle_id=?').run(day.id,sourceVehicleId)
     }
+    database.prepare('UPDATE daily_route_assignments SET vehicle_id=?,assigned_by=?,updated_at=CURRENT_TIMESTAMP WHERE dispatch_day_id=? AND vehicle_id=?').run(targetId,actor(payload.changedBy),day.id,sourceVehicleId)
     if(payload.setSourceMaintenance){database.prepare("UPDATE vehicles SET operational_status='maintenance',status='maintenance',updated_at=CURRENT_TIMESTAMP WHERE id=?").run(sourceVehicleId);database.prepare("INSERT INTO vehicle_status_history(vehicle_id,previous_status,new_status,reason,changed_by) VALUES(?,?,'maintenance',?,?)").run(sourceVehicleId,source.operational_status,payload.reason||'Vehicle route transferred due to maintenance',actor(payload.changedBy))}
     invalidateDispatchDay(database,day.dispatch_date,'vehicle_route_transferred','vehicle',sourceVehicleId,before,{targetVehicleId:targetId,transferDriver:payload.transferDriver!==false,setSourceMaintenance:Boolean(payload.setSourceMaintenance),reason:payload.reason||null},payload.changedBy)
     database.exec('COMMIT');return getDispatchDay(date,database)

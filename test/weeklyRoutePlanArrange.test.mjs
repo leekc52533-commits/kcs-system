@@ -6,14 +6,14 @@ import {KCS_WEEKLY_ROUTE_PLAN_ARRANGE} from '../server/weeklyRoutePlanArrangeDat
 import {KCS_WEEKLY_ROUTE_PLAN_V49} from '../server/weeklyRoutePlanV49Data.mjs'
 import {USER_CONFIRMED_OVERRIDES} from '../server/weeklyRoutePlanV50Service.mjs'
 import {inspectWeeklyRoutePlan,installWeeklyRoutePlan,validateWeeklyRoutePlan} from '../server/weeklyRoutePlanService.mjs'
-import {generateDay,getDispatchDay} from '../server/dispatchService.mjs'
-import {SUNDAY_ROUTE_ALTERNATION,sundayRoutePlateForDate} from '../server/weeklyRouteAlternation.mjs'
+import {assignRouteVehicle,generateDay,getDispatchDay} from '../server/dispatchService.mjs'
+import {SUNDAY_ROUTE_ALTERNATION} from '../server/weeklyRouteAlternation.mjs'
 
 const counts={QAA4293N:[0,15,19,17,20,18,13],QAB1225B:[0,27,27,24,26,29,25],QM3028M:[4,23,21,22,21,22,24],QM630S:[8,19,22,29,16,19,20],QTY5028:[13,24,23,19,19,19,18]}
 
 test('vehicle-sheet Arrange columns produce the exact 665-stop plan',()=>{
   const checked=validateWeeklyRoutePlan(KCS_WEEKLY_ROUTE_PLAN_ARRANGE)
-  assert.equal(KCS_WEEKLY_ROUTE_PLAN_ARRANGE.sourceName,'KCS_7Day_5Vehicle_Route_Plan(2).xlsx [vehicle sheets Arrange + confirmed Sunday alternation]')
+  assert.equal(KCS_WEEKLY_ROUTE_PLAN_ARRANGE.sourceName,'KCS_7Day_5Vehicle_Route_Plan(2).xlsx [five sheets retained as Route 1–5]')
   assert.equal(checked.entryCount,665);assert.equal(checked.branchCount,317)
   for(const [plate,expected] of Object.entries(counts))assert.deepEqual([0,1,2,3,4,5,6].map(weekday=>checked.entries.filter(row=>row.plate===plate&&row.weekday===weekday).length),expected)
   const monday=checked.entries.filter(row=>row.plate==='QM630S'&&row.weekday===1).sort((a,b)=>a.sequence-b.sequence)
@@ -22,19 +22,20 @@ test('vehicle-sheet Arrange columns produce the exact 665-stop plan',()=>{
   assert.deepEqual(sunday.map(row=>row.branchCode),SUNDAY_ROUTE_ALTERNATION.branchCodes)
 })
 
-test('the complete 13-stop Sunday route alternates weekly between QTY5028 and QAA4293N',()=>{
-  assert.equal(sundayRoutePlateForDate('2026-09-06'),'QTY5028')
-  assert.equal(sundayRoutePlateForDate('2026-09-13'),'QAA4293N')
-  assert.equal(sundayRoutePlateForDate('2026-09-20'),'QTY5028')
+test('the complete 13-stop Sunday Route is independent from its daily vehicle',()=>{
   const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON;'+schemaSql)
   db.prepare("INSERT INTO customers(jodoo_customer_id,name) VALUES('C1','Sunday')").run()
   db.prepare("INSERT INTO branches(jodoo_branch_id,customer_id,branch_name,collection_frequency,assigned_weekdays) VALUES('B10151',1,'First','Once a week','[\"Sunday\"]'),('B10204',1,'Fifth','Once a week','[\"Sunday\"]')").run()
   db.prepare("INSERT INTO branch_schedules(jodoo_schedule_id,branch_id,source_branch_id,frequency,days_of_week) VALUES('S1',1,'B10151','Once a week','Sunday'),('S2',2,'B10204','Once a week','Sunday')").run()
   db.prepare("INSERT INTO vehicles(vehicle_code,registration_number,status,operational_status,is_temporary) VALUES('Lorry 2','QAA4293N','available','active',0),('Lorry 5','QTY5028','available','active',0)").run()
   installWeeklyRoutePlan({name:'Sunday alternating route',sourceName:'confirmed',entries:[[0,'QTY5028',1,1,'B10151','',''],[0,'QTY5028',1,2,'B10204','','']]},{},db)
-  for(const [date,plate] of [['2026-09-06','QTY5028'],['2026-09-13','QAA4293N'],['2026-09-20','QTY5028']]){
+  for(const [date,plate,vehicleId] of [['2026-09-06','QTY5028',2],['2026-09-13','QAA4293N',1]]){
     generateDay({startDate:date},db)
-    const day=getDispatchDay(date,db),board=day.vehicleBoards.find(row=>row.registrationNumber===plate)
+    let day=getDispatchDay(date,db)
+    assert.deepEqual(day.routeBoards[3].stops.map(stop=>stop.branchId),['B10151','B10204'])
+    assert.equal(day.routeBoards[3].vehicleId,null)
+    assignRouteVehicle(date,4,{vehicleId},db)
+    day=getDispatchDay(date,db);const board=day.vehicleBoards.find(row=>row.registrationNumber===plate)
     assert.deepEqual(board.slots.flatMap(slot=>slot.stops).map(stop=>stop.branchId),['B10151','B10204'])
     assert.equal(day.vehicleBoards.filter(row=>row.registrationNumber!==plate).flatMap(row=>row.slots).flatMap(slot=>slot.stops).length,0)
   }
@@ -73,7 +74,11 @@ test('daily refresh keeps non-plan stops but removes them from arranged vehicles
   db.prepare('UPDATE areas SET default_vehicle_id=1 WHERE id=1').run()
   installWeeklyRoutePlan({name:'Arrange test',sourceName:'test.xlsx',entries:[[1,'ABC1',1,1,'B1','Zone','North']]},{},db)
   generateDay({startDate:'2026-09-07'},db)
-  const day=getDispatchDay('2026-09-07',db),vehicle=day.vehicleBoards.find(row=>row.registrationNumber==='ABC1')
+  let day=getDispatchDay('2026-09-07',db),vehicle=day.vehicleBoards.find(row=>row.registrationNumber==='ABC1')
+  assert.deepEqual(day.routeBoards[0].stops.map(stop=>stop.branchId),['B1'])
+  assert.equal(vehicle.customerCount,0)
+  assignRouteVehicle('2026-09-07',1,{vehicleId:1},db)
+  day=getDispatchDay('2026-09-07',db);vehicle=day.vehicleBoards.find(row=>row.registrationNumber==='ABC1')
   assert.deepEqual(vehicle.slots.flatMap(slot=>slot.stops).map(stop=>stop.branchId),['B1'])
   assert.deepEqual(day.unassignedStops.map(stop=>stop.branchId),['BX'])
 })
