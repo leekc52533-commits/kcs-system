@@ -13,7 +13,9 @@ export const USER_CONFIRMED_MOVES=[
   ['4:B10049','3:B10049'],['4:B10113','3:B10113'],['4:B10074','3:B10074']
 ]
 export const USER_CONFIRMED_ADDITIONS=new Set(['0:B10204','2:B10137','5:B10137','2:B10498','5:B10498','2:B10499','5:B10499'])
-const key=(weekday,branchCode)=>`${weekday}:${String(branchCode).trim().toUpperCase()}`
+const normalizedBranchCode=value=>{const code=String(value??'').trim().toUpperCase().replace(/\s+/g,'');return /^\d+$/.test(code)?`B${code}`:code}
+const branchAliases=value=>{const code=normalizedBranchCode(value);return [code,/^B\d+$/.test(code)?code.slice(1):code]}
+const key=(weekday,branchCode)=>`${weekday}:${normalizedBranchCode(branchCode)}`
 const snapshot=(db,table)=>JSON.stringify(db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all())
 const protectedTables=['dispatch_days','dispatches','dispatch_trips','dispatch_stops','stop_step_records','stop_documents','purchase_bills','purchase_payment_proofs','unloading_weight_records','cash_float_transactions','admin_expense_records']
 
@@ -21,7 +23,7 @@ export function reconcileRouteRows(canonical,candidates,{confirmed=true}={}){
   const byKey=new Map()
   for(const raw of candidates){
     if(raw.heading)continue
-    const item={...raw,plate:normalizePlate(raw.plate),branchCode:String(raw.branchCode).trim().toUpperCase()}
+    const item={...raw,plate:normalizePlate(raw.plate),branchCode:normalizedBranchCode(raw.branchCode)}
     const k=key(item.weekday,item.branchCode),list=byKey.get(k)||[]
     if(!list.some(x=>x.plate===item.plate&&x.sequence===item.sequence))list.push(item)
     byKey.set(k,list)
@@ -52,7 +54,7 @@ export function reconcileRouteRows(canonical,candidates,{confirmed=true}={}){
   const resultKeys=new Set(rows.map(x=>key(x.weekday,x.branchCode)))
   for(const additionKey of confirmedAdditions)if(!resultKeys.has(additionKey)){
     const chosen=(byKey.get(additionKey)||[])[0];if(!chosen)throw new Error(`Confirmed addition candidate missing: ${additionKey}`)
-    const template=canonical.find(x=>x.branchCode===chosen.branchCode)
+    const template=canonical.find(x=>normalizedBranchCode(x.branchCode)===normalizedBranchCode(chosen.branchCode))
     rows.push({...chosen,stopId:null,branchId:template?.branchId||null,zoneName:null,areaName:null})
     report.additions.push({key:additionKey,plate:chosen.plate,sequence:chosen.sequence})
   }
@@ -93,8 +95,8 @@ export function applyWeeklyRoutePlanV50(candidates,{apply=false}={},db){
       for(const row of rows)if(row.stopId)update.run(row.weekday,row.plate,row.sequence,row.stopId)
     }
     if(inserted){
-      const findBranch=db.prepare("SELECT id FROM branches WHERE UPPER(REPLACE(jodoo_branch_id,' ',''))=?"),insert=db.prepare('INSERT INTO weekly_route_plan_stops(plan_id,weekday,branch_id,vehicle_registration_number,trip_number,stop_sequence,zone_name_snapshot,area_name_snapshot) VALUES(?,?,?,?,?,?,?,?)')
-      for(const row of rows)if(!row.stopId){const branchId=row.branchId||findBranch.get(row.branchCode)?.id;if(!branchId)throw new Error(`Confirmed addition Branch ID missing: ${row.branchCode}`);insert.run(plan.id,row.weekday,branchId,row.plate,row.trip,row.sequence,row.zoneName,row.areaName)}
+      const findBranches=db.prepare("SELECT id FROM branches WHERE UPPER(REPLACE(jodoo_branch_id,' ','')) IN (?,?)"),insert=db.prepare('INSERT INTO weekly_route_plan_stops(plan_id,weekday,branch_id,vehicle_registration_number,trip_number,stop_sequence,zone_name_snapshot,area_name_snapshot) VALUES(?,?,?,?,?,?,?,?)')
+      for(const row of rows)if(!row.stopId){const matches=row.branchId?[]:findBranches.all(...branchAliases(row.branchCode)),branchId=row.branchId||(matches.length===1?matches[0].id:null);if(!branchId)throw new Error(matches.length>1?`Confirmed addition Branch ID is ambiguous: ${row.branchCode}`:`Confirmed addition Branch ID missing: ${row.branchCode}`);insert.run(plan.id,row.weekday,branchId,row.plate,row.trip,row.sequence,row.zoneName,row.areaName)}
     }
     if(Object.entries(beforeProtected).some(([t,value])=>snapshot(db,t)!==value))throw new Error('Protected non-route data changed')
     if(db.prepare('PRAGMA foreign_key_check').get())throw new Error('Foreign-key validation failed')
