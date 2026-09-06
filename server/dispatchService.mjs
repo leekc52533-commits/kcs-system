@@ -440,7 +440,7 @@ export function assignRouteVehicle(date,routeNumber,payload={},database=defaultD
   const day=dayByDate(database,iso(date)),route=Number(routeNumber),vehicleId=payload.vehicleId==null?null:Number(payload.vehicleId)
   if(!day)throw new Error('Dispatch day not found')
   if(!Number.isInteger(route)||route<1||route>5)throw new Error('Route must be between 1 and 5')
-  const protection=protectedDayReason(database,day);if(protection||day.status!=='draft')throw new Error(`Route assignment is protected: ${protection||day.status}`)
+  const protection=protectedDayReason(database,day);if(protection||!['draft','reapproval_required'].includes(day.status))throw new Error(`Route assignment is protected: ${protection||day.status}`)
   if(vehicleId){
     const vehicle=database.prepare("SELECT id FROM vehicles WHERE id=? AND operational_status IN ('available','active') AND status IN ('available','assigned') AND (is_temporary=0 OR temporary_date=?)").get(vehicleId,day.dispatch_date)
     if(!vehicle)throw new Error('Vehicle is not available for this date')
