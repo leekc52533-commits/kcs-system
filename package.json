@@ -65,7 +65,8 @@
     "preview:customer-product-pricing": "node scripts/apply-customer-product-pricing-20260818.mjs",
     "apply:customer-product-pricing": "node scripts/apply-customer-product-pricing-20260818.mjs --apply",
     "preview:assign-product-customers": "node scripts/assign-active-customers-to-product.mjs",
-    "apply:assign-product-customers": "node scripts/assign-active-customers-to-product.mjs --apply"
+    "apply:assign-product-customers": "node scripts/assign-active-customers-to-product.mjs --apply",
+    "apply:weekly-route-plan:v50": "node scripts/apply-weekly-route-plan-v50.mjs"
   },
   "dependencies": {
     "exceljs": "^4.4.0",
