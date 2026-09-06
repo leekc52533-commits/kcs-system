@@ -79,10 +79,13 @@ export function installWeeklyRoutePlan(plan=KCS_WEEKLY_ROUTE_PLAN_V49,{changedBy
   }
   database.exec('BEGIN IMMEDIATE')
   try{
+    const previousNames=new Map(database.prepare(`SELECT d.route_number routeNumber,d.display_name displayName FROM weekly_route_definitions d JOIN weekly_route_plans p ON p.id=d.plan_id WHERE p.is_active=1`).all().map(row=>[row.routeNumber,row.displayName]))
     database.prepare('UPDATE weekly_route_plans SET is_active=0,updated_at=CURRENT_TIMESTAMP WHERE is_active=1').run()
     const created=database.prepare('INSERT INTO weekly_route_plans(name,source_name,source_start_date,created_by) VALUES(?,?,?,?)').run(checked.name,checked.sourceName,checked.sourceStartDate,clean(changedBy)||'Owner Admin')
     const planId=Number(created.lastInsertRowid),insert=database.prepare('INSERT INTO weekly_route_plan_stops(plan_id,weekday,branch_id,vehicle_registration_number,trip_number,stop_sequence,zone_name_snapshot,area_name_snapshot,route_number) VALUES(?,?,?,?,?,?,?,?,?)')
     for(const item of resolved)insert.run(planId,item.weekday,item.branchId,item.plate,item.trip,item.sequence,item.zoneName,item.areaName,item.routeNumber)
+    const insertDefinition=database.prepare('INSERT INTO weekly_route_definitions(plan_id,route_number,display_name,updated_by) VALUES(?,?,?,?)')
+    for(let routeNumber=1;routeNumber<=5;routeNumber+=1)insertDefinition.run(planId,routeNumber,previousNames.get(routeNumber)||`Route ${routeNumber}`,clean(changedBy)||'Owner Admin')
     database.prepare("INSERT INTO master_change_history(entity_type,entity_id,change_type,new_value,after_json,reason,changed_by) VALUES('weekly_route_plan',?,'INSTALL',?,?,?,?)").run(String(planId),checked.name,JSON.stringify({sourceName:checked.sourceName,entryCount:resolved.length,branchCount:checked.branchCount,vehiclePlates:checked.vehiclePlates}),'Approved Excel route plan',clean(changedBy)||'Owner Admin')
     if(database.prepare('PRAGMA foreign_key_check').get())throw new Error('Foreign-key validation failed after installing route plan')
     database.exec('COMMIT')
