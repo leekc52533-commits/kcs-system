@@ -22,7 +22,7 @@ test('reconciliation deterministically applies unique candidates and audits conf
 
 import {DatabaseSync} from 'node:sqlite'
 import {schemaSql} from '../server/schema.mjs'
-import {installWeeklyRoutePlan} from '../server/weeklyRoutePlanService.mjs'
+import {inspectWeeklyRoutePlan,installWeeklyRoutePlan} from '../server/weeklyRoutePlanService.mjs'
 import {KCS_WEEKLY_ROUTE_PLAN_V49} from '../server/weeklyRoutePlanV49Data.mjs'
 import {applyWeeklyRoutePlanV50} from '../server/weeklyRoutePlanV50Service.mjs'
 
@@ -58,6 +58,7 @@ test('complete Excel transcription and reconciliation output are stable',()=>{
   assert.deepEqual(Object.fromEntries([['B10242',572],['B10373',574],['B10438',576],['B10071',204],['B10058',206],['B10320',208],['B10049',209],['B10113',218],['B10074',219]].map(([branch])=>[branch,rows.find(x=>x.branch===branch&&((['B10242','B10373','B10438'].includes(branch)&&x.weekday===2)||x.weekday===3))?.id])),{B10242:572,B10373:574,B10438:576,B10071:204,B10058:206,B10320:208,B10049:209,B10113:218,B10074:219})
   assert.equal(rows.filter(x=>x.id>691).length,7)
   const second=applyWeeklyRoutePlanV50(KCS_WEEKLY_ROUTE_PLAN_V50_CANDIDATES,{apply:true},db);assert.equal(second.noOp,true);assert.equal(second.changed,0);assert.equal(second.inserted,0);assert.equal(second.moved,0)
+  const restored=installWeeklyRoutePlan(KCS_WEEKLY_ROUTE_PLAN_V49,{changedBy:'Owner Admin'},db);assert.equal(restored.noOp,false);assert.equal(inspectWeeklyRoutePlan(KCS_WEEKLY_ROUTE_PLAN_V49,db).matchesExact,true);assert.equal(db.prepare('SELECT COUNT(*) n FROM weekly_route_plan_stops s JOIN weekly_route_plans p ON p.id=s.plan_id WHERE p.is_active=1').get().n,691);assert.equal(installWeeklyRoutePlan(KCS_WEEKLY_ROUTE_PLAN_V49,{},db).noOp,true)
 })
 
 
