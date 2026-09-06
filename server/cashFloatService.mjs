@@ -84,7 +84,7 @@ function addTransaction(employeeId,type,signedAmount,payload,context,database,up
 }
 
 export function addCashFloatTopUp(employeeId,payload={},context={},database=defaultDb,options={}){const channel=String(payload.paymentChannel||'');if(!['Cash','TNG','Bank Transfer'].includes(channel))throw fail('Select Cash, TNG or Bank Transfer.');return addTransaction(employeeId,'top_up',positiveCents(payload.amount),{...payload,paymentChannel:channel},context,database,options.uploadsRoot)}
-export function addCashFloatExpense(employeeId,payload={},context={},database=defaultDb,options={}){const description=String(payload.description||'').trim();if(!description)throw fail('Expense description is required.');return addTransaction(employeeId,'expense',-positiveCents(payload.amount),{...payload,description,paymentChannel:'System'},context,database,options.uploadsRoot)}
+export function addCashFloatExpense(employeeId,payload={},context={},database=defaultDb,options={}){const description=String(payload.description||'').trim();if(!description)throw fail('Expense description is required.');if(!payload.proof)throw fail('Receipt photo is required.','PHOTO_REQUIRED');return addTransaction(employeeId,'expense',-positiveCents(payload.amount),{...payload,description,paymentChannel:'System'},context,database,options.uploadsRoot)}
 
 export const ADMIN_PAYMENT_METHODS=['Cash','Bank Transfer','TNG','Card']
 export function addAdminExpense(payload={},context={},database=defaultDb,options={}){
@@ -92,6 +92,7 @@ export function addAdminExpense(payload={},context={},database=defaultDb,options
   if(![...EXPENSE_CATEGORIES,'Other'].includes(category))throw fail('Select an Expense category.')
   if(!description)throw fail('Expense description is required.')
   if(!ADMIN_PAYMENT_METHODS.includes(paymentMethod))throw fail('Select Cash, Bank Transfer, TNG or Card.')
+  if(!payload.proof)throw fail('Receipt photo is required.','PHOTO_REQUIRED')
   const receipt=saveImage(payload.proof,options.uploadsRoot),when=nowKuching(context.now),actorId=Number(context.employeeId)||null,actorName=String(context.employeeName||'Office'),reference=String(payload.referenceNumber||'').trim()||null
   try{const result=database.prepare(`INSERT INTO admin_expense_records(service_date,category,description,amount_cents,payment_method,reference_number,receipt_storage_key,receipt_original_name,receipt_content_type,receipt_size_bytes,created_by_employee_id,created_by_name_snapshot,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(validDate(payload.serviceDate),category,description,positiveCents(payload.amount),paymentMethod,reference,receipt.storageKey||null,receipt.originalName||null,receipt.contentType||null,receipt.sizeBytes||null,actorId,actorName,when);return{recordKey:`admin-${Number(result.lastInsertRowid)}`,amountCents:positiveCents(payload.amount)}}catch(error){if(receipt.absolute&&fs.existsSync(receipt.absolute))fs.unlinkSync(receipt.absolute);throw error}
 }
