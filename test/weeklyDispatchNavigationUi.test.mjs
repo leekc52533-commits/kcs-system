@@ -28,7 +28,14 @@ test('Special request action appears once beside the draft update action',()=>{
 
 test('Dispatch navigation is sticky below the global header and remains usable on narrow screens',()=>{
   assert.match(appCss,/\.topbar\{[^}]*position:sticky;[^}]*top:0;[^}]*z-index:[1-9][0-9]*;[^}]*box-shadow:/)
+  assert.match(hub,/workspace-hub--pinned/)
+  assert.match(hubCss,/\.workspace-hub--pinned\{padding-top:0\}/)
   assert.match(hubCss,/\.workspace-tabs--sticky\{[^}]*position:sticky;[^}]*top:76px;[^}]*z-index:[1-9][0-9]*;[^}]*background:[^;}]+;[^}]*box-shadow:/)
   assert.match(hubCss,/@media\(max-width:600px\)\{\.workspace-tabs--sticky\{[^}]*display:flex;[^}]*overflow-x:auto/)
   assert.match(hubCss,/\.workspace-tabs--sticky>button\{[^}]*white-space:nowrap/)
+})
+
+test('Dispatch day keeps its date and status but omits the large metric summary block',()=>{
+  assert.doesNotMatch(planner,/className="day-metrics preview-metrics"/)
+  assert.match(planner,/labels\[day\.status\]\|\|day\.status/)
 })
