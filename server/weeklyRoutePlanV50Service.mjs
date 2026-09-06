@@ -61,7 +61,7 @@ export function reconcileRouteRows(canonical,candidates,{confirmed=true}={}){
   for(const [k,choices] of byKey)if(!canonicalKeys.has(k)&&!moveDestinations.has(k)&&!confirmedAdditions.has(k))for(const choice of choices)report.extras.push({key:k,plate:choice.plate,sequence:choice.sequence})
   report.sequenceAdjustments=[]
   for(const weekday of [0,1,2,3,4,5,6])for(const plate of Object.values(ROUTE_PLATES)){
-    const group=rows.filter(x=>x.weekday===weekday&&x.plate===plate).sort((a,b)=>a.branchCode.localeCompare(b.branchCode)),used=new Set()
+    const group=rows.filter(x=>x.weekday===weekday&&x.plate===plate).sort((a,b)=>normalizedBranchCode(a.branchCode).localeCompare(normalizedBranchCode(b.branchCode))),used=new Set()
     for(const row of group){let sequence=row.sequence;while(used.has(`${row.trip}:${sequence}`))sequence++;if(sequence!==row.sequence){report.sequenceAdjustments.push({key:key(row.weekday,row.branchCode),from:row.sequence,to:sequence});row.sequence=sequence}used.add(`${row.trip}:${sequence}`)}
   }
   return{rows,report}
