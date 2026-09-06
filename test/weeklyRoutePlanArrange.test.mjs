@@ -12,6 +12,7 @@ const counts={QAA4293N:[1,15,19,17,20,18,13],QAB1225B:[0,27,27,24,26,29,25],QM30
 
 test('vehicle-sheet Arrange columns produce the exact 665-stop plan',()=>{
   const checked=validateWeeklyRoutePlan(KCS_WEEKLY_ROUTE_PLAN_ARRANGE)
+  assert.equal(KCS_WEEKLY_ROUTE_PLAN_ARRANGE.sourceName,'KCS_7Day_5Vehicle_Route_Plan(2).xlsx [vehicle sheets Arrange]')
   assert.equal(checked.entryCount,665);assert.equal(checked.branchCount,317)
   for(const [plate,expected] of Object.entries(counts))assert.deepEqual([0,1,2,3,4,5,6].map(weekday=>checked.entries.filter(row=>row.plate===plate&&row.weekday===weekday).length),expected)
   const monday=checked.entries.filter(row=>row.plate==='QM630S'&&row.weekday===1).sort((a,b)=>a.sequence-b.sequence)
