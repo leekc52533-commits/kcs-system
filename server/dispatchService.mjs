@@ -582,8 +582,8 @@ export function saveDraftAdjustments(payload={},database=defaultDb){
 
 const driverRouteForbidden=message=>{const error=new Error(message);error.statusCode=403;error.code='PERMISSION_DENIED';return error}
 
-/** Read-only, session-scoped view of the authenticated employee's approved route for today. */
-export function driverToday({employeeId,role,today=kuchingDate()}={},database=defaultDb){
+/** Read-only, session-scoped view of an authenticated driver's or crew member's approved route. */
+function driverRouteForDate({employeeId,role,date,preview=false},database){
   const tripColumns=new Set(database.prepare('PRAGMA table_info(dispatch_trips)').all().map(row=>row.name)),stopColumns=new Set(database.prepare('PRAGMA table_info(dispatch_stops)').all().map(row=>row.name)),hasCompletion=tripColumns.has('completed_at')&&stopColumns.has('completion_outcome'),tripCompletion=hasCompletion?',dt.completed_at completedAt':'',stopCompletion=hasCompletion?',ds.completion_outcome completionOutcome,ds.completed_at completedAt,EXISTS(SELECT 1 FROM purchase_bills pb WHERE pb.dispatch_stop_id=ds.id AND pb.status=\'issued\') billCreated,(SELECT pb.bill_number FROM purchase_bills pb WHERE pb.dispatch_stop_id=ds.id AND pb.status=\'issued\' LIMIT 1) billNumber,(SELECT pb.payment_method FROM purchase_bills pb WHERE pb.dispatch_stop_id=ds.id AND pb.status=\'issued\' LIMIT 1) billPaymentMethod,EXISTS(SELECT 1 FROM purchase_payment_proofs pp JOIN purchase_bills pb ON pb.id=pp.purchase_bill_id WHERE pb.dispatch_stop_id=ds.id) paymentProofUploaded':''
   const employee=database.prepare(`SELECT e.id,e.job_role jobRole,e.employment_status employmentStatus,e.is_active isActive,
     EXISTS(SELECT 1 FROM employee_job_roles r WHERE r.employee_id=e.id AND r.role='Driver' AND r.is_active=1) hasDriverRole,
@@ -594,9 +594,10 @@ export function driverToday({employeeId,role,today=kuchingDate()}={},database=de
   const isDriver=accountRole==='driver'&&(jobRole==='driver'||Boolean(employee.hasDriverRole))
   const isCrew=accountRole==='crew'&&(['assistant','crew','attendant / crew'].includes(jobRole)||Boolean(employee.hasCrewRole))
   if(!isDriver&&!isCrew)throw driverRouteForbidden('You do not have permission to view a driver route.')
-  const date=iso(today),weekday=new Date(`${date}T00:00:00Z`).toLocaleDateString('en-US',{weekday:'long',timeZone:'UTC'}),day=dayByDate(database,date)
-  const empty=reason=>({date,weekday,status:day?.status||null,approved:false,routeAvailable:false,reason,trips:[],vehicles:[],totalStops:0,completedStops:0,pendingStops:0})
-  if(!day||!['approved','in_progress'].includes(day.status))return empty('NO_APPROVED_ROUTE')
+  date=iso(date)
+  const weekday=new Date(`${date}T00:00:00Z`).toLocaleDateString('en-US',{weekday:'long',timeZone:'UTC'}),day=dayByDate(database,date)
+  const empty=reason=>({date,weekday,preview,status:day?.status||null,approved:false,routeAvailable:false,reason,trips:[],vehicles:[],totalStops:0,completedStops:0,pendingStops:0})
+  if(!day||(preview?day.status!=='approved':!['approved','in_progress'].includes(day.status)))return empty('NO_APPROVED_ROUTE')
   const assignment=isDriver?'d.driver_id=?':`(d.assistant_id=? OR EXISTS(SELECT 1 FROM dispatch_vehicle_assistants dva WHERE dva.dispatch_day_id=dt.dispatch_day_id AND dva.vehicle_id=d.vehicle_id AND dva.employee_id=?))`
   const params=isDriver?[day.id,Number(employeeId)]:[day.id,Number(employeeId),Number(employeeId)]
   const trips=database.prepare(`SELECT dt.id,dt.trip_number tripNumber,dt.execution_status executionStatus,dt.started_at startedAt${tripCompletion},d.vehicle_id vehicleId,v.vehicle_code vehicleCode,v.vehicle_name vehicleName,v.registration_number registrationNumber
@@ -612,7 +613,17 @@ export function driverToday({employeeId,role,today=kuchingDate()}={},database=de
       ORDER BY ds.stop_sequence,ds.id`).all(trip.id).map(stop=>({...stop,deferred:Boolean(stop.deferred),gpsAvailable:Boolean(stop.gpsAvailable),billCreated:Boolean(stop.billCreated),paymentProofUploaded:Boolean(stop.paymentProofUploaded)}))})).map((trip,index,trips)=>{const current=trip.executionStatus==='in_progress'?trip.stops.find(stop=>!stop.deferred&&!['completed','cancelled'].includes(stop.status)):null,earlierOpen=trips.some(other=>other.vehicleId===trip.vehicleId&&other.tripNumber<trip.tripNumber&&other.stops.length&&other.executionStatus!=='completed'),finished=trip.stops.filter(stop=>stop.status==='completed').length;return{...trip,completedCount:finished,totalCount:trip.stops.length,canComplete:trip.executionStatus==='in_progress'&&finished===trip.stops.length,canStart:['approved','in_progress'].includes(day.status)&&trip.executionStatus==='not_started'&&!earlierOpen,currentStopId:current?.id||null,stops:trip.stops.map(stop=>({...stop,canArrive:Boolean((stop.deferred||current&&current.id===stop.id)&&!stop.arrivedAt),canFinish:Boolean((stop.deferred||current&&current.id===stop.id)&&stop.arrivedAt&&stop.status==='active'&&stop.deferApprovalStatus!=='pending')}))}})
   if(!trips.length)return empty('NO_VEHICLE_ASSIGNED')
   const stops=trips.flatMap(trip=>trip.stops),vehicles=[...new Map(trips.map(trip=>[trip.vehicleId,{id:trip.vehicleId,vehicleCode:trip.vehicleCode,vehicleName:trip.vehicleName,registrationNumber:trip.registrationNumber}])).values()]
-  return{date,weekday,status:day.status,approved:true,routeAvailable:true,jodooUrl:String(process.env.JODOO_FORM_URL||'https://www.jodoo.com/'),trips,vehicles,totalStops:stops.length,completedStops:stops.filter(stop=>stop.status==='completed').length,pendingStops:stops.filter(stop=>stop.status!=='completed').length}
+  return{date,weekday,preview,status:day.status,approved:true,routeAvailable:true,jodooUrl:String(process.env.JODOO_FORM_URL||'https://www.jodoo.com/'),trips,vehicles,totalStops:stops.length,completedStops:stops.filter(stop=>stop.status==='completed').length,pendingStops:stops.filter(stop=>stop.status!=='completed').length}
+}
+
+/** Backwards-compatible today endpoint service. The date is server-derived in production. */
+export function driverToday({employeeId,role,today=kuchingDate()}={},database=defaultDb){
+  return driverRouteForDate({employeeId,role,date:today,preview:false},database)
+}
+
+/** Tomorrow is deliberately server-derived and cannot accept a client-selected date. */
+export function driverTomorrow({employeeId,role,now=new Date()}={},database=defaultDb){
+  return driverRouteForDate({employeeId,role,date:addCalendarDays(kuchingDate(now),1),preview:true},database)
 }
 
 export function createScheduleException(payload,database=defaultDb){

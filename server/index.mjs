@@ -7,7 +7,7 @@ import { db, databasePath, getSystemStatus, uploadsDir } from './database.mjs'
 import { getJodooIntegrationStatus, recordJodooWebhook, verifyJodooWebhookToken } from './jodoo.mjs'
 import { commitImport, previewImport } from './importService.mjs'
 import { customerBranchDetail, customerBranches, dashboardSummary, dataQualitySummary, importBatches, importErrors, schedules } from './queryService.mjs'
-import { approveDay, assignAreaStops, assignVehicleDay, createScheduleException, createStop, createTrip, dailyApprovalCheck, deleteStop, driverToday, generateDay, generateWeek, getDispatchDay, getDispatchWeek, getStartLocationOptions, moveRouteStop, promisedCheck, publishDay, reopenDay, saveDraftAdjustments, transferVehicleDay, updateStop, updateTrip } from './dispatchService.mjs'
+import { approveDay, assignAreaStops, assignVehicleDay, createScheduleException, createStop, createTrip, dailyApprovalCheck, deleteStop, driverToday, driverTomorrow, generateDay, generateWeek, getDispatchDay, getDispatchWeek, getStartLocationOptions, moveRouteStop, promisedCheck, publishDay, reopenDay, saveDraftAdjustments, transferVehicleDay, updateStop, updateTrip } from './dispatchService.mjs'
 import {setDefaultVehicle,setZoneDefaultVehicles} from './defaultVehicleService.mjs'
 import {getRouteTemplate,saveRouteTemplate} from './routeTemplateService.mjs'
 import {analyzeArea,analyzeZoneAreas,confirmAreaRefinement,getAreaRefinement,updateAreaRefinement} from './areaRefinementService.mjs'
@@ -110,6 +110,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'GET' && url.pathname === '/api/auth/audit') return sendJson(response,200,{items:listAuthAudit(Object.fromEntries(url.searchParams))})
     if (request.method === 'GET' && url.pathname === '/api/system/network') return sendJson(response,200,{host,apiPort:port,lanUrls:networkUrls(),httpsRequiredForGps:true})
     if (request.method === 'GET' && url.pathname === '/api/mobile/today') return sendJson(response,200,{...driverToday({employeeId:session.employeeId,role:session.role}),arrivalTestMode:isArrivalTestMode()})
+    if (request.method === 'GET' && url.pathname === '/api/mobile/tomorrow') return sendJson(response,200,driverTomorrow({employeeId:session.employeeId,role:session.role}))
     if (request.method === 'GET' && url.pathname === '/api/mobile/unloading-weights/context') return sendJson(response,200,mobileWeightContext({employeeId:session.employeeId,role:session.role}))
     if (request.method === 'POST' && url.pathname === '/api/mobile/unloading-weights/recognize') return sendJson(response,201,await recognizeUnloadingWeight((await readJson(request)).payload,{employeeId:session.employeeId,role:session.role},db,{uploadsRoot:uploadsDir}))
     if (request.method === 'POST' && /^\/api\/mobile\/unloading-weights\/\d+\/confirm$/.test(url.pathname)) return sendJson(response,200,confirmUnloadingWeight(Number(url.pathname.split('/')[4]),(await readJson(request)).payload,{employeeId:session.employeeId,role:session.role}))
