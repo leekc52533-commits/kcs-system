@@ -5,7 +5,7 @@ import {schemaSql} from '../server/schema.mjs'
 import {applyV49Migration} from '../server/migrationV49.mjs'
 import {inspectWeeklyRoutePlan,installWeeklyRoutePlan,validateWeeklyRoutePlan} from '../server/weeklyRoutePlanService.mjs'
 import {KCS_WEEKLY_ROUTE_PLAN_V49} from '../server/weeklyRoutePlanV49Data.mjs'
-import {generateDay,getDispatchDay} from '../server/dispatchService.mjs'
+import {assignRouteVehicle,generateDay,getDispatchDay} from '../server/dispatchService.mjs'
 
 const smallPlan={name:'Test weekday plan',sourceName:'test.xlsx',sourceStartDate:'2026-09-07',entries:[[1,'ABC1',1,2,'B1','Zone','North'],[1,'QM3028M',1,1,'B2','Zone','North']]}
 
@@ -56,16 +56,17 @@ test('same-size route drift is replaced instead of incorrectly returning no-op',
   assert.equal(installWeeklyRoutePlan(KCS_WEEKLY_ROUTE_PLAN_V49,{},db).noOp,true)
 })
 
-test('weekday plan assigns an available plate and holds a missing plate unassigned until added',()=>{
+test('weekday plan keeps Routes unassigned until each whole Route receives a daily vehicle',()=>{
   const db=fixture(),installed=installWeeklyRoutePlan(smallPlan,{changedBy:'Owner'},db)
   assert.deepEqual(installed.pendingVehiclePlates,['QM3028M'])
   generateDay({startDate:'2026-09-07'},db)
   let day=getDispatchDay('2026-09-07',db)
-  assert.equal(day.stops.find(stop=>stop.branchId==='B1').vehicleId,1)
-  assert.equal(day.stops.find(stop=>stop.branchId==='B1').stopSequence,1)
+  assert.equal(day.stops.find(stop=>stop.branchId==='B1').vehicleId,null)
   assert.equal(day.stops.find(stop=>stop.branchId==='B2').vehicleId,null)
+  assignRouteVehicle('2026-09-07',1,{vehicleId:1},db)
+  assert.equal(getDispatchDay('2026-09-07',db).stops.find(stop=>stop.branchId==='B1').vehicleId,1)
   db.prepare("INSERT INTO vehicles(vehicle_code,registration_number,status,operational_status,is_temporary) VALUES('Truck 2','QM 3028 M','available','active',0)").run()
-  generateDay({startDate:'2026-09-07'},db)
+  assignRouteVehicle('2026-09-07',3,{vehicleId:2},db)
   day=getDispatchDay('2026-09-07',db)
   assert.equal(day.stops.find(stop=>stop.branchId==='B2').vehicleId,2)
   assert.equal(day.stops.find(stop=>stop.branchId==='B2').stopSequence,1)

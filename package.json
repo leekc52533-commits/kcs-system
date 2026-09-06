@@ -59,6 +59,7 @@
     "migrate:v48": "node scripts/migrate-v48.mjs",
     "migrate:v49": "node scripts/migrate-v49.mjs",
     "migrate:v50": "node scripts/migrate-v50.mjs",
+    "migrate:v51": "node scripts/migrate-v51.mjs",
     "apply:weekly-route-plan:v49": "node scripts/apply-weekly-route-plan-v49.mjs",
     "impact:v42": "node scripts/v42-impact-report.mjs",
     "deploy:v42:check": "node scripts/cloud-preflight.mjs",

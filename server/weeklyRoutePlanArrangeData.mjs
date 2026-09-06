@@ -49,8 +49,8 @@ if(entries.length!==665)throw new Error(`Arrange route plan must contain 665 row
 if(new Set(entries.map(row=>`${row[0]}:${row[4]}`)).size!==entries.length)throw new Error('Arrange route plan contains duplicate branch/weekday rows')
 
 export const KCS_WEEKLY_ROUTE_PLAN_ARRANGE=Object.freeze({
-  name:'KCS 7-Day / 5-Vehicle Route Plan — Arrange',
-  sourceName:'KCS_7Day_5Vehicle_Route_Plan(2).xlsx [vehicle sheets Arrange + confirmed Sunday alternation]',
+  name:'KCS 7-Day / Route 1–5 Plan — Arrange',
+  sourceName:'KCS_7Day_5Vehicle_Route_Plan(2).xlsx [five sheets retained as Route 1–5]',
   sourceStartDate:'2026-08-26',
   entries:Object.freeze(entries)
 })
