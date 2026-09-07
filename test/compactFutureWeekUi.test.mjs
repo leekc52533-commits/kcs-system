@@ -32,6 +32,15 @@ test('temporary customers use Route assignment and custom dropdowns close outsid
   assert.doesNotMatch(ui,/function VehiclePicker/)
 })
 
+test('dispatch view keeps the five Route overview cards without the old heading',()=>{
+  const ui=readFileSync(new URL('../src/WeeklyDispatchPage.jsx',import.meta.url),'utf8')
+  assert.match(ui,/function RouteDispatchOverview/)
+  assert.match(ui,/<RouteDispatchOverview routes=\{day\.routeBoards\|\|\[\]\}\/>/)
+  assert.match(ui,/route-overview-card/)
+  assert.doesNotMatch(ui,/<strong>Route 1–5<\/strong>/)
+  assert.doesNotMatch(ui,/每条 Route 分别分配车辆、分别批准/)
+})
+
 test('approved days use a distinct style and manual adjustment panel is removed',()=>{
   const ui=readFileSync(new URL('../src/WeeklyDispatchPage.jsx',import.meta.url),'utf8')
   const css=readFileSync(new URL('../src/Planner.css',import.meta.url),'utf8')
