@@ -34,10 +34,11 @@ test('temporary customers use Route assignment and custom dropdowns close outsid
   assert.doesNotMatch(ui,/function VehiclePicker/)
 })
 
-test('Route choices only appear inside the temporary-customer dropdown',()=>{
+test('dispatch overview and temporary-customer dropdown both remain available',()=>{
   const ui=readFileSync(new URL('../src/WeeklyDispatchPage.jsx',import.meta.url),'utf8')
   const css=readFileSync(new URL('../src/Planner.css',import.meta.url),'utf8')
-  assert.doesNotMatch(ui,/function RouteDispatchOverview|<RouteDispatchOverview/)
+  assert.match(ui,/<RouteDispatchOverview day=\{day\}\/>/)
+  assert.match(ui,/aria-label="当天 Route 总览"/)
   assert.match(ui,/route-picker-panel/)
   assert.match(css,/\.route-picker-panel\{right:0;left:auto/)
   assert.doesNotMatch(ui,/<strong>Route 1–5<\/strong>/)
