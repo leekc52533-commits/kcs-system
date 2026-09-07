@@ -37,7 +37,8 @@ test('temporary customers use Route assignment and custom dropdowns close outsid
 test('dispatch overview and temporary-customer dropdown both remain available',()=>{
   const ui=readFileSync(new URL('../src/WeeklyDispatchPage.jsx',import.meta.url),'utf8')
   const css=readFileSync(new URL('../src/Planner.css',import.meta.url),'utf8')
-  assert.match(ui,/<RouteDispatchOverview day=\{day\}\/>/)
+  assert.match(ui,/<RouteDispatchOverview day=\{day\} vehicles=\{vehicles\}.*onApprove=\{approveSingleRoute\}/)
+  assert.match(ui,/<RouteAssignmentPanel \{\.\.\.props\}\/>/)
   assert.match(ui,/aria-label="当天 Route 总览"/)
   assert.match(ui,/route-picker-panel/)
   assert.match(css,/\.route-picker-panel\{right:0;left:auto/)
