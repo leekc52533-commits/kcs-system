@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {DatabaseSync} from 'node:sqlite'
 import {readFileSync} from 'node:fs'
 import {schemaSql} from '../server/schema.mjs'
-import {approveRoute,assignRouteVehicle,assignVehicleDay,carryForwardVehicleDrivers,carryForwardRouteVehicles,getDispatchDay,driverTomorrow,generateWeek} from '../server/dispatchService.mjs'
+import {approveRoute,assignRouteVehicle,assignVehicleDay,carryForwardVehicleDrivers,carryForwardRouteVehicles,getDispatchDay,driverTomorrow,generateWeek,handoverRoute} from '../server/dispatchService.mjs'
 import {installWeeklyRoutePlan} from '../server/weeklyRoutePlanService.mjs'
 
 function fixture(){
@@ -88,6 +88,23 @@ test('repair does not change protected days or carry unavailable vehicles',()=>{
     carryForwardRouteVehicles({startDate:'2026-09-08'},db)
     assert.equal(getDispatchDay('2026-09-08',db).routeBoards[0].vehicleId,null)
   }
+})
+
+test('handover does not alter tomorrow or become its default',()=>{
+  const db=fixture()
+  db.prepare("INSERT INTO vehicles(vehicle_code,registration_number,status,operational_status) VALUES('V2','NEW2','available','active')").run()
+  assignRouteVehicle('2026-09-07',1,{vehicleId:1},db)
+  assignVehicleDay('2026-09-07',1,{driverId:1},db)
+  approveRoute('2026-09-07',1,{approvedBy:'Supervisor'},db)
+  const tomorrow=JSON.stringify(getDispatchDay('2026-09-08',db))
+  handoverRoute('2026-09-07',1,{vehicleId:2,driverId:2,reason:'Correction',expectedRevision:getDispatchDay('2026-09-07',db).revision},{role:'supervisor',today:'2026-09-07'},db)
+  assert.equal(JSON.stringify(getDispatchDay('2026-09-08',db)),tomorrow)
+  assert.equal(getDispatchDay('2026-09-07',db).routeBoards[0].approvalStatus,'approved')
+  db.prepare("DELETE FROM daily_route_assignments WHERE dispatch_day_id=(SELECT id FROM dispatch_days WHERE dispatch_date='2026-09-08')").run()
+  db.prepare("UPDATE dispatches SET driver_id=NULL WHERE dispatch_date='2026-09-08'").run()
+  carryForwardRouteVehicles({startDate:'2026-09-08'},db)
+  assert.equal(getDispatchDay('2026-09-08',db).routeBoards[0].vehicleId,1)
+  assert.equal(getDispatchDay('2026-09-08',db).vehicleBoards.find(v=>v.id===1).driverId,1)
 })
 
 test('mobile day buttons always refetch and both views auto-refresh',()=>{
