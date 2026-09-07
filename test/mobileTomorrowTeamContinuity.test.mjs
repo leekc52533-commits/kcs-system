@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {DatabaseSync} from 'node:sqlite'
 import {readFileSync} from 'node:fs'
 import {schemaSql} from '../server/schema.mjs'
-import {approveRoute,assignRouteVehicle,assignVehicleDay,carryForwardVehicleDrivers,driverTomorrow,generateWeek} from '../server/dispatchService.mjs'
+import {approveRoute,assignRouteVehicle,assignVehicleDay,carryForwardVehicleDrivers,carryForwardRouteVehicles,getDispatchDay,driverTomorrow,generateWeek} from '../server/dispatchService.mjs'
 import {installWeeklyRoutePlan} from '../server/weeklyRoutePlanService.mjs'
 
 function fixture(){
@@ -40,6 +40,54 @@ test('repair fills empty future vehicle drivers without replacing an explicit as
   const result=carryForwardVehicleDrivers({startDate:'2026-09-08'},db)
   assert.equal(result.driversCarried,0)
   assert.equal(db.prepare(`SELECT d.driver_id driverId FROM dispatch_trips dt JOIN dispatch_days dd ON dd.id=dt.dispatch_day_id JOIN dispatches d ON d.id=dt.dispatch_id WHERE dd.dispatch_date='2026-09-08' AND d.vehicle_id=1 LIMIT 1`).get().driverId,2)
+})
+
+test('vehicle and driver automatically fill tomorrow without approving it',()=>{
+  const db=fixture()
+  assignRouteVehicle('2026-09-07',1,{vehicleId:1},db)
+  assignVehicleDay('2026-09-07',1,{driverId:1},db)
+  const tomorrow=getDispatchDay('2026-09-08',db)
+  assert.equal(tomorrow.routeBoards[0].vehicleId,1)
+  assert.equal(tomorrow.vehicleBoards[0].driverId,1)
+  assert.equal(tomorrow.routeBoards[0].approvalStatus,'pending')
+  assert.deepEqual(tomorrow.routeBoards[0].stops.map(s=>s.branchId),['B1'])
+  assert.equal(carryForwardRouteVehicles({startDate:'2026-09-07'},db).vehiclesCarried,0)
+})
+
+test('future manual vehicle and driver choices survive earlier assignments',()=>{
+  const db=fixture()
+  db.prepare("INSERT INTO vehicles(vehicle_code,registration_number,status,operational_status) VALUES('Lorry 2','QAB1225B','available','active')").run()
+  assignRouteVehicle('2026-09-08',1,{vehicleId:2},db)
+  assignVehicleDay('2026-09-08',2,{driverId:2},db)
+  assignRouteVehicle('2026-09-07',1,{vehicleId:1},db)
+  assignVehicleDay('2026-09-07',1,{driverId:1},db)
+  assert.equal(getDispatchDay('2026-09-08',db).routeBoards[0].vehicleId,2)
+  assert.equal(getDispatchDay('2026-09-08',db).vehicleBoards.find(v=>v.id===2).driverId,2)
+})
+
+test('explicitly cleared future assignments stay cleared',()=>{
+  const db=fixture()
+  assignRouteVehicle('2026-09-07',1,{vehicleId:1},db)
+  assignVehicleDay('2026-09-08',1,{driverId:null},db)
+  assignVehicleDay('2026-09-07',1,{driverId:1},db)
+  assert.equal(getDispatchDay('2026-09-08',db).vehicleBoards[0].driverId,null)
+  assignRouteVehicle('2026-09-08',1,{vehicleId:null},db)
+  carryForwardRouteVehicles({startDate:'2026-09-08'},db)
+  assert.equal(getDispatchDay('2026-09-08',db).routeBoards[0].vehicleId,null)
+})
+
+test('repair does not change protected days or carry unavailable vehicles',()=>{
+  for(const protectedDay of [true,false]){
+    const db=fixture()
+    db.prepare("UPDATE dispatch_days SET status='approved' WHERE dispatch_date='2026-09-08'").run()
+    assignRouteVehicle('2026-09-07',1,{vehicleId:1},db)
+    if(!protectedDay){
+      db.prepare("UPDATE dispatch_days SET status='draft' WHERE dispatch_date='2026-09-08'").run()
+      db.prepare("UPDATE vehicles SET operational_status='maintenance' WHERE id=1").run()
+    }
+    carryForwardRouteVehicles({startDate:'2026-09-08'},db)
+    assert.equal(getDispatchDay('2026-09-08',db).routeBoards[0].vehicleId,null)
+  }
 })
 
 test('mobile day buttons always refetch and both views auto-refresh',()=>{
