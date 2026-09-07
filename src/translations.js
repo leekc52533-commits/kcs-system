@@ -748,3 +748,6 @@ export function translate(language,key,variables={}){
   }
   return String(value).replace(/\{(\w+)\}/g,(_,name)=>variables[name]??`{${name}}`)
 }
+Object.assign(messages.en,{'dashboard.enableSound':'Enable alert sound','dashboard.soundOn':'Alert sound on','dashboard.soundUnsupported':'This phone does not support browser alert sounds.','dashboard.soundBlocked':'The browser blocked the sound. Tap Enable alert sound again.'})
+Object.assign(messages.ms,{'dashboard.enableSound':'Aktifkan bunyi amaran','dashboard.soundOn':'Bunyi amaran aktif','dashboard.soundUnsupported':'Telefon ini tidak menyokong bunyi amaran pelayar.','dashboard.soundBlocked':'Pelayar menyekat bunyi. Tekan Aktifkan bunyi amaran sekali lagi.'})
+Object.assign(messages.zh,{'dashboard.enableSound':'开启通知铃声','dashboard.soundOn':'通知铃声已开启','dashboard.soundUnsupported':'这部手机不支持网页通知铃声。','dashboard.soundBlocked':'浏览器阻止了铃声，请再按一次开启通知铃声。'})
