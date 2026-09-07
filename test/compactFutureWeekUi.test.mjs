@@ -21,6 +21,7 @@ test('approved days use a distinct style and manual adjustment panel is removed'
   assert.match(ui,/every\(route=>route\.approvalStatus==='approved'\)/)
   assert.match(css,/\.week-day-tabs button\.approved\{/)
   assert.doesNotMatch(ui,/function DraftAdjustmentPanel|Supervisor Draft Adjustments|draft-adjustments/)
+  assert.match(ui,/import \{ useCallback, useEffect, useMemo, useState \} from 'react'/)
 })
 
 test('route date and compact vehicle actions are shown in the requested rows',()=>{
