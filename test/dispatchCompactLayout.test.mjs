@@ -7,6 +7,7 @@ const css=await readFile(new URL('../src/Planner.css',import.meta.url),'utf8')
 
 test('date shortcuts stay pinned below the workspace navigation',()=>{
   assert.match(css,/\.workspace-hub--pinned \.planner-toolbar\{position:sticky;top:141px;/)
+  assert.match(css,/\.workspace-hub--pinned>\.planner-page\{padding-top:0\}/)
 })
 
 test('the redundant whole-day heading and approval panel are removed',()=>{
@@ -31,4 +32,14 @@ test('collapsed and saved start locations show names without addresses',()=>{
 test('individual route approval remains available',()=>{
   assert.match(ui,/批准这条 Route/)
   assert.match(ui,/\/approval-check/)
+})
+
+test('Route vehicle labels use plates and reorder controls use arrows',()=>{
+  const panel=ui.slice(ui.indexOf('function RouteAssignmentPanel'),ui.indexOf('function UnassignedPool'))
+  assert.match(panel,/route\.registrationNumber\|\|route\.vehicle/)
+  assert.match(panel,/vehicle\.registrationNumber\|\|vehicle\.vehicleCode\|\|vehicle\.vehicle/)
+  assert.doesNotMatch(panel,/\{vehicleLabel\(vehicle\)\}/)
+  assert.match(panel,/>↑<\/button>/)
+  assert.match(panel,/>↓<\/button>/)
+  assert.doesNotMatch(panel,/>上移<\/button>|>下移<\/button>/)
 })
