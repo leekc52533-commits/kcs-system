@@ -6,7 +6,7 @@ const ui=await readFile(new URL('../src/WeeklyDispatchPage.jsx',import.meta.url)
 const css=await readFile(new URL('../src/Planner.css',import.meta.url),'utf8')
 
 test('date shortcuts stay pinned below the workspace navigation',()=>{
-  assert.match(css,/\.workspace-hub--pinned \.planner-toolbar\{position:sticky;top:141px;/)
+  assert.match(css,/\.workspace-hub--pinned \.planner-navigation\{position:sticky;top:141px;/)
   assert.match(css,/\.workspace-hub--pinned>\.planner-page\{padding-top:0\}/)
 })
 
