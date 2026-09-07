@@ -7,6 +7,7 @@ import {actingCollectorOptions,claimActingCollectorVehicle} from '../server/acti
 import {approveRoute,assignRouteVehicle,driverToday,generateDay} from '../server/dispatchService.mjs'
 import {startDriverTrip} from '../server/driverExecutionService.mjs'
 import {installWeeklyRoutePlan} from '../server/weeklyRoutePlanService.mjs'
+import {listPendingDeferRequests} from '../server/deferApprovalService.mjs'
 
 function fixture(){
   const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON;'+schemaSql)
@@ -33,4 +34,11 @@ test('supervisor can inspect then take over one approved vehicle for today and o
 test('collector menu and supervisor-to-mobile switch are wired without changing account role',()=>{
   const app=readFileSync(new URL('../src/App.jsx',import.meta.url),'utf8'),page=readFileSync(new URL('../src/ActingCollectorPage.jsx',import.meta.url),'utf8')
   assert.match(app,/nav\.actingCollector/);assert.match(app,/kcs_acting_collector_mode/);assert.match(page,/api\/acting-collector\/vehicle/);assert.match(page,/acting\.inspectRoute/);assert.match(page,/acting\.takeOver/)
+})
+
+test('dashboard approval queue returns a pending employee request immediately',()=>{
+  const db=fixture(),row=db.prepare('SELECT ds.id stopId,dt.id tripId,dd.id dayId FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id JOIN dispatch_days dd ON dd.id=dt.dispatch_day_id LIMIT 1').get()
+  db.prepare("INSERT INTO driver_defer_requests(dispatch_stop_id,dispatch_trip_id,dispatch_day_id,driver_employee_id,reason,expected_return_time,expected_return_at,requested_at) VALUES(?,?,?,?,?,?,?,?)").run(row.stopId,row.tripId,row.dayId,1,'customer_requested_return','14:30','2026-09-07T14:30:00+08:00','2026-09-07T12:00:00+08:00')
+  const items=listPendingDeferRequests(db)
+  assert.equal(items.length,1);assert.equal(items[0].driverName,'Normal Driver');assert.equal(items[0].registrationNumber,'QAV3468');assert.equal(items[0].branchId,'B1')
 })
