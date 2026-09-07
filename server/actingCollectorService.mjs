@@ -38,6 +38,9 @@ export function claimActingCollectorVehicle(vehicleId,context={},database=defaul
     SELECT 1 FROM dispatch_trips dt JOIN dispatches d ON d.id=dt.dispatch_id JOIN dispatch_stops ds ON ds.dispatch_trip_id=dt.id
     WHERE dt.dispatch_day_id=? AND d.vehicle_id=v.id AND ds.status<>'cancelled')`).get(Number(vehicleId),day.id)
   if(!vehicle)throw fail('This vehicle has no route today.','NOT_FOUND',404)
+  const routeNumbers=database.prepare(`SELECT DISTINCT ds.route_number routeNumber FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id JOIN dispatches d ON d.id=dt.dispatch_id WHERE dt.dispatch_day_id=? AND d.vehicle_id=? AND ds.status<>'cancelled' AND ds.route_number IS NOT NULL`).all(day.id,vehicle.id).map(row=>Number(row.routeNumber))
+  const approved=new Set(database.prepare('SELECT route_number routeNumber FROM daily_route_approvals WHERE dispatch_day_id=?').all(day.id).map(row=>Number(row.routeNumber)))
+  if(!routeNumbers.length||!routeNumbers.every(number=>approved.has(number)))throw fail('Approve this route before assigning an acting collector.','ROUTE_NOT_APPROVED',409)
   const running=database.prepare(`SELECT 1 FROM dispatch_trips dt JOIN dispatches d ON d.id=dt.dispatch_id WHERE dt.dispatch_day_id=? AND d.vehicle_id=? AND dt.execution_status='in_progress' LIMIT 1`).get(day.id,vehicle.id)
   if(running)throw fail('This vehicle has already started and cannot change driver.','TRIP_ALREADY_STARTED',409)
   return withImmediateTransaction(database,()=>{
