@@ -8,6 +8,7 @@ import { getJodooIntegrationStatus, recordJodooWebhook, verifyJodooWebhookToken 
 import { commitImport, previewImport } from './importService.mjs'
 import { customerBranchDetail, customerBranches, dashboardSummary, dataQualitySummary, importBatches, importErrors, schedules } from './queryService.mjs'
 import { approveDay, approveRoute, assignAreaStops, assignRouteVehicle, assignVehicleDay, createScheduleException, createStop, createTrip, dailyApprovalCheck, deleteStop, driverToday, driverTomorrow, generateDay, generateWeek, getDispatchDay, getDispatchWeek, getStartLocationOptions, moveRouteStop, promisedCheck, publishDay, renameRoute, reorderRouteStop, reopenDay, routeApprovalCheck, saveDraftAdjustments, transferVehicleDay, updateStop, updateTrip } from './dispatchService.mjs'
+import {actingCollectorOptions,claimActingCollectorVehicle} from './actingCollectorService.mjs'
 import {setDefaultVehicle,setZoneDefaultVehicles} from './defaultVehicleService.mjs'
 import {getRouteTemplate,saveRouteTemplate} from './routeTemplateService.mjs'
 import {analyzeArea,analyzeZoneAreas,confirmAreaRefinement,getAreaRefinement,updateAreaRefinement} from './areaRefinementService.mjs'
@@ -283,6 +284,8 @@ const server = http.createServer(async (request, response) => {
     }
     if (request.method === 'GET' && url.pathname.startsWith('/api/dispatch/promised-check/')) return sendJson(response,200,promisedCheck(decodeURIComponent(url.pathname.slice('/api/dispatch/promised-check/'.length))))
     if (request.method === 'GET' && url.pathname === '/api/driver/today') return sendJson(response,200,driverToday({employeeId:session.employeeId,role:session.role}))
+    if (request.method === 'GET' && url.pathname === '/api/acting-collector/today') {if(!canManageSchedules(session))return sendJson(response,403,{error:'Supervisor permission is required.'});return sendJson(response,200,actingCollectorOptions({employeeId:session.employeeId,employeeName:session.employeeName,role:session.role}))}
+    if (request.method === 'POST' && /^\/api\/acting-collector\/vehicle\/\d+$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Supervisor permission is required.'});return sendJson(response,200,claimActingCollectorVehicle(Number(url.pathname.split('/').at(-1)),{employeeId:session.employeeId,employeeName:session.employeeName,role:session.role}))}
     if (request.method === 'POST' && url.pathname === '/api/dispatch/stops') {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});return sendJson(response,201,createStop((await readJson(request)).payload))}
     if (request.method === 'POST' && url.pathname === '/api/dispatch/trips') {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});return sendJson(response,201,createTrip((await readJson(request)).payload))}
     if (request.method === 'PATCH' && /^\/api\/dispatch\/stops\/\d+$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});return sendJson(response,200,updateStop(Number(url.pathname.split('/').at(-1)),(await readJson(request)).payload))}

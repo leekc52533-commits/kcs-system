@@ -5,6 +5,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import {routeSignature} from './dispatchService.mjs'
+import {activeRouteDriver} from './routeDriverAuthorization.mjs'
 
 export const ARRIVAL_RADIUS_METERS=Number(process.env.KCS_ARRIVAL_RADIUS_METERS||150)
 export const MAX_ARRIVAL_ACCURACY_METERS=Number(process.env.KCS_MAX_ARRIVAL_ACCURACY_METERS||50)
@@ -12,7 +13,7 @@ export const isArrivalTestMode=(env=process.env)=>/^(1|true|yes|on)$/i.test(Stri
 const fail=(message,code='INVALID_STATUS',statusCode=409,details={})=>{const error=new Error(message);error.code=code;error.statusCode=statusCode;error.publicDetails=details;return error}
 const nowKuching=(input=new Date())=>{const parts=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuching',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(input)).map(part=>[part.type,part.value]));return`${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}+08:00`}
 const distanceMeters=(aLat,aLon,bLat,bLon)=>{const rad=value=>value*Math.PI/180,R=6371000,dLat=rad(bLat-aLat),dLon=rad(bLon-aLon),x=Math.sin(dLat/2)**2+Math.cos(rad(aLat))*Math.cos(rad(bLat))*Math.sin(dLon/2)**2;return 2*R*Math.atan2(Math.sqrt(x),Math.sqrt(1-x))}
-function activeDriver(database,employeeId,role){if(String(role).toLowerCase()!=='driver')throw fail('Only an active driver can perform this action.','PERMISSION_DENIED',403);const employee=database.prepare(`SELECT e.id FROM employees e WHERE e.id=? AND e.is_active=1 AND e.employment_status='active' AND (lower(e.job_role)='driver' OR EXISTS(SELECT 1 FROM employee_job_roles r WHERE r.employee_id=e.id AND r.role='Driver' AND r.is_active=1))`).get(Number(employeeId));if(!employee)throw fail('Only an active driver can perform this action.','PERMISSION_DENIED',403);return employee}
+function activeDriver(database,employeeId,role){const employee=activeRouteDriver(database,employeeId,role);if(!employee)throw fail('Only an active driver or an assigned acting supervisor can perform this action.','PERMISSION_DENIED',403);return employee}
 const tripContext=(database,tripId)=>database.prepare(`SELECT dt.*,dd.dispatch_date,dd.status day_status,d.vehicle_id,d.driver_id,d.status dispatch_status,v.operational_status,v.status vehicle_status
   FROM dispatch_trips dt JOIN dispatch_days dd ON dd.id=dt.dispatch_day_id JOIN dispatches d ON d.id=dt.dispatch_id JOIN vehicles v ON v.id=d.vehicle_id WHERE dt.id=?`).get(Number(tripId))
 const assertOwnedToday=(database,tripId,employeeId,today)=>{const trip=tripContext(database,tripId);if(!trip)throw fail('Trip not found.','NOT_FOUND',404);if(trip.dispatch_date!==today)throw fail('Only today’s route can be operated.','PERMISSION_DENIED',403);if(Number(trip.driver_id)!==Number(employeeId))throw fail('This Trip is assigned to another driver.','PERMISSION_DENIED',403);if(!['available','active'].includes(trip.operational_status)||!['available','assigned'].includes(trip.vehicle_status))throw fail('The assigned vehicle is inactive.');return trip}
