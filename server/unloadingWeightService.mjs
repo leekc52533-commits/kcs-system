@@ -23,14 +23,15 @@ function assignedTrips(database,{employeeId,role,today=kuchingDate()}){
       d.vehicle_id vehicleId,d.end_location_name locationName,d.end_address locationAddress,e.name driverName,v.vehicle_code vehicleCode,v.registration_number registrationNumber,
       (SELECT GROUP_CONCAT(ea.name,', ') FROM dispatch_vehicle_assistants dva JOIN employees ea ON ea.id=dva.employee_id WHERE dva.dispatch_day_id=dt.dispatch_day_id AND dva.vehicle_id=d.vehicle_id) crewNames
     FROM dispatch_trips dt JOIN dispatch_days dd ON dd.id=dt.dispatch_day_id JOIN dispatches d ON d.id=dt.dispatch_id JOIN employees e ON e.id=d.driver_id JOIN vehicles v ON v.id=d.vehicle_id
-    WHERE dd.dispatch_date=? AND dd.status IN ('approved','in_progress','completed') AND d.driver_id=?
+    WHERE dd.dispatch_date=? AND dd.status IN ('approved','reapproval_required','in_progress','completed') AND d.driver_id=?
     ORDER BY CASE dt.execution_status WHEN 'in_progress' THEN 0 WHEN 'completed' THEN 1 ELSE 2 END,COALESCE(dt.started_at,dt.created_at) DESC,dt.trip_number DESC`).all(serviceDate,employee.id).map(row=>({...row,serviceDate,estimatedWeightKg:estimateSinceLastUnload(database,row.vehicleId,serviceDate)}))
 }
 
 function estimateSinceLastUnload(database,vehicleId,serviceDate){
-  const last=database.prepare("SELECT weighed_at weighedAt FROM unloading_weight_records WHERE vehicle_id=? AND service_date=? AND status='confirmed' ORDER BY weighed_at DESC,id DESC LIMIT 1").get(vehicleId,serviceDate)
+  const last=database.prepare("SELECT w.weighed_at weighedAt FROM unloading_weight_records w JOIN dispatch_trips dt ON dt.id=w.dispatch_trip_id JOIN dispatches d ON d.id=dt.dispatch_id WHERE d.vehicle_id=? AND w.service_date=? AND w.status='confirmed' ORDER BY w.weighed_at DESC,w.id DESC LIMIT 1").get(vehicleId,serviceDate)
   const row=database.prepare(`SELECT COALESCE(SUM(i.quantity),0) weight FROM purchase_bill_items i JOIN purchase_bills b ON b.id=i.purchase_bill_id
-    WHERE b.vehicle_id=? AND b.service_date=? AND b.status='issued' AND lower(COALESCE(i.unit_snapshot,'kg')) LIKE '%kg%' AND (? IS NULL OR b.issued_at>?)`).get(vehicleId,serviceDate,last?.weighedAt||null,last?.weighedAt||null)
+    JOIN dispatch_trips dt ON dt.id=b.dispatch_trip_id JOIN dispatches d ON d.id=dt.dispatch_id
+    WHERE d.vehicle_id=? AND b.service_date=? AND b.status='issued' AND lower(COALESCE(i.unit_snapshot,'kg')) LIKE '%kg%' AND (? IS NULL OR b.issued_at>?)`).get(vehicleId,serviceDate,last?.weighedAt||null,last?.weighedAt||null)
   return Number(Number(row.weight||0).toFixed(2))
 }
 
