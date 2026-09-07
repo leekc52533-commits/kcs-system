@@ -12,6 +12,13 @@ export function listDeferRequestsForDay(dayId,database=defaultDb){
     WHERE r.dispatch_day_id=? ORDER BY CASE r.status WHEN 'pending' THEN 0 ELSE 1 END,r.requested_at DESC,r.id DESC`).all(Number(dayId))
 }
 
+export function listPendingDeferRequests(database=defaultDb){
+  return database.prepare(`SELECT r.id,r.dispatch_stop_id stopId,r.dispatch_trip_id tripId,r.driver_employee_id driverEmployeeId,r.reason,r.expected_return_time expectedReturnTime,r.expected_return_at expectedReturnAt,r.status,r.requested_at requestedAt,
+    dd.dispatch_date dispatchDate,ds.stop_sequence stopSequence,b.jodoo_branch_id branchId,b.branch_name branchName,c.name customerName,e.name driverName,v.vehicle_code vehicleName,v.registration_number registrationNumber
+    FROM driver_defer_requests r JOIN dispatch_days dd ON dd.id=r.dispatch_day_id JOIN dispatch_stops ds ON ds.id=r.dispatch_stop_id JOIN branches b ON b.id=ds.branch_id LEFT JOIN customers c ON c.id=b.customer_id JOIN employees e ON e.id=r.driver_employee_id JOIN dispatch_trips dt ON dt.id=r.dispatch_trip_id JOIN dispatches d ON d.id=dt.dispatch_id LEFT JOIN vehicles v ON v.id=d.vehicle_id
+    WHERE r.status='pending' ORDER BY r.requested_at DESC,r.id DESC`).all()
+}
+
 export function decideDeferRequest(id,decision,context={},database=defaultDb){
   const normalized=String(decision||'').toLowerCase()
   if(!['approved','rejected'].includes(normalized))throw fail('Approval decision must be approved or rejected.','INVALID_DECISION',400)
