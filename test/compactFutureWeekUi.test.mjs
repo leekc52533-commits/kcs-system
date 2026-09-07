@@ -25,18 +25,21 @@ test('Route view omits the redundant explanatory heading',()=>{
 test('temporary customers use Route assignment and custom dropdowns close outside',()=>{
   const ui=readFileSync(new URL('../src/WeeklyDispatchPage.jsx',import.meta.url),'utf8')
   assert.match(ui,/\/assign-route/)
-  assert.match(ui,/>未分配 Route<\/button>/)
+  assert.match(ui,/>未分配 Route ▾<\/button>/)
   assert.match(ui,/function RoutePicker/)
+  assert.match(ui,/await onChoose\(routeNumber\);setOpen\(false\)/)
+  assert.match(ui,/setLocalError\(error\.message\)/)
   assert.match(ui,/function useOutsideClose/)
   assert.match(ui,/document\.addEventListener\('pointerdown',close\)/)
   assert.doesNotMatch(ui,/function VehiclePicker/)
 })
 
-test('dispatch view keeps the five Route overview cards without the old heading',()=>{
+test('Route choices only appear inside the temporary-customer dropdown',()=>{
   const ui=readFileSync(new URL('../src/WeeklyDispatchPage.jsx',import.meta.url),'utf8')
-  assert.match(ui,/function RouteDispatchOverview/)
-  assert.match(ui,/<RouteDispatchOverview routes=\{day\.routeBoards\|\|\[\]\}\/>/)
-  assert.match(ui,/route-overview-card/)
+  const css=readFileSync(new URL('../src/Planner.css',import.meta.url),'utf8')
+  assert.doesNotMatch(ui,/function RouteDispatchOverview|<RouteDispatchOverview/)
+  assert.match(ui,/route-picker-panel/)
+  assert.match(css,/\.route-picker-panel\{right:0;left:auto/)
   assert.doesNotMatch(ui,/<strong>Route 1–5<\/strong>/)
   assert.doesNotMatch(ui,/每条 Route 分别分配车辆、分别批准/)
 })
