@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 52
+export const SCHEMA_VERSION = 53
 
 export const schemaSql = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -533,6 +533,16 @@ CREATE TABLE IF NOT EXISTS weekly_route_definitions (
   updated_by TEXT,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY(plan_id, route_number)
+);
+
+CREATE TABLE IF NOT EXISTS daily_route_approvals (
+  dispatch_day_id INTEGER NOT NULL REFERENCES dispatch_days(id) ON DELETE CASCADE,
+  route_number INTEGER NOT NULL CHECK(route_number BETWEEN 1 AND 5),
+  route_signature TEXT NOT NULL,
+  actor TEXT NOT NULL,
+  reason TEXT,
+  approved_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY(dispatch_day_id, route_number)
 );
 
 CREATE TABLE IF NOT EXISTS driver_defer_requests (
