@@ -179,6 +179,13 @@ function stopRows(database, dayId) {
     WHERE dt.dispatch_day_id=? AND ds.status<>'cancelled' ORDER BY dt.trip_number,ds.stop_sequence`).all(dayId)
 }
 
+function routeSignature(database,dayId,routeNumber){
+  const rows=database.prepare(`SELECT ds.id,ds.branch_id branchId,ds.route_stop_sequence routeSequence,ds.stop_sequence stopSequence,ds.status,dt.trip_number tripNumber,d.vehicle_id vehicleId
+    FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id JOIN dispatches d ON d.id=ds.dispatch_id
+    WHERE dt.dispatch_day_id=? AND ds.route_number=? AND ds.status<>'cancelled' ORDER BY ds.route_stop_sequence,ds.id`).all(dayId,routeNumber)
+  return createHash('sha256').update(JSON.stringify(rows)).digest('hex')
+}
+
 function dayView(database, day) {
   const stops=stopRows(database,day.id)
   const allTrips=database.prepare(`SELECT dt.id,dt.trip_number tripNumber,dt.estimated_weight_kg estimatedWeightKg,a.name area,d.vehicle_id vehicleId,v.vehicle_code vehicle,
@@ -212,7 +219,8 @@ function dayView(database, day) {
   const unassignedStops=stops.filter(stop=>!stop.vehicleId||!availableIds.has(stop.vehicleId))
   const assignmentRows=database.prepare('SELECT route_number routeNumber,vehicle_id vehicleId,assigned_by assignedBy,updated_at updatedAt FROM daily_route_assignments WHERE dispatch_day_id=?').all(day.id),assignmentByRoute=new Map(assignmentRows.map(row=>[row.routeNumber,row]))
   const definitionRows=database.prepare(`SELECT d.route_number routeNumber,d.display_name displayName FROM weekly_route_definitions d JOIN weekly_route_plans p ON p.id=d.plan_id WHERE p.is_active=1`).all(),definitionByRoute=new Map(definitionRows.map(row=>[row.routeNumber,row.displayName]))
-  const routeBoards=[1,2,3,4,5].map(routeNumber=>{const assignment=assignmentByRoute.get(routeNumber)||{},vehicle=vehicles.find(item=>item.id===assignment.vehicleId),routeStops=stops.filter(stop=>stop.routeNumber===routeNumber).sort((a,b)=>(a.routeStopSequence??999999)-(b.routeStopSequence??999999)||a.id-b.id);return{routeNumber,name:definitionByRoute.get(routeNumber)||`Route ${routeNumber}`,vehicleId:assignment.vehicleId??null,vehicle:vehicle?.vehicle??null,registrationNumber:vehicle?.registrationNumber??null,assignedBy:assignment.assignedBy??null,updatedAt:assignment.updatedAt??null,customerCount:routeStops.length,stops:routeStops}})
+  const approvalRows=database.prepare('SELECT route_number routeNumber,route_signature routeSignature,actor approvedBy,reason approvalReason,approved_at approvedAt FROM daily_route_approvals WHERE dispatch_day_id=?').all(day.id),approvalByRoute=new Map(approvalRows.map(row=>[row.routeNumber,row]))
+  const routeBoards=[1,2,3,4,5].map(routeNumber=>{const assignment=assignmentByRoute.get(routeNumber)||{},vehicle=vehicles.find(item=>item.id===assignment.vehicleId),routeStops=stops.filter(stop=>stop.routeNumber===routeNumber).sort((a,b)=>(a.routeStopSequence??999999)-(b.routeStopSequence??999999)||a.id-b.id),approval=approvalByRoute.get(routeNumber),approved=Boolean(routeStops.length&&approval&&approval.routeSignature===routeSignature(database,day.id,routeNumber));return{routeNumber,name:definitionByRoute.get(routeNumber)||`Route ${routeNumber}`,vehicleId:assignment.vehicleId??null,vehicle:vehicle?.vehicle??null,registrationNumber:vehicle?.registrationNumber??null,assignedBy:assignment.assignedBy??null,updatedAt:assignment.updatedAt??null,customerCount:routeStops.length,stops:routeStops,approvalStatus:routeStops.length?(approved?'approved':approval?'reapproval_required':'pending'):'empty',approvedBy:approved?approval.approvedBy:null,approvedAt:approved?approval.approvedAt:null,approvalReason:approved?approval.approvalReason:null}})
   const extraUnassignedStops=unassignedStops.filter(stop=>stop.routeNumber==null)
   const unassignedGroups=[...new Map(extraUnassignedStops.map(stop=>[stop.areaId??'unassigned',{areaId:stop.areaId??null,areaName:stop.area||'未分区',zoneGroupId:stop.zoneGroupId??'pending',zoneGroupName:stop.zoneGroup||'待确认',zoneSortOrder:stop.zoneSortOrder??9999}])).values()].map(group=>{
     const groupedStops=extraUnassignedStops.filter(stop=>(stop.areaId??null)===group.areaId),weights=groupedStops.filter(stop=>stop.estimatedWeightKg!=null)
@@ -317,9 +325,56 @@ export function dailyApprovalCheck(date,database=defaultDb){
   return{ok:issues.length===0,date:serviceDate,dayId:day.id,status:day.status,issues,warnings,summary:{stopCount:rows.length,assignedCount:rows.filter(row=>row.vehicleId).length,unassignedCount:rows.filter(row=>!row.vehicleId).length,vehicleCount:vehicleIds.length,vehicleIds,estimatedWeightKg:weighted.reduce((sum,row)=>sum+Number(row.estimatedWeightKg),0),weightedStopCount:weighted.length,missingWeightCount:rows.length-weighted.length,missingGpsCount:warnings.filter(item=>item.code==='GPS_MISSING').length,timeRestrictionCount:warnings.filter(item=>item.code==='TIME_RESTRICTION').length,trips:[...tripGroups.values()].map(group=>({vehicleId:group[0].vehicleId,vehicle:group[0].vehicleCode,tripNumber:group[0].tripNumber,stopCount:group.length,estimatedWeightKg:group.filter(row=>row.estimatedWeightKg!=null).reduce((sum,row)=>sum+Number(row.estimatedWeightKg),0),missingWeightCount:group.filter(row=>row.estimatedWeightKg==null).length}))}}
 }
 
+export function routeApprovalCheck(date,routeNumber,database=defaultDb){
+  const serviceDate=iso(date),route=Number(routeNumber),day=dayByDate(database,serviceDate)
+  if(!day)return{ok:false,date:serviceDate,routeNumber:route,issues:[{code:'DAY_NOT_FOUND',message:'Dispatch day not found.'}],warnings:[]}
+  if(!Number.isInteger(route)||route<1||route>5)return{ok:false,date:serviceDate,routeNumber:route,issues:[{code:'ROUTE_INVALID',message:'Route must be between 1 and 5.'}],warnings:[]}
+  const rows=database.prepare(`SELECT ds.id stopId,ds.branch_id branchId,ds.status stopStatus,ds.estimated_weight_kg estimatedWeightKg,ds.route_stop_sequence routeSequence,
+    ds.source_schedule_id sourceScheduleId,b.jodoo_branch_id branchCode,b.branch_name branchName,b.is_active branchActive,b.status branchStatus,b.latitude,b.longitude,b.time_restriction timeRestriction,
+    dt.id tripId,dt.trip_number tripNumber,d.id dispatchId,d.status dispatchStatus,d.vehicle_id vehicleId,v.vehicle_code vehicleCode,v.operational_status vehicleOperationalStatus,v.status vehicleStatus,COALESCE(s.is_active,1) scheduleActive
+    FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id JOIN dispatches d ON d.id=ds.dispatch_id JOIN branches b ON b.id=ds.branch_id
+    LEFT JOIN vehicles v ON v.id=d.vehicle_id LEFT JOIN branch_schedules s ON s.id=ds.source_schedule_id
+    WHERE dt.dispatch_day_id=? AND ds.route_number=? AND ds.status<>'cancelled' ORDER BY ds.route_stop_sequence,ds.id`).all(day.id,route)
+  const issues=[],warnings=[]
+  if(!['draft','reapproval_required'].includes(day.status))issues.push({code:'DAY_NOT_EDITABLE',message:`The dispatch day is ${day.status}.`})
+  if(!rows.length)issues.push({code:'NO_ROUTE_STOPS',message:`Route ${route} has no customers.`})
+  const assignment=database.prepare('SELECT vehicle_id vehicleId FROM daily_route_assignments WHERE dispatch_day_id=? AND route_number=?').get(day.id,route)
+  if(!assignment?.vehicleId)issues.push({code:'ROUTE_UNASSIGNED',message:`Route ${route} has not been assigned a vehicle.`})
+  for(const row of rows){
+    if(!row.vehicleId||row.vehicleId!==assignment?.vehicleId)issues.push({code:'ROUTE_VEHICLE_MISMATCH',stopId:row.stopId,message:`${row.branchCode} is not on the Route vehicle.`})
+    else if(!['available','active'].includes(row.vehicleOperationalStatus)||!['available','assigned'].includes(row.vehicleStatus))issues.push({code:'VEHICLE_INACTIVE',stopId:row.stopId,message:`${row.vehicleCode} is not Active.`})
+    if(![1,2,3].includes(Number(row.tripNumber)))issues.push({code:'TRIP_INVALID',stopId:row.stopId,message:`${row.branchCode} has an invalid Trip.`})
+    if(row.branchActive!==1||String(row.branchStatus).toLowerCase()!=='active')issues.push({code:'BRANCH_INACTIVE',stopId:row.stopId,message:`${row.branchName||row.branchCode} is inactive.`})
+    if(row.sourceScheduleId&&row.scheduleActive!==1)issues.push({code:'SCHEDULE_SUPERSEDED',stopId:row.stopId,message:`${row.branchCode} belongs to a Superseded Schedule.`})
+    if(row.dispatchStatus!=='draft')issues.push({code:'DISPATCH_PROTECTED',stopId:row.stopId,message:`Dispatch ${row.dispatchId} is ${row.dispatchStatus}.`})
+    if(!Number.isFinite(row.latitude)||!Number.isFinite(row.longitude)||row.latitude===0||row.longitude===0)warnings.push({code:'GPS_MISSING',stopId:row.stopId,message:`${row.branchName||row.branchCode}: GPS missing.`})
+    if(row.estimatedWeightKg==null)warnings.push({code:'WEIGHT_MISSING',stopId:row.stopId,message:`${row.branchName||row.branchCode}: estimated weight not set.`})
+  }
+  const weighted=rows.filter(row=>row.estimatedWeightKg!=null)
+  return{ok:issues.length===0,date:serviceDate,dayId:day.id,routeNumber:route,status:day.status,issues,warnings,summary:{stopCount:rows.length,vehicleId:assignment?.vehicleId??null,estimatedWeightKg:weighted.reduce((sum,row)=>sum+Number(row.estimatedWeightKg),0),weightedStopCount:weighted.length,missingWeightCount:rows.length-weighted.length,missingGpsCount:warnings.filter(item=>item.code==='GPS_MISSING').length}}
+}
+
+export function approveRoute(date,routeNumber,{approvedBy='Supervisor',reason='Route checked and ready'}={},database=defaultDb){
+  const approvalReason=String(reason||'').trim();if(!approvalReason)throw new Error('Approval reason is required.')
+  return withImmediateTransaction(database,()=>{
+    const check=routeApprovalCheck(date,routeNumber,database);if(!check.ok){const error=new Error(check.issues.map(item=>item.message).join(' '));error.code='ROUTE_APPROVAL_VALIDATION_FAILED';error.issues=check.issues;throw error}
+    const day=dayByDate(database,iso(date)),route=Number(routeNumber),signature=routeSignature(database,day.id,route),approvedByName=actor(approvedBy)
+    database.prepare(`INSERT INTO daily_route_approvals(dispatch_day_id,route_number,route_signature,actor,reason) VALUES(?,?,?,?,?)
+      ON CONFLICT(dispatch_day_id,route_number) DO UPDATE SET route_signature=excluded.route_signature,actor=excluded.actor,reason=excluded.reason,approved_at=CURRENT_TIMESTAMP`).run(day.id,route,signature,approvedByName,approvalReason)
+    database.prepare(`INSERT INTO dispatch_change_logs(dispatch_day_id,actor,change_type,entity_type,entity_id,before_json,after_json,requires_reapproval) VALUES(?,?,'route_approved','daily_route',?,?,?,0)`).run(day.id,approvedByName,String(route),null,json({routeNumber:route,routeSignature:signature,reason:approvalReason}))
+    const activeRoutes=database.prepare("SELECT DISTINCT route_number routeNumber FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id WHERE dt.dispatch_day_id=? AND ds.status<>'cancelled' AND ds.route_number IS NOT NULL").all(day.id).map(row=>row.routeNumber)
+    const allApproved=activeRoutes.length>0&&activeRoutes.every(number=>database.prepare('SELECT route_signature routeSignature FROM daily_route_approvals WHERE dispatch_day_id=? AND route_number=?').get(day.id,number)?.routeSignature===routeSignature(database,day.id,number))
+    if(allApproved){database.prepare("UPDATE dispatch_days SET status='approved',approved_revision=revision,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(day.id);database.prepare("INSERT INTO dispatch_approvals(dispatch_day_id,action,revision,actor,reason) VALUES(?,?,?,?,?)").run(day.id,day.status==='reapproval_required'?'reapprove':'approve',day.revision,approvedByName,'All active Routes approved individually')}
+    else if(day.status==='draft')database.prepare("UPDATE dispatch_days SET status='reapproval_required',updated_at=CURRENT_TIMESTAMP WHERE id=?").run(day.id)
+    return getDispatchDay(date,database)
+  })
+}
+
 export function approveDay(date,{approvedBy='Supervisor',reason=''}={},database=defaultDb){
   const approvalReason=String(reason||'').trim();if(!approvalReason)throw new Error('Approval reason is required.')
   return withImmediateTransaction(database,()=>{const check=dailyApprovalCheck(date,database);if(!check.ok){const error=new Error(check.issues.map(item=>item.message).join(' '));error.code='DAY_APPROVAL_VALIDATION_FAILED';error.issues=check.issues;throw error}const day=dayByDate(database,iso(date)),before={...day}
+    const routeNumbers=database.prepare("SELECT DISTINCT route_number routeNumber FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id WHERE dt.dispatch_day_id=? AND ds.status<>'cancelled' AND ds.route_number IS NOT NULL").all(day.id).map(row=>row.routeNumber),saveRouteApproval=database.prepare(`INSERT INTO daily_route_approvals(dispatch_day_id,route_number,route_signature,actor,reason) VALUES(?,?,?,?,?) ON CONFLICT(dispatch_day_id,route_number) DO UPDATE SET route_signature=excluded.route_signature,actor=excluded.actor,reason=excluded.reason,approved_at=CURRENT_TIMESTAMP`)
+    for(const routeNumber of routeNumbers)saveRouteApproval.run(day.id,routeNumber,routeSignature(database,day.id,routeNumber),actor(approvedBy),approvalReason)
     database.prepare("UPDATE dispatch_days SET status='approved',approved_revision=revision,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(day.id)
     database.prepare("INSERT INTO dispatch_approvals(dispatch_day_id,action,revision,actor,reason) VALUES(?,?,?,?,?)").run(day.id,day.status==='reapproval_required'?'reapprove':'approve',day.revision,actor(approvedBy),approvalReason)
     database.prepare(`INSERT INTO dispatch_change_logs(dispatch_day_id,actor,change_type,entity_type,entity_id,before_json,after_json,requires_reapproval) VALUES(?,?,'day_approved','dispatch_day',?,?,?,0)`).run(day.id,actor(approvedBy),String(day.id),json(before),json({...day,status:'approved',approvedRevision:day.revision,reason:approvalReason}))
@@ -340,6 +395,7 @@ export function reopenDay(date,{reopenedBy='Supervisor',reason=''}={},database=d
   const withdrawalReason=String(reason||'').trim();if(!withdrawalReason)throw new Error('Withdrawal reason is required.')
   return withImmediateTransaction(database,()=>{const day=dayByDate(database,iso(date));if(!day)throw new Error('Dispatch day not found');if(day.status!=='approved')throw new Error(`Only an Approved route can be withdrawn; current status is ${day.status}.`);const before={...day}
     const protectedDispatch=database.prepare("SELECT id,status FROM dispatches WHERE id IN(SELECT dispatch_id FROM dispatch_trips WHERE dispatch_day_id=?) AND status IN ('released','in_progress','completed') LIMIT 1").get(day.id);if(protectedDispatch)throw new Error(`Dispatch ${protectedDispatch.id} is ${protectedDispatch.status} and cannot be withdrawn.`)
+    database.prepare('DELETE FROM daily_route_approvals WHERE dispatch_day_id=?').run(day.id)
     database.prepare("UPDATE dispatch_days SET status='draft',revision=revision+1,approved_revision=NULL,published_at=NULL,published_by=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(day.id)
     database.prepare("INSERT INTO dispatch_approvals(dispatch_day_id,action,revision,actor,reason) VALUES(?,'reopen',?,?,?)").run(day.id,day.revision+1,actor(reopenedBy),withdrawalReason)
     database.prepare(`INSERT INTO dispatch_change_logs(dispatch_day_id,actor,change_type,entity_type,entity_id,before_json,after_json,requires_reapproval) VALUES(?,?,'day_approval_withdrawn','dispatch_day',?,?,?,0)`).run(day.id,actor(reopenedBy),String(day.id),json(before),json({...day,status:'draft',revision:day.revision+1,reason:withdrawalReason}))
