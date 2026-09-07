@@ -2,11 +2,11 @@ import {useEffect,useRef,useState} from 'react'
 import {useI18n} from './i18n.jsx'
 import {languageOptions} from './translations.js'
 
-export default function AccountProfileMenu({account,onChangePassword,onAccountManagement,onLogout}){
+export default function AccountProfileMenu({account,onChangePassword,onAccountManagement,onExitMobile,onLogout}){
   const{t,language,setLanguage}=useI18n()
   const[open,setOpen]=useState(false)
   const rootRef=useRef(null)
-  const canManage=Boolean(onAccountManagement&&['owner_admin','operations_admin'].includes(account.role))
+  const canManage=Boolean(onAccountManagement&&['owner_admin','operations_admin'].includes(account.role)),exitMobile=onExitMobile||account.onExitMobile
   const action=callback=>{setOpen(false);callback()}
   useEffect(()=>{if(!open)return undefined;const closeOutside=event=>{if(!rootRef.current?.contains(event.target))setOpen(false)},closeEscape=event=>{if(event.key==='Escape')setOpen(false)};document.addEventListener('pointerdown',closeOutside);document.addEventListener('keydown',closeEscape);return()=>{document.removeEventListener('pointerdown',closeOutside);document.removeEventListener('keydown',closeEscape)}},[open])
   return <div className="account-profile" ref={rootRef}>
@@ -21,6 +21,7 @@ export default function AccountProfileMenu({account,onChangePassword,onAccountMa
         <div className="profile-language"><dt>{t('auth.preferredLanguage')}</dt><dd><select aria-label={t('auth.preferredLanguage')} value={language} onChange={event=>void setLanguage(event.target.value)}>{languageOptions.map(option=><option key={option.code} value={option.code}>{option.label}</option>)}</select></dd></div>
       </dl>
       <button role="menuitem" onClick={()=>action(onChangePassword)}>{t('auth.changePassword')}</button>
+      {exitMobile&&<button role="menuitem" onClick={()=>action(exitMobile)}>{t('acting.backToManagement')}</button>}
       {canManage&&<button role="menuitem" onClick={()=>action(onAccountManagement)}>{t('nav.accounts')}</button>}
       <button role="menuitem" className="danger" onClick={()=>action(onLogout)}>{t('common.logout')}</button>
     </div>}

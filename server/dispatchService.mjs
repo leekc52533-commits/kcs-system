@@ -8,6 +8,7 @@ import {commercialOptions,resolveBuyerPayer,resolvePrimaryEndLocation,writeComme
 import {recordOptimizationFeedback} from './routeOptimizationService.mjs'
 import {MAX_ASSIGNED_CREW} from '../shared/dispatchRules.js'
 import {listDeferRequestsForDay} from './deferApprovalService.mjs'
+import {activeRouteDriver,isTemporarySupervisorDriver} from './routeDriverAuthorization.mjs'
 
 const iso = (value = new Date()) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : kuchingDate(value)
 const addDays = addCalendarDays
@@ -81,9 +82,10 @@ function carryForwardVehicleDriver(database,day,vehicleId){
     WHERE dt.dispatch_day_id=? AND d.vehicle_id=? ORDER BY dt.trip_number,dt.id`).all(day.id,vehicleId)
   if(!targetTrips.length)return{updated:false,reason:'NO_TARGET_TRIP'}
   if(targetTrips.some(row=>row.driverId))return{updated:false,reason:'TARGET_DRIVER_EXISTS'}
-  const source=database.prepare(`SELECT dd.dispatch_date sourceDate,d.driver_id driverId,d.driver_employment_period_id driverEmploymentPeriodId
-    FROM dispatch_trips dt JOIN dispatch_days dd ON dd.id=dt.dispatch_day_id JOIN dispatches d ON d.id=dt.dispatch_id
+  const source=database.prepare(`SELECT dd.dispatch_date sourceDate,d.driver_id driverId,d.driver_employment_period_id driverEmploymentPeriodId,e.job_role jobRole
+    FROM dispatch_trips dt JOIN dispatch_days dd ON dd.id=dt.dispatch_day_id JOIN dispatches d ON d.id=dt.dispatch_id JOIN employees e ON e.id=d.driver_id
     WHERE d.vehicle_id=? AND dd.dispatch_date<? AND d.driver_id IS NOT NULL
+      AND lower(e.job_role)<>'supervisor'
     ORDER BY dd.dispatch_date DESC,dt.trip_number,dt.id LIMIT 1`).get(vehicleId,targetDate)
   if(!source)return{updated:false,reason:'NO_PREVIOUS_DRIVER'}
   const usable=database.prepare(`SELECT 1 FROM employees e WHERE e.id=? AND e.is_active=1 AND e.employment_status='active'
@@ -617,7 +619,7 @@ export function assignVehicleDay(date,vehicleId,payload,database=defaultDb){
   const before=database.prepare(`SELECT d.driver_id driverId,d.assistant_id assistantId,d.start_location_id startLocationId,d.end_location_id endLocationId FROM dispatch_trips dt JOIN dispatches d ON d.id=dt.dispatch_id WHERE dt.dispatch_day_id=? AND d.vehicle_id=? LIMIT 1`).get(day.id,vehicleId)||{}
   before.assistantIds=database.prepare('SELECT employee_id id FROM dispatch_vehicle_assistants WHERE dispatch_day_id=? AND vehicle_id=? ORDER BY employee_id').all(day.id,vehicleId).map(item=>item.id)
   if(payload.driverId){
-    const driver=database.prepare(`SELECT * FROM employees e WHERE id=? AND is_active=1 AND employment_status='active' AND (lower(job_role)='driver' OR EXISTS(SELECT 1 FROM employee_job_roles r WHERE r.employee_id=e.id AND r.role='Driver' AND r.is_active=1))`).get(payload.driverId)
+    const driver=database.prepare(`SELECT * FROM employees e WHERE id=? AND is_active=1 AND employment_status='active' AND (lower(job_role) IN ('driver','supervisor') OR EXISTS(SELECT 1 FROM employee_job_roles r WHERE r.employee_id=e.id AND r.role='Driver' AND r.is_active=1))`).get(payload.driverId)
     if(!driver)throw new Error('所选员工不是可用 Driver')
     const conflict=database.prepare(`SELECT v.vehicle_code vehicle FROM dispatch_trips dt JOIN dispatches d ON d.id=dt.dispatch_id JOIN vehicles v ON v.id=d.vehicle_id
       WHERE dt.dispatch_day_id=? AND d.driver_id=? AND d.vehicle_id<>? LIMIT 1`).get(day.id,payload.driverId,vehicleId)
@@ -633,7 +635,8 @@ export function assignVehicleDay(date,vehicleId,payload,database=defaultDb){
     if(assistantIds){database.prepare('DELETE FROM dispatch_vehicle_assistants WHERE dispatch_day_id=? AND vehicle_id=?').run(day.id,vehicleId);const insert=database.prepare('INSERT INTO dispatch_vehicle_assistants(dispatch_day_id,vehicle_id,employee_id,employment_period_id) VALUES(?,?,?,?)');for(const employeeId of assistantIds)insert.run(day.id,vehicleId,employeeId,currentEmploymentPeriod(database,employeeId))}
     for(let tripNumber=1;tripNumber<=3;tripNumber+=1){const trip=ensureVehicleTrip(database,day,Number(vehicleId),tripNumber);const dispatch=database.prepare('SELECT * FROM dispatches WHERE id=?').get(trip.dispatch_id),driverId=payload.driverId===undefined?dispatch.driver_id:payload.driverId,assistantId=assistantIds===null?dispatch.assistant_id:(assistantIds[0]||null);database.prepare(`UPDATE dispatches SET driver_id=?,driver_employment_period_id=?,assistant_id=?,assistant_employment_period_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(driverId,currentEmploymentPeriod(database,driverId),assistantId,currentEmploymentPeriod(database,assistantId),trip.dispatch_id);if(payload.startLocation)writeStartLocationSnapshot(database,trip.dispatch_id,resolveStartLocation(payload.startLocation,{driverId,canViewEmployeeHome:Boolean(payload.canViewEmployeeHome)},database));if(payload.endLocationId!==undefined)writeCommercialSnapshot(database,trip.dispatch_id,{buyer:dispatch.buyer_reference_id?{buyerReferenceId:dispatch.buyer_reference_id,buyerCode:dispatch.buyer_code,buyerName:dispatch.buyer_name}:null,endLocation:payload.endLocationId?resolvePrimaryEndLocation(payload.endLocationId,database):null})}
     invalidateDispatchDay(database,day.dispatch_date,'vehicle_assignment_updated','vehicle',vehicleId,before,{...payload,assistantIds},payload.changedBy)
-    if(payload.driverId){const futureDays=database.prepare(`SELECT DISTINCT dd.id,dd.dispatch_date FROM dispatch_days dd JOIN daily_route_assignments a ON a.dispatch_day_id=dd.id
+    const selectedDriver=payload.driverId?database.prepare('SELECT job_role jobRole FROM employees WHERE id=?').get(payload.driverId):null
+    if(payload.driverId&&!isTemporarySupervisorDriver(selectedDriver)){const futureDays=database.prepare(`SELECT DISTINCT dd.id,dd.dispatch_date FROM dispatch_days dd JOIN daily_route_assignments a ON a.dispatch_day_id=dd.id
       WHERE dd.dispatch_date>? AND dd.status IN ('draft','reapproval_required','approved') AND a.vehicle_id=? ORDER BY dd.dispatch_date`).all(day.dispatch_date,vehicleId);for(const futureDay of futureDays)carryForwardVehicleDriver(database,futureDay,Number(vehicleId))}
     database.exec('COMMIT');return getDispatchDay(date,database)
   }catch(error){database.exec('ROLLBACK');throw error}
@@ -757,7 +760,7 @@ function driverRouteForDate({employeeId,role,date,preview=false},database){
     FROM employees e WHERE e.id=?`).get(Number(employeeId))
   const accountRole=String(role||'').trim().toLowerCase(),jobRole=String(employee?.jobRole||'').trim().toLowerCase()
   if(!employee||!employee.isActive||employee.employmentStatus!=='active')throw driverRouteForbidden('This employee is not active.')
-  const isDriver=accountRole==='driver'&&(jobRole==='driver'||Boolean(employee.hasDriverRole))
+  const isDriver=Boolean(activeRouteDriver(database,employeeId,accountRole))
   const isCrew=accountRole==='crew'&&(['assistant','crew','attendant / crew'].includes(jobRole)||Boolean(employee.hasCrewRole))
   if(!isDriver&&!isCrew)throw driverRouteForbidden('You do not have permission to view a driver route.')
   date=iso(date)

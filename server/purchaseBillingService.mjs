@@ -6,15 +6,15 @@ import {withImmediateTransaction} from './branchServiceDateGuard.mjs'
 import {listBranchProducts,requireBranchProductPrice} from './materialProductService.mjs'
 import {kuchingDate} from '../shared/kuchingTime.js'
 import {recordCashPurchase} from './cashFloatService.mjs'
+import {activeRouteDriver} from './routeDriverAuthorization.mjs'
 
 const fail=(message,code='INVALID_BILL',statusCode=409)=>{const error=new Error(message);error.code=code;error.statusCode=statusCode;return error}
 const nowKuching=(input=new Date())=>{const parts=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuching',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(input)).map(part=>[part.type,part.value]));return`${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}+08:00`}
 const money=value=>Math.round(Number(value)*100)
 
 function activeDriver(database,employeeId,role){
-  if(String(role).toLowerCase()!=='driver')throw fail('Only an active driver can create a Purchase Bill.','PERMISSION_DENIED',403)
-  const employee=database.prepare(`SELECT id,name FROM employees WHERE id=? AND is_active=1 AND employment_status='active' AND (lower(job_role)='driver' OR EXISTS(SELECT 1 FROM employee_job_roles r WHERE r.employee_id=employees.id AND r.role='Driver' AND r.is_active=1))`).get(Number(employeeId))
-  if(!employee)throw fail('Only an active driver can create a Purchase Bill.','PERMISSION_DENIED',403)
+  const employee=activeRouteDriver(database,employeeId,role)
+  if(!employee)throw fail('Only an active driver or an assigned acting supervisor can create a Purchase Bill.','PERMISSION_DENIED',403)
   return employee
 }
 
