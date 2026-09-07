@@ -1,9 +1,9 @@
 import {db} from '../server/database.mjs'
-import {carryForwardVehicleTeams} from '../server/dispatchService.mjs'
+import {carryForwardVehicleDrivers} from '../server/dispatchService.mjs'
 import {kuchingDate} from '../shared/kuchingTime.js'
 
 const startDate=process.env.ROUTE_TEAM_START||kuchingDate()
-const result=carryForwardVehicleTeams({startDate},db)
+const result=carryForwardVehicleDrivers({startDate},db)
 const integrity=db.prepare('PRAGMA integrity_check').get().integrity_check
 const foreignKeyErrors=db.prepare('PRAGMA foreign_key_check').all().length
 const conflicts=db.prepare(`SELECT COUNT(*) count FROM (
