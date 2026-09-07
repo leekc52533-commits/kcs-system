@@ -168,7 +168,7 @@ function TodayView({data,preview=false}){
     {error&&<div className="auth-error" role="alert">{error}</div>}
     <div className="driver-route-summary"><strong>{route.date} · {route.weekday}</strong><span>{t('mobile.routeStatus')}: {t(route.status==='in_progress'?'mobile.inProgress':'mobile.approved')}</span><span>{t('mobile.totalStops')}: {route.totalStops} · {t('mobile.completed')}: {route.completedStops} · {t('mobile.pending')}: {route.pendingStops}</span></div>
     {route.trips.map(trip=><article className="mobile-card driver-trip" key={trip.id}>
-      <h2>{trip.vehicleName||trip.vehicleCode} · {trip.registrationNumber||trip.vehicleCode}</h2>
+      <h2>{trip.registrationNumber||trip.vehicleCode}</h2>
       <p>Trip {trip.tripNumber} · {trip.completedCount||0}/{trip.totalCount||trip.stops.length} {t('mobile.completed')} · {t(trip.executionStatus==='in_progress'?'mobile.inProgress':trip.executionStatus==='completed'?'mobile.completed':'mobile.notStarted')}</p>
       {!preview&&trip.canStart&&<button type="button" className="primary-mobile" disabled={Boolean(busy)} onClick={()=>start(trip)}>{busy==='trip-'+trip.id?t('common.processing'):t('mobile.startTrip')}</button>}
       {!preview&&trip.canComplete&&<button type="button" className="primary-mobile" disabled={Boolean(busy)} onClick={()=>completeTrip(trip)}>{busy==='complete-trip-'+trip.id?t('common.processing'):'Complete Trip'}</button>}
