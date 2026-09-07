@@ -698,7 +698,10 @@ export function assignStopsToRoute(date,payload={},database=defaultDb){
   const serviceDate=iso(date),day=dayByDate(database,serviceDate),route=Number(payload.routeNumber)
   if(!day)throw new Error('Dispatch day not found')
   if(!Number.isInteger(route)||route<1||route>5)throw new Error('Route must be between 1 and 5')
-  const protection=protectedDayReason(database,day);if(protection||!['draft','reapproval_required'].includes(day.status))throw new Error(`Route assignment is protected: ${protection||day.status}`)
+  if(!['draft','reapproval_required','approved','in_progress'].includes(day.status))throw new Error(`当天已经是 ${day.status}，不能再分配客户`)
+  const protectedRoute=database.prepare(`SELECT d.id,d.status FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id JOIN dispatches d ON d.id=dt.dispatch_id
+    WHERE dt.dispatch_day_id=? AND ds.route_number=? AND ds.status<>'cancelled' AND d.status IN ('released','in_progress','completed') ORDER BY d.id LIMIT 1`).get(day.id,route)
+  if(protectedRoute)throw new Error(`Route ${route} 已经开始执行，不能再加入客户`)
   const stopIds=[...new Set((payload.stopIds||[]).map(Number).filter(Boolean))];if(!stopIds.length)throw new Error('没有可分配到 Route 的客户')
   const placeholders=stopIds.map(()=>'?').join(',')
   const eligible=database.prepare(`SELECT ds.id,ds.dispatch_trip_id tripId FROM dispatch_stops ds
