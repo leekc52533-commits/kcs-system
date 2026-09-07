@@ -8,7 +8,8 @@ import {schemaSql,SCHEMA_VERSION} from '../server/schema.mjs'
 import {applyV28Migration} from '../server/migrationV28.mjs'
 import {applyV44Migration} from '../server/migrationV44.mjs'
 import {seedV22MasterData} from '../server/migrationV22.mjs'
-import {approveDay,generateWeek,saveDraftAdjustments} from '../server/dispatchService.mjs'
+import {approveDay,generateWeek,saveDraftAdjustments,handoverRoute,getDispatchDay,driverToday} from '../server/dispatchService.mjs'
+import {mobileWeightContext} from '../server/unloadingWeightService.mjs'
 import {arriveAtStop,completeDriverStop,startDriverTrip} from '../server/driverExecutionService.mjs'
 import {createPurchaseBill,getPurchaseBilling,uploadPurchasePaymentProof} from '../server/purchaseBillingService.mjs'
 import {configureCashFloat,mobileCashFloat} from '../server/cashFloatService.mjs'
@@ -33,6 +34,35 @@ function fixture(){
   return{db,tripId,stops,productId:product.id}
 }
 const arrive=(db,id)=>arriveAtStop(id,{latitude:3.1001,longitude:101.6001,accuracy:10,captured_at:'2026-09-07T00:59:30Z'},context,db)
+
+test('today handover preserves bills and completed stops, changes ownership and carries cargo estimate',()=>{
+  const{db,stops,productId}=fixture()
+  db.prepare("INSERT INTO vehicles(vehicle_code,registration_number,status,operational_status) VALUES('V2','NEW2','available','active')").run()
+  db.prepare("INSERT INTO employees(employee_code,name,job_role,employment_status,is_active) VALUES('D2','Driver Two','Driver','active',1)").run()
+  db.prepare('UPDATE dispatch_stops SET route_number=1,route_stop_sequence=stop_sequence').run()
+  const day=getDispatchDay(date,db)
+  db.prepare('INSERT INTO daily_route_assignments(dispatch_day_id,route_number,vehicle_id) VALUES(?,1,1)').run(day.id)
+  db.prepare("UPDATE branches SET payment_type='Credit' WHERE id=1").run()
+  arrive(db,stops[0])
+  createPurchaseBill(stops[0],{weightMethod:'on_site',printChoice:'no_print',items:[{productId,quantity:61.6}]},context,db)
+  completeDriverStop(stops[0],context,db)
+  const billBefore=db.prepare('SELECT * FROM purchase_bills').all(),itemsBefore=db.prepare('SELECT * FROM purchase_bill_items').all(),stopBefore=db.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(stops[0])
+  const payload={vehicleId:2,driverId:2,reason:'Correct allocation',expectedRevision:day.revision},manager={role:'supervisor',employeeName:'Supervisor',today:date}
+  assert.throws(()=>handoverRoute(date,1,payload,{...manager,role:'driver'},db),/permission/)
+  handoverRoute(date,1,payload,manager,db)
+  assert.deepEqual(db.prepare('SELECT * FROM purchase_bills').all(),billBefore)
+  assert.deepEqual(db.prepare('SELECT * FROM purchase_bill_items').all(),itemsBefore)
+  assert.deepEqual(db.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(stops[0]),stopBefore)
+  assert.throws(()=>getPurchaseBilling(stops[1],context,db),/not assigned/)
+  const next={...context,employeeId:2}
+  arriveAtStop(stops[1],{latitude:3.1001,longitude:101.6001,accuracy:10,captured_at:'2026-09-07T00:59:30Z'},next,db)
+  createPurchaseBill(stops[1],{weightMethod:'on_site',printChoice:'no_print',items:[{productId,quantity:20}]},next,db)
+  assert.equal(db.prepare('SELECT driver_employee_id n FROM purchase_bills WHERE dispatch_stop_id=?').get(stops[1]).n,2)
+  assert.equal(mobileWeightContext(next,db).trip.estimatedWeightKg,81.6)
+  assert.equal(driverToday({...next},db).routeAvailable,true)
+  assert.throws(()=>handoverRoute(date,1,payload,manager,db),/刷新/)
+  assert.equal(db.prepare('PRAGMA integrity_check').get().integrity_check,'ok')
+})
 
 test('v44 migration is additive, preserves dispatch counts and is idempotent',()=>{
   const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON;'+schemaSql);db.exec('DROP TABLE purchase_payment_proofs;DROP TABLE purchase_bill_items;DROP TABLE purchase_bills;DELETE FROM schema_meta;INSERT INTO schema_meta(version) VALUES(43)')
