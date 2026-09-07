@@ -693,6 +693,32 @@ export function assignAreaStops(date,payload,database=defaultDb){
   }catch(error){database.exec('ROLLBACK');throw error}
 }
 
+/** Adds one or more date-specific, unassigned stops to a Route. The Route's vehicle, if any, carries them automatically. */
+export function assignStopsToRoute(date,payload={},database=defaultDb){
+  const serviceDate=iso(date),day=dayByDate(database,serviceDate),route=Number(payload.routeNumber)
+  if(!day)throw new Error('Dispatch day not found')
+  if(!Number.isInteger(route)||route<1||route>5)throw new Error('Route must be between 1 and 5')
+  const protection=protectedDayReason(database,day);if(protection||!['draft','reapproval_required'].includes(day.status))throw new Error(`Route assignment is protected: ${protection||day.status}`)
+  const stopIds=[...new Set((payload.stopIds||[]).map(Number).filter(Boolean))];if(!stopIds.length)throw new Error('没有可分配到 Route 的客户')
+  const placeholders=stopIds.map(()=>'?').join(',')
+  const eligible=database.prepare(`SELECT ds.id,ds.dispatch_trip_id tripId FROM dispatch_stops ds
+    JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id JOIN dispatches d ON d.id=dt.dispatch_id
+    WHERE dt.dispatch_day_id=? AND ds.id IN (${placeholders}) AND ds.status<>'cancelled' AND ds.route_number IS NULL AND d.vehicle_id IS NULL`).all(day.id,...stopIds)
+  if(eligible.length!==stopIds.length)throw new Error('有客户已经分配到其他 Route，请刷新后重试')
+  const routeAssignment=database.prepare('SELECT vehicle_id vehicleId FROM daily_route_assignments WHERE dispatch_day_id=? AND route_number=?').get(day.id,route)
+  return withImmediateTransaction(database,()=>{
+    const target=routeAssignment?.vehicleId?ensureVehicleTrip(database,day,routeAssignment.vehicleId,1):ensureUnassignedTrip(database,day)
+    let stopSequence=database.prepare("SELECT COALESCE(MAX(stop_sequence),0) value FROM dispatch_stops WHERE dispatch_id=? AND stop_sequence>0").get(target.dispatch_id).value
+    let routeSequence=database.prepare("SELECT COALESCE(MAX(route_stop_sequence),0) value FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id WHERE dt.dispatch_day_id=? AND ds.route_number=? AND ds.status<>'cancelled'").get(day.id,route).value
+    database.prepare(`UPDATE dispatch_stops SET stop_sequence=-id WHERE id IN (${placeholders})`).run(...stopIds)
+    const move=database.prepare('UPDATE dispatch_stops SET dispatch_id=?,dispatch_trip_id=?,stop_sequence=?,route_number=?,route_stop_sequence=? WHERE id=?')
+    for(const stopId of stopIds){stopSequence+=1;routeSequence+=1;move.run(target.dispatch_id,target.id,stopSequence,route,routeSequence,stopId)}
+    normalizeTripSequences(database,[...eligible.map(item=>item.tripId),target.id])
+    invalidateDispatchDay(database,serviceDate,'temporary_stops_assigned_to_route','route',route,null,{routeNumber:route,stopIds},payload.changedBy)
+    return getDispatchDay(serviceDate,database)
+  })
+}
+
 const draftStopById=(database,id)=>database.prepare(`SELECT ds.*,dd.id dispatch_day_id,dd.dispatch_date,dd.status day_status,d.status dispatch_status,
   dt.trip_number,d.vehicle_id,s.jodoo_schedule_id,s.days_of_week schedule_days
   FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id JOIN dispatch_days dd ON dd.id=dt.dispatch_day_id
