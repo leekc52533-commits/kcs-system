@@ -20,14 +20,18 @@ const vehicleLabel=(item)=>`${item.vehicleCode||item.vehicle} — ${item.registr
 
 export default function WeeklyDispatchPage({currentUser}){
   const{t}=useI18n()
-  const[selectedDate]=useState(localDate()),[displayMode,setDisplayMode]=useState('dispatch'),[selectedWeekDate,setSelectedWeekDate]=useState(localDate()),[selectedRouteNumber,setSelectedRouteNumber]=useState(1),[data,setData]=useState(null),[error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false)
+  const[displayMode,setDisplayMode]=useState('dispatch'),[selectedWeekDate,setSelectedWeekDate]=useState(localDate()),[selectedRouteNumber,setSelectedRouteNumber]=useState(1),[data,setData]=useState(null),[error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false)
   const canEditDispatch=['owner_admin','operations_admin','supervisor'].includes(currentUser.systemRole)||currentUser.permissions?.includes('schedule_manage')
   const canManageVehicles=['owner_admin','operations_admin'].includes(currentUser.systemRole)||currentUser.permissions?.includes('vehicle_manage')
   const canApproveDefer=['owner','owner_admin','operations_admin','supervisor'].includes(currentUser.systemRole||currentUser.role)
-  const load=useCallback(async()=>{setError('');try{setData(await request(`/api/dispatch/week?startDate=${selectedDate}`))}catch(e){setData({days:[],vehicles:[],employees:[],locations:[],areas:[],buyers:[],endLocations:[]});setError(e.message)}},[selectedDate])
+  const loadSequence=useRef(0)
+  const load=useCallback(async()=>{const sequence=++loadSequence.current;setError('');try{
+    const result=await request(canEditDispatch?'/api/dispatch/ensure-rolling-week':`/api/dispatch/week?startDate=${localDate()}`,canEditDispatch?{method:'POST'}:undefined)
+    if(sequence===loadSequence.current)setData(result)
+  }catch(e){if(sequence===loadSequence.current)setError(e.message)}},[canEditDispatch])
   useEffect(()=>{load()},[load])
   useEffect(()=>{const refresh=()=>load();window.addEventListener('kcs-handover-saved',refresh);return()=>window.removeEventListener('kcs-handover-saved',refresh)},[load])
-  useEffect(()=>{const timer=setInterval(load,10000);return()=>clearInterval(timer)},[load])
+  useEffect(()=>{const wake=()=>{if(document.visibilityState==='visible')load()};const timer=setInterval(load,10000);window.addEventListener('focus',load);document.addEventListener('visibilitychange',wake);return()=>{clearInterval(timer);window.removeEventListener('focus',load);document.removeEventListener('visibilitychange',wake)}},[load])
   const act=async(date,action,reason='')=>{setBusy(true);setMessage('');try{await request(`/api/dispatch/day/${date}/${action}`,{method:'POST',body:JSON.stringify({[action==='approve'?'approvedBy':'reopenedBy']:currentUser.name,reason})});setMessage(`${date} ${action==='approve'?'approved':'approval withdrawn'}.`);await load()}catch(e){setError(e.message);await load();throw e}finally{setBusy(false)}}
   const patchStop=async(id,body)=>{try{await request(`/api/dispatch/stops/${id}`,{method:'PATCH',body:JSON.stringify({...body,changedBy:currentUser.name})});await load()}catch(e){setError(e.message)}}
   const patchTrip=async(id,body)=>{try{await request(`/api/dispatch/trips/${id}`,{method:'PATCH',body:JSON.stringify(body)});setMessage('Start Location updated.');await load()}catch(e){setError(e.message);throw e}}
