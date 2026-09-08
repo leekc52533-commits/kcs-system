@@ -34,12 +34,13 @@ test('individual route approval remains available',()=>{
   assert.match(ui,/\/approval-check/)
 })
 
-test('Route vehicle labels use plates and reorder controls use arrows',()=>{
+test('Route vehicle labels use plates and reorder controls use arrows',async()=>{
+  const list=await readFile(new URL('../src/RouteCustomerList.jsx',import.meta.url),'utf8')
   const panel=ui.slice(ui.indexOf('function RouteAssignmentPanel'),ui.indexOf('function UnassignedPool'))
   assert.match(panel,/route\.registrationNumber\|\|route\.vehicle/)
   assert.match(panel,/vehicle\.registrationNumber\|\|vehicle\.vehicleCode\|\|vehicle\.vehicle/)
   assert.doesNotMatch(panel,/\{vehicleLabel\(vehicle\)\}/)
-  assert.match(panel,/>↑<\/button>/)
-  assert.match(panel,/>↓<\/button>/)
-  assert.doesNotMatch(panel,/>上移<\/button>|>下移<\/button>/)
+  assert.match(list,/>↑<\/button>/)
+  assert.match(list,/>↓<\/button>/)
+  assert.doesNotMatch(list,/>上移<\/button>|>下移<\/button>/)
 })

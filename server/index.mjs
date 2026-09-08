@@ -1,3 +1,4 @@
+import {adjustRouteCustomer} from './dispatchService.mjs'
 import {routeUnloadingRecords} from './routeUnloadingService.mjs'
 import http from 'node:http'
 import crypto from 'node:crypto'
@@ -292,6 +293,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && url.pathname === '/api/dispatch/stops') {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});return sendJson(response,201,createStop((await readJson(request)).payload))}
     if (request.method === 'POST' && url.pathname === '/api/dispatch/trips') {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});return sendJson(response,201,createTrip((await readJson(request)).payload))}
     if (request.method === 'PATCH' && /^\/api\/dispatch\/stops\/\d+$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});return sendJson(response,200,updateStop(Number(url.pathname.split('/').at(-1)),(await readJson(request)).payload))}
+    if (request.method === 'POST' && /^\/api\/dispatch\/stops\/\d+\/adjust-route$/.test(url.pathname)) return sendJson(response,200,adjustRouteCustomer(Number(url.pathname.split('/')[4]),(await readJson(request)).payload,{role:session.role,employeeName:session.employeeName}))
     if (request.method === 'POST' && /^\/api\/dispatch\/stops\/\d+\/move-vehicle$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});const payload=(await readJson(request)).payload;return sendJson(response,200,moveRouteStop(Number(url.pathname.split('/')[4]),{...payload,changedBy:session.employeeName}))}
     if (request.method === 'DELETE' && /^\/api\/dispatch\/stops\/\d+$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});return sendJson(response,200,deleteStop(Number(url.pathname.split('/').at(-1)),(await readJson(request)).payload))}
     if (request.method === 'PATCH' && /^\/api\/dispatch\/trips\/\d+$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});const payload=(await readJson(request)).payload;return sendJson(response,200,updateTrip(Number(url.pathname.split('/').at(-1)),{...payload,changedBy:session.employeeName,canViewEmployeeHome:canManageEmployees(session)}))}
