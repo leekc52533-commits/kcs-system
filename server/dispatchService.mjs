@@ -991,7 +991,7 @@ export function reconcileScheduleWindow({startDate=iso(),changedBy='System',conf
   if(confirmedDate){const confirmed=dayByDate(database,confirmedDate);if(!confirmed||confirmed.revision!==Number(expectedRevision))throw new Error('安排已改变，请刷新后确认');if(confirmed.status==='completed')throw new Error('已完成日期不能补排')}
   const review=[],schedules=database.prepare("SELECT s.*,b.branch_name FROM branch_schedules s JOIN branches b ON b.id=s.branch_id LEFT JOIN customers c ON c.id=b.customer_id WHERE s.is_active=1 AND b.lifecycle_status='ACTIVE' AND b.is_active=1 AND LOWER(b.status)='active' AND COALESCE(c.is_active,1)=1").all()
   const plan=database.prepare('SELECT id FROM weekly_route_plans WHERE is_active=1').get()
-  for(let offset=0;offset<7;offset++){
+  for(let offset=0;offset<(confirmedDate?1:7);offset++){
    const date=addDays(startDate,offset),day=dayByDate(database,date);if(!day)continue
    const exceptions=database.prepare('SELECT * FROM schedule_exceptions WHERE original_date=? OR target_date=?').all(date,date)
    const expected=new Map()
