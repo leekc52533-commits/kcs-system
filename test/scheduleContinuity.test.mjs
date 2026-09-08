@@ -98,3 +98,28 @@ test('issued bill is immutable across schedule edits, reconciliation and rejecte
  save(db,'B1',{frequency:'Once a week',weekdays:['Tuesday'],routeNumber:1});ensureRollingWeek({startDate:'2026-09-07'},db)
  assert.deepEqual(db.prepare('SELECT * FROM purchase_bills').all(),bill);assert.deepEqual(stop(db,1),source)
 }finally{db.close()}})
+
+test('Sunday conflict remains pending while eligible schedules synchronize, including on retry',()=>{const db=fixture();try{
+ db.prepare('UPDATE weekly_route_plan_stops SET weekday=0 WHERE branch_id=1').run()
+ const before={schedule:db.prepare('SELECT * FROM branch_schedules WHERE branch_id=1').get(),branch:db.prepare('SELECT * FROM branches WHERE id=1').get(),routes:db.prepare('SELECT * FROM weekly_route_plan_stops WHERE branch_id=1').all()}
+ const changes=db.prepare('SELECT total_changes() n').get().n
+ const preview=synchronizeRouteScheduleBaseline(db,{today:'2026-09-07',dryRun:true})
+ assert.equal(db.prepare('SELECT total_changes() n').get().n,changes)
+ assert.ok(preview.pending.some(p=>p.branchId==='B1'&&p.issueCode==='SUNDAY_REVIEW_REQUIRED'))
+ assert.ok(!preview.automatic.some(p=>p.branchId==='B1'))
+ const result=synchronizeRouteScheduleBaseline(db,{today:'2026-09-07'});assert.equal(result.applied,2)
+ assert.deepEqual(db.prepare('SELECT * FROM branch_schedules WHERE branch_id=1').get(),before.schedule)
+ assert.deepEqual(db.prepare('SELECT * FROM branches WHERE id=1').get(),before.branch)
+ assert.deepEqual(db.prepare('SELECT * FROM weekly_route_plan_stops WHERE branch_id=1').all(),before.routes)
+ assert.equal(getCollectionScheduleManagement('B2',db).frequency,'Once a week')
+ assert.throws(()=>save(db,'B1',{frequency:'Once a week',weekdays:['Sunday']}),/Sunday is restricted/)
+ const retry=synchronizeRouteScheduleBaseline(db,{today:'2026-09-07'});assert.equal(retry.applied,0);assert.ok(retry.pending.some(p=>p.branchId==='B1'&&p.issueCode==='SUNDAY_REVIEW_REQUIRED'))
+}finally{db.close()}})
+
+for(const permitted of ['existing Sunday','allowed customer'])test(`baseline retains Sunday allowance for ${permitted}`,()=>{const db=fixture();try{
+ db.prepare('UPDATE weekly_route_plan_stops SET weekday=0 WHERE branch_id=1').run()
+ if(permitted==='existing Sunday')db.prepare("UPDATE branch_schedules SET days_of_week='Sunday' WHERE branch_id=1").run()
+ else db.prepare("UPDATE customers SET name='Everwin' WHERE id=1").run()
+ const result=synchronizeRouteScheduleBaseline(db,{today:'2026-09-07'});assert.equal(result.pending.some(p=>p.branchId==='B1'),false)
+ assert.deepEqual(getCollectionScheduleManagement('B1',db).weekdays,['Sunday'])
+}finally{db.close()}})
