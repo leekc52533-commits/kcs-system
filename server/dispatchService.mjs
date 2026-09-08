@@ -854,7 +854,8 @@ export function assignStopsToRoute(date,payload={},database=defaultDb){
     database.prepare(`UPDATE dispatch_stops SET stop_sequence=-id WHERE id IN (${placeholders})`).run(...stopIds)
     const move=database.prepare('UPDATE dispatch_stops SET dispatch_id=?,dispatch_trip_id=?,stop_sequence=?,route_number=?,route_stop_sequence=? WHERE id=?')
     for(const stopId of stopIds){stopSequence+=1;routeSequence+=1;move.run(target.dispatch_id,target.id,stopSequence,route,routeSequence,stopId)}
-    normalizeTripSequences(database,[...eligible.map(item=>item.tripId),target.id])
+    // Append only: cancelled records still reserve their sequence numbers.
+    // Renumbering active stops would collide with history and change existing order.
     invalidateDispatchDay(database,serviceDate,'temporary_stops_assigned_to_route','route',route,null,{routeNumber:route,stopIds},payload.changedBy)
     return getDispatchDay(serviceDate,database)
   })

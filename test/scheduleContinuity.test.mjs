@@ -162,3 +162,27 @@ test('production preflight can apply the whole baseline inside an outer rollback
  db.exec('BEGIN IMMEDIATE');const report=synchronizeRouteScheduleBaseline(db,{today:'2026-09-07'});assert.equal(report.applied,3);assert.equal(db.isTransaction,true);db.exec('ROLLBACK')
  assert.deepEqual(tables.map(name=>db.prepare(`SELECT * FROM ${name}`).all()),before)
 }finally{db.close()}})
+
+for(const scenario of ['cancelled slot','reversed row IDs'])test(`rolling reconciliation preserves occupied sequence slots: ${scenario}`,()=>{const db=fixture();try{
+ ensureRollingWeek({startDate:'2026-09-07'},db)
+ if(scenario==='cancelled slot'){
+  const old=stop(db,1)
+  recordCustomerReportedNoGoods(old.id,{expectedRevision:getDispatchDay('2026-09-07',db).revision,reason:'Customer called'},context,db)
+ }else{
+  const a=stop(db,1),b=stop(db,2)
+  db.prepare('UPDATE dispatch_stops SET stop_sequence=100 WHERE id=?').run(a.id)
+  db.prepare('UPDATE dispatch_stops SET stop_sequence=? WHERE id=?').run(a.stop_sequence,b.id)
+  db.prepare('UPDATE dispatch_stops SET stop_sequence=? WHERE id=?').run(b.stop_sequence,a.id)
+ }
+ const before=db.prepare('SELECT * FROM dispatch_stops ORDER BY id').all()
+ addBranch(db)
+ db.exec("INSERT INTO weekly_route_plan_stops(plan_id,weekday,branch_id,vehicle_registration_number,trip_number,stop_sequence,route_number) VALUES(1,1,4,'QAA4293N',1,3,1)")
+ ensureRollingWeek({startDate:'2026-09-07'},db)
+ assert.equal(stop(db,4).route_number,1)
+ for(const row of before)assert.deepEqual(db.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(row.id),row)
+ const after=db.prepare('SELECT * FROM dispatch_stops ORDER BY id').all()
+ ensureRollingWeek({startDate:'2026-09-07'},db)
+ assert.deepEqual(db.prepare('SELECT * FROM dispatch_stops ORDER BY id').all(),after)
+ assert.equal(db.prepare("SELECT count(*) n FROM dispatch_stops WHERE branch_id=4 AND service_date='2026-09-07' AND status<>'cancelled'").get().n,1)
+ assert.equal(db.prepare('PRAGMA foreign_key_check').all().length,0)
+}finally{db.close()}})
