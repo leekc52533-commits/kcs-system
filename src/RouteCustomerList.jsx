@@ -1,3 +1,4 @@
+import {DispatchScheduleTools} from './DispatchScheduleTools.jsx'
 import {useState} from 'react'
 import {apiRequest} from './apiClient.js'
 import {formatBranchId} from '../shared/typedIds.js'
@@ -37,10 +38,11 @@ function CustomerRow({stop,index,day,route,days,canEdit,editable,onReorder,busy}
       <p>联系人：{stop.contactPerson||'未记录'} · {stop.phone?<a href={`tel:${stop.phone.replace(/[^+0-9]/g,'')}`}>{stop.phone}</a>:'电话未记录'}</p>
       {stop.timeRestriction&&<p>约定时段：{stop.timeRestriction}</p>}
       {[['Parking',stop.parkingNote],['Truck access',stop.truckAccess],['GPS note',stop.gpsRemark],['跟进原因',stop.overrideReason]].filter(([,value])=>value).map(([label,value])=><p key={label}>{label}：{value}</p>)}
-      <div className="route-customer-links">{gps?<a href={`https://www.google.com/maps/dir/?api=1&destination=${stop.latitude},${stop.longitude}`} target="_blank" rel="noreferrer">导航</a>:<span>GPS 未记录</span>}<a href={`?page=customers&tab=branches&branch=${encodeURIComponent(formatBranchId(stop.branchId))}`} target="_blank" rel="noreferrer">客户主资料</a>{canEdit&&<button type="button" disabled={!editable||protectedStop||saving} onClick={()=>setAdjust(value=>!value)}>改期／转到其他 ROUTE</button>}</div>
+      {canEdit&&<DispatchScheduleTools {...{stop,day,days}} routeNumber={route.routeNumber}/>}
+      <div className="route-customer-links">{gps?<a href={`https://www.google.com/maps/dir/?api=1&destination=${stop.latitude},${stop.longitude}`} target="_blank" rel="noreferrer">导航</a>:<span>GPS 未记录</span>}<a href={`?page=customers&tab=branches&branch=${encodeURIComponent(formatBranchId(stop.branchId))}`} target="_blank" rel="noreferrer">客户主资料</a>{canEdit&&<button type="button" disabled={!editable||protectedStop||saving} onClick={()=>setAdjust(value=>!value)}>转到其他 ROUTE</button>}</div>
       {canEdit&&(!editable||protectedStop)&&<small>{protectedStop?'已有执行或单据，保留原始收货记录。':'调整前请先撤回批准；执行中的日期不能移动客户。'}</small>}
-      {adjust&&editable&&!protectedStop&&<fieldset disabled={saving}><legend>只调整这一次收货</legend>
-        <label>日期<select value={date} onChange={e=>setDate(e.target.value)}>{days.map(item=><option key={item.id} value={item.dispatch_date}>{item.dispatch_date}</option>)}</select></label>
+      {adjust&&editable&&!protectedStop&&<fieldset disabled={saving}><legend>调整当天 ROUTE（收货日期不变）</legend>
+        
         <label>ROUTE<select value={targetRoute} onChange={e=>setTargetRoute(e.target.value)}>{(targetDay?.routeBoards||[]).map(item=><option key={item.routeNumber} value={item.routeNumber}>{item.name}</option>)}</select></label>
         <label>原因<input value={reason} onChange={e=>setReason(e.target.value)}/></label>
         <button type="button" disabled={!reason.trim()||!targetDay||(date===day.dispatch_date&&Number(targetRoute)===route.routeNumber)} onClick={save}>{saving?'保存中…':'确认调整'}</button><button type="button" onClick={()=>setAdjust(false)}>取消</button>
