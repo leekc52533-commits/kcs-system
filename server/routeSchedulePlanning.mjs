@@ -1,4 +1,4 @@
-import {parseScheduleWeekdays,recurrenceTypeForFrequency,validateRecurrenceConfig,weekdayName} from '../shared/scheduleRecurrence.js'
+import {parseScheduleWeekdays,recurrenceTypeForFrequency,validateRecurrenceConfig,weekdayName,isSundayCustomerAllowed} from '../shared/scheduleRecurrence.js'
 import {addCalendarDays,kuchingDate} from '../shared/kuchingTime.js'
 export const WEEKDAYS=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
 export function branchRouteRows(db,branchId){return db.prepare('SELECT r.* FROM weekly_route_plan_stops r JOIN weekly_route_plans p ON p.id=r.plan_id WHERE p.is_active=1 AND r.branch_id=? ORDER BY r.weekday,r.stop_sequence').all(branchId)}
@@ -27,7 +27,7 @@ export function syncScheduleRouteRows(db,branchId,after,routeNumber){
 
 export function routeScheduleProposals(db,today=kuchingDate()){
  const result=[]
- const branches=db.prepare("SELECT b.* FROM branches b LEFT JOIN customers c ON c.id=b.customer_id WHERE b.lifecycle_status='ACTIVE' AND b.is_active=1 AND LOWER(b.status)='active' AND COALESCE(c.is_active,1)=1").all()
+ const branches=db.prepare("SELECT b.*,c.name customer_name FROM branches b LEFT JOIN customers c ON c.id=b.customer_id WHERE b.lifecycle_status='ACTIVE' AND b.is_active=1 AND LOWER(b.status)='active' AND COALESCE(c.is_active,1)=1").all()
  for(const b of branches){
   const schedules=db.prepare('SELECT * FROM branch_schedules WHERE branch_id=? AND is_active=1').all(b.id),s=schedules[0],type=recurrenceTypeForFrequency(s?.frequency||b.collection_frequency)
   if(['paused','on_call'].includes(type))continue
@@ -44,7 +44,13 @@ export function routeScheduleProposals(db,today=kuchingDate()){
    const frequencies={1:'Once a week',2:'Twice a week',3:'3 times a week',4:'4 times a week',6:'6 times a week',7:'Daily'}
    if(!frequencies[weekdays.length]){result.push({...item,issue:'路线表每周次数需要核对'});continue}
    const same=s&&JSON.stringify([...parseScheduleWeekdays(s.days_of_week)].sort())===JSON.stringify([...weekdays].sort())&&s.frequency===frequencies[weekdays.length]
-   if(!same)result.push({...item,automatic:true,proposal:{frequency:frequencies[weekdays.length],weekdays,anchorDate:s?.anchor_date||'',effectiveDate:s?.effective_date||today,monthlyOccurrence:null}})
+   if(!same){
+    // Mirror the schedule editor's Sunday rule before classifying an automatic proposal.
+    // Existing Sunday schedules are grandfathered; a Route row alone is not approval.
+    const previousWeekdays=parseScheduleWeekdays(s?s.days_of_week:b.assigned_weekdays)
+    const sundayConflict=weekdays.includes('Sunday')&&!previousWeekdays.includes('Sunday')&&!isSundayCustomerAllowed({customerName:b.customer_name,branchName:b.branch_name})
+    result.push({...item,automatic:!sundayConflict,...(sundayConflict?{issueCode:'SUNDAY_REVIEW_REQUIRED',issue:'路线表包含星期日，但现有排程未获星期日许可；保留原排程，请主管核对收货星期'}:{}),proposal:{frequency:frequencies[weekdays.length],weekdays,anchorDate:s?.anchor_date||'',effectiveDate:s?.effective_date||today,monthlyOccurrence:null}})
+   }
   }else{
    const oldDay=s?.fixed_weekday||parseScheduleWeekdays(s?.days_of_week)[0],fixed=weekdays.includes(oldDay)?oldDay:weekdays[0]
    let valid=false;try{validateRecurrenceConfig(s||{});valid=!!s&&s.recurrence_type===type&&oldDay===fixed&&!inferred}catch{}
