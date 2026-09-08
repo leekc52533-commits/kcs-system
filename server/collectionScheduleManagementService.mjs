@@ -1,3 +1,4 @@
+import {planningDate} from '../shared/planningDates.js'
 import {syncScheduleRouteRows} from './routeSchedulePlanning.mjs'
 import {db as defaultDb} from './database.mjs'
 import {normalizeCollectionSettings} from '../shared/collectionSettings.js'
@@ -29,9 +30,11 @@ export function listCollectionScheduleManagement(params={},database=defaultDb){c
 export function getCollectionScheduleManagement(id,database=defaultDb){const b=branch(database,id);return b?view(database,b):null}
 
 function normalized(payload,before,b){
+  for(const field of ['anchorDate','effectiveDate'])if(payload[field]&&!planningDate(payload[field]))throw new Error(`${field} must be a valid calendar date.`)
+  payload={...payload,anchorDate:planningDate(payload.anchorDate),effectiveDate:planningDate(payload.effectiveDate)}
   const settings=normalizeCollectionSettings(payload.frequency,payload.weekdays)
   if(!settings.collectionFrequency)throw new Error('Collection Frequency is required.')
-  const expected={ 'Once a week':1,'Twice a week':2,'3 times a week':3,'4 times a week':4,'6 times a week':6,Daily:7,'Every 2 Weeks':1,'Every 3 Weeks':1,Monthly:1,'On Call':0,Paused:0}[settings.collectionFrequency]
+  const expected={ 'Once a week':1,'Twice a week':2,'3 times a week':3,'4 times a week':4,'5 times a week':5,'6 times a week':6,Daily:7,'Every 2 Weeks':1,'Every 3 Weeks':1,Monthly:1,'On Call':0,Paused:0}[settings.collectionFrequency]
   if(settings.assignedWeekdays.length!==expected)throw new Error(`${settings.collectionFrequency} requires exactly ${expected} collection weekday${expected===1?'':'s'}.`)
   if(settings.frequencyWarning)throw new Error(settings.frequencyWarning)
   if(settings.assignedWeekdays.includes('Sunday')&&!before?.weekdays.includes('Sunday')&&!isSundayCustomerAllowed({customerName:b.customer_name,branchName:b.branch_name}))throw new Error('Sunday is restricted to approved customers.')
@@ -39,7 +42,7 @@ function normalized(payload,before,b){
   if(payload.recurrenceType&&payload.recurrenceType!==recurrenceType)throw new Error('Recurrence type does not match Collection Frequency.')
   const config=validateRecurrenceConfig({frequency:settings.collectionFrequency,daysOfWeek:settings.assignedWeekdays,recurrenceType,intervalWeeks,anchorDate:payload.anchorDate,effectiveDate:payload.effectiveDate,fixedWeekday,monthlyOccurrence:payload.monthlyOccurrence})
   const after={frequency:settings.collectionFrequency,weekdays:settings.assignedWeekdays,recurrenceType,intervalWeeks,anchorDate:config.anchorDate,effectiveDate:config.effectiveDate,monthlyOccurrence:config.monthlyOccurrence,fixedWeekday}
-  after.nextCollectionDate=['on_call','paused'].includes(recurrenceType)?null:nextCollectionDate({...after,daysOfWeek:after.weekdays},after.effectiveDate||after.anchorDate||kuchingDate())
+  after.nextCollectionDate=['on_call','paused'].includes(recurrenceType)?null:nextCollectionDate({...after,daysOfWeek:after.weekdays},kuchingDate())
   return after
 }
 function externalId(database,branchId){const base=`KCS-${branchId}`;let candidate=base,index=1;while(database.prepare('SELECT 1 FROM branch_schedules WHERE jodoo_schedule_id=?').get(candidate))candidate=`${base}-${++index}`;return candidate}
