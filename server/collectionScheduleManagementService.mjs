@@ -12,7 +12,16 @@ const token=(branch,schedule)=>`${branch.updated_at}|${schedule?.updated_at||'MI
 const days=value=>normalizeCollectionSettings(null,value).assignedWeekdays
 const scheduleState=s=>s?{scheduleId:s.jodoo_schedule_id,frequency:s.frequency,weekdays:days(s.days_of_week),recurrenceType:s.recurrence_type,intervalWeeks:s.interval_weeks,anchorDate:s.anchor_date,effectiveDate:s.effective_date,monthlyOccurrence:s.monthly_occurrence,fixedWeekday:s.fixed_weekday,nextCollectionDate:s.next_collection_date}:null
 
-function branch(database,id){return database.prepare(`SELECT b.*,c.name customer_name,a.name area,z.name zone FROM branches b LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN zone_groups z ON z.id=COALESCE(a.confirmed_zone_group_id,a.zone_group_id) WHERE (${activeBranch}) AND (b.jodoo_branch_id=? OR b.id=?)`).get(branchKey(id),Number(branchKey(id))||-1)}
+function branch(database,id){
+ const select=`SELECT b.*,c.name customer_name,a.name area,z.name zone FROM branches b LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN zone_groups z ON z.id=COALESCE(a.confirmed_zone_group_id,a.zone_group_id) WHERE (${activeBranch})`
+ // Internal callers use numeric database IDs; HTTP/string callers use external Branch codes.
+ // Never fall back from an external code to an unrelated row's primary key.
+ if(typeof id==='number')return Number.isSafeInteger(id)&&id>0?database.prepare(`${select} AND b.id=?`).get(id):null
+ const key=branchKey(id).toUpperCase()
+ const rows=database.prepare(`${select} AND UPPER(TRIM(b.jodoo_branch_id)) IN (?,?)`).all(key,`B${key}`)
+ if(rows.length>1)throw Object.assign(new Error(`Ambiguous Branch code ${String(id)}; review duplicate Branch codes before editing.`),{statusCode:409})
+ return rows[0]||null
+}
 const activeSchedules=(database,id)=>database.prepare('SELECT * FROM branch_schedules WHERE branch_id=? AND is_active=1 ORDER BY id').all(id)
 function view(database,b){const schedules=activeSchedules(database,b.id),s=schedules[0];return{internalScheduleId:s?.id||null,scheduleId:s?.jodoo_schedule_id||null,scheduleCount:schedules.length,blocked:schedules.length>1,branchId:b.jodoo_branch_id,branchName:b.branch_name,area:b.area,zone:b.zone,frequency:s?.frequency??b.collection_frequency,weekdays:days(s?.days_of_week??b.assigned_weekdays),recurrenceType:s?.recurrence_type||null,intervalWeeks:s?.interval_weeks||null,anchorDate:s?.anchor_date||null,effectiveDate:s?.effective_date||null,monthlyOccurrence:s?.monthly_occurrence||null,fixedWeekday:s?.fixed_weekday||null,nextCollectionDate:s?.next_collection_date||null,updatedAt:token(b,s)} }
 

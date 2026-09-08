@@ -123,3 +123,42 @@ for(const permitted of ['existing Sunday','allowed customer'])test(`baseline ret
  const result=synchronizeRouteScheduleBaseline(db,{today:'2026-09-07'});assert.equal(result.pending.some(p=>p.branchId==='B1'),false)
  assert.deepEqual(getCollectionScheduleManagement('B1',db).weekdays,['Sunday'])
 }finally{db.close()}})
+
+test('baseline resolves prefixed production codes whose internal IDs differ',()=>{const db=fixture();try{
+ db.exec("UPDATE branches SET jodoo_branch_id='B10036' WHERE id=1; UPDATE branches SET jodoo_branch_id='10037' WHERE id=2")
+ for(const code of ['B10036','b10036','10036'])assert.equal(getCollectionScheduleManagement(code,db).branchName,'One')
+ for(const code of ['B10037','b10037','10037'])assert.equal(getCollectionScheduleManagement(code,db).branchName,'Two')
+ assert.equal(getCollectionScheduleManagement(1,db).branchId,'B10036')
+ const result=synchronizeRouteScheduleBaseline(db,{today:'2026-09-07'});assert.equal(result.applied,3)
+ assert.equal(getCollectionScheduleManagement('B10036',db).frequency,'Once a week')
+ save(db,'b10036',{frequency:'Once a week',weekdays:['Tuesday'],routeNumber:1})
+ assert.deepEqual(getCollectionScheduleManagement('10036',db).weekdays,['Tuesday'])
+ assert.deepEqual(getCollectionScheduleManagement('10037',db).weekdays,['Monday'])
+}finally{db.close()}})
+
+test('external Branch code never selects another customer with the same numeric internal ID',()=>{const db=fixture();try{
+ db.exec("UPDATE branches SET jodoo_branch_id='B10036' WHERE id=1; INSERT INTO branches(id,jodoo_branch_id,customer_id,branch_name,status,collection_frequency) VALUES(10036,'B99999',1,'Unrelated customer','active','On Call')")
+ assert.equal(getCollectionScheduleManagement('10036',db).branchName,'One')
+ assert.equal(getCollectionScheduleManagement(10036,db).branchName,'Unrelated customer')
+ const before=db.prepare('SELECT * FROM branches WHERE id=10036').get()
+ synchronizeRouteScheduleBaseline(db,{today:'2026-09-07'})
+ assert.deepEqual(db.prepare('SELECT * FROM branches WHERE id=10036').get(),before)
+ db.exec("UPDATE branches SET jodoo_branch_id='B77777' WHERE id=1")
+ assert.equal(getCollectionScheduleManagement('B10036',db),null)
+ assert.equal(getCollectionScheduleManagement('10036',db),null)
+}finally{db.close()}})
+
+test('ambiguous external aliases reject instead of choosing a random customer',()=>{const db=fixture();try{
+ db.exec("UPDATE branches SET jodoo_branch_id='B10036' WHERE id=1; UPDATE branches SET jodoo_branch_id='10036' WHERE id=2")
+ assert.throws(()=>getCollectionScheduleManagement('B10036',db),e=>e.statusCode===409)
+ assert.equal(getCollectionScheduleManagement(1,db).branchName,'One')
+ assert.equal(getCollectionScheduleManagement(2,db).branchName,'Two')
+}finally{db.close()}})
+
+test('production preflight can apply the whole baseline inside an outer rollback transaction',()=>{const db=fixture();try{
+ db.exec("UPDATE branches SET jodoo_branch_id='B10036' WHERE id=1")
+ const tables=['branches','branch_schedules','weekly_route_plan_stops','master_change_history','audit_logs']
+ const before=tables.map(name=>db.prepare(`SELECT * FROM ${name}`).all())
+ db.exec('BEGIN IMMEDIATE');const report=synchronizeRouteScheduleBaseline(db,{today:'2026-09-07'});assert.equal(report.applied,3);assert.equal(db.isTransaction,true);db.exec('ROLLBACK')
+ assert.deepEqual(tables.map(name=>db.prepare(`SELECT * FROM ${name}`).all()),before)
+}finally{db.close()}})

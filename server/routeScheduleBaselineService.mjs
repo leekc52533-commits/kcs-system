@@ -7,7 +7,12 @@ export function synchronizeRouteScheduleBaseline(database,{today=kuchingDate(),d
  if(dryRun)return{dryRun:true,automatic,pending}
  return withImmediateTransaction(database,()=>{
   let applied=0
-  for(const item of automatic){const current=getCollectionScheduleManagement(item.branchId,database);saveCollectionScheduleManagement(item.branchId,{...item.proposal,expectedUpdatedAt:current.updatedAt,reason:'Synchronize approved uploaded Route weekdays',changedBy:'System route baseline'},database);applied++}
+  for(const item of automatic){
+   const current=getCollectionScheduleManagement(item.internalBranchId,database)
+   if(!current)throw new Error(`Route schedule Branch ${item.branchId} (internal ID ${item.internalBranchId}) is no longer active or could not be resolved; synchronization rolled back.`)
+   saveCollectionScheduleManagement(item.internalBranchId,{...item.proposal,expectedUpdatedAt:current.updatedAt,reason:'Synchronize approved uploaded Route weekdays',changedBy:'System route baseline'},database)
+   applied++
+  }
   return{applied,pending}
  })
 }
