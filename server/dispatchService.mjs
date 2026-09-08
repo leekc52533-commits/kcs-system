@@ -116,10 +116,11 @@ export function carryForwardVehicleDrivers({startDate=iso(),endDate=null}={},dat
 }
 
 // Fill only missing assignments; explicit choices (including clearing) always win.
-function fillRouteVehicleDefaults(database,startDate){
+function fillRouteVehicleDefaults(database,startDate,onlyDayIds=null){
   let vehiclesCarried=0
   const days=database.prepare("SELECT * FROM dispatch_days WHERE dispatch_date>=? AND status IN ('draft','reapproval_required') ORDER BY dispatch_date").all(startDate)
   for(const day of days){
+    if(onlyDayIds&&!onlyDayIds.has(day.id))continue
     if(protectedDayReason(database,day))continue
     const routes=database.prepare("SELECT DISTINCT ds.route_number routeNumber FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id WHERE dt.dispatch_day_id=? AND ds.route_number IS NOT NULL AND ds.status<>'cancelled' ORDER BY ds.route_number").all(day.id)
     for(const {routeNumber} of routes){
@@ -219,18 +220,21 @@ export function applyWeeklyRoutePlanToDay(database,day){
   return{applied:true,arranged,pendingRoutes:[...pending].sort()}
 }
 
-function generateRange({startDate=iso(),generatedBy='Supervisor',count=7}={}, database=defaultDb) {
+function generateRange({startDate=iso(),generatedBy='Supervisor',count=7,onlyMissing=false}={}, database=defaultDb) {
   const start=iso(startDate)
   database.exec('BEGIN IMMEDIATE')
   try {
     assertRouteGenerationReady(database)
     database.prepare(`INSERT INTO weekly_dispatch_plans(week_start,generated_by) VALUES(?,?) ON CONFLICT(week_start) DO NOTHING`).run(start,actor(generatedBy))
     const plan=database.prepare('SELECT * FROM weekly_dispatch_plans WHERE week_start=?').get(start)
+    const createdDayIds=new Set()
     let createdStops=0,reusedStops=0,duplicateStops=[],protectedDays=[]
     for(let offset=0;offset<count;offset+=1){
       const date=addDays(start,offset)
+      if(onlyMissing&&dayByDate(database,date))continue
       database.prepare(`INSERT OR IGNORE INTO dispatch_days(weekly_plan_id,dispatch_date) VALUES(?,?)`).run(plan.id,date)
       const day=dayByDate(database,date)
+      createdDayIds.add(day.id)
       const protectedReason=protectedDayReason(database,day)
       if(protectedReason){protectedDays.push({date,reason:protectedReason,status:day.status});continue}
       const schedules=database.prepare(`SELECT s.*,b.area_id FROM branch_schedules s JOIN branches b ON b.id=s.branch_id LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN zone_groups z ON z.id=COALESCE(a.confirmed_zone_group_id,a.zone_group_id) LEFT JOIN route_templates rt ON rt.zone_group_id=z.id AND rt.is_active=1 LEFT JOIN route_template_areas rta ON rta.route_template_id=rt.id AND rta.area_id=a.id LEFT JOIN route_template_branches rtb ON rtb.route_template_id=rt.id AND rtb.branch_id=b.id WHERE s.is_active=1 AND b.lifecycle_status='ACTIVE' AND COALESCE(c.is_active,1)=1 AND LOWER(TRIM(COALESCE(b.collection_frequency,''))) NOT IN ('on call','paused') ORDER BY COALESCE(z.sort_order,999999),CASE WHEN rta.area_order IS NULL THEN 1 ELSE 0 END,rta.area_order,CASE WHEN rtb.branch_order IS NULL THEN 1 ELSE 0 END,rtb.branch_order,COALESCE(b.branch_name,''),b.id,s.id`).all()
@@ -244,10 +248,17 @@ function generateRange({startDate=iso(),generatedBy='Supervisor',count=7}={}, da
       }
       applyWeeklyRoutePlanToDay(database,day)
     }
-    fillRouteVehicleDefaults(database,start)
+    fillRouteVehicleDefaults(database,start,onlyMissing?createdDayIds:null)
     database.exec('COMMIT')
     return {weekStart:start,dayCount:count,createdStops,reusedStops,protectedDays,duplicateStops,...(count===1?{day:getDispatchDay(start,database)}:getDispatchWeek({startDate:start},database))}
   } catch(error){if(database.isTransaction)database.exec('ROLLBACK');throw error}
+}
+// Fill the rolling window without regenerating any existing day or its approvals.
+export function ensureRollingWeek({startDate=iso(),generatedBy='Supervisor'}={},database=defaultDb){
+  const start=iso(startDate),end=addDays(start,6)
+  const count=database.prepare('SELECT COUNT(*) n FROM dispatch_days WHERE dispatch_date BETWEEN ? AND ?').get(start,end).n
+  if(count===7)return getDispatchWeek({startDate:start},database)
+  return generateRange({startDate:start,generatedBy,count:7,onlyMissing:true},database)
 }
 export function generateWeek(payload={},database=defaultDb){return generateRange({...payload,count:7},database)}
 export function generateDay(payload={},database=defaultDb){return generateRange({...payload,count:1},database)}

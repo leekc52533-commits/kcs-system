@@ -1,3 +1,4 @@
+import {ensureRollingWeek} from './dispatchService.mjs'
 import {adjustRouteCustomer} from './dispatchService.mjs'
 import {routeUnloadingRecords} from './routeUnloadingService.mjs'
 import http from 'node:http'
@@ -257,6 +258,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'GET' && url.pathname === '/api/dispatch/start-location-options') {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});const driverId=Number(url.searchParams.get('driverId'))||null,includeEmployeeHome=canManageEmployees(session);return sendJson(response,200,getStartLocationOptions({driverId,includeEmployeeHome}))}
     if (request.method === 'GET' && /^\/api\/schedules\/\d+\/recurrence$/.test(url.pathname)) return sendJson(response,200,getScheduleRecurrence(Number(url.pathname.split('/')[3])))
     if (request.method === 'PATCH' && /^\/api\/schedules\/\d+\/recurrence$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});return sendJson(response,200,configureScheduleRecurrence(Number(url.pathname.split('/')[3]),{...((await readJson(request)).payload),changedBy:session.employeeName}))}
+    if (request.method === 'POST' && url.pathname === '/api/dispatch/ensure-rolling-week') {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});return sendJson(response,200,ensureRollingWeek({generatedBy:session.employeeName}))}
     if (request.method === 'POST' && url.pathname === '/api/dispatch/generate-week') {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});return sendJson(response,200,generateWeek({...((await readJson(request)).payload),generatedBy:session.employeeName}))}
     if (request.method === 'POST' && url.pathname === '/api/dispatch/generate-day') {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});return sendJson(response,200,generateDay({...((await readJson(request)).payload),generatedBy:session.employeeName}))}
     if (request.method === 'POST' && url.pathname === '/api/dispatch/draft-adjustments') {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});return sendJson(response,200,saveDraftAdjustments({...((await readJson(request)).payload),changedBy:session.employeeName}))}
