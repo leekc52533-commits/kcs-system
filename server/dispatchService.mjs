@@ -177,7 +177,7 @@ const weekdayForDate=date=>new Date(`${date}T00:00:00Z`).getUTCDay()
 export function applyWeeklyRoutePlanToDay(database,day){
   const plan=database.prepare('SELECT id FROM weekly_route_plans WHERE is_active=1 ORDER BY id DESC LIMIT 1').get()
   if(!plan)return{applied:false,arranged:0,pendingRoutes:[]}
-  const routes=database.prepare(`SELECT wr.branch_id branchId,wr.route_number routeNumber,wr.trip_number tripNumber,wr.stop_sequence stopSequence
+  let routes=database.prepare(`SELECT wr.branch_id branchId,wr.route_number routeNumber,wr.trip_number tripNumber,wr.stop_sequence stopSequence
     FROM weekly_route_plan_stops wr WHERE wr.plan_id=? AND wr.weekday=?
     ORDER BY wr.route_number,wr.trip_number,wr.stop_sequence`).all(plan.id,weekdayForDate(day.dispatch_date))
   if(!routes.length)return{applied:true,arranged:0,pendingRoutes:[]}
@@ -186,6 +186,14 @@ export function applyWeeklyRoutePlanToDay(database,day){
     ORDER BY ds.dispatch_id,ds.stop_sequence,ds.id`).all(day.id)
   if(!allStops.length)return{applied:true,arranged:0,pendingRoutes:[]}
   const stopByBranch=new Map(allStops.filter(row=>row.status!=='cancelled').map(row=>[row.branchId,row]))
+  // Keep explicit one-date supervisor Route choices when regenerating a draft.
+  const overrides=new Map()
+  for(const log of database.prepare("SELECT entity_id,after_json FROM dispatch_change_logs WHERE dispatch_day_id=? AND change_type='route_customer_adjusted' ORDER BY id").all(day.id)){
+    const choice=JSON.parse(log.after_json||'{}'),stop=allStops.find(item=>item.id===Number(log.entity_id)&&item.status!=='cancelled')
+    if(stop&&choice.date===day.dispatch_date)overrides.set(stop.branchId,{branchId:stop.branchId,routeNumber:choice.routeNumber,tripNumber:1,stopSequence:choice.routeStopSequence||9999})
+  }
+  routes=[...routes.filter(item=>!overrides.has(item.branchId)),...overrides.values()]
+
   const assignments=new Map(database.prepare('SELECT route_number routeNumber,vehicle_id vehicleId FROM daily_route_assignments WHERE dispatch_day_id=?').all(day.id).map(row=>[row.routeNumber,row.vehicleId]))
   const pending=new Set(),plannedIds=new Set(),sequenceCounters=new Map()
   database.prepare(`UPDATE dispatch_stops SET stop_sequence=-id WHERE dispatch_trip_id IN(SELECT id FROM dispatch_trips WHERE dispatch_day_id=?)`).run(day.id)
@@ -239,13 +247,14 @@ function generateRange({startDate=iso(),generatedBy='Supervisor',count=7}={}, da
     fillRouteVehicleDefaults(database,start)
     database.exec('COMMIT')
     return {weekStart:start,dayCount:count,createdStops,reusedStops,protectedDays,duplicateStops,...(count===1?{day:getDispatchDay(start,database)}:getDispatchWeek({startDate:start},database))}
-  } catch(error){database.exec('ROLLBACK');throw error}
+  } catch(error){if(database.isTransaction)database.exec('ROLLBACK');throw error}
 }
 export function generateWeek(payload={},database=defaultDb){return generateRange({...payload,count:7},database)}
 export function generateDay(payload={},database=defaultDb){return generateRange({...payload,count:1},database)}
 
 function stopRows(database, dayId) {
-  return database.prepare(`SELECT ds.id,ds.stop_sequence stopSequence,ds.sequence_locked sequenceLocked,ds.estimated_weight_kg estimatedWeightKg,ds.route_number routeNumber,ds.route_stop_sequence routeStopSequence,
+  const hasOutcome=database.prepare('PRAGMA table_info(dispatch_stops)').all().some(column=>column.name==='completion_outcome')
+  return database.prepare(`SELECT ds.id,ds.status,${hasOutcome?'ds.completion_outcome':'NULL'} completionOutcome,ds.arrived_at arrivedAt,ds.completed_at completedAt,ds.override_note overrideNote,ds.override_reason overrideReason,EXISTS(SELECT 1 FROM purchase_bills pb WHERE pb.dispatch_stop_id=ds.id) hasBill,b.address,b.contact_person contactPerson,b.phone,b.parking_note parkingNote,b.truck_access truckAccess,b.gps_remark gpsRemark,c.jodoo_customer_id customerId,ds.stop_sequence stopSequence,ds.sequence_locked sequenceLocked,ds.estimated_weight_kg estimatedWeightKg,ds.route_number routeNumber,ds.route_stop_sequence routeStopSequence,
     ds.source_special_request_id specialRequestId,b.jodoo_branch_id branchId,b.branch_name branchName,c.name customerName,c.payment_type paymentType,COALESCE((SELECT CASE WHEN cmp.price_type='outstation' THEN COALESCE(cmp.outstation_special_price,opl.price_amount) ELSE COALESCE(cmp.standard_special_price,spl.price_amount) END FROM customer_material_pricing cmp JOIN materials om ON om.id=cmp.material_id AND om.material_code='OCC' LEFT JOIN material_price_levels spl ON spl.id=cmp.standard_price_level_id LEFT JOIN material_price_levels opl ON opl.id=cmp.outstation_price_level_id WHERE cmp.customer_id=c.id AND cmp.status='active' AND cmp.resolution_state='ready'),c.occ_price) occPrice,
     b.area_id areaId,COALESCE(ds.area_name_snapshot,a.name) area,COALESCE(ds.zone_group_id_snapshot,a.zone_group_id) zoneGroupId,COALESCE(ds.zone_group_name_snapshot,z.name,'待确认') zoneGroup,z.sort_order zoneSortOrder,b.latitude,b.longitude,b.time_restriction timeRestriction,
     dt.id tripId,dt.trip_number tripNumber,d.vehicle_id vehicleId,v.vehicle_code vehicle,d.driver_id driverId,dr.name driver,d.assistant_id assistantId,asst.name assistant
@@ -531,6 +540,36 @@ export function updateStop(id,payload,database=defaultDb){
     const updated=database.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(id)
     recordOptimizationFeedback({stopId:id,before,after:updated,reason:payload.reason,actor:actor(payload.changedBy)},{db:database})
     return updated
+  })
+}
+
+export function adjustRouteCustomer(id,payload={},context={},database=defaultDb){
+  const fail=(message,statusCode=409)=>{throw Object.assign(new Error(message),{statusCode})}
+  if(!['owner_admin','operations_admin','supervisor'].includes(context.role))fail('只有主管可以调整路线客户。',403)
+  const date=payload.date,route=Number(payload.routeNumber),reason=String(payload.reason||'').trim()
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date||'')||!Number.isInteger(route)||route<1||route>5||!reason)fail('请选择日期、ROUTE，并填写原因。',400)
+  return withImmediateTransaction(database,()=>{
+    const before=draftStopById(database,id);if(!before)fail('找不到收货记录。',404)
+    const source=dayByDate(database,before.dispatch_date),targetDay=dayByDate(database,date)
+    if(!targetDay)fail('请先建立目标日期的派车安排。')
+    if(Number(payload.expectedRevision)!==source.revision||Number(payload.targetRevision)!==targetDay.revision)fail('安排已经改变，请刷新后重试。')
+    for(const day of [source,targetDay])if(protectedDayReason(database,day)||!['draft','reapproval_required'].includes(day.status))fail('请先撤回相关日期的批准；已开始执行的日期不能移动客户。')
+    if(!before.route_number||['active','completed','cancelled'].includes(before.status)||before.arrived_at||before.completed_at||database.prepare('SELECT 1 FROM purchase_bills WHERE dispatch_stop_id=?').get(id))fail('此收货记录已有执行或单据，不能改期或转移。')
+    if(date===before.dispatch_date&&route===before.route_number)fail('请选择不同日期或 ROUTE。',400)
+    assertBranchServiceDateAvailable(database,before.branch_id,date,{excludeStopId:Number(id),attemptedScheduleId:before.source_schedule_id,entryPoint:'route_customer_adjustment'})
+    const assignment=database.prepare('SELECT vehicle_id vehicleId FROM daily_route_assignments WHERE dispatch_day_id=? AND route_number=?').get(targetDay.id,route)
+    const trip=assignment?.vehicleId?ensureVehicleTrip(database,targetDay,assignment.vehicleId,1):ensureUnassignedTrip(database,targetDay)
+    const sequence=database.prepare('SELECT COALESCE(MAX(stop_sequence),0)+1 n FROM dispatch_stops WHERE dispatch_id=?').get(trip.dispatch_id).n
+    const routeSequence=database.prepare("SELECT COALESCE(MAX(route_stop_sequence),0)+1 n FROM dispatch_stops s JOIN dispatch_trips t ON t.id=s.dispatch_trip_id WHERE t.dispatch_day_id=? AND s.route_number=? AND s.status<>'cancelled'").get(targetDay.id,route).n
+    database.prepare('UPDATE dispatch_stops SET dispatch_id=?,dispatch_trip_id=?,service_date=?,dedupe_enforced=1,stop_sequence=?,route_number=?,route_stop_sequence=? WHERE id=?').run(trip.dispatch_id,trip.id,date,sequence,route,routeSequence,id)
+    if(date!==before.dispatch_date&&before.source_schedule_id)database.prepare("UPDATE schedule_exceptions SET target_date=? WHERE schedule_id=? AND exception_type='move_date' AND target_date=? AND permanent=0").run(date,before.source_schedule_id,before.dispatch_date)
+    if(date!==before.dispatch_date&&before.source_schedule_id)database.prepare("DELETE FROM schedule_exceptions WHERE schedule_id=? AND exception_type='move_date' AND original_date=target_date AND target_date=? AND permanent=0").run(before.source_schedule_id,date)
+    if(date!==before.dispatch_date&&before.source_schedule_id)database.prepare("INSERT INTO schedule_exceptions(branch_id,schedule_id,exception_type,original_date,target_date,permanent,reason,created_by) VALUES(?,?,'move_date',?,?,0,?,?)").run(before.branch_id,before.source_schedule_id,before.dispatch_date,date,reason,actor(context.employeeName))
+    normalizeTripSequences(database,[before.dispatch_trip_id,trip.id])
+    const after={date,routeNumber:route,routeStopSequence:routeSequence,reason}
+    invalidateDispatchDay(database,before.dispatch_date,'route_customer_adjusted','dispatch_stop',id,before,after,context.employeeName)
+    if(date!==before.dispatch_date)invalidateDispatchDay(database,date,'route_customer_adjusted','dispatch_stop',id,before,after,context.employeeName)
+    return{updated:true,stopId:Number(id),...after}
   })
 }
 
