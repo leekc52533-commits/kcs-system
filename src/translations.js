@@ -751,3 +751,2904 @@ export function translate(language,key,variables={}){
 Object.assign(messages.en,{'dashboard.enableSound':'Enable alert sound','dashboard.soundOn':'Alert sound on','dashboard.soundUnsupported':'This phone does not support browser alert sounds.','dashboard.soundBlocked':'The browser blocked the sound. Tap Enable alert sound again.'})
 Object.assign(messages.ms,{'dashboard.enableSound':'Aktifkan bunyi amaran','dashboard.soundOn':'Bunyi amaran aktif','dashboard.soundUnsupported':'Telefon ini tidak menyokong bunyi amaran pelayar.','dashboard.soundBlocked':'Pelayar menyekat bunyi. Tekan Aktifkan bunyi amaran sekali lagi.'})
 Object.assign(messages.zh,{'dashboard.enableSound':'开启通知铃声','dashboard.soundOn':'通知铃声已开启','dashboard.soundUnsupported':'这部手机不支持网页通知铃声。','dashboard.soundBlocked':'浏览器阻止了铃声，请再按一次开启通知铃声。'})
+
+// Operational UI catalog: source, English, Bahasa Melayu, Chinese.
+export const operationalUiMessages = [
+  [
+    "On Leave",
+    "On leave",
+    "Bercuti",
+    "休假"
+  ],
+  [
+    "approval withdrawn",
+    "Approval withdrawn",
+    "Kelulusan ditarik balik",
+    "已撤回批准"
+  ],
+  [
+    "Start Location updated.",
+    "Start location updated.",
+    "Lokasi mula dikemas kini.",
+    "出发地点已更新。"
+  ],
+  [
+    "{0} 的 {1} 家客户已分配到 Route {2}。",
+    "Assigned {1} customers from {0} to route {2}.",
+    "{1} pelanggan dari {0} ditetapkan ke laluan {2}.",
+    "{0} 的 {1} 家客户已分配到路线 {2}。"
+  ],
+  [
+    "Route {0} 已{1}；客户与顺序没有改变。",
+    "Route {0}: {1}. Customers and stop order are unchanged.",
+    "Laluan {0}: {1}. Pelanggan dan urutan hentian kekal.",
+    "路线 {0} 已{1}；客户与顺序没有改变。"
+  ],
+  [
+    "整条分配到所选车辆",
+    "Assigned in full to the selected vehicle",
+    "Seluruh laluan ditetapkan kepada kenderaan dipilih",
+    "整条分配到所选车辆"
+  ],
+  [
+    "解除当天车辆分配",
+    "Vehicle assignment removed for this date",
+    "Penetapan kenderaan untuk tarikh ini dibatalkan",
+    "解除当天车辆分配"
+  ],
+  [
+    "请输入新的 Route 名称：",
+    "Enter the new route name:",
+    "Masukkan nama laluan baharu:",
+    "请输入新的路线名称："
+  ],
+  [
+    "Route {0} 已改名为 {1}。",
+    "Route {0} renamed to {1}.",
+    "Laluan {0} dinamakan semula kepada {1}.",
+    "路线 {0} 已改名为 {1}。"
+  ],
+  [
+    "客户顺序已保存；以后同一星期会跟随这个排列。",
+    "Customer order saved for this weekday in future weeks.",
+    "Urutan pelanggan disimpan untuk hari yang sama pada minggu berikutnya.",
+    "客户顺序已保存；以后同一星期会跟随这个排列。"
+  ],
+  [
+    "Route {0} 已单独批准。",
+    "Route {0} approved individually.",
+    "Laluan {0} diluluskan secara berasingan.",
+    "路线 {0} 已单独批准。"
+  ],
+  [
+    "请输入撤回批准的原因：",
+    "Enter the reason for withdrawing approval:",
+    "Masukkan sebab penarikan balik kelulusan:",
+    "请输入撤回批准的原因："
+  ],
+  [
+    "需要修改路线",
+    "Route changes needed",
+    "Perubahan laluan diperlukan",
+    "需要修改路线"
+  ],
+  [
+    "Enter target vehicle number or plate: {0}",
+    "Enter target vehicle number or plate: {0}",
+    "Masukkan nombor kenderaan atau plat sasaran: {0}",
+    "输入目标车辆编号或车牌：{0}"
+  ],
+  [
+    "No available target vehicle",
+    "No available target vehicle",
+    "Tiada kenderaan sasaran tersedia",
+    "没有可用的目标车辆"
+  ],
+  [
+    "After route transfer, Set the original vehicle to Maintenance？",
+    "After transferring the route, mark the original vehicle as under maintenance?",
+    "Selepas pemindahan laluan, tandakan kenderaan asal sebagai dalam penyelenggaraan?",
+    "转移路线后，将原车辆设为维修中？"
+  ],
+  [
+    "Enter the transfer reason:",
+    "Enter the transfer reason:",
+    "Masukkan sebab pemindahan:",
+    "输入转移原因："
+  ],
+  [
+    "Vehicle breakdown／Replace vehicle",
+    "Vehicle breakdown / replacement",
+    "Kerosakan / penggantian kenderaan",
+    "车辆故障／更换车辆"
+  ],
+  [
+    "Vehicle transfer",
+    "Vehicle transfer",
+    "Pemindahan kenderaan",
+    "车辆转移"
+  ],
+  [
+    "Trip, Customer routes and driver transferred to {0}.",
+    "Trips, customer routes and driver transferred to {0}.",
+    "Perjalanan, laluan pelanggan dan pemandu dipindahkan ke {0}.",
+    "趟次、客户路线及司机已转移到 {0}。"
+  ],
+  [
+    "Temporary vehicle number:",
+    "Temporary vehicle number:",
+    "Nombor kenderaan sementara:",
+    "临时车辆编号："
+  ],
+  [
+    "{0} added for {1}.",
+    "{0} added for {1}.",
+    "{0} ditambah untuk {1}.",
+    "已为 {1} 加入 {0}。"
+  ],
+  [
+    "Permanent vehicle number:",
+    "Permanent vehicle number:",
+    "Nombor kenderaan tetap:",
+    "长期车辆编号："
+  ],
+  [
+    "Registration plate (must be unique):",
+    "Registration plate (must be unique):",
+    "Nombor plat (mesti unik):",
+    "车牌号码（不可重复）："
+  ],
+  [
+    "Capacity (kg, optional):",
+    "Capacity (kg, optional):",
+    "Kapasiti (kg, pilihan):",
+    "载重量（kg，选填）："
+  ],
+  [
+    "Capacity must be a non-negative number.",
+    "Capacity must be zero or greater.",
+    "Kapasiti mesti sifar atau lebih.",
+    "载重量必须为零或正数。"
+  ],
+  [
+    "{0} added permanently and selected for {1}.",
+    "{0} added permanently and selected for {1}.",
+    "{0} ditambah sebagai kenderaan tetap dan dipilih untuk {1}.",
+    "已加入长期车辆 {0}，并安排于 {1} 使用。"
+  ],
+  [
+    "{0} moved to another vehicle.",
+    "{0} moved to another vehicle.",
+    "{0} dipindahkan ke kenderaan lain.",
+    "{0} 已移到另一辆车。"
+  ],
+  [
+    "Stop {0}",
+    "Stop {0}",
+    "Hentian {0}",
+    "站点 {0}"
+  ],
+  [
+    "派车",
+    "Dispatch",
+    "Penugasan kenderaan",
+    "派车"
+  ],
+  [
+    "一周派车日期",
+    "Weekly dispatch dates",
+    "Tarikh penugasan mingguan",
+    "一周派车日期"
+  ],
+  [
+    "家",
+    "customers",
+    "pelanggan",
+    "家"
+  ],
+  [
+    "· ✓ 已批准",
+    "· ✓ Approved",
+    "· ✓ Diluluskan",
+    "· ✓ 已批准"
+  ],
+  [
+    "Route 1 至 5",
+    "Routes",
+    "Laluan",
+    "路线"
+  ],
+  [
+    "Route {0}",
+    "Route {0}",
+    "Laluan {0}",
+    "路线 {0}"
+  ],
+  [
+    "查看七天",
+    "View seven days",
+    "Lihat tujuh hari",
+    "查看七天"
+  ],
+  [
+    "客户通知无货 · 无需到店（",
+    "Customer reported no goods · No visit needed (",
+    "Pelanggan memaklumkan tiada barang · Tidak perlu melawat (",
+    "客户通知无货 · 无需到店（"
+  ],
+  [
+    "Withdraw Approval first",
+    "Withdraw approval first",
+    "Tarik balik kelulusan dahulu",
+    "请先撤回批准"
+  ],
+  [
+    "Add permanent vehicle",
+    "Add permanent vehicle",
+    "Tambah kenderaan tetap",
+    "加入长期车辆"
+  ],
+  [
+    "＋ 长期车",
+    "＋ Permanent vehicle",
+    "＋ Kenderaan tetap",
+    "＋ 长期车"
+  ],
+  [
+    "Add temporary vehicle for this date",
+    "Add a temporary vehicle for this date",
+    "Tambah kenderaan sementara untuk tarikh ini",
+    "加入当天临时车辆"
+  ],
+  [
+    "＋ 临时车",
+    "＋ Temporary vehicle",
+    "＋ Kenderaan sementara",
+    "＋ 临时车"
+  ],
+  [
+    "Customer promise ·",
+    "Promised to customer ·",
+    "Dijanjikan kepada pelanggan ·",
+    "已向客户承诺 ·"
+  ],
+  [
+    "Potential new customer · Trip",
+    "Potential new customer · Trip",
+    "Bakal pelanggan baharu · Perjalanan",
+    "潜在新客户 · 趟次"
+  ],
+  [
+    "当天 Route 总览",
+    "Daily route overview",
+    "Gambaran laluan harian",
+    "当天路线总览"
+  ],
+  [
+    "No vehicles available for this date.",
+    "No vehicles available for this date.",
+    "Tiada kenderaan tersedia untuk tarikh ini.",
+    "当天没有可用车辆。"
+  ],
+  [
+    "Vehicles available for this date",
+    "Vehicles available for this date",
+    "Kenderaan tersedia untuk tarikh ini",
+    "当天可用车辆"
+  ],
+  [
+    "调整当天车辆／司机",
+    "Change today's vehicle / driver",
+    "Tukar kenderaan / pemandu hari ini",
+    "调整当天车辆／司机"
+  ],
+  [
+    "当天交接",
+    "Today's handover",
+    "Serahan tugas hari ini",
+    "当天交接"
+  ],
+  [
+    "只影响当天。旧单据归属不变，明天安排不变。",
+    "Applies only today. Existing bills and tomorrow's assignments remain unchanged.",
+    "Hanya untuk hari ini. Bil sedia ada dan penugasan esok kekal.",
+    "只影响当天。旧单据归属不变，明天安排不变。"
+  ],
+  [
+    "接手司机",
+    "Replacement driver",
+    "Pemandu pengganti",
+    "接手司机"
+  ],
+  [
+    "选择司机",
+    "Select driver",
+    "Pilih pemandu",
+    "选择司机"
+  ],
+  [
+    "调整原因",
+    "Reason for change",
+    "Sebab perubahan",
+    "调整原因"
+  ],
+  [
+    "确认当天调整",
+    "Confirm today's change",
+    "Sahkan perubahan hari ini",
+    "确认当天调整"
+  ],
+  [
+    "星期日两组合并收货，每周轮班。换车、换人只影响这个星期日。",
+    "Sunday collections use two combined groups with weekly rotation. Vehicle and staff changes apply only to this Sunday.",
+    "Kutipan Ahad menggunakan dua kumpulan gabungan dengan giliran mingguan. Perubahan kenderaan dan kakitangan hanya untuk Ahad ini.",
+    "星期日两组合并收货，每周轮班。换车、换人只影响这个星期日。"
+  ],
+  [
+    "撤回当天批准",
+    "Withdraw today's approval",
+    "Tarik balik kelulusan hari ini",
+    "撤回当天批准"
+  ],
+  [
+    "未设车牌",
+    "Plate not set",
+    "Plat belum ditetapkan",
+    "未设车牌"
+  ],
+  [
+    "当天未分配车辆",
+    "No vehicle assigned for this date",
+    "Tiada kenderaan ditetapkan untuk tarikh ini",
+    "当天未分配车辆"
+  ],
+  [
+    "需要重新批准",
+    "Reapproval required",
+    "Perlu kelulusan semula",
+    "需要重新批准"
+  ],
+  [
+    "当天没有客户",
+    "No customers for this date",
+    "Tiada pelanggan untuk tarikh ini",
+    "当天没有客户"
+  ],
+  [
+    "尚未批准",
+    "Not yet approved",
+    "Belum diluluskan",
+    "尚未批准"
+  ],
+  [
+    "批准这条 Route",
+    "Approve this route",
+    "Luluskan laluan ini",
+    "批准这条路线"
+  ],
+  [
+    "当天执行车辆",
+    "Vehicle for this date",
+    "Kenderaan untuk tarikh ini",
+    "当天执行车辆"
+  ],
+  [
+    "· 已给 Route {0}",
+    "· Assigned to route {0}",
+    "· Ditetapkan ke laluan {0}",
+    "· 已给路线 {0}"
+  ],
+  [
+    "Route 以外的临时客户",
+    "Temporary customers outside planned routes",
+    "Pelanggan sementara di luar laluan terancang",
+    "路线以外的临时客户"
+  ],
+  [
+    "· Zone只用于查看地理位置",
+    "· Zone indicates geographic location only",
+    "· Zon menunjukkan lokasi geografi sahaja",
+    "· 分区只用于查看地理位置"
+  ],
+  [
+    "没有 Route 以外的临时客户。",
+    "No temporary customers outside planned routes.",
+    "Tiada pelanggan sementara di luar laluan terancang.",
+    "没有路线以外的临时客户。"
+  ],
+  [
+    "地理 Zone ·",
+    "Geographic zone ·",
+    "Zon geografi ·",
+    "地理分区 ·"
+  ],
+  [
+    "地理 Area",
+    "Geographic area",
+    "Kawasan geografi",
+    "地理区域"
+  ],
+  [
+    "未分配 Route ▾",
+    "Unassigned route ▾",
+    "Laluan belum ditetapkan ▾",
+    "未分配路线 ▾"
+  ],
+  [
+    "司机：",
+    "Driver:",
+    "Pemandu:",
+    "司机："
+  ],
+  [
+    "· Attendant：",
+    "· Crew:",
+    "· Pembantu:",
+    "· 跟车员："
+  ],
+  [
+    "收货设置",
+    "Collection settings",
+    "Tetapan kutipan",
+    "收货设置"
+  ],
+  [
+    "Capacity not set",
+    "Capacity not set",
+    "Kapasiti belum ditetapkan",
+    "未设载重量"
+  ],
+  [
+    "· Base",
+    "· Base",
+    "· Pangkalan",
+    "· 基地"
+  ],
+  [
+    "Stops ·",
+    "Stops ·",
+    "Hentian ·",
+    "站点 ·"
+  ],
+  [
+    "{0} kg estimated",
+    "{0} kg estimated",
+    "Anggaran {0} kg",
+    "预计 {0} kg"
+  ],
+  [
+    "weight not set",
+    "Weight not set",
+    "Berat belum ditetapkan",
+    "未设重量"
+  ],
+  [
+    "· {0} missing weight",
+    "· {0} missing weights",
+    "· {0} berat belum diisi",
+    "· {0} 项缺少重量"
+  ],
+  [
+    "· Over capacity",
+    "· Over capacity",
+    "· Melebihi kapasiti",
+    "· 超过载重量"
+  ],
+  [
+    "· recommendation match {0}",
+    "· Recommendation match {0}",
+    "· Padanan cadangan {0}",
+    "· 建议匹配 {0}"
+  ],
+  [
+    "Change Reason is required",
+    "A reason for change is required.",
+    "Sebab perubahan diperlukan.",
+    "请填写修改原因。"
+  ],
+  [
+    "Buyer / Payer",
+    "Buyer / Payer",
+    "Pembeli / Pembayar",
+    "买家／付款方"
+  ],
+  [
+    "Trip {0} Buyer / Payer",
+    "Trip {0} buyer / payer",
+    "Pembeli / pembayar perjalanan {0}",
+    "第 {0} 趟买家／付款方"
+  ],
+  [
+    "Not selected",
+    "Not selected",
+    "Belum dipilih",
+    "未选择"
+  ],
+  [
+    "Primary End Location",
+    "Primary end location",
+    "Lokasi akhir utama",
+    "主要结束地点"
+  ],
+  [
+    "Trip {0} Primary End Location",
+    "Trip {0} primary end location",
+    "Lokasi akhir utama perjalanan {0}",
+    "第 {0} 趟主要结束地点"
+  ],
+  [
+    "Recommended ·",
+    "Recommended ·",
+    "Disyorkan ·",
+    "建议 ·"
+  ],
+  [
+    "· GPS Set",
+    "· GPS set",
+    "· GPS ditetapkan",
+    "· 已设定位"
+  ],
+  [
+    "Save Buyer & End Location",
+    "Save buyer and end location",
+    "Simpan pembeli dan lokasi akhir",
+    "保存买家及结束地点"
+  ],
+  [
+    "· GPS source: {0}",
+    "· GPS source: {0}",
+    "· Sumber GPS: {0}",
+    "· 定位来源：{0}"
+  ],
+  [
+    "Factory not set",
+    "Factory not set",
+    "Kilang belum ditetapkan",
+    "未设工厂"
+  ],
+  [
+    "Start Location · Trip",
+    "Start location · Trip",
+    "Lokasi mula · Perjalanan",
+    "出发地点 · 趟次"
+  ],
+  [
+    "Employee Home",
+    "Employee home",
+    "Rumah pekerja",
+    "员工住处"
+  ],
+  [
+    "Saved Location",
+    "Saved location",
+    "Lokasi disimpan",
+    "已存地点"
+  ],
+  [
+    "Custom Location",
+    "Custom location",
+    "Lokasi tersuai",
+    "自定地点"
+  ],
+  [
+    "Factory — {0} · GPS Set",
+    "Factory — {0} · GPS set",
+    "Kilang — {0} · GPS ditetapkan",
+    "工厂 — {0} · 已设定位"
+  ],
+  [
+    "Company Yard GPS is not set",
+    "Company yard GPS is not set",
+    "GPS kawasan syarikat belum ditetapkan",
+    "公司场地尚未设定位"
+  ],
+  [
+    "{0} · Home GPS Set",
+    "{0} · Home GPS set",
+    "{0} · GPS rumah ditetapkan",
+    "{0} · 住处已设定位"
+  ],
+  [
+    "Select a Driver",
+    "Select a driver",
+    "Pilih pemandu",
+    "选择司机"
+  ],
+  [
+    "Select a GPS-enabled location",
+    "Select a location with GPS",
+    "Pilih lokasi dengan GPS",
+    "选择已有定位的地点"
+  ],
+  [
+    "Save Start Location",
+    "Save start location",
+    "Simpan lokasi mula",
+    "保存出发地点"
+  ],
+  [
+    "Unassigned driver",
+    "Unassigned driver",
+    "Pemandu belum ditetapkan",
+    "未分配司机"
+  ],
+  [
+    "Search driver name or employee number",
+    "Search driver name or employee number",
+    "Cari nama pemandu atau nombor pekerja",
+    "搜索司机姓名或员工编号"
+  ],
+  [
+    "Release current driver assignment",
+    "Remove current driver assignment",
+    "Batalkan penugasan pemandu semasa",
+    "解除当前司机安排"
+  ],
+  [
+    "· Area",
+    "· Area",
+    "· Kawasan",
+    "· 区域"
+  ],
+  [
+    "Assigned today: {0}",
+    "Assigned today: {0}",
+    "Penugasan hari ini: {0}",
+    "当天安排：{0}"
+  ],
+  [
+    "Not assigned to another vehicle today",
+    "Not assigned to another vehicle today",
+    "Belum ditetapkan ke kenderaan lain hari ini",
+    "当天未安排到其他车辆"
+  ],
+  [
+    "· Unavailable",
+    "· Unavailable",
+    "· Tidak tersedia",
+    "· 不可用"
+  ],
+  [
+    "Employee Master No Driver",
+    "No drivers in employee records",
+    "Tiada pemandu dalam rekod pekerja",
+    "员工资料中没有司机"
+  ],
+  [
+    "attendant / crew",
+    "Crew",
+    "Pembantu",
+    "跟车员"
+  ],
+  [
+    "Attendant / Crew",
+    "Crew",
+    "Pembantu",
+    "跟车员"
+  ],
+  [
+    "Unassigned crew",
+    "Unassigned crew",
+    "Pembantu belum ditetapkan",
+    "未分配跟车员"
+  ],
+  [
+    "Search crew name or employee number",
+    "Search crew name or employee number",
+    "Cari nama pembantu atau nombor pekerja",
+    "搜索跟车员姓名或员工编号"
+  ],
+  [
+    "· Maximum 2 crew selected",
+    "· Maximum two crew members",
+    "· Maksimum dua pembantu",
+    "· 最多选择两位跟车员"
+  ],
+  [
+    "Employee Master No Assistant/Crew",
+    "No crew in employee records",
+    "Tiada pembantu dalam rekod pekerja",
+    "员工资料中没有跟车员"
+  ],
+  [
+    "Weight not set",
+    "Weight not set",
+    "Berat belum ditetapkan",
+    "未设重量"
+  ],
+  [
+    "GPS✓",
+    "GPS ✓",
+    "GPS ✓",
+    "定位 ✓"
+  ],
+  [
+    "Time restriction:",
+    "Time restriction:",
+    "Had masa:",
+    "时间限制："
+  ],
+  [
+    "Move {0} to another vehicle",
+    "Move {0} to another vehicle",
+    "Pindahkan {0} ke kenderaan lain",
+    "将 {0} 移到其他车辆"
+  ],
+  [
+    "移到其他车辆",
+    "Move to another vehicle",
+    "Pindah ke kenderaan lain",
+    "移到其他车辆"
+  ],
+  [
+    "No plate",
+    "No plate",
+    "Tiada plat",
+    "未设车牌"
+  ],
+  [
+    "Move this route stop",
+    "Move this stop",
+    "Pindahkan hentian ini",
+    "移动此站点"
+  ],
+  [
+    "Draft restored after the page was reopened.",
+    "Draft restored after reopening the page.",
+    "Draf dipulihkan selepas halaman dibuka semula.",
+    "重新打开页面后已恢复草稿。"
+  ],
+  [
+    "Bill draft discarded.",
+    "Bill draft discarded.",
+    "Draf bil dibuang.",
+    "开单草稿已清除。"
+  ],
+  [
+    "Electronic Bill",
+    "Electronic bill",
+    "Bil elektronik",
+    "电子单"
+  ],
+  [
+    "Select a payment proof photo.",
+    "Select a payment proof photo.",
+    "Pilih foto bukti bayaran.",
+    "请选择付款证明照片。"
+  ],
+  [
+    "Payment proof selected and is uploading…",
+    "Uploading selected payment proof…",
+    "Memuat naik bukti bayaran dipilih…",
+    "正在上传已选付款证明…"
+  ],
+  [
+    "✓ Payment proof saved. You may continue to the next customer.",
+    "✓ Payment proof saved. You may continue to the next customer.",
+    "✓ Bukti bayaran disimpan. Anda boleh terus ke pelanggan seterusnya.",
+    "✓ 付款证明已保存，可以前往下一家。"
+  ],
+  [
+    "The upload is too large for the server. Retake the photo at a lower resolution.",
+    "The photo is too large. Retake it at a lower resolution.",
+    "Foto terlalu besar. Ambil semula pada resolusi lebih rendah.",
+    "照片太大，请以较低分辨率重拍。"
+  ],
+  [
+    "Upload failed. Check the connection and tap Retry upload.",
+    "Upload failed. Check your connection and retry.",
+    "Muat naik gagal. Semak sambungan dan cuba semula.",
+    "上传失败，请检查网络后重试。"
+  ],
+  [
+    "Loading billing…",
+    "Loading billing…",
+    "Memuatkan bil…",
+    "正在载入开单资料…"
+  ],
+  [
+    "✓ Electronic Bill created",
+    "✓ Electronic bill created",
+    "✓ Bil elektronik dibuat",
+    "✓ 电子单已建立"
+  ],
+  [
+    "Print / Reprint",
+    "Print / Reprint",
+    "Cetak / Cetak semula",
+    "打印／重新打印"
+  ],
+  [
+    "✓ Payment proof uploaded",
+    "✓ Payment proof uploaded",
+    "✓ Bukti bayaran dimuat naik",
+    "✓ 付款证明已上传"
+  ],
+  [
+    "Create Electronic Purchase Bill",
+    "Create electronic purchase bill",
+    "Buat bil pembelian elektronik",
+    "建立电子采购单"
+  ],
+  [
+    "Weight / Quantity",
+    "Weight / Quantity",
+    "Berat / Kuantiti",
+    "重量／数量"
+  ],
+  [
+    "＋ Other Item",
+    "＋ Other item",
+    "＋ Item lain",
+    "＋ 其他品项"
+  ],
+  [
+    "Paper option",
+    "Paper option",
+    "Pilihan kertas",
+    "纸张选择"
+  ],
+  [
+    "Create electronic Bill and print",
+    "Create electronic bill and print",
+    "Buat bil elektronik dan cetak",
+    "建立电子单并打印"
+  ],
+  [
+    "Create electronic Bill only — no print",
+    "Create electronic bill without printing",
+    "Buat bil elektronik tanpa cetakan",
+    "只建立电子单，不打印"
+  ],
+  [
+    "Create Electronic Bill",
+    "Create electronic bill",
+    "Buat bil elektronik",
+    "建立电子单"
+  ],
+  [
+    "Discard bill draft",
+    "Discard bill draft",
+    "Buang draf bil",
+    "清除开单草稿"
+  ],
+  [
+    "Receipt photo is required.",
+    "Receipt photo is required.",
+    "Foto resit diperlukan.",
+    "请上传收据照片。"
+  ],
+  [
+    "✓ Expense and receipt photo saved.",
+    "✓ Expense and receipt photo saved.",
+    "✓ Perbelanjaan dan foto resit disimpan.",
+    "✓ 支出及收据照片已保存。"
+  ],
+  [
+    "The receipt upload is too large. Retake the photo.",
+    "The receipt photo is too large. Retake it.",
+    "Foto resit terlalu besar. Ambil semula.",
+    "收据照片太大，请重拍。"
+  ],
+  [
+    "Cash Float",
+    "Cash float",
+    "Wang runcit",
+    "备用金"
+  ],
+  [
+    "Current Balance",
+    "Current balance",
+    "Baki semasa",
+    "当前余额"
+  ],
+  [
+    "Today Top Up",
+    "Today's top-ups",
+    "Tambahan hari ini",
+    "今日补款"
+  ],
+  [
+    "Low balance. Supervisor has been notified.",
+    "Low balance. Supervisor has been notified.",
+    "Baki rendah. Penyelia telah dimaklumkan.",
+    "余额不足，已通知主管。"
+  ],
+  [
+    "Record Expense",
+    "Record expense",
+    "Rekod perbelanjaan",
+    "记录支出"
+  ],
+  [
+    "Amount (RM)",
+    "Amount (RM)",
+    "Amaun (RM)",
+    "金额（RM）"
+  ],
+  [
+    "Select description",
+    "Select description",
+    "Pilih keterangan",
+    "选择支出项目"
+  ],
+  [
+    "Other description",
+    "Other description",
+    "Keterangan lain",
+    "其他说明"
+  ],
+  [
+    "Receipt photo (required)",
+    "Receipt photo (required)",
+    "Foto resit (wajib)",
+    "收据照片（必填）"
+  ],
+  [
+    "Selected receipt preview",
+    "Selected receipt preview",
+    "Pratonton resit dipilih",
+    "已选收据预览"
+  ],
+  [
+    "Save Expense and Receipt",
+    "Save expense and receipt",
+    "Simpan perbelanjaan dan resit",
+    "保存支出及收据"
+  ],
+  [
+    "Trip started.",
+    "Trip started.",
+    "Perjalanan bermula.",
+    "趟次已开始。"
+  ],
+  [
+    "Arrival recorded.",
+    "Arrival recorded.",
+    "Ketibaan direkodkan.",
+    "已记录到店。"
+  ],
+  [
+    "Stop completed. Next Stop is now available.",
+    "Stop completed. Next stop is now available.",
+    "Hentian selesai. Hentian seterusnya kini tersedia.",
+    "站点已完成，可以前往下一家。"
+  ],
+  [
+    "Trip completed.",
+    "Trip completed.",
+    "Perjalanan selesai.",
+    "趟次已完成。"
+  ],
+  [
+    "No Goods reason is required.",
+    "Enter the reason for no goods.",
+    "Masukkan sebab tiada barang.",
+    "请填写无货原因。"
+  ],
+  [
+    "A No Goods photo is required.",
+    "A photo showing no goods is required.",
+    "Foto bukti tiada barang diperlukan.",
+    "请上传无货证明照片。"
+  ],
+  [
+    "No Goods proof saved. Next Stop is now available.",
+    "No-goods proof saved. Next stop is now available.",
+    "Bukti tiada barang disimpan. Hentian seterusnya kini tersedia.",
+    "无货证明已保存，可以前往下一家。"
+  ],
+  [
+    "REMOTE ARRIVAL TEST MODE",
+    "Remote arrival test mode",
+    "Mod ujian ketibaan jarak jauh",
+    "远程到店测试模式"
+  ],
+  [
+    "Complete Trip",
+    "Complete trip",
+    "Selesaikan perjalanan",
+    "完成趟次"
+  ],
+  [
+    "COME BACK LATER ▼",
+    "Come back later ▼",
+    "Datang semula ▼",
+    "稍后再来 ▼"
+  ],
+  [
+    "OPEN ▼",
+    "Open ▼",
+    "Buka ▼",
+    "打开 ▼"
+  ],
+  [
+    "COME BACK LATER ▲",
+    "Come back later ▲",
+    "Datang semula ▲",
+    "稍后再来 ▲"
+  ],
+  [
+    "Open in Google Maps",
+    "Open in Google Maps",
+    "Buka dalam Google Maps",
+    "在 Google Maps 打开"
+  ],
+  [
+    "· Open Map",
+    "· Open map",
+    "· Buka peta",
+    "· 打开地图"
+  ],
+  [
+    "Complete and continue to next customer",
+    "Complete and continue to next customer",
+    "Selesai dan terus ke pelanggan seterusnya",
+    "完成并前往下一家"
+  ],
+  [
+    "No Goods reason",
+    "No-goods reason",
+    "Sebab tiada barang",
+    "无货原因"
+  ],
+  [
+    "No Goods photo",
+    "No-goods photo",
+    "Foto tiada barang",
+    "无货照片"
+  ],
+  [
+    "Uploading…",
+    "Uploading…",
+    "Memuat naik…",
+    "上传中…"
+  ],
+  [
+    "No Goods",
+    "No goods",
+    "Tiada barang",
+    "无货"
+  ],
+  [
+    "Missing official GPS",
+    "Missing official GPS",
+    "GPS rasmi tiada",
+    "缺少正式定位"
+  ],
+  [
+    "Move {0} Merge into which Zone？ {1}",
+    "Merge {0} into which zone? {1}",
+    "Gabungkan {0} ke zon mana? {1}",
+    "将 {0} 合并到哪个分区？{1}"
+  ],
+  [
+    "Confirm moving all Area and deactivate {0}？Moved Area remain pending confirmation, history snapshots remain unchanged.",
+    "Move all areas and deactivate {0}? Moved areas await confirmation; historical records remain unchanged.",
+    "Pindahkan semua kawasan dan nyahaktifkan {0}? Kawasan dipindahkan menunggu pengesahan; rekod sejarah kekal.",
+    "移动全部区域并停用 {0}？移动后的区域保持待确认，历史记录不变。"
+  ],
+  [
+    "First select the Zone, items to split Area.",
+    "Select the areas to split from this zone first.",
+    "Pilih kawasan untuk dipisahkan daripada zon ini dahulu.",
+    "请先勾选要从此分区拆出的区域。"
+  ],
+  [
+    "New Zone Group Name",
+    "New zone name",
+    "Nama zon baharu",
+    "新分区名称"
+  ],
+  [
+    "Select at least one Area.",
+    "Select at least one area.",
+    "Pilih sekurang-kurangnya satu kawasan.",
+    "请至少选择一个区域。"
+  ],
+  [
+    "Select a target Zone Group.",
+    "Select a target zone.",
+    "Pilih zon sasaran.",
+    "请选择目标分区。"
+  ],
+  [
+    "The target Zone Group must be different from every selected Area current Zone Group.",
+    "The target zone must differ from the current zone of every selected area.",
+    "Zon sasaran mesti berbeza daripada zon semasa setiap kawasan dipilih.",
+    "目标分区必须与所有已选区域的当前分区不同。"
+  ],
+  [
+    "Moved {0} Area; assignment adjusted, awaiting Supervisor confirmation.",
+    "Moved {0} areas; awaiting supervisor confirmation.",
+    "{0} kawasan dipindahkan; menunggu pengesahan penyelia.",
+    "已移动 {0} 个区域，等待主管确认归属。"
+  ],
+  [
+    "Successfully moved {0} Area{1}; assignment adjusted, awaiting Supervisor confirmation.",
+    "Successfully moved {0} areas; awaiting supervisor confirmation.",
+    "Berjaya memindahkan {0} kawasan; menunggu pengesahan penyelia.",
+    "已成功移动 {0} 个区域，等待主管确认归属。"
+  ],
+  [
+    "The Areas could not be moved. No Areas were changed.",
+    "Areas could not be moved. No changes were made.",
+    "Kawasan tidak dapat dipindahkan. Tiada perubahan dibuat.",
+    "区域移动失败，资料没有改变。"
+  ],
+  [
+    "{0} Area assignment{1} {2}.",
+    "{0} area assignments: {2}.",
+    "Penetapan {0} kawasan: {2}.",
+    "{0} 个区域归属：{2}。"
+  ],
+  [
+    "returned to pending confirmation",
+    "Returned to pending confirmation",
+    "Dikembalikan untuk pengesahan",
+    "已退回待确认"
+  ],
+  [
+    "The Area confirmation could not be changed. No Areas were changed.",
+    "Area confirmation could not be changed. No changes were made.",
+    "Pengesahan kawasan tidak dapat diubah. Tiada perubahan dibuat.",
+    "区域确认状态修改失败，资料没有改变。"
+  ],
+  [
+    "＋ Add Zone Group",
+    "＋ Add zone",
+    "＋ Tambah zon",
+    "＋ 新增分区"
+  ],
+  [
+    "Zone 只记录地理范围；新派车不会使用这里保存的旧默认车辆。",
+    "Zones describe geographic coverage only. New dispatches do not use the old default vehicles saved here.",
+    "Zon hanya menerangkan liputan geografi. Penugasan baharu tidak menggunakan kenderaan lalai lama yang disimpan di sini.",
+    "分区只记录地理范围；新派车不会使用这里保存的旧默认车辆。"
+  ],
+  [
+    "Zone Group Name",
+    "Zone name",
+    "Nama zon",
+    "分区名称"
+  ],
+  [
+    "Code (optional)",
+    "Code (optional)",
+    "Kod (pilihan)",
+    "代码（选填）"
+  ],
+  [
+    "Display Order (optional)",
+    "Display order (optional)",
+    "Urutan paparan (pilihan)",
+    "显示顺序（选填）"
+  ],
+  [
+    "Placed last when empty",
+    "Placed last when empty",
+    "Diletakkan terakhir jika kosong",
+    "留空则排在最后"
+  ],
+  [
+    "Moving Areas…",
+    "Moving areas…",
+    "Memindahkan kawasan…",
+    "正在移动区域…"
+  ],
+  [
+    "Select {0}",
+    "Select {0}",
+    "Pilih {0}",
+    "选择 {0}"
+  ],
+  [
+    "None AreaID",
+    "No area ID",
+    "Tiada ID kawasan",
+    "无区域编号"
+  ],
+  [
+    "customers /",
+    "customers /",
+    "pelanggan /",
+    "客户／"
+  ],
+  [
+    "branches · GPS",
+    "branches · GPS",
+    "cawangan · GPS",
+    "分店 · 定位"
+  ],
+  [
+    "Area assignment confirmed.",
+    "Area assignment confirmed.",
+    "Penetapan kawasan disahkan.",
+    "区域归属已确认。"
+  ],
+  [
+    "The Area assignment could not be confirmed.",
+    "Area assignment could not be confirmed.",
+    "Penetapan kawasan tidak dapat disahkan.",
+    "无法确认区域归属。"
+  ],
+  [
+    "Confirm moving {0} Area？ Source Zone: {1} Target Zone: {2} After moving this is shown as “Assignment adjusted／Pending confirmation”.",
+    "Move {0} areas from {1} to {2}? They will await confirmation.",
+    "Pindahkan {0} kawasan dari {1} ke {2}? Kawasan akan menunggu pengesahan.",
+    "确认将 {0} 个区域从 {1} 移到 {2}？移动后将显示为待确认归属。"
+  ],
+  [
+    "Successfully moved {0} Area to {1}; Assignment adjusted, awaiting reconfirmation.",
+    "Moved {0} areas to {1}; awaiting reconfirmation.",
+    "{0} kawasan dipindahkan ke {1}; menunggu pengesahan semula.",
+    "已将 {0} 个区域移到 {1}，等待重新确认归属。"
+  ],
+  [
+    "ZONE STATISTIC DETAIL",
+    "Zone statistics",
+    "Statistik zon",
+    "分区统计明细"
+  ],
+  [
+    "items · currently shown",
+    "items · currently shown",
+    "item · sedang dipaparkan",
+    "项 · 当前显示"
+  ],
+  [
+    "Search details",
+    "Search details",
+    "Cari butiran",
+    "搜索明细"
+  ],
+  [
+    "By Area filter",
+    "Filter by area",
+    "Tapis mengikut kawasan",
+    "按区域筛选"
+  ],
+  [
+    "All Area",
+    "All areas",
+    "Semua kawasan",
+    "全部区域"
+  ],
+  [
+    "Detail sort",
+    "Sort details",
+    "Susun butiran",
+    "明细排序"
+  ],
+  [
+    "Area / Branch Name",
+    "Area / Branch name",
+    "Kawasan / Nama cawangan",
+    "区域／分店名称"
+  ],
+  [
+    "Customer Branch descending",
+    "Branch count: high to low",
+    "Bilangan cawangan: tinggi ke rendah",
+    "分店数量：多到少"
+  ],
+  [
+    "Official GPS descending",
+    "Official GPS count: high to low",
+    "Bilangan GPS rasmi: tinggi ke rendah",
+    "正式定位数量：多到少"
+  ],
+  [
+    "official GPS descending",
+    "Official GPS count: high to low",
+    "Bilangan GPS rasmi: tinggi ke rendah",
+    "正式定位数量：多到少"
+  ],
+  [
+    "By Area summary",
+    "Summary by area",
+    "Ringkasan mengikut kawasan",
+    "按区域汇总"
+  ],
+  [
+    "By Customer Branch",
+    "By customer branch",
+    "Mengikut cawangan pelanggan",
+    "按客户分店"
+  ],
+  [
+    "Select all current filtered results",
+    "Select all filtered results",
+    "Pilih semua hasil ditapis",
+    "勾选当前全部筛选结果"
+  ],
+  [
+    "Target Zone",
+    "Target zone",
+    "Zon sasaran",
+    "目标分区"
+  ],
+  [
+    "Move reason",
+    "Reason for moving",
+    "Sebab pemindahan",
+    "移动原因"
+  ],
+  [
+    "Area Name / ID",
+    "Area name / ID",
+    "Nama / ID kawasan",
+    "区域名称／编号"
+  ],
+  [
+    "Current official Zone",
+    "Current confirmed zone",
+    "Zon disahkan semasa",
+    "当前正式分区"
+  ],
+  [
+    "Confirmation status",
+    "Confirmation status",
+    "Status pengesahan",
+    "确认状态"
+  ],
+  [
+    "None Area ID",
+    "No area ID",
+    "Tiada ID kawasan",
+    "无区域编号"
+  ],
+  [
+    "Assignment adjusted／Pending confirmation",
+    "Assignment changed / Pending confirmation",
+    "Penetapan diubah / Menunggu pengesahan",
+    "归属已调整／待确认"
+  ],
+  [
+    "Confirm this Area current Zone assignment？",
+    "Confirm this area's current zone assignment?",
+    "Sahkan penetapan zon semasa kawasan ini?",
+    "确认此区域的当前分区归属？"
+  ],
+  [
+    "Current suggestion Zone",
+    "Currently suggested zone",
+    "Zon dicadangkan semasa",
+    "当前建议分区"
+  ],
+  [
+    "Customer ID / Branch ID",
+    "Customer ID / Branch ID",
+    "ID pelanggan / ID cawangan",
+    "客户编号／分店编号"
+  ],
+  [
+    "Not stated",
+    "Not stated",
+    "Tidak dinyatakan",
+    "未注明"
+  ],
+  [
+    "Not specified",
+    "Not specified",
+    "Tidak dinyatakan",
+    "未指定"
+  ],
+  [
+    "Available official GPS",
+    "Official GPS available",
+    "GPS rasmi tersedia",
+    "已有正式定位"
+  ],
+  [
+    "Has official schedule",
+    "Official schedule available",
+    "Jadual rasmi tersedia",
+    "已有正式排程"
+  ],
+  [
+    "No official schedule",
+    "No official schedule",
+    "Tiada jadual rasmi",
+    "没有正式排程"
+  ],
+  [
+    "AREA CONFIRMATION DETAIL",
+    "Area confirmation details",
+    "Butiran pengesahan kawasan",
+    "区域确认明细"
+  ],
+  [
+    "Area Loading data…",
+    "Loading area data…",
+    "Memuatkan data kawasan…",
+    "正在载入区域资料…"
+  ],
+  [
+    "Assignment status",
+    "Assignment status",
+    "Status penetapan",
+    "归属状态"
+  ],
+  [
+    "Historical dispatch count",
+    "Historical dispatch count",
+    "Bilangan penugasan terdahulu",
+    "历史派车次数"
+  ],
+  [
+    "Historical collection weight",
+    "Historical collection weight",
+    "Berat kutipan terdahulu",
+    "历史收货重量"
+  ],
+  [
+    "Frequency not stated",
+    "Frequency not stated",
+    "Kekerapan tidak dinyatakan",
+    "未注明频率"
+  ],
+  [
+    "Weekday not specified",
+    "Weekday not specified",
+    "Hari tidak dinyatakan",
+    "未指定收货星期"
+  ],
+  [
+    "· about",
+    "· About",
+    "· Kira-kira",
+    "· 约"
+  ],
+  [
+    "Parking Note",
+    "Parking note",
+    "Catatan parkir",
+    "停车备注"
+  ],
+  [
+    "Truck Access",
+    "Truck access",
+    "Akses lori",
+    "罗里通行条件"
+  ],
+  [
+    "Once a week",
+    "Once a week",
+    "Sekali seminggu",
+    "每周一次"
+  ],
+  [
+    "Twice a week",
+    "Twice a week",
+    "Dua kali seminggu",
+    "每周两次"
+  ],
+  [
+    "3 times a week",
+    "3 times a week",
+    "Tiga kali seminggu",
+    "每周三次"
+  ],
+  [
+    "4 times a week",
+    "4 times a week",
+    "Empat kali seminggu",
+    "每周四次"
+  ],
+  [
+    "5 times a week",
+    "5 times a week",
+    "Lima kali seminggu",
+    "每周五次"
+  ],
+  [
+    "6 times a week",
+    "6 times a week",
+    "Enam kali seminggu",
+    "每周六次"
+  ],
+  [
+    "Every 2 Weeks",
+    "Every 2 weeks",
+    "Setiap dua minggu",
+    "每两周一次"
+  ],
+  [
+    "Every 3 Weeks",
+    "Every 3 weeks",
+    "Setiap tiga minggu",
+    "每三周一次"
+  ],
+  [
+    "On Call",
+    "On call",
+    "Atas permintaan",
+    "来电安排"
+  ],
+  [
+    "当前频率需要选择 {0} 个收货星期。",
+    "Select {0} collection weekdays for this frequency.",
+    "Pilih {0} hari kutipan untuk kekerapan ini.",
+    "当前频率需要选择 {0} 个收货星期。"
+  ],
+  [
+    "请选择客户所属 ROUTE。",
+    "Select the customer's home route.",
+    "Pilih laluan tetap pelanggan.",
+    "请选择客户所属路线。"
+  ],
+  [
+    "Area / Zone",
+    "Area / Zone",
+    "Kawasan / Zon",
+    "区域／分区"
+  ],
+  [
+    "所属 ROUTE",
+    "Home route",
+    "Laluan tetap",
+    "所属路线"
+  ],
+  [
+    "请选择所属 ROUTE",
+    "Select home route",
+    "Pilih laluan tetap",
+    "请选择所属路线"
+  ],
+  [
+    "星期日执行路线",
+    "Sunday collection route",
+    "Laluan kutipan Ahad",
+    "星期日执行路线"
+  ],
+  [
+    "跟随固定所属路线",
+    "Follow home route",
+    "Ikut laluan tetap",
+    "跟随固定所属路线"
+  ],
+  [
+    "只改变星期日由哪组收货；客户仍按原收货频率到期安排。",
+    "Only changes the Sunday collection group. The customer's collection frequency remains unchanged.",
+    "Hanya menukar kumpulan kutipan Ahad. Kekerapan kutipan pelanggan kekal.",
+    "只改变星期日由哪组收货；客户仍按原收货频率到期安排。"
+  ],
+  [
+    "周期起算日期",
+    "Cycle start date",
+    "Tarikh mula kitaran",
+    "周期起算日期"
+  ],
+  [
+    "按当前设置计算的下次收货日期：",
+    "Next collection date with these settings:",
+    "Tarikh kutipan seterusnya berdasarkan tetapan ini:",
+    "按当前设置计算的下次收货日期："
+  ],
+  [
+    "请先补全有效的周期设置",
+    "Complete valid cycle settings first",
+    "Lengkapkan tetapan kitaran yang sah dahulu",
+    "请先补全有效的周期设置"
+  ],
+  [
+    "（保存后生效）",
+    "(Effective after saving)",
+    "(Berkuat kuasa selepas disimpan)",
+    "（保存后生效）"
+  ],
+  [
+    "星期日执行路线：",
+    "Sunday collection route:",
+    "Laluan kutipan Ahad:",
+    "星期日执行路线："
+  ],
+  [
+    "客户通知无货、无需到店：请填写通知内容及原因。",
+    "Customer reported no goods and no visit needed. Enter the notice and reason.",
+    "Pelanggan memaklumkan tiada barang dan tidak perlu melawat. Masukkan makluman dan sebab.",
+    "客户通知无货、无需到店：请填写通知内容及原因。"
+  ],
+  [
+    "固定收货排程",
+    "Regular collection schedule",
+    "Jadual kutipan tetap",
+    "固定收货排程"
+  ],
+  [
+    "＋ 临时增加收货",
+    "＋ Add extra collection",
+    "＋ Tambah kutipan tambahan",
+    "＋ 临时增加收货"
+  ],
+  [
+    "客户通知无货（无需到店）",
+    "Customer reported no goods (no visit needed)",
+    "Pelanggan memaklumkan tiada barang (tidak perlu melawat)",
+    "客户通知无货（无需到店）"
+  ],
+  [
+    "只增加一次，保留原收货记录",
+    "Add once; keep the original collection record",
+    "Tambah sekali; kekalkan rekod kutipan asal",
+    "只增加一次，保留原收货记录"
+  ],
+  [
+    "确认增加",
+    "Confirm addition",
+    "Sahkan penambahan",
+    "确认增加"
+  ],
+  [
+    "收货排程需要确认（",
+    "Collection schedules awaiting confirmation (",
+    "Jadual kutipan menunggu pengesahan (",
+    "收货排程需要确认（"
+  ],
+  [
+    "确认补入",
+    "Confirm adding",
+    "Sahkan penambahan",
+    "确认补入"
+  ],
+  [
+    "上述应收客户",
+    "customers due above",
+    "pelanggan yang perlu dikutip di atas",
+    "上述应收客户"
+  ],
+  [
+    "按上传路线表同步固定收货星期",
+    "Synchronize collection weekdays from the uploaded route plan",
+    "Selaraskan hari kutipan daripada pelan laluan dimuat naik",
+    "按上传路线表同步固定收货星期"
+  ],
+  [
+    "建议收货星期：",
+    "Suggested collection weekdays:",
+    "Cadangan hari kutipan:",
+    "建议收货星期："
+  ],
+  [
+    "· ROUTE {0}",
+    "· Route {0}",
+    "· Laluan {0}",
+    "· 路线 {0}"
+  ],
+  [
+    "（依据同一 Area 建议，需确认）",
+    "(Suggested from the same area; confirmation required)",
+    "(Cadangan berdasarkan kawasan sama; pengesahan diperlukan)",
+    "（依据同一区域建议，需确认）"
+  ],
+  [
+    "周期起算日期：",
+    "Cycle start date:",
+    "Tarikh mula kitaran:",
+    "周期起算日期："
+  ],
+  [
+    "依据上次实际收货",
+    "Based on the last actual collection",
+    "Berdasarkan kutipan sebenar terakhir",
+    "依据上次实际收货"
+  ],
+  [
+    "系统建议，尚未确认",
+    "System suggestion, not yet confirmed",
+    "Cadangan sistem, belum disahkan",
+    "系统建议，尚未确认"
+  ],
+  [
+    "依据原排程",
+    "Based on the original schedule",
+    "Berdasarkan jadual asal",
+    "依据原排程"
+  ],
+  [
+    "建议下次收货日期：",
+    "Suggested next collection date:",
+    "Cadangan tarikh kutipan seterusnya:",
+    "建议下次收货日期："
+  ],
+  [
+    "（确认后生效）",
+    "(Effective after confirmation)",
+    "(Berkuat kuasa selepas pengesahan)",
+    "（确认后生效）"
+  ],
+  [
+    "来源：",
+    "Source:",
+    "Sumber:",
+    "来源："
+  ],
+  [
+    "{0} / ROUTE {1}",
+    "{0} / Route {1}",
+    "{0} / Laluan {1}",
+    "{0}／路线 {1}"
+  ],
+  [
+    "已有派车记录：",
+    "Existing dispatch records:",
+    "Rekod penugasan sedia ada:",
+    "已有派车记录："
+  ],
+  [
+    "排程",
+    "Schedule",
+    "Jadual",
+    "排程"
+  ],
+  [
+    "· 起算",
+    "· Starts",
+    "· Bermula",
+    "· 起算"
+  ],
+  [
+    "核对排程",
+    "Review schedule",
+    "Semak jadual",
+    "核对排程"
+  ],
+  [
+    "已到店 · 无货",
+    "Arrived · No goods",
+    "Tiba · Tiada barang",
+    "已到店 · 无货"
+  ],
+  [
+    "需跟进",
+    "Follow-up needed",
+    "Perlu susulan",
+    "需跟进"
+  ],
+  [
+    "收货中",
+    "Collecting",
+    "Sedang mengutip",
+    "收货中"
+  ],
+  [
+    "待收",
+    "Awaiting collection",
+    "Menunggu kutipan",
+    "待收"
+  ],
+  [
+    "上移 {0}",
+    "Move {0} up",
+    "Naikkan {0}",
+    "上移 {0}"
+  ],
+  [
+    "下移 {0}",
+    "Move {0} down",
+    "Turunkan {0}",
+    "下移 {0}"
+  ],
+  [
+    "Address：",
+    "Address:",
+    "Alamat:",
+    "Address:"
+  ],
+  [
+    "Not recorded",
+    "Not recorded",
+    "Tidak direkodkan",
+    "未记录"
+  ],
+  [
+    "联系人：",
+    "Contact:",
+    "Orang hubungan:",
+    "联系人："
+  ],
+  [
+    "未记录",
+    "Not recorded",
+    "Tidak direkodkan",
+    "未记录"
+  ],
+  [
+    "电话未记录",
+    "Phone not recorded",
+    "Telefon tidak direkodkan",
+    "电话未记录"
+  ],
+  [
+    "约定时段：",
+    "Agreed time window:",
+    "Tempoh masa dipersetujui:",
+    "约定时段："
+  ],
+  [
+    "Truck access",
+    "Truck access",
+    "Akses lori",
+    "罗里通行条件"
+  ],
+  [
+    "GPS note",
+    "GPS note",
+    "Catatan GPS",
+    "定位备注"
+  ],
+  [
+    "跟进原因",
+    "Follow-up reason",
+    "Sebab susulan",
+    "跟进原因"
+  ],
+  [
+    "导航",
+    "Navigate",
+    "Navigasi",
+    "导航"
+  ],
+  [
+    "GPS 未记录",
+    "GPS not recorded",
+    "GPS tidak direkodkan",
+    "未记录定位"
+  ],
+  [
+    "客户主资料",
+    "Customer records",
+    "Rekod pelanggan",
+    "客户主资料"
+  ],
+  [
+    "转到其他 ROUTE",
+    "Move to another route",
+    "Pindah ke laluan lain",
+    "转到其他路线"
+  ],
+  [
+    "已有执行或单据，保留原始收货记录。",
+    "Execution or billing has started; the original collection record is retained.",
+    "Pelaksanaan atau bil telah bermula; rekod kutipan asal dikekalkan.",
+    "已有执行或单据，保留原始收货记录。"
+  ],
+  [
+    "调整前请先撤回批准；执行中的日期不能移动客户。",
+    "Withdraw approval before editing. Customers cannot be moved on dates already in progress.",
+    "Tarik balik kelulusan sebelum mengubah. Pelanggan tidak boleh dipindah pada tarikh yang sedang dilaksanakan.",
+    "调整前请先撤回批准；执行中的日期不能移动客户。"
+  ],
+  [
+    "调整当天 ROUTE（收货日期不变）",
+    "Change today's route (collection date unchanged)",
+    "Ubah laluan hari ini (tarikh kutipan kekal)",
+    "调整当天路线（收货日期不变）"
+  ],
+  [
+    "确认调整",
+    "Confirm change",
+    "Sahkan perubahan",
+    "确认调整"
+  ],
+  [
+    "卸货记录",
+    "Unloading records",
+    "Rekod pemunggahan",
+    "卸货记录"
+  ],
+  [
+    "刷新记录",
+    "Refresh records",
+    "Muat semula rekod",
+    "刷新记录"
+  ],
+  [
+    "当天这条 ROUTE 暂无卸货记录。",
+    "No unloading records for this route on this date.",
+    "Tiada rekod pemunggahan bagi laluan ini pada tarikh ini.",
+    "当天这条路线暂无卸货记录。"
+  ],
+  [
+    "等待员工确认重量",
+    "Awaiting staff weight confirmation",
+    "Menunggu pengesahan berat oleh pekerja",
+    "等待员工确认重量"
+  ],
+  [
+    "重量待确认",
+    "Weight awaiting confirmation",
+    "Berat menunggu pengesahan",
+    "重量待确认"
+  ],
+  [
+    "卸货提交司机：",
+    "Submitting driver:",
+    "Pemandu yang menghantar:",
+    "卸货提交司机："
+  ],
+  [
+    "当时 Attendant：",
+    "Crew at the time:",
+    "Pembantu ketika itu:",
+    "当时跟车员："
+  ],
+  [
+    "这车货关联 ROUTE",
+    "This load is linked to routes",
+    "Muatan ini berkaitan dengan laluan",
+    "这车货关联路线"
+  ],
+  [
+    "，同一卸货编号只计算一次。",
+    "; each unloading record is counted once.",
+    "; setiap rekod pemunggahan dikira sekali sahaja.",
+    "，同一卸货编号只计算一次。"
+  ],
+  [
+    "历史记录：路线根据现有趟次关联，人员按原始记录显示。",
+    "Historical record: routes are linked from existing trips; staff follow the original record.",
+    "Rekod sejarah: laluan dikaitkan melalui perjalanan sedia ada; pekerja mengikut rekod asal.",
+    "历史记录：路线根据现有趟次关联，人员按原始记录显示。"
+  ],
+  [
+    "查看卸货照片",
+    "View unloading photo",
+    "Lihat foto pemunggahan",
+    "查看卸货照片"
+  ],
+  [
+    "当天交接记录",
+    "Today's handover records",
+    "Rekod serahan tugas hari ini",
+    "当天交接记录"
+  ],
+  [
+    "交接前后人员供核对；卸货重量尚未分配为个人薪酬。",
+    "Staff before and after handover are shown for checking. Unloading weight has not been allocated to individual pay.",
+    "Pekerja sebelum dan selepas serahan dipaparkan untuk semakan. Berat pemunggahan belum diperuntukkan kepada gaji individu.",
+    "交接前后人员供核对；卸货重量尚未分配为个人薪酬。"
+  ],
+  [
+    "Workspace sections",
+    "Workspace sections",
+    "Bahagian ruang kerja",
+    "工作区栏目"
+  ],
+  [
+    "Preferred/Usual Areas",
+    "Preferred / usual areas",
+    "Kawasan pilihan / biasa",
+    "偏好／常跑区域"
+  ],
+  [
+    "· Start",
+    "· Start",
+    "· Mula",
+    "· 出发"
+  ],
+  [
+    "/ End",
+    "/ End",
+    "/ Akhir",
+    "／结束"
+  ],
+  [
+    "Coordinates kept; address lookup failed: {0}",
+    "Coordinates kept; address lookup failed: {0}",
+    "Koordinat dikekalkan; carian alamat gagal: {0}",
+    "坐标已保留；地址查询失败：{0}"
+  ],
+  [
+    "Enter an address to search",
+    "Enter an address to search",
+    "Masukkan alamat untuk dicari",
+    "输入地址进行搜索"
+  ],
+  [
+    "Select a valid location on the map",
+    "Select a valid location on the map",
+    "Pilih lokasi yang sah pada peta",
+    "请在地图上选择有效位置"
+  ],
+  [
+    "Paste Coordinates",
+    "Paste coordinates",
+    "Tampal koordinat",
+    "粘贴坐标"
+  ],
+  [
+    "Get Current GPS",
+    "Get current GPS",
+    "Dapatkan GPS semasa",
+    "取得当前位置"
+  ],
+  [
+    "Use Pasted Coordinates",
+    "Use pasted coordinates",
+    "Gunakan koordinat ditampal",
+    "使用已粘贴坐标"
+  ],
+  [
+    "Find on Map",
+    "Find on map",
+    "Cari pada peta",
+    "在地图查找"
+  ],
+  [
+    "Select on Map",
+    "Select on map",
+    "Pilih pada peta",
+    "在地图选择"
+  ],
+  [
+    "GPS Source:",
+    "GPS source:",
+    "Sumber GPS:",
+    "定位来源："
+  ],
+  [
+    "Select GPS on map",
+    "Select GPS on map",
+    "Pilih GPS pada peta",
+    "在地图选择定位"
+  ],
+  [
+    "Search map",
+    "Search map",
+    "Cari peta",
+    "搜索地图"
+  ],
+  [
+    "Search address or place",
+    "Search address or place",
+    "Cari alamat atau tempat",
+    "搜索地址或地点"
+  ],
+  [
+    "Searching…",
+    "Searching…",
+    "Sedang mencari…",
+    "搜索中…"
+  ],
+  [
+    "Address search results",
+    "Address search results",
+    "Hasil carian alamat",
+    "地址搜索结果"
+  ],
+  [
+    "Search, pan or zoom, switch Map / Satellite, then click the map or drag the marker.",
+    "Search, pan or zoom, switch Map / Satellite, then click the map or drag the marker.",
+    "Cari, gerakkan atau zum, tukar Peta / Satelit, kemudian klik peta atau seret penanda.",
+    "搜索、移动或缩放地图，切换地图／卫星，然后点击地图或拖动标记。"
+  ],
+  [
+    "Use This Location",
+    "Use this location",
+    "Gunakan lokasi ini",
+    "使用此位置"
+  ],
+  [
+    "Selected GPS",
+    "Selected GPS",
+    "GPS dipilih",
+    "已选定位"
+  ],
+  [
+    "Current: {0}",
+    "Current: {0}",
+    "Semasa: {0}",
+    "当前：{0}"
+  ],
+  [
+    "Suggested: {0}",
+    "Suggested: {0}",
+    "Cadangan: {0}",
+    "建议：{0}"
+  ],
+  [
+    "Route",
+    "Route",
+    "Laluan",
+    "路线"
+  ],
+  [
+    "ROUTE",
+    "Route",
+    "Laluan",
+    "路线"
+  ],
+  [
+    "Trip",
+    "Trip",
+    "Perjalanan",
+    "趟次"
+  ],
+  [
+    "Daily",
+    "Daily",
+    "Setiap hari",
+    "每天"
+  ],
+  [
+    "Weekly",
+    "Weekly",
+    "Setiap minggu",
+    "每周"
+  ],
+  [
+    "Monthly",
+    "Monthly",
+    "Setiap bulan",
+    "每月"
+  ],
+  [
+    "Paused",
+    "Paused",
+    "Dijeda",
+    "暂停"
+  ],
+  [
+    "Sunday",
+    "Sunday",
+    "Ahad",
+    "星期日"
+  ],
+  [
+    "Monday",
+    "Monday",
+    "Isnin",
+    "星期一"
+  ],
+  [
+    "Tuesday",
+    "Tuesday",
+    "Selasa",
+    "星期二"
+  ],
+  [
+    "Wednesday",
+    "Wednesday",
+    "Rabu",
+    "星期三"
+  ],
+  [
+    "Thursday",
+    "Thursday",
+    "Khamis",
+    "星期四"
+  ],
+  [
+    "Friday",
+    "Friday",
+    "Jumaat",
+    "星期五"
+  ],
+  [
+    "Saturday",
+    "Saturday",
+    "Sabtu",
+    "星期六"
+  ],
+  [
+    "First",
+    "First",
+    "Pertama",
+    "第一个"
+  ],
+  [
+    "Second",
+    "Second",
+    "Kedua",
+    "第二个"
+  ],
+  [
+    "Third",
+    "Third",
+    "Ketiga",
+    "第三个"
+  ],
+  [
+    "Fourth",
+    "Fourth",
+    "Keempat",
+    "第四个"
+  ],
+  [
+    "Last",
+    "Last",
+    "Terakhir",
+    "最后一个"
+  ],
+  [
+    "Weight",
+    "Weight",
+    "Berat",
+    "重量"
+  ],
+  [
+    "Item",
+    "Item",
+    "Item",
+    "品项"
+  ],
+  [
+    "Remove",
+    "Remove",
+    "Buang",
+    "删除"
+  ],
+  [
+    "Remove {0}",
+    "Remove {0}",
+    "Buang {0}",
+    "删除 {0}"
+  ],
+  [
+    "Reason:",
+    "Reason:",
+    "Sebab:",
+    "原因："
+  ],
+  [
+    "Arrived",
+    "Arrived",
+    "Tiba",
+    "已到店"
+  ],
+  [
+    "Fuel",
+    "Fuel",
+    "Bahan api",
+    "燃油"
+  ],
+  [
+    "Services",
+    "Servicing",
+    "Servis",
+    "保养"
+  ],
+  [
+    "Repair",
+    "Repair",
+    "Pembaikan",
+    "维修"
+  ],
+  [
+    "Spare Parts",
+    "Spare parts",
+    "Alat ganti",
+    "零件"
+  ],
+  [
+    "Road Tax",
+    "Road tax",
+    "Cukai jalan",
+    "路税"
+  ],
+  [
+    "Insurance",
+    "Insurance",
+    "Insurans",
+    "保险"
+  ],
+  [
+    "Other",
+    "Other",
+    "Lain-lain",
+    "其他"
+  ],
+  [
+    "Purchases",
+    "Purchases",
+    "Pembelian",
+    "采购"
+  ],
+  [
+    "Expenses",
+    "Expenses",
+    "Perbelanjaan",
+    "支出"
+  ],
+  [
+    "Description",
+    "Description",
+    "Keterangan",
+    "说明"
+  ],
+  [
+    "PURCHASE",
+    "Purchase",
+    "Pembelian",
+    "采购单"
+  ],
+  [
+    "No:",
+    "No.:",
+    "No.:",
+    "编号："
+  ],
+  [
+    "Date:",
+    "Date:",
+    "Tarikh:",
+    "日期："
+  ],
+  [
+    "To:",
+    "To:",
+    "Kepada:",
+    "客户："
+  ],
+  [
+    "Att:",
+    "Vehicle:",
+    "Kenderaan:",
+    "车辆："
+  ],
+  [
+    "Total",
+    "Total",
+    "Jumlah",
+    "合计"
+  ],
+  [
+    "Cash",
+    "Cash",
+    "Tunai",
+    "现金"
+  ],
+  [
+    "Credit",
+    "Credit",
+    "Kredit",
+    "赊账"
+  ],
+  [
+    "Bank Transfer",
+    "Bank transfer",
+    "Pindahan bank",
+    "银行转账"
+  ],
+  [
+    "Stop",
+    "Stop",
+    "Hentian",
+    "站点"
+  ],
+  [
+    "Areas",
+    "Areas",
+    "Kawasan",
+    "区域"
+  ],
+  [
+    "Type",
+    "Type",
+    "Jenis",
+    "类型"
+  ],
+  [
+    "Factory",
+    "Factory",
+    "Kilang",
+    "工厂"
+  ],
+  [
+    "Move",
+    "Move",
+    "Pindah",
+    "移动"
+  ],
+  [
+    "BranchID",
+    "Branch ID",
+    "ID cawangan",
+    "分店编号"
+  ],
+  [
+    "ScheduleID",
+    "Schedule ID",
+    "ID jadual",
+    "排程编号"
+  ],
+  [
+    "Selected",
+    "Selected",
+    "Dipilih",
+    "已选择"
+  ],
+  [
+    "Area",
+    "Area",
+    "Kawasan",
+    "区域"
+  ],
+  [
+    "Frequency",
+    "Frequency",
+    "Kekerapan",
+    "频率"
+  ],
+  [
+    "Capacity",
+    "Capacity",
+    "Kapasiti",
+    "载重量"
+  ],
+  [
+    "Base",
+    "Base",
+    "Pangkalan",
+    "基地"
+  ],
+  [
+    "Zones",
+    "Zones",
+    "Zon",
+    "分区"
+  ],
+  [
+    "Zone",
+    "Zone",
+    "Zon",
+    "分区"
+  ],
+  [
+    "End",
+    "End",
+    "Akhir",
+    "结束"
+  ],
+  [
+    "Parking",
+    "Parking",
+    "Parkir",
+    "停车"
+  ],
+  [
+    "Assistant",
+    "Assistant",
+    "Pembantu",
+    "跟车员"
+  ],
+  [
+    "Crew",
+    "Crew",
+    "Pembantu",
+    "跟车员"
+  ],
+  [
+    "confirmed",
+    "Confirmed",
+    "Disahkan",
+    "已确认"
+  ],
+  [
+    "pending",
+    "Pending",
+    "Menunggu",
+    "待处理"
+  ],
+  [
+    "active",
+    "Active",
+    "Aktif",
+    "启用"
+  ],
+  [
+    "inactive",
+    "Inactive",
+    "Tidak aktif",
+    "停用"
+  ],
+  [
+    "completed",
+    "Completed",
+    "Selesai",
+    "已完成"
+  ],
+  [
+    "cancelled",
+    "Cancelled",
+    "Dibatalkan",
+    "已取消"
+  ],
+  [
+    "draft",
+    "Draft",
+    "Draf",
+    "草稿"
+  ],
+  [
+    "approved",
+    "Approved",
+    "Diluluskan",
+    "已批准"
+  ],
+  [
+    "in_progress",
+    "In progress",
+    "Sedang dilaksanakan",
+    "执行中"
+  ],
+  [
+    "reapproval_required",
+    "Reapproval required",
+    "Perlu kelulusan semula",
+    "需要重新批准"
+  ],
+  [
+    "maintenance",
+    "Maintenance",
+    "Penyelenggaraan",
+    "维修中"
+  ],
+  [
+    "sold",
+    "Sold",
+    "Dijual",
+    "已出售"
+  ],
+  [
+    "on_leave",
+    "On leave",
+    "Bercuti",
+    "休假"
+  ],
+  [
+    "available",
+    "Available",
+    "Tersedia",
+    "可用"
+  ],
+  [
+    "customer_requested_return",
+    "Customer requested return later",
+    "Pelanggan minta datang semula",
+    "客户要求稍后再来"
+  ],
+  [
+    "no_space_available",
+    "No space available",
+    "Tiada ruang tersedia",
+    "暂时没有空间"
+  ],
+  [
+    "other",
+    "Other",
+    "Lain-lain",
+    "其他"
+  ],
+  [
+    "Sunday is restricted to approved customers.",
+    "Sunday collections require supervisor approval.",
+    "Kutipan Ahad memerlukan kelulusan penyelia.",
+    "星期日收货需要主管批准。"
+  ],
+  [
+    "请由主管确认星期日收货。",
+    "Ask a supervisor to confirm Sunday collection.",
+    "Minta penyelia mengesahkan kutipan Ahad.",
+    "请由主管确认星期日收货。"
+  ],
+  [
+    "Electronic Bill {0} created.",
+    "Electronic bill {0} created.",
+    "Bil elektronik {0} dibuat.",
+    "电子单 {0} 已建立。"
+  ],
+  [
+    "Monthly occurrence must be First, Second, Third, Fourth, or Last.",
+    "Choose the first, second, third, fourth or last occurrence in the month.",
+    "Pilih kejadian pertama, kedua, ketiga, keempat atau terakhir dalam bulan.",
+    "请选择当月第一个、第二个、第三个、第四个或最后一个星期。"
+  ],
+  [
+    "Monthly occurrence is required.",
+    "Select the monthly occurrence.",
+    "Pilih kejadian dalam bulan.",
+    "请选择当月第几个星期。"
+  ],
+  [
+    "The requested monthly occurrence does not exist in this month.",
+    "The selected occurrence does not exist in this month.",
+    "Kejadian dipilih tidak wujud dalam bulan ini.",
+    "本月没有所选的星期次数。"
+  ],
+  [
+    "A valid fixed weekday is required for interval or monthly recurrence.",
+    "Choose a valid fixed weekday for this repeating schedule.",
+    "Pilih hari tetap yang sah untuk jadual berulang ini.",
+    "此周期排程必须选择有效的固定星期。"
+  ],
+  [
+    "Anchor Date is required for interval or monthly recurrence.",
+    "A cycle start date is required for this repeating schedule.",
+    "Tarikh mula kitaran diperlukan untuk jadual berulang ini.",
+    "此周期排程必须填写起算日期。"
+  ],
+  [
+    "Interval Weeks must be 2 or 3.",
+    "The interval must be two or three weeks.",
+    "Sela mesti dua atau tiga minggu.",
+    "间隔必须为两周或三周。"
+  ],
+  [
+    "Anchor Date must fall on the fixed weekday.",
+    "The cycle start date must fall on the selected weekday.",
+    "Tarikh mula kitaran mesti jatuh pada hari yang dipilih.",
+    "周期起算日期必须与所选星期一致。"
+  ],
+  [
+    "A valid from date is required.",
+    "A valid start date is required.",
+    "Tarikh mula yang sah diperlukan.",
+    "请填写有效的开始日期。"
+  ],
+  [
+    "Invalid Route",
+    "Invalid route",
+    "Laluan tidak sah",
+    "路线无效"
+  ],
+  [
+    "Invalid weekday",
+    "Invalid weekday",
+    "Hari tidak sah",
+    "收货星期无效"
+  ],
+  [
+    "Collection Frequency is required.",
+    "Collection frequency is required.",
+    "Kekerapan kutipan diperlukan.",
+    "请选择收货频率。"
+  ],
+  [
+    "Recurrence type does not match Collection Frequency.",
+    "The recurrence type does not match the collection frequency.",
+    "Jenis ulangan tidak sepadan dengan kekerapan kutipan.",
+    "周期类型与收货频率不一致。"
+  ],
+  [
+    "Reason is required.",
+    "A reason is required.",
+    "Sebab diperlukan.",
+    "请填写原因。"
+  ],
+  [
+    "此客户属于多条 ROUTE，请在派车中指定新增星期的 ROUTE。",
+    "This customer uses multiple routes. Select the route for the added weekday in dispatch.",
+    "Pelanggan ini menggunakan beberapa laluan. Pilih laluan untuk hari tambahan dalam penugasan.",
+    "此客户属于多条路线，请在派车中指定新增星期的路线。"
+  ],
+  [
+    "所选 ROUTE 尚无基础路线，请先确认路线资料。",
+    "The selected route has no base plan. Confirm its route data first.",
+    "Laluan dipilih tiada pelan asas. Sahkan data laluan dahulu.",
+    "所选路线尚无基础路线，请先确认路线资料。"
+  ],
+  [
+    "多份有效收货排程，需要主管核对（未删除或合并）",
+    "Multiple active schedules need supervisor review. None have been deleted or merged.",
+    "Beberapa jadual aktif memerlukan semakan penyelia. Tiada jadual dipadam atau digabungkan.",
+    "多份有效收货排程，需要主管核对（未删除或合并）"
+  ],
+  [
+    "路线表每周次数需要核对",
+    "Review the weekly frequency in the route plan.",
+    "Semak kekerapan mingguan dalam pelan laluan.",
+    "路线表每周次数需要核对"
+  ],
+  [
+    "路线表包含星期日，但现有排程未获星期日许可；保留原排程，请主管核对收货星期",
+    "The route plan includes Sunday, but the current schedule lacks Sunday approval. The original schedule is retained for supervisor review.",
+    "Pelan laluan termasuk Ahad, tetapi jadual semasa belum mendapat kelulusan Ahad. Jadual asal dikekalkan untuk semakan penyelia.",
+    "路线表包含星期日，但现有排程未获星期日许可；保留原排程，请主管核对收货星期"
+  ],
+  [
+    "确认低频客户周期及所属 ROUTE",
+    "Confirm this infrequent customer's cycle and home route.",
+    "Sahkan kitaran dan laluan tetap pelanggan berkekerapan rendah ini.",
+    "确认低频客户周期及所属路线"
+  ],
+  [
+    "曾在上传路线表中出现，请核对是否恢复；不会自动覆盖当前安排",
+    "Found in a previously uploaded route plan. Review whether to restore it; current assignments are not overwritten automatically.",
+    "Ditemui dalam pelan laluan terdahulu. Semak sama ada perlu dipulihkan; penugasan semasa tidak ditulis ganti secara automatik.",
+    "曾在上传路线表中出现，请核对是否恢复；不会自动覆盖当前安排"
+  ],
+  [
+    "有历史派车 ROUTE，尚未保存为固定路线；请确认长期归属",
+    "Historical dispatch routes exist, but no home route is saved. Confirm the long-term assignment.",
+    "Laluan penugasan terdahulu wujud tetapi laluan tetap belum disimpan. Sahkan penetapan jangka panjang.",
+    "有历史派车路线，尚未保存为固定路线；请确认长期归属"
+  ],
+  [
+    "现行及已保存的上传路线表均未找到此客户，需确认固定归属",
+    "This customer is absent from current and saved uploaded route plans. Confirm the home route.",
+    "Pelanggan ini tiada dalam pelan laluan semasa dan yang disimpan. Sahkan laluan tetap.",
+    "现行及已保存的上传路线表均未找到此客户，需确认固定归属"
+  ],
+  [
+    "原周期起算日期无效，需要核对",
+    "The original cycle start date is invalid. Please review it.",
+    "Tarikh mula kitaran asal tidak sah. Sila semak.",
+    "原周期起算日期无效，需要核对"
+  ],
+  [
+    "原预计收货日期无效，需要核对",
+    "The original expected collection date is invalid. Please review it.",
+    "Tarikh jangkaan kutipan asal tidak sah. Sila semak.",
+    "原预计收货日期无效，需要核对"
+  ],
+  [
+    "原收货日期无效，需要核对",
+    "The original collection date is invalid. Please review it.",
+    "Tarikh kutipan asal tidak sah. Sila semak.",
+    "原收货日期无效，需要核对"
+  ],
+  [
+    "原生效日期无效，需要核对",
+    "The original effective date is invalid. Please review it.",
+    "Tarikh kuat kuasa asal tidak sah. Sila semak.",
+    "原生效日期无效，需要核对"
+  ],
+  [
+    "原起算星期与所属路线不同，已列出对齐路线日的建议，需确认",
+    "The original start weekday differs from the route. A matching date is suggested for confirmation.",
+    "Hari mula asal berbeza daripada laluan. Tarikh sepadan dicadangkan untuk pengesahan.",
+    "原起算星期与所属路线不同，已列出对齐路线日的建议，需确认"
+  ],
+  [
+    "周期规则需要核对，暂不提供下次日期",
+    "Review the recurrence rules before calculating the next date.",
+    "Semak peraturan ulangan sebelum mengira tarikh seterusnya.",
+    "周期规则需要核对，暂不提供下次日期"
+  ],
+  [
+    "星期日执行路线已改变，原安排已有批准、执行或人工调整，请主管核对。",
+    "The Sunday route changed, but the original plan was approved, started or manually adjusted. Supervisor review is required.",
+    "Laluan Ahad berubah, tetapi pelan asal telah diluluskan, dimulakan atau diubah secara manual. Semakan penyelia diperlukan.",
+    "星期日执行路线已改变，原安排已有批准、执行或人工调整，请主管核对。"
+  ],
+  [
+    "应收客户尚未加入；请主管核对并撤回批准后补排",
+    "A due customer is missing. The supervisor must review and withdraw approval before adding the customer.",
+    "Pelanggan yang perlu dikutip belum ditambah. Penyelia perlu menyemak dan menarik balik kelulusan sebelum menambah pelanggan.",
+    "应收客户尚未加入；请主管核对并撤回批准后补排"
+  ],
+  [
+    "所属 ROUTE 已完成，请主管安排临时增加到其他日期",
+    "The home route is completed. Ask the supervisor to add a one-off collection on another date.",
+    "Laluan tetap telah selesai. Minta penyelia menambah kutipan sekali pada tarikh lain.",
+    "所属路线已完成，请主管安排临时增加到其他日期"
+  ],
+  [
+    "收货记录与排程关联需要核对",
+    "Review the link between the collection record and schedule.",
+    "Semak kaitan antara rekod kutipan dan jadual.",
+    "收货记录与排程关联需要核对"
+  ],
+  [
+    "已加入当天待安排客户，请确认所属 ROUTE",
+    "Added to today's unassigned customers. Confirm the home route.",
+    "Ditambah kepada pelanggan belum ditetapkan hari ini. Sahkan laluan tetap.",
+    "已加入当天待安排客户，请确认所属路线"
+  ],
+  [
+    "固定排程已改变，原批准安排需要主管核对",
+    "The regular schedule changed. The approved plan needs supervisor review.",
+    "Jadual tetap berubah. Pelan diluluskan memerlukan semakan penyelia.",
+    "固定排程已改变，原批准安排需要主管核对"
+  ],
+  [
+    "Route {0} has no customers.",
+    "Route {0} has no customers.",
+    "Laluan {0} tiada pelanggan.",
+    "路线 {0} 没有客户。"
+  ],
+  [
+    "Route {0} has not been assigned a vehicle.",
+    "Route {0} has not been assigned a vehicle.",
+    "Laluan {0} belum ditetapkan kenderaan.",
+    "路线 {0} 尚未分配车辆。"
+  ],
+  [
+    "{0} is not on the Route vehicle.",
+    "{0} is not on the assigned route vehicle.",
+    "{0} bukan pada kenderaan laluan ditetapkan.",
+    "{0} 不在路线所分配的车辆上。"
+  ],
+  [
+    "{0} is not Active.",
+    "{0} is not active.",
+    "{0} tidak aktif.",
+    "{0} 未启用。"
+  ],
+  [
+    "{0} has an invalid Trip.",
+    "{0} has an invalid trip.",
+    "{0} mempunyai perjalanan tidak sah.",
+    "{0} 的趟次无效。"
+  ],
+  [
+    "{0} is inactive.",
+    "{0} is inactive.",
+    "{0} tidak aktif.",
+    "{0} 已停用。"
+  ],
+  [
+    "{0} belongs to a Superseded Schedule.",
+    "{0} belongs to a replaced schedule.",
+    "{0} tergolong dalam jadual yang telah diganti.",
+    "{0} 属于已被替代的排程。"
+  ],
+  [
+    "{0}: GPS missing.",
+    "{0}: GPS missing.",
+    "{0}: GPS tiada.",
+    "{0}：缺少定位。"
+  ],
+  [
+    "{0}: estimated weight not set.",
+    "{0}: estimated weight not set.",
+    "{0}: anggaran berat belum ditetapkan.",
+    "{0}：未设预计重量。"
+  ],
+  [
+    "{0}: time restriction applies.",
+    "{0}: time restriction applies.",
+    "{0}: tertakluk kepada had masa.",
+    "{0}：有收货时间限制。"
+  ],
+  [
+    "{0} existing future Dispatch Stop(s) will be checked against the new schedule; approved or executed records require supervisor review.",
+    "{0} future stops will be checked against the new schedule. Approved or executed records need supervisor review.",
+    "{0} hentian akan disemak mengikut jadual baharu. Rekod diluluskan atau dilaksanakan memerlukan semakan penyelia.",
+    "将按新排程核对 {0} 个未来站点；已批准或执行的记录需要主管核对。"
+  ]
+]
+
+const normalizeUiText=value=>String(value??'').trim().replace(/\s+/g,' ')
+const operationalAliases=new Map()
+for(const row of operationalUiMessages)for(const text of row)operationalAliases.set(normalizeUiText(text),row)
+export function translateUi(language,source,variables={}){
+  const value=String(source??''),normalized=normalizeUiText(value),row=operationalAliases.get(normalized)
+  let matched=row,params=variables
+  if(!matched){
+    for(const pattern of operationalPatterns){
+      const match=normalized.match(pattern.regex)
+      if(match){matched=pattern.row;params={...Object.fromEntries(pattern.keys.map((key,i)=>[key,match[i+1]])),...variables};break}
+    }
+  }
+  if(!matched&&/^(Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday)([,;|，、]\s*(Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday))*$/.test(normalized))return normalized.split(/[,;|，、]\s*/).map(day=>translateUi(language,day)).join(', ')
+  const text=matched?matched[{en:1,ms:2,zh:3}[language]||1]:translateSource(language,value)
+  return text.replace(/\{(\w+)\}/g,(_,key)=>params[key]??'{'+key+'}')
+}
+
+// Match complete generated notices, never fragments of names or addresses.
+const escapePattern=value=>value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')
+const operationalPatterns=[]
+for(const row of operationalUiMessages)for(const source of row){
+  const keys=[...source.matchAll(/\{(\w+)\}/g)].map(match=>match[1])
+  if(!keys.length)continue
+  const parts=normalizeUiText(source).split(/\{\w+\}/g)
+  operationalPatterns.push({row,keys,weight:parts.join('').length,regex:new RegExp('^'+parts.map(escapePattern).join('(.*?)')+'$')})
+}
+operationalPatterns.sort((a,b)=>b.weight-a.weight)
+
+Object.assign(messages.en,{'common.notAvailable':'Not available'})
+Object.assign(messages.ms,{'common.notAvailable':'Tidak tersedia','mobile.weight':'Berat','mobile.area':'Kawasan','schedule.edit':'Sunting','hub.weekly':'Penugasan Mingguan','nav.dispatchSchedule':'Penugasan Kenderaan & Jadual Kutipan','hub.areaZone':'Penetapan Kawasan / Zon'})
+Object.assign(messages.zh,{'common.notAvailable':'不可用','mobile.weight':'重量','mobile.more':'更多','mobile.selectBranch':'请先选择客户分店','mobile.searchBranch':'搜索客户、分店或分店编号','mobile.gpsSaved':'定位已保存为临时定位，等待主管审批。','mobile.submitGps':'提交临时定位','mobile.moreGpsHelp':'采集或校正客户分店定位','mobile.temporaryGps':'临时定位','mobile.weightNoTrip':'今天没有已分配的趟次。','mobile.startTrip':'开始趟次','hub.areaZone':'区域／分区归属','purchase.item':'品项','purchase.otherItem':'其他品项'})
+for(const [language,replacements] of Object.entries({ms:{Area:'Kawasan',Areas:'Kawasan',Branch:'Cawangan',Branches:'Cawangan',Trip:'Perjalanan',Buyer:'Pembeli',Driver:'Pemandu',Attendant:'Pembantu',Schedule:'Jadual',Customer:'Pelanggan'},zh:{Area:'区域',Areas:'区域',Branch:'分店',Branches:'分店',BranchID:'分店编号',Trip:'趟次',Zone:'分区',Group:'组',Customer:'客户',Driver:'司机',Attendant:'跟车员',Route:'路线',ROUTE:'路线',Schedule:'排程',Buyer:'买家',Preview:'预览',Analyze:'分析',Confirm:'确认',metadata:'资料'}})){
+  for(const key of Object.keys(messages[language]))if(/^(mobile|zone|areaRefinement|planner|optimization|schedule|hub|purchase)\./.test(key)){
+    for(const [word,replacement]of Object.entries(replacements))messages[language][key]=messages[language][key].replace(new RegExp('\\b'+word+'\\b','g'),replacement)
+  }
+}
+
+Object.assign(messages.en,{'nav.cashFloat':'Cash float'})
+Object.assign(messages.ms,{'nav.cashFloat':'Wang runcit'})
+Object.assign(messages.zh,{'nav.cashFloat':'备用金'})

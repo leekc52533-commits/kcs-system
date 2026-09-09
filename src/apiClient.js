@@ -1,4 +1,4 @@
-import {translate} from './translations.js'
+import {translate,translateUi} from './translations.js'
 
 let activeLanguage='en'
 
@@ -22,7 +22,7 @@ export async function apiRequest(url,options={}){
   if(!response.ok){
     const requestId=data.requestId||response.headers.get('X-Request-ID')||''
     const scheduleMessage=response.status===400&&/\/collection-schedule$/.test(url)&&data.details?.scheduleValidationMessage
-    const message=typeof scheduleMessage==='string'?scheduleMessage:apiErrorMessage(data)
+    const message=typeof scheduleMessage==='string'?translateUi(activeLanguage,scheduleMessage):apiErrorMessage(data)
     const error=new Error(requestId?`${message} (Reference: ${requestId})`:message)
     error.code=data.errorCode||data.code||'UNKNOWN_ERROR'
     error.status=response.status

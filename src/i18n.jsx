@@ -1,6 +1,6 @@
 /* eslint-disable react/only-export-components -- provider, selector and hook are one i18n surface */
 import {createContext,useCallback,useContext,useEffect,useMemo} from 'react'
-import {languageOptions,translate,translateSource} from './translations.js'
+import {languageOptions,translate,translateSource,translateUi} from './translations.js'
 import {setApiLanguage} from './apiClient.js'
 
 const I18nContext=createContext({language:'en',setLanguage:()=>{},t:key=>translate('en',key)})
@@ -44,3 +44,6 @@ export function LanguageSelector({compact=false}){
     </select>
   </label>
 }
+
+// Explicit React translations keep option values and stored business data unchanged.
+export function useUi(){const{language}=useI18n();return useCallback((source,variables)=>translateUi(language,source,variables),[language])}

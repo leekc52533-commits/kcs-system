@@ -21,7 +21,7 @@ import ExpenseRecordsPage from './ExpenseRecordsPage.jsx'
 import ActingCollectorPage from './ActingCollectorPage.jsx'
 import DashboardApprovals from './DashboardApprovals.jsx'
 
-const navigation=[['dashboard','⌂','nav.dashboard'],['operations','↗','nav.dispatchSchedule'],['acting-collector','▣','nav.actingCollector'],['purchase-bills','▤','nav.purchaseBills'],['expense-records','▧','nav.expenseRecords'],['cash-float','RM','Cash Float'],['customers','◎','nav.customers'],['buyers','◉','nav.buyers'],['location-zone','⌖','nav.locationGpsZone'],['vehicles','◇','nav.vehicles'],['materials','▦','nav.materials'],['staff','♙','nav.staffAccounts']]
+const navigation=[['dashboard','⌂','nav.dashboard'],['operations','↗','nav.dispatchSchedule'],['acting-collector','▣','nav.actingCollector'],['purchase-bills','▤','nav.purchaseBills'],['expense-records','▧','nav.expenseRecords'],['cash-float','RM','nav.cashFloat'],['customers','◎','nav.customers'],['buyers','◉','nav.buyers'],['location-zone','⌖','nav.locationGpsZone'],['vehicles','◇','nav.vehicles'],['materials','▦','nav.materials'],['staff','♙','nav.staffAccounts']]
 const modules=[['operations','↗','','','','green'],['special','＋','','','','rose'],['customers','◎','','','','blue'],['location-zone','⌖','','','','violet'],['vehicles','◇','','','','cyan'],['materials','▦','','','','orange'],['staff','♙','','','','green']]
 const pageTitleKeys={special:'nav.special'}
 const legacyPages={dispatch:['operations','weekly'],schedule:['operations','schedules'],data:['location-zone','data-quality'],'gps-zone':['location-zone','recommendations'],resources:['vehicles','vehicles'],accounts:['staff','accounts'],'gps-migration':['location-zone','legacy-gps']}
@@ -34,7 +34,7 @@ class AppErrorBoundary extends Component {
 }
 
 function AppContent(){
-  const[account,setAccount]=useState(undefined),[changing,setChanging]=useState(false),[startupError,setStartupError]=useState(''),[mobileMode,setMobileMode]=useState(()=>sessionStorage.getItem('kcs_acting_collector_mode')==='1')
+  const[account,setAccount]=useState(undefined),[changing,setChanging]=useState(false),[startupError,setStartupError]=useState(''),[mobileMode,setMobileMode]=useState(false)
   const[guestLanguage,setGuestLanguage]=useState(()=>localStorage.getItem('kcs_language')||'en')
   const applyAccount=next=>{setAccount(next);if(next?.preferredLanguage){localStorage.setItem('kcs_language',next.preferredLanguage);setGuestLanguage(next.preferredLanguage)}}
   const refresh=async()=>{try{const response=await fetch('/api/auth/session'),data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(apiErrorMessage(data));setStartupError('');applyAccount(data.account||null)}catch(error){setStartupError(error.message);setAccount(null)}}
@@ -58,8 +58,10 @@ export default function App(){return <AppErrorBoundary><AppContent/></AppErrorBo
 
 function DesktopApp({account,onLogout,onChangePassword,onEnterMobile}){
   const{t,language}=useI18n()
-  const initial=()=>{const query=new URLSearchParams(window.location.search),raw=query.get('page')||window.history.state?.kcsPage||'dashboard';return resolvePage(raw,query.get('tab')||'')}
-  const start=initial(),initialZoneId=()=>new URLSearchParams(window.location.search).get('zone')||'',[page,setPage]=useState(start.page),[pageTab,setPageTab]=useState(start.tab),[routeZoneId,setRouteZoneId]=useState(initialZoneId),[menuOpen,setMenuOpen]=useState(false)
+  const managementEntry=['supervisor','operations_admin','owner_admin'].includes(account.role)
+  const initial=()=>{if(managementEntry)return{page:'dashboard',tab:''};const query=new URLSearchParams(window.location.search);return resolvePage(query.get('page')||'dashboard',query.get('tab')||'')}
+  const start=initial(),initialZoneId=()=>managementEntry?'':new URLSearchParams(window.location.search).get('zone')||'',[page,setPage]=useState(start.page),[pageTab,setPageTab]=useState(start.tab),[routeZoneId,setRouteZoneId]=useState(initialZoneId),[menuOpen,setMenuOpen]=useState(false)
+  useEffect(()=>{if(managementEntry)window.history.replaceState({kcsPage:'dashboard'},'',window.location.pathname+'?page=dashboard')},[])
   const[systemStatus,setSystemStatus]=useState({connected:false,label:t('system.connecting')})
   useEffect(()=>{let active=true;fetch('/api/system/status').then(r=>{if(!r.ok)throw new Error();return r.json()}).then(s=>active&&setSystemStatus({connected:s.database==='connected',label:t('system.database',{version:s.schemaVersion,jodoo:t(s.integrations?.jodoo?.configured?'system.configured':'system.awaiting')})})).catch(()=>active&&setSystemStatus({connected:false,label:t('system.offline')}));return()=>{active=false}},[t])
   useEffect(()=>{
