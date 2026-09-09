@@ -1,3 +1,4 @@
+import {applyV54Migration,ensureV54Schema} from './migrationV54.mjs'
 import { DatabaseSync } from 'node:sqlite'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -308,6 +309,9 @@ else if(postV51SchemaVersion>=52)ensureV52Schema(db)
 const postV52SchemaVersion=Number(db.prepare('SELECT COALESCE(MAX(version),0) version FROM schema_meta').get().version)
 if(postV52SchemaVersion===52)applyV53Migration(db)
 else if(postV52SchemaVersion>=53)ensureV53Schema(db)
+const postV53Version=Number(db.prepare('SELECT MAX(version) v FROM schema_meta').get().v)
+if(postV53Version===53)applyV54Migration(db)
+else if(postV53Version>=54)ensureV54Schema(db)
 const officialVehicles = [
   ['Lorry 1','QAV3468','available',0,null],
   ['Lorry 2','QAA4293N','active',1,null],
