@@ -1,3 +1,4 @@
+import DriverRouteTools from './DriverRouteTools.jsx'
 import {useUi} from './i18n.jsx'
 import {useEffect,useState} from 'react'
 import {LanguageSelector,useI18n} from './i18n.jsx'
@@ -178,6 +179,7 @@ function TodayView({data,preview=false}){
     {!preview&&route.arrivalTestMode&&<div className="test-mode-warning">{ui("REMOTE ARRIVAL TEST MODE")}</div>}
     {message&&<div className="mobile-message" role="status">{ui(message)}</div>}
     {error&&<div className="auth-error" role="alert">{ui(error)}</div>}
+    {!preview&&route.trialOrderEnabled&&<p className="mobile-message">{t('routeTrial.banner')}</p>}
     <div className="driver-route-summary"><strong>{route.date} · {ui(route.weekday)}</strong><span>{t('mobile.routeStatus')}: {t(route.status==='in_progress'?'mobile.inProgress':'mobile.approved')}</span><span>{t('mobile.totalStops')}: {route.totalStops} · {t('mobile.completed')}: {route.completedStops} · {t('mobile.pending')}: {route.pendingStops}</span></div>
     {route.trips.map(trip=><article className="mobile-card driver-trip" key={trip.id}>
       <h2><span data-i18n-raw>{trip.registrationNumber||trip.vehicleCode}</span></h2>
@@ -186,11 +188,13 @@ function TodayView({data,preview=false}){
       {!preview&&trip.canComplete&&<button type="button" className="primary-mobile" disabled={Boolean(busy)} onClick={()=>completeTrip(trip)}>{busy==='complete-trip-'+trip.id?t('common.processing'):ui("Complete Trip")}</button>}
       {trip.stops.map(stop=>{
         const current=trip.currentStopId===stop.id,ended=stop.status==='completed',pendingApproval=stop.deferApprovalStatus==='pending',proof=proofs[stop.id]||{},ready=stop.billCreated&&(stop.billPaymentMethod==='Credit'||stop.paymentProofUploaded),label=stop.stopSequence+'. '+stop.customerName+' — '+stop.branchName,canOpen=preview||current||stop.deferred||ended&&stop.billCreated,expanded=preview||(openStopId==null?current:openStopId===stop.id)&&canOpen
-        if(!expanded)return <div className={'driver-stop collapsed-stop'+(stop.deferred?' deferred-stop':pendingApproval?' defer-pending':'')} key={stop.id}>{canOpen?<button type="button" className="stop-name-button" onClick={()=>toggleStop(stop.id)}><b><span data-i18n-raw>{label}</span></b><span>{pendingApproval?t('mobile.waitingSupervisor')+' ▼':stop.deferred?ui("COME BACK LATER ▼"):current?ui("OPEN ▼"):'▼'}</span></button>:<b><span data-i18n-raw>{label}</span></b>}</div>
+        const adjustmentTools=!preview&&<DriverRouteTools {...{stop,trip,route,run}} busy={Boolean(busy)}/>
+        if(!expanded)return <div className={'driver-stop collapsed-stop'+(stop.deferred?' deferred-stop':pendingApproval?' defer-pending':'')} key={stop.id}>{canOpen?<button type="button" className="stop-name-button" onClick={()=>toggleStop(stop.id)}><b><span data-i18n-raw>{label}</span></b><span>{pendingApproval?t('mobile.waitingSupervisor')+' ▼':stop.deferred?ui("COME BACK LATER ▼"):current?ui("OPEN ▼"):'▼'}</span></button>:<b><span data-i18n-raw>{label}</span></b>}{adjustmentTools}</div>
         if(!preview&&ended)return <div className="driver-stop collapsed-stop" key={stop.id}><button type="button" className="stop-name-button" onClick={()=>toggleStop(stop.id)}><b><span data-i18n-raw>{label}</span></b><span>▲</span></button><PurchaseBillPanel stop={stop} onChanged={refresh} readOnly/></div>
         const mapUrl=stopMapUrl(stop),status=stop.arrivedAt?'Arrived':'Pending'
         return <div className={'driver-stop '+(stop.deferred?'deferred-stop':'current-stop')} key={stop.id}>
           {!preview&&stop.deferred?<button type="button" className="stop-name-button" onClick={()=>toggleStop(stop.id)}><b><span data-i18n-raw>{label}</span></b><span>{ui("COME BACK LATER ▲")}</span></button>:<b><span data-i18n-raw>{label}</span></b>}
+          {adjustmentTools}
           {mapUrl?<a className="stop-map-link" href={mapUrl} target="_blank" rel="noreferrer"><span data-i18n-raw>{stop.address||ui("Open in Google Maps")}</span>{ui("· Open Map")}</a>:<span><span data-i18n-raw>{stop.address||t('mobile.notSet')}</span></span>}
           <span><span data-i18n-raw>{t('mobile.area')}</span>: <span data-i18n-raw>{stop.area||t('mobile.notSet')}</span></span>
           <span>{t('mobile.timeRestriction')}: {stop.timeRestriction||t('mobile.notSet')}</span>
