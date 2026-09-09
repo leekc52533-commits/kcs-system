@@ -1,3 +1,4 @@
+import {voidActor,voidEvent} from './purchaseBillVoidService.mjs'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -38,7 +39,7 @@ function stopForDriver(database,stopId,{employeeId,role,today=kuchingDate()}={},
 
 function bill(database,stopId){
   const header=database.prepare(`SELECT pb.*,EXISTS(SELECT 1 FROM purchase_payment_proofs pp WHERE pp.purchase_bill_id=pb.id) paymentProofUploaded
-    FROM purchase_bills pb WHERE pb.dispatch_stop_id=?`).get(Number(stopId))
+    FROM purchase_bills pb WHERE pb.dispatch_stop_id=? AND pb.status='issued'`).get(Number(stopId))
   if(!header)return null
   const items=database.prepare(`SELECT id,product_id productId,material_id materialId,product_code_snapshot productCode,product_name_snapshot productName,
     short_form_snapshot shortForm,unit_snapshot unit,quantity,unit_price_cents unitPriceCents,line_total_cents lineTotalCents,
@@ -60,8 +61,9 @@ export function getPurchaseBilling(stopId,context={},database=defaultDb){
 export function createPurchaseBill(stopId,payload={},context={},database=defaultDb){
   const{employeeId,role,today=kuchingDate(),now=new Date()}=context
   return withImmediateTransaction(database,()=>{
-    const stop=stopForDriver(database,stopId,{employeeId,role,today},true),existing=bill(database,stopId)
+    const stop=context.replacesBillId?replacementStop(database,context.replacesBillId,context):stopForDriver(database,stopId,{employeeId,role,today},true),existing=bill(database,stopId)
     if(existing)return{...existing,idempotent:true}
+    if(!context.replacesBillId&&database.prepare("SELECT id FROM purchase_bills WHERE dispatch_stop_id=? AND status='voided'").get(stop.id))throw fail('Use the void page to reissue.','VOID_USE_REISSUE')
     const weightMethod=String(payload.weightMethod||'').trim(),printChoice=String(payload.printChoice||'').trim()
     if(!['on_site','factory','estimated'].includes(weightMethod))throw fail('Select how the weight was determined.','WEIGHT_METHOD_REQUIRED',400)
     if(!['print','no_print'].includes(printChoice))throw fail('Select Print or No Print.','PRINT_CHOICE_REQUIRED',400)
@@ -87,6 +89,11 @@ export function createPurchaseBill(stopId,payload={},context={},database=default
     database.prepare('UPDATE dispatch_stops SET invoice_number=?,payment_status=?,collected_weight_kg=CASE WHEN ?>0 THEN ? ELSE collected_weight_kg END WHERE id=?').run(billNumber,stop.paymentMethod==='Cash'?'pending_proof':'credit',totalWeight,totalWeight,stop.id)
     database.prepare(`INSERT OR REPLACE INTO stop_step_records(dispatch_stop_id,step_key,completed_by,completed_at,payload_json) VALUES(?,'invoice_driver_confirmed',NULL,?,?)`).run(stop.id,issuedAt,JSON.stringify({method:'electronic_purchase_bill',billId:purchaseBillId,billNumber,paymentMethod:stop.paymentMethod,driverEmployeeId:Number(employeeId)}))
     recordCashPurchase({id:purchaseBillId,billNumber,paymentMethod:stop.paymentMethod,totalCents,serviceDate:stop.serviceDate,driverEmployeeId:Number(employeeId),driverName:stop.driverName},database,{now})
+    if(context.replacesBillId){
+      database.prepare("UPDATE purchase_bill_void_requests SET replacement_bill_id=? WHERE purchase_bill_id=? AND status='approved'").run(purchaseBillId,Number(context.replacesBillId))
+      const r=database.prepare("SELECT id FROM purchase_bill_void_requests WHERE purchase_bill_id=? AND status='approved'").get(Number(context.replacesBillId))
+      voidEvent(database,r.id,'reissued',voidActor(context,database),{replacementBillId:purchaseBillId,billNumber})
+    }
     return{...bill(database,stop.id),idempotent:false}
   })
 }
@@ -94,7 +101,7 @@ export function createPurchaseBill(stopId,payload={},context={},database=default
 const image=photo=>{const match=/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(photo?.dataUrl||''));if(!match)throw fail('A valid JPEG, PNG or WebP payment proof is required.','INVALID_PHOTO',400);const bytes=Buffer.from(match[2],'base64'),max=8*1024*1024;if(!bytes.length||bytes.length>max)throw fail('Payment proof must be no larger than 8 MB.','INVALID_PHOTO',400);const type=match[1],valid=type==='image/jpeg'&&bytes[0]===0xff&&bytes[1]===0xd8&&bytes[2]===0xff||type==='image/png'&&bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))||type==='image/webp'&&bytes.subarray(0,4).toString()==='RIFF'&&bytes.subarray(8,12).toString()==='WEBP';if(!valid)throw fail('Payment proof content does not match its file type.','INVALID_PHOTO',400);return{bytes,type,extension:type.split('/')[1].replace('jpeg','jpg')}}
 
 export function uploadPurchasePaymentProof(stopId,payload={},context={},database=defaultDb,{uploadsRoot}={}){
-  const{employeeId,role,today=kuchingDate(),now=new Date()}=context,stop=stopForDriver(database,stopId,{employeeId,role,today},true),existingBill=bill(database,stopId)
+  const{employeeId,role,today=kuchingDate(),now=new Date()}=context,stop=context.replacesBillId?replacementStop(database,context.replacesBillId,context):stopForDriver(database,stopId,{employeeId,role,today},true),existingBill=bill(database,stopId)
   if(!existingBill)throw fail('Create the electronic Purchase Bill before uploading payment proof.','BILL_REQUIRED',409)
   if(existingBill.paymentMethod!=='Cash')throw fail('Payment proof is only required for Cash customers.','PAYMENT_PROOF_NOT_REQUIRED',409)
   const existing=database.prepare('SELECT id,created_at FROM purchase_payment_proofs WHERE purchase_bill_id=?').get(existingBill.id)
@@ -103,7 +110,32 @@ export function uploadPurchasePaymentProof(stopId,payload={},context={},database
   const file=image(payload.photo),folder=path.resolve(uploadsRoot,'payment-proofs'),name=`${crypto.randomUUID()}.${file.extension}`,absolute=path.resolve(folder,name)
   if(!absolute.startsWith(folder+path.sep))throw fail('Invalid upload path.','INVALID_PHOTO',400)
   fs.mkdirSync(folder,{recursive:true});fs.writeFileSync(absolute,file.bytes,{flag:'wx'})
-  try{return withImmediateTransaction(database,()=>{const createdAt=nowKuching(now),result=database.prepare('INSERT INTO purchase_payment_proofs(purchase_bill_id,uploaded_by_employee_id,storage_key,original_name,content_type,size_bytes,created_at) VALUES(?,?,?,?,?,?,?)').run(existingBill.id,employeeId,`payment-proofs/${name}`,String(payload.photo?.name||`payment-proof.${file.extension}`),file.type,file.bytes.length,createdAt);database.prepare("UPDATE dispatch_stops SET payment_status='proof_uploaded' WHERE id=?").run(stop.id);return{billId:existingBill.id,proofId:Number(result.lastInsertRowid),uploadedAt:createdAt,idempotent:false}})}catch(error){if(fs.existsSync(absolute))fs.unlinkSync(absolute);throw error}
+  try{return withImmediateTransaction(database,()=>{if(bill(database,stopId)?.id!==existingBill.id)throw fail('Bill changed.','VOID_STATE_CONFLICT');const createdAt=nowKuching(now),result=database.prepare('INSERT INTO purchase_payment_proofs(purchase_bill_id,uploaded_by_employee_id,storage_key,original_name,content_type,size_bytes,created_at) VALUES(?,?,?,?,?,?,?)').run(existingBill.id,employeeId,`payment-proofs/${name}`,String(payload.photo?.name||`payment-proof.${file.extension}`),file.type,file.bytes.length,createdAt);database.prepare("UPDATE dispatch_stops SET payment_status='proof_uploaded' WHERE id=?").run(stop.id);return{billId:existingBill.id,proofId:Number(result.lastInsertRowid),uploadedAt:createdAt,idempotent:false}})}catch(error){if(fs.existsSync(absolute))fs.unlinkSync(absolute);throw error}
 }
 
 export function purchasePaymentProofFile(proofId,database=defaultDb){return database.prepare(`SELECT pp.storage_key,pp.content_type,pb.driver_employee_id FROM purchase_payment_proofs pp JOIN purchase_bills pb ON pb.id=pp.purchase_bill_id WHERE pp.id=?`).get(Number(proofId))||null}
+
+function replacementStop(database,billId,context){
+ const actor=voidActor(context,database),b=database.prepare('SELECT * FROM purchase_bills WHERE id=?').get(Number(billId)),r=database.prepare("SELECT * FROM purchase_bill_void_requests WHERE purchase_bill_id=? AND status='approved'").get(Number(billId))
+ if(!b||!r||b.status!=='voided')throw fail('Approved void required.','VOID_STATE_CONFLICT')
+ if(b.driver_employee_id!==actor.employeeId)throw fail('Only the original issuer can reissue.','PERMISSION_DENIED',403)
+ const current=bill(database,b.dispatch_stop_id)
+ if(current&&current.id!==r.replacement_bill_id)throw fail('Another bill exists.','VOID_STATE_CONFLICT')
+ if(r.replacement_bill_id&&!current)throw fail('Replacement already voided; use that bill.','VOID_STATE_CONFLICT')
+ if(!current&&database.prepare('SELECT id FROM cash_float_transactions WHERE purchase_bill_id=?').get(b.id)&&!database.prepare('SELECT employee_id FROM cash_float_accounts WHERE employee_id=? AND is_active=1').get(actor.employeeId))throw fail('Cash Float must be active to reissue.','VOID_FLOAT_REQUIRED')
+ return{id:b.dispatch_stop_id,tripId:b.dispatch_trip_id,dayId:b.dispatch_day_id,branchId:b.branch_id,customerId:b.customer_id,serviceDate:b.service_date,vehicleId:b.vehicle_id,driverId:b.driver_employee_id,branchCode:b.branch_code_snapshot,branchName:b.branch_name_snapshot,customerName:b.customer_name_snapshot,driverName:actor.employeeName,vehicleCode:b.vehicle_code_snapshot,registrationNumber:b.registration_number_snapshot,paymentMethod:b.payment_method,arrived:true}
+}
+export function getReplacementBilling(billId,context={},database=defaultDb){
+ const stop=replacementStop(database,billId,context)
+ return {stop,bill:bill(database,stop.id),products:listBranchProducts(stop.branchId,database).filter(p=>p.isSelectable&&p.currentPrice!=null)}
+}
+export function reissuePurchaseBill(billId,payload={},context={},database=defaultDb){
+ return withImmediateTransaction(database,()=>{
+  const stop=replacementStop(database,billId,context)
+  return createPurchaseBill(stop.id,payload,{...context,replacesBillId:Number(billId)},database)
+ })
+}
+export function uploadReplacementProof(billId,payload={},context={},database=defaultDb,options={}){
+ const stop=replacementStop(database,billId,context)
+ return uploadPurchasePaymentProof(stop.id,payload,{...context,replacesBillId:Number(billId)},database,options)
+}
