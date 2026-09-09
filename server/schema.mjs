@@ -1,6 +1,7 @@
-export const SCHEMA_VERSION = 53
+import {sundaySchemaSql} from './sundayPlanning.mjs'
+export const SCHEMA_VERSION = 54
 
-export const schemaSql = `
+export const schemaSql = sundaySchemaSql + `
 CREATE TABLE IF NOT EXISTS schema_meta (
   version INTEGER PRIMARY KEY,
   applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
