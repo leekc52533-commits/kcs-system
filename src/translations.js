@@ -3717,6 +3717,11 @@ operationalUiMessages.push(
  ['Unit','Unit','Unit','单位'],
  ['Price','Price','Harga','单价']
 )
+operationalUiMessages.push(
+ ['Blank','Blank','Kosong','空白'],['Select all','Select all','Pilih semua','全选'],
+ ['Sort ascending','Sort ascending','Susun menaik','升序'],
+ ['Sort descending','Sort descending','Susun menurun','降序']
+)
 for(const row of operationalUiMessages)for(const text of row)operationalAliases.set(normalizeUiText(text),row)
 export function translateUi(language,source,variables={}){
   const value=String(source??''),normalized=normalizeUiText(value),row=operationalAliases.get(normalized)

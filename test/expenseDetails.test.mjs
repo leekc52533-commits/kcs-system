@@ -18,3 +18,16 @@ test('employee/admin details persist, ledger deducts once, search/export retain 
 test('v56 migration is additive and repeatable',()=>{const d=fixture();d.exec('DROP TABLE expense_details;INSERT INTO schema_meta(version) VALUES(55)');applyV56Migration(d);applyV56Migration(d);assert.equal(d.prepare('SELECT MAX(version) v FROM schema_meta').get().v,56);assert.equal(d.prepare('SELECT COUNT(*) n FROM employees').get().n,1);d.close()})
 test('receipt parser uses explicit labels and known vehicle, never guesses absent meter',()=>{const result=parseExpenseReceipt('Test Petrol SDN BHD\nSUBTOTAL 10.00\nTOTAL RM 12.30\nInvoice No: INV-99\nTIN: C123\nOdometer: 15,001 km\nCar No: QAB123',[{id:1,registrationNumber:'QAB123'}]);assert.deepEqual(result,{amount:'12.30',referenceNumber:'INV-99',companyName:'Test Petrol SDN BHD',tinNumber:'C123',odometerKm:'15001',vehicleId:'1'});assert.deepEqual(parseExpenseReceipt('SUBTOTAL 22.00\n12 99\nTHANK YOU'),{})})
 test('unavailable OCR preserves manual workflow and malformed images are rejected',async()=>{const old=process.env.KCS_TESSERACT_PATH;process.env.KCS_TESSERACT_PATH='/does-not-exist/kcs-ocr';try{assert.equal((await recognizeExpenseReceipt(proof)).status,'unavailable');await assert.rejects(()=>recognizeExpenseReceipt({dataUrl:'not-an-image'}))}finally{if(old===undefined)delete process.env.KCS_TESSERACT_PATH;else process.env.KCS_TESSERACT_PATH=old}})
+
+test('expense multi-select and blanks apply before totals and Excel generation',async()=>{
+ const d=fixture(),root=fs.mkdtempSync(path.join(os.tmpdir(),'kcs-exp-filter-')),context={employeeId:1,employeeName:'Test'}
+ try{
+ addAdminExpense({...full,referenceNumber:'INV-10',amount:100},context,d,{uploadsRoot:root})
+ addAdminExpense({...full,referenceNumber:'INV-2',amount:9,tinNumber:''},context,d,{uploadsRoot:root})
+ const query={columns:JSON.stringify({referenceNumber:['INV-2','INV-10'],tinNumber:['']}),sortKey:'amountLabel',sortDirection:'asc'}
+ const result=listExpenseRecords(query,d);assert.equal(result.items.length,1);assert.equal(result.totalCents,900)
+ const book=new ExcelJS.Workbook();await book.xlsx.load(await expenseRecordsWorkbook(query,d,{uploadsRoot:root}))
+ assert.equal(book.worksheets[0].rowCount,3);assert.equal(book.worksheets[0].getCell('G3').value,9);assert.ok(book.worksheets[0].getRow(2).values.includes('INV-2'))
+ assert.deepEqual(listExpenseRecords({sortKey:'referenceNumber',sortDirection:'asc'},d).items.map(x=>x.referenceNumber),['INV-2','INV-10'])
+ }finally{d.close();fs.rmSync(root,{recursive:true,force:true})}
+})

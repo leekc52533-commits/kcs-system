@@ -17,3 +17,9 @@
 .expense-filter-menu input,.expense-filter-menu select{width:100%;box-sizing:border-box;padding:8px;border:1px solid #bdd5ce;border-radius:8px;font:inherit;background:#fff;color:#24584b}
 .expense-filter-menu>div{display:flex;gap:8px}
 .expense-filter-menu button{padding:8px 12px;background:#fff;color:#24584b;border:1px solid #bdd5ce;border-radius:8px;font:inherit;font-weight:800}
+
+.expense-filter-menu .archive-check{display:flex;align-items:center;gap:10px;min-height:36px;font-weight:500}
+.expense-filter-menu .archive-check input{width:18px;height:18px;flex:0 0 18px;accent-color:#186e5c;padding:0}
+.expense-filter-menu .archive-check-options{display:block;max-height:220px;overflow:auto;border:1px solid #bdd5ce;border-radius:8px;padding:6px}
+.expense-filter-menu .archive-sort-actions{flex-wrap:wrap}
+.expense-filter-menu .archive-sort-actions button[aria-pressed=true]{background:#186e5c;color:#fff}
