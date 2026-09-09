@@ -42,11 +42,11 @@ export default function ExpenseRecordsPage({onBack}){
   </div>
 }
 
-function FilterHeader({label,value,options,onChange,open,onOpen,onClose,search,onSearch}){
+export function FilterHeader({label,value,options,onChange,open,onOpen,onClose,search,onSearch,searchLabel="Search all expense records",searchPlaceholder="Employee, description or reference"}){
  const ui=useUi(),trigger=useRef(null),panel=useRef(null),[term,setTerm]=useState(''),[position,setPosition]=useState({left:8,top:80})
  useEffect(()=>{if(!open)return;setTerm('');const rect=trigger.current.getBoundingClientRect();setPosition({left:Math.max(8,Math.min(rect.left,window.innerWidth-296)),top:Math.max(8,Math.min(rect.bottom+4,window.innerHeight-360))});const dismiss=e=>{if(!panel.current?.contains(e.target)&&!trigger.current?.contains(e.target))onClose()},key=e=>{if(e.key==='Escape'){onClose();trigger.current?.focus()}};document.addEventListener('pointerdown',dismiss);document.addEventListener('keydown',key);return()=>{document.removeEventListener('pointerdown',dismiss);document.removeEventListener('keydown',key)}},[open])
  return <th><button type="button" ref={trigger} className={'expense-filter-trigger'+(value||search?' active':'')} aria-expanded={open} aria-haspopup="dialog" onClick={open?onClose:onOpen}>{label} <span aria-hidden="true">▼</span></button>{open&&createPortal(<div ref={panel} role="dialog" aria-label={label} className="expense-filter-menu" style={position}>
- <b>{label}</b>{onSearch&&<label>{ui('Search all expense records')}<input autoFocus value={search} placeholder={ui('Employee, description or reference')} onChange={e=>onSearch(e.target.value)}/></label>}
+ <b>{label}</b>{onSearch&&<label>{ui(searchLabel)}<input autoFocus value={search} placeholder={ui(searchPlaceholder)} onChange={e=>onSearch(e.target.value)}/></label>}
  <label>{ui('Find an option')}<input autoFocus={!onSearch} value={term} onChange={e=>setTerm(e.target.value)}/></label>
  <label>{ui('Select value')}<select size={6} value={value} onChange={e=>{onChange(e.target.value);onClose()}}><option value="">{ui('All')}</option>{options.filter(item=>item.label.toLocaleLowerCase().includes(term.toLocaleLowerCase())||item.value===value).map(item=><option key={item.value} value={item.value} data-i18n-raw>{item.label}</option>)}</select></label>
  <div><button type="button" onClick={()=>{onChange('');onSearch?.('');setTerm('')}}>{ui('Clear Filter')}</button><button type="button" onClick={onClose}>{ui('Close')}</button></div></div>,document.body)}</th>
