@@ -1,8 +1,9 @@
+import {expenseDetailsSchemaSql} from './migrationV56.mjs'
 import {routeRequestSchemaSql} from './migrationV55.mjs'
 import {sundaySchemaSql} from './sundayPlanning.mjs'
-export const SCHEMA_VERSION = 55
+export const SCHEMA_VERSION = 56
 
-export const schemaSql = routeRequestSchemaSql + sundaySchemaSql + `
+export const schemaSql = expenseDetailsSchemaSql + routeRequestSchemaSql + sundaySchemaSql + `
 CREATE TABLE IF NOT EXISTS schema_meta (
   version INTEGER PRIMARY KEY,
   applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP

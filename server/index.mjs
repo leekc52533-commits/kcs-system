@@ -1,3 +1,5 @@
+import {recognizeExpenseReceipt} from './expenseReceiptOcr.mjs'
+import {expenseVehicles} from './expenseDetails.mjs'
 import {createEmployeeWithAccount} from './employeeAccountService.mjs'
 import {reorderDriverStop,requestDriverDate,listDriverDateRequests,decideDriverDate} from './driverRouteAdjustmentService.mjs'
 import {kuchingDate as scheduleToday,addCalendarDays as scheduleAddDays} from '../shared/kuchingTime.js'
@@ -123,6 +125,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && url.pathname === '/api/mobile/unloading-weights/recognize') return sendJson(response,201,await recognizeUnloadingWeight((await readJson(request)).payload,{employeeId:session.employeeId,role:session.role},db,{uploadsRoot:uploadsDir}))
     if (request.method === 'POST' && /^\/api\/mobile\/unloading-weights\/\d+\/confirm$/.test(url.pathname)) return sendJson(response,200,confirmUnloadingWeight(Number(url.pathname.split('/')[4]),(await readJson(request)).payload,{employeeId:session.employeeId,role:session.role}))
     if (request.method === 'GET' && url.pathname === '/api/mobile/cash-float') return sendJson(response,200,mobileCashFloat(session.employeeId))
+    if(request.method==='POST'&&url.pathname==='/api/expenses/recognize'){if(!canManageCashFloat(session)&&!mobileCashFloat(session.employeeId).configured)return sendJson(response,403,{error:'Expense access is restricted.'});return sendJson(response,200,await recognizeExpenseReceipt((await readJson(request)).payload.proof,expenseVehicles(db)))}
     if (request.method === 'POST' && url.pathname === '/api/mobile/cash-float/expenses') return sendJson(response,201,addCashFloatExpense(session.employeeId,(await readJson(request)).payload,{employeeId:session.employeeId,employeeName:session.employeeName},db,{uploadsRoot:uploadsDir}))
     if (request.method === 'POST' && /^\/api\/mobile\/stops\/\d+\/(trial-reorder|request-date)$/.test(url.pathname)) {const parts=url.pathname.split('/'),payload=(await readJson(request)).payload,context={employeeId:session.employeeId,role:session.role};return sendJson(response,200,parts[5]==='trial-reorder'?reorderDriverStop(Number(parts[4]),payload,context):requestDriverDate(Number(parts[4]),payload,context))}
     if (request.method === 'GET' && url.pathname === '/api/dispatch/date-requests/pending') {if(!canApproveDriverDefer(session))return sendJson(response,403,{error:'Supervisor permission required'});return sendJson(response,200,{items:listDriverDateRequests()})}

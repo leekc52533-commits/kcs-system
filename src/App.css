@@ -78,3 +78,5 @@
 .photo-attachment{min-width:0;grid-column:1/-1}.photo-attachment>.proof-input-action{display:block;position:relative;padding:12px;text-align:center}.photo-upload{display:block;min-width:240px}.photo-upload>button{margin:8px 0}
 
 .driver-route-tools{margin:12px 0;padding:10px;border:1px solid #c3d8d2;border-radius:10px}.mobile-card .driver-route-tools button{background:#e4f2ee;color:#15594e;border:1px solid #91b9ac;border-radius:8px;padding:10px;margin:4px;min-height:44px}.driver-route-tools button:disabled{opacity:.4}.driver-route-tools label,.driver-route-tools small{display:block;margin:8px 0}.driver-route-tools input,.driver-route-tools textarea{width:100%;box-sizing:border-box}
+
+.expense-detail-fields{display:grid;gap:12px;min-width:0;margin:16px 0;padding:14px;border:1px solid #bdd5ce;border-radius:12px}.expense-detail-fields label{display:grid;gap:6px}.expense-detail-fields input,.expense-detail-fields select,.expense-detail-fields textarea{box-sizing:border-box;width:100%;min-width:0}.expense-detail-fields p{margin:0;font-size:.9rem}.expense-detail-fields button{min-height:44px}.expense-table{min-width:2100px!important}
