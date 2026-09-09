@@ -1,2 +1,6 @@
 @import './PurchaseBillsPage.css';
 .expense-records{gap:16px}.archive-actions .secondary{background:#e7f3ef;color:#176f60}.expense-filters{grid-template-columns:140px 140px minmax(210px,1fr) 160px 175px 205px}.expense-table{min-width:1450px!important}.expense-table td small{display:block;margin-top:3px;color:#76858f}.expense-category,.expense-type{display:inline-block;padding:4px 8px;border-radius:99px;font-size:.75rem;font-weight:800}.expense-category,.expense-type.employee{background:#e7f3ef;color:#176f60}.expense-type.admin{background:#e9eef8;color:#365f8a}.expense-table a{color:#176f60;font-weight:800}.expense-no-account{margin:16px 0;padding:14px;border-radius:9px;background:#fff3e6;color:#805528}@media(max-width:1200px){.expense-filters{grid-template-columns:1fr 1fr 1fr}}@media(max-width:700px){.expense-filters{grid-template-columns:1fr}}
+
+.expense-toolbar{display:flex;flex-wrap:nowrap;align-items:center;gap:12px;overflow-x:auto;max-width:100%;padding-bottom:4px}
+.expense-toolbar>button{flex:0 0 auto;white-space:nowrap}
+.expense-records{padding-bottom:64px}
