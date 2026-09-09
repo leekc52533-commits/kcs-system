@@ -1,9 +1,10 @@
+import {billVoidSchemaSql} from './migrationV57.mjs'
 import {expenseDetailsSchemaSql} from './migrationV56.mjs'
 import {routeRequestSchemaSql} from './migrationV55.mjs'
 import {sundaySchemaSql} from './sundayPlanning.mjs'
-export const SCHEMA_VERSION = 56
+export const SCHEMA_VERSION = 57
 
-export const schemaSql = expenseDetailsSchemaSql + routeRequestSchemaSql + sundaySchemaSql + `
+export const schemaSql = billVoidSchemaSql + expenseDetailsSchemaSql + routeRequestSchemaSql + sundaySchemaSql + `
 CREATE TABLE IF NOT EXISTS schema_meta (
   version INTEGER PRIMARY KEY,
   applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -1489,7 +1490,7 @@ CREATE INDEX IF NOT EXISTS area_refinement_suggestions_analysis_idx ON area_refi
 CREATE TABLE IF NOT EXISTS purchase_bills (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   bill_number TEXT NOT NULL UNIQUE,
-  dispatch_stop_id INTEGER NOT NULL UNIQUE REFERENCES dispatch_stops(id),
+  dispatch_stop_id INTEGER NOT NULL REFERENCES dispatch_stops(id),
   dispatch_trip_id INTEGER NOT NULL REFERENCES dispatch_trips(id),
   dispatch_day_id INTEGER NOT NULL REFERENCES dispatch_days(id),
   branch_id INTEGER NOT NULL REFERENCES branches(id),
@@ -1515,6 +1516,7 @@ CREATE TABLE IF NOT EXISTS purchase_bills (
 );
 CREATE INDEX IF NOT EXISTS purchase_bills_date_idx ON purchase_bills(service_date,driver_employee_id,status);
 CREATE INDEX IF NOT EXISTS purchase_bills_branch_idx ON purchase_bills(branch_id,issued_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS purchase_bills_issued_stop ON purchase_bills(dispatch_stop_id) WHERE status='issued';
 CREATE TABLE IF NOT EXISTS purchase_bill_items (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   purchase_bill_id INTEGER NOT NULL REFERENCES purchase_bills(id) ON DELETE CASCADE,

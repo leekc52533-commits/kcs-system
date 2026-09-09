@@ -149,3 +149,16 @@ export async function expenseRecordsWorkbook(filters={},database=defaultDb,{uplo
   const root=path.resolve(uploadsRoot||'');for(const item of data.items){if(!item.hasProof)continue;const absolute=path.resolve(root,item.proofStorageKey);if(!absolute.startsWith(root+path.sep)||!fs.existsSync(absolute))continue;const row=photos.addRow({date:item.serviceDate,employee:item.employeeName,photo:'Embedded receipt'}),extension=item.proofContentType==='image/png'?'png':item.proofContentType==='image/jpeg'?'jpeg':null;row.height=230;row.getCell(1).numFmt='dd-mm-yy';if(extension){const imageId=workbook.addImage({buffer:fs.readFileSync(absolute),extension});photos.addImage(imageId,{tl:{col:2,row:row.number-1},ext:{width:420,height:300}})}else row.getCell(3).value='WebP receipt: view in KCS system'}
   return Buffer.from(await workbook.xlsx.writeBuffer())
 }
+
+// Reversal links the original deduction, retaining its unique bill reference.
+export function reverseVoidedPurchase(header,context={},database=defaultDb){
+ const original=database.prepare('SELECT * FROM cash_float_transactions WHERE purchase_bill_id=?').get(header.id)
+ if(!original)return null
+ if(header.payment_method!=='Cash'||original.transaction_type!=='cash_purchase'||original.amount_cents!==-header.total_cents||original.employee_id!==header.driver_employee_id)throw fail('Cash ledger does not match the bill.','VOID_LEDGER_CONFLICT',409)
+ const prior=database.prepare('SELECT * FROM cash_float_transactions WHERE reversed_transaction_id=?').all(original.id)
+ if(prior.length){if(prior.length!==1||prior[0].transaction_type!=='reversal'||prior[0].amount_cents!==-original.amount_cents||prior[0].employee_id!==original.employee_id)throw fail('Cash ledger reversal requires review.','VOID_LEDGER_CONFLICT',409);return Number(prior[0].id)}
+ const when=nowKuching(context.now||new Date())
+ const result=database.prepare(`INSERT INTO cash_float_transactions(employee_id,transaction_type,amount_cents,service_date,reversed_transaction_id,payment_channel,description,reference_number,created_by_employee_id,created_by_name_snapshot,created_at) VALUES(?,'reversal',?,?,?,'System',?,?,?,?,?)`).run(original.employee_id,-original.amount_cents,kuchingDate(context.now||new Date()),original.id,`Void ${header.bill_number}`,header.bill_number,context.employeeId,context.employeeName,when)
+ refreshAlert(database,original.employee_id,when)
+ return Number(result.lastInsertRowid)
+}
