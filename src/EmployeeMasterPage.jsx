@@ -1,3 +1,4 @@
+import {FilterHeader} from './ExpenseRecordsPage.jsx'
 import BackButton from './BackButton.jsx'
 import EmployeeAccountCard,{NewEmployeeAccountFields} from './EmployeeAccountCard.jsx'
 import TableBottomScroll from './TableBottomScroll.jsx'
@@ -5,7 +6,7 @@ import './CompactDataTable.css'
 import {PhotoUpload} from './PhotoAttachment.jsx'
 import {Fragment,useCallback,useEffect,useMemo,useRef,useState} from 'react'
 import {downloadSpreadsheet,readSpreadsheet} from './spreadsheetFiles.js'
-import {createEmployeeSelectionGuard,employeeDetailDraft,employeeMatchesDirectory,sortEmployeeDirectory,terminalEmploymentStatuses} from './employeeMasterState.js'
+import {createEmployeeSelectionGuard,employeeDetailDraft,employeeMatchesDirectory,employeeDirectoryValue,employeeDirectoryPeriod,sortEmployeeDirectory,terminalEmploymentStatuses} from './employeeMasterState.js'
 import {kuchingDate} from '../shared/kuchingTime.js'
 import {passwordMessage} from './formValidation.js'
 import {apiRequest as api} from './apiClient.js'
@@ -16,11 +17,10 @@ import FormActionBar from './FormActionBar.jsx'
 
 const roles=['Driver','Attendant / Crew','Supervisor','Office','Admin','Mechanic / Workshop','Other']
 const employmentTypes=['Permanent','Contractor','Part-time','Temporary']
-const directoryStatuses=['active','resigned','terminated','contract_end','suspended','inactive','on_leave','rehired']
 const empty={employeeCode:'',name:'',phone:'',jobRole:'Driver',additionalRoles:[],employmentType:'Permanent',employmentStatus:'active',employmentStartDate:'',drivingLicenceExpiryDate:'',gdlExpiryDate:'',defaultBaseLocationId:'',usualAreaIds:[],nationalIdNumber:'',bankName:'',bankAccountNumber:'',bankAccountHolderName:'',epfNumber:'',socsoNumber:''}
 const dataUrl=file=>new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve({name:file.name,dataUrl:reader.result});reader.onerror=reject;reader.readAsDataURL(file)})
 const labelStatus=value=>({active:'Active',on_leave:'On Leave',inactive:'Inactive',resigned:'Resigned',terminated:'Terminated',contract_end:'Contract End',suspended:'Suspended',rehired:'Rehired'})[value]||value||'—'
-const currentPeriod=employee=>[...(employee.employmentPeriods||[])].reverse().find(period=>!period.endDate&&period.employmentStatus==='active')
+const currentPeriod=employeeDirectoryPeriod
 
 export default function EmployeeMasterPage({resources,currentUser,account,reload,onBack}){
   const ui=useUi()
@@ -29,10 +29,11 @@ export default function EmployeeMasterPage({resources,currentUser,account,reload
   const[group,setGroup]=useState('current')
   const[form,setForm]=useState({...empty,loginAccount:null}),[selectedId,setSelectedId]=useState(null),[detail,setDetail]=useState(null),[draft,setDraft]=useState(null)
   const[detailLoading,setDetailLoading]=useState(false),[saving,setSaving]=useState(false),[dirty,setDirty]=useState(false),[loadError,setLoadError]=useState('')
-  const[filters,setFilters]=useState({search:'',status:[],jobRole:[],employmentType:[],accountStatus:[]}),[sort,setSort]=useState({column:'',direction:''}),[preview,setPreview]=useState(null),[message,setMessage]=useState(''),[error,setError]=useState(''),[showCreate,setShowCreate]=useState(false),[showTools,setShowTools]=useState(false)
+  const[filters,setFilters]=useState({search:'',columns:{}}),[sort,setSort]=useState({column:'',direction:''}),[preview,setPreview]=useState(null),[message,setMessage]=useState(''),[error,setError]=useState(''),[showCreate,setShowCreate]=useState(false),[showTools,setShowTools]=useState(false)
   const guard=useRef(createEmployeeSelectionGuard()),abortRef=useRef(null)
   const bases=resources.locations.filter(item=>item.isActive&&['Company Yard','Employee Base'].includes(item.operationalType||({'depot':'Company Yard','employee_home':'Employee Base'})[item.locationType]))
-  const filtered=useMemo(()=>sortEmployeeDirectory(resources.employees.filter(item=>((group==='departed')===['resigned','terminated','contract_end'].includes(item.employmentStatus))&&employeeMatchesDirectory(item,filters)),sort),[resources.employees,filters,sort,group])
+  const directoryItems=useMemo(()=>resources.employees.filter(item=>(group==='departed')===['resigned','terminated','contract_end'].includes(item.employmentStatus)),[resources.employees,group])
+  const filtered=useMemo(()=>sortEmployeeDirectory(directoryItems.filter(item=>employeeMatchesDirectory(item,filters)),sort),[directoryItems,filters,sort])
 
   useEffect(()=>{api('/api/employees/next-code').then(data=>setForm(value=>({...value,employeeCode:value.employeeCode||data.employeeCode}))).catch(()=>{})},[resources.employees.length])
   useEffect(()=>{const warn=event=>{if(dirty){event.preventDefault();event.returnValue=''}};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn)},[dirty])
@@ -82,7 +83,7 @@ export default function EmployeeMasterPage({resources,currentUser,account,reload
 
   const openCreate=()=>{if(dirty&&!confirm(t('branchEditor.unsavedLeave')))return;abortRef.current?.abort();guard.current.cancel();setSelectedId(null);setDetail(null);setDraft(null);setDirty(false);setError('');setShowCreate(true)}
   const closeCreate=()=>{if(dirty&&!confirm(ui("You have unsaved changes. Leave without saving?")))return;setShowCreate(false);setDirty(false)}
-  const chooseGroup=value=>{if(dirty&&!confirm(t('branchEditor.unsavedLeave')))return;abortRef.current?.abort();guard.current.cancel();setSelectedId(null);setDetail(null);setDraft(null);setDirty(false);setShowCreate(false);setShowTools(false);setGroup(value);setFilters(current=>({...current,status:[]}))}
+  const chooseGroup=value=>{if(dirty&&!confirm(t('branchEditor.unsavedLeave')))return;abortRef.current?.abort();guard.current.cancel();setSelectedId(null);setDetail(null);setDraft(null);setDirty(false);setShowCreate(false);setShowTools(false);setGroup(value);setFilters(current=>({...current,columns:{...current.columns,employmentStatus:null}}))}
   const toggleTools=()=>setShowTools(value=>!value)
   const activeView=showCreate?'create':showTools?'tools':group
   return <section className="employee-master-v2"><nav className="employee-toolbar employee-groups" aria-label={t('employee.title')}><BackButton className="employee-back" fallback={onBack} iconOnly/><button data-staff-view="current" className={activeView==='current'?'active':''} onClick={()=>chooseGroup('current')}>{t('staff.current')}</button><button data-staff-view="departed" className={activeView==='departed'?'active':''} onClick={()=>chooseGroup('departed')}>{t('staff.departed')}</button><button data-staff-view="create" className={activeView==='create'?'active':''} onClick={()=>{openCreate();setShowTools(false)}}>{t('employee.add')}</button><button data-staff-view="tools" className={activeView==='tools'?'active':''} onClick={toggleTools}>{ui('Data tools ⋯')}</button></nav>{message&&<div className="planner-message">✓ {message}</div>}{error&&<div className="data-error">{error}</div>}
@@ -91,7 +92,7 @@ export default function EmployeeMasterPage({resources,currentUser,account,reload
     {showCreate&&<div className="employee-detail-backdrop"><div className="employee-detail-drawer">{error&&<div className="data-error" role="alert">{error}</div>}<EmployeeCreateDetail form={form} setForm={setForm} roles={roles} types={employmentTypes} bases={bases} areas={resources.areas} dirty={dirty} setDirty={setDirty} account={account||currentUser} saving={saving} save={create} close={closeCreate}/></div></div>}
 
     <input className="employee-search" aria-label={t('common.search')} placeholder={t('list.searchAccounts')} value={filters.search} onChange={event=>setFilters({...filters,search:event.target.value})}/>
-    <EmployeeDirectory items={filtered} selectedId={selectedId} openEmployee={openEmployee} filters={filters} setFilters={setFilters} sort={sort} setSort={setSort} renderDetail={()=> <div className="employee-inline-panel">{error&&<div className="data-error" role="alert">{error}</div>}{message&&<div role="status">{message}</div>}{detailLoading?<div className="data-loading">{ui("Loading employee details\u2026")}</div>:loadError?<><div className="data-error">{t('common.error')}: {loadError}</div><button onClick={closeDetail}>{ui("Close")}</button></>:detail&&draft?<EmployeeDetail key={detail.id} item={detail} draft={draft} roles={roles} types={employmentTypes} bases={bases} areas={resources.areas} currentUser={currentUser} account={account} dirty={dirty} saving={saving} changeDraft={changeDraft} saveDetail={saveDetail} closeDetail={closeDetail} refresh={()=>refreshCurrent(detail.id)} setError={setError} setMessage={setMessage}/>:null}</div>}/>
+    <EmployeeDirectory items={filtered} optionItems={directoryItems} group={group} selectedId={selectedId} openEmployee={openEmployee} filters={filters} setFilters={setFilters} sort={sort} setSort={setSort} renderDetail={()=> <div className="employee-inline-panel">{error&&<div className="data-error" role="alert">{error}</div>}{message&&<div role="status">{message}</div>}{detailLoading?<div className="data-loading">{ui("Loading employee details\u2026")}</div>:loadError?<><div className="data-error">{t('common.error')}: {loadError}</div><button onClick={closeDetail}>{ui("Close")}</button></>:detail&&draft?<EmployeeDetail key={detail.id} item={detail} draft={draft} roles={roles} types={employmentTypes} bases={bases} areas={resources.areas} currentUser={currentUser} account={account} dirty={dirty} saving={saving} changeDraft={changeDraft} saveDetail={saveDetail} closeDetail={closeDetail} refresh={()=>refreshCurrent(detail.id)} setError={setError} setMessage={setMessage}/>:null}</div>}/>
 
   </section>
 }
@@ -111,22 +112,21 @@ function EmployeeCreateDetail({form,setForm,roles,types,bases,areas,dirty,setDir
 
 const accountOptions=[['active','Active Account'],['disabled','Disabled Account'],['none','No Account']]
 
-function EmployeeColumnHeader({label,column,kind='text',sort,setSort,filterKey,options=[],filters,setFilters}){
-  const ui=useUi()
-  const selected=filterKey?filters[filterKey]||[]:[],sortActive=sort.column===column&&sort.direction,filterActive=selected.length>0
-  const setDirection=(event,direction)=>{setSort(direction?{column,direction}:{column:'',direction:''});event.currentTarget.closest('details')?.removeAttribute('open')}
-  const toggle=value=>setFilters(current=>{const values=current[filterKey]||[],all=options.map(([key])=>key);const next=values.length?(values.includes(value)?values.filter(item=>item!==value):[...values,value]):all.filter(item=>item!==value);return {...current,[filterKey]:next.length===all.length?[]:next}})
-  return <th><details className={`employee-column-control ${sortActive||filterActive?'active':''}`}><summary><span>{ui(label)}</span><span aria-hidden="true">{sortActive?(sort.direction==='asc'?'↑':'↓'):(filterActive?'●':'▼')}</span></summary><div className="employee-column-menu"><button type="button" className={sortActive&&sort.direction==='asc'?'selected':''} onClick={event=>setDirection(event,'asc')}>{ui(kind==='date'?'Oldest → Newest':'Sort A → Z')}</button><button type="button" className={sortActive&&sort.direction==='desc'?'selected':''} onClick={event=>setDirection(event,'desc')}>{ui(kind==='date'?'Newest → Oldest':'Sort Z → A')}</button><button type="button" onClick={event=>setDirection(event,'')}>{ui("Clear Sort")}</button>{filterKey&&<><hr/><div className="employee-filter-actions"><button type="button" onClick={()=>setFilters(current=>({...current,[filterKey]:[]}))}>{ui("Select All")}</button><button type="button" onClick={()=>setFilters(current=>({...current,[filterKey]:[]}))}>{ui("Clear Filter")}</button></div>{options.map(([value,text])=><label key={value}><input type="checkbox" checked={!selected.length||selected.includes(value)} onChange={()=>toggle(value)}/>{ui(text)}</label>)}</>}</div></details></th>
-}
-
-function EmployeeDirectory({items,selectedId,openEmployee,filters,setFilters,sort,setSort,renderDetail}){
+export function EmployeeDirectory({items,optionItems=items,group,selectedId,openEmployee,filters,setFilters,sort,setSort,renderDetail}){
   const ui=useUi()
   const scrollRef=useRef(null)
   const{t}=useI18n()
-  const header={sort,setSort,filters,setFilters}
+  const[openColumn,setOpenColumn]=useState(null)
+  useEffect(()=>setOpenColumn(null),[group])
+  const columns=[['employeeCode','Employee Code'],['name','Name'],['jobRole','Primary Job Role'],['employmentType','Employment Type'],['employmentStatus','Employment Status'],['homeGpsStatus','Home GPS'],['currentStartDate',t('employee.startDate')],['lastWorkingDay','Last Working Day'],['employmentEndDate','Employment End Date'],['accountStatus','Account Status'],['phone','Phone']]
+  const optionLabel=(column,value)=>!value?ui('Blank'):column==='employmentStatus'?ui(labelStatus(value)):column==='accountStatus'?ui(accountOptions.find(([key])=>key===value)?.[1]||value):['jobRole','employmentType','homeGpsStatus'].includes(column)?ui(value):value
+
   return <><div className="employee-directory-table" ref={scrollRef}><table><thead><tr>
-    <EmployeeColumnHeader {...header} label="Employee Code" column="employeeCode"/><EmployeeColumnHeader {...header} label="Name" column="name"/><EmployeeColumnHeader {...header} label="Primary Job Role" column="jobRole" filterKey="jobRole" options={roles.map(value=>[value,value])}/><EmployeeColumnHeader {...header} label="Employment Type" column="employmentType" filterKey="employmentType" options={employmentTypes.map(value=>[value,value])}/><EmployeeColumnHeader {...header} label="Employment Status" column="employmentStatus" filterKey="status" options={directoryStatuses.map(value=>[value,labelStatus(value)])}/><EmployeeColumnHeader {...header} label="Home GPS" column="homeGpsStatus"/><EmployeeColumnHeader {...header} label={t('employee.startDate')} column="currentStartDate" kind="date"/><EmployeeColumnHeader {...header} label="Last Working Day" column="lastWorkingDay" kind="date"/><EmployeeColumnHeader {...header} label="Employment End Date" column="employmentEndDate" kind="date"/><EmployeeColumnHeader {...header} label="Account Status" column="accountStatus" filterKey="accountStatus" options={accountOptions}/><EmployeeColumnHeader {...header} label="Phone" column="phone"/>
-  </tr></thead><tbody>{items.map(item=>{const period=currentPeriod(item);return <Fragment key={item.id}><tr role="button" tabIndex="0" className={`interactive-row${selectedId===item.id?' selected':''}`} onClick={()=>openEmployee(item.id)} onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();openEmployee(item.id)}}}><td>{item.employeeCode||'—'}</td><td><button type="button" className="entity-name-link" onClick={event=>{event.stopPropagation();openEmployee(item.id)}} data-i18n-raw>{item.name}</button></td><td>{ui(item.jobRole||'—')}</td><td>{ui(item.employmentType||'—')}</td><td>{ui(labelStatus(item.employmentStatus))}</td><td>Home GPS: {item.homeGpsStatus||'Not Set'}</td><td>{period?.startDate||t('common.notProvided')}</td><td>{period?.lastWorkingDay||'—'}</td><td>{period?.endDate||'—'}</td><td>{ui(item.accountId?(item.accountActive?'Active':'Disabled'):'No Account')}</td><td>{item.phone||'—'}</td></tr>{selectedId===item.id&&<tr className="employee-inline-row"><td colSpan={11}>{renderDetail()}</td></tr>}</Fragment>})}</tbody></table>{!items.length&&<p className="empty-state">{ui("No employees match the filters.")}</p>}</div><TableBottomScroll scrollRef={scrollRef}/></>
+    {columns.map(([column,label])=>{
+      const values=[...new Set(['',...optionItems.map(item=>String(employeeDirectoryValue(item,column)).trim())])].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'}))
+      return <FilterHeader key={column} label={ui(label)} value={filters.columns?.[column]??null} options={values.map(value=>({value,label:optionLabel(column,value)}))} onChange={value=>setFilters(current=>({...current,columns:{...current.columns,[column]:value}}))} sortDirection={sort.column===column?sort.direction:null} onSort={direction=>setSort(direction?{column,direction}:{column:'',direction:''})} open={openColumn===column} onOpen={()=>setOpenColumn(column)} onClose={()=>setOpenColumn(null)}/>
+    })}
+  </tr></thead><tbody>{items.map(item=>{const period=currentPeriod(item);return <Fragment key={item.id}><tr role="button" tabIndex="0" className={`interactive-row${selectedId===item.id?' selected':''}`} onClick={()=>openEmployee(item.id)} onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();openEmployee(item.id)}}}><td>{item.employeeCode||'—'}</td><td><button type="button" className="entity-name-link" onClick={event=>{event.stopPropagation();openEmployee(item.id)}} data-i18n-raw>{item.name}</button></td><td>{ui(item.jobRole||'—')}</td><td>{ui(item.employmentType||'—')}</td><td>{ui(labelStatus(item.employmentStatus))}</td><td>{ui(item.homeGpsStatus||'Not Set')}</td><td>{period?.startDate||t('common.notProvided')}</td><td>{period?.lastWorkingDay||'—'}</td><td>{period?.endDate||'—'}</td><td>{ui(item.accountId?(item.accountActive?'Active':'Disabled'):'No Account')}</td><td>{item.phone||'—'}</td></tr>{selectedId===item.id&&<tr className="employee-inline-row"><td colSpan={11}>{renderDetail()}</td></tr>}</Fragment>})}</tbody></table>{!items.length&&<p className="empty-state">{ui("No employees match the filters.")}</p>}</div><TableBottomScroll scrollRef={scrollRef}/></>
 }
 
 function EmployeeDetail({item,draft,roles,types,bases,areas,currentUser,account,dirty,saving,changeDraft,saveDetail,closeDetail,refresh,setError,setMessage}){

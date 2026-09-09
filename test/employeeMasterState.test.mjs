@@ -14,4 +14,15 @@ test('Employee Directory支持多值栏位筛选且保留原有单值查询',()=
 
 test('Employee Directory文字、编号及日期排序稳定且不丢失员工',()=>{const rows=[employee(10,{name:'Zulu',employmentPeriods:[{startDate:'2025-01-01',employmentStatus:'active'}]}),employee(2,{name:'Alpha',employmentPeriods:[{startDate:'2026-01-01',employmentStatus:'active'}]}),employee(3,{name:'Alpha',employmentPeriods:[{startDate:'2024-01-01',employmentStatus:'active'}]})];assert.deepEqual(sortEmployeeDirectory(rows,{column:'name',direction:'asc'}).map(item=>item.id),[2,3,10]);assert.deepEqual(sortEmployeeDirectory(rows,{column:'employeeCode',direction:'desc'}).map(item=>item.id),[10,3,2]);assert.deepEqual(sortEmployeeDirectory(rows,{column:'currentStartDate',direction:'desc'}).map(item=>item.id),[2,10,3]);assert.equal(new Set(sortEmployeeDirectory(rows,{column:'name',direction:'asc'}).map(item=>item.id)).size,3)})
 
-test('Employee Master筛选已移入表头且保留Add employee与Data tools',async()=>{const source=await import('node:fs').then(fs=>fs.readFileSync(new URL('../src/EmployeeMasterPage.jsx',import.meta.url),'utf8'));assert.doesNotMatch(source,/function DirectoryFilters/);assert.match(source,/EmployeeColumnHeader/);assert.match(source,/Sort A → Z/);assert.match(source,/Newest → Oldest/);assert.match(source,/Clear Filter/);assert.match(source,/＋ Add employee/);assert.match(source,/Data tools/);assert.match(source,/employee-column-menu/)})
+test('column filters distinguish all, none and blank, and combine columns',()=>{
+ const rows=[employee(1,{phone:''}),employee(2,{phone:'0123',jobRole:'Office'})]
+ assert.equal(rows.filter(e=>employeeMatchesDirectory(e,{columns:{phone:null}})).length,2)
+ assert.equal(rows.filter(e=>employeeMatchesDirectory(e,{columns:{phone:[]}})).length,0)
+ assert.deepEqual(rows.filter(e=>employeeMatchesDirectory(e,{columns:{phone:['']}})).map(e=>e.id),[1])
+ assert.deepEqual(rows.filter(e=>employeeMatchesDirectory(e,{columns:{jobRole:['Driver','Office'],phone:['0123']}})).map(e=>e.id),[2])
+})
+test('former employee dates use their latest period and sort chronologically',()=>{
+ const rows=[employee(1,{employmentStatus:'resigned',employmentPeriods:[{startDate:'2020-01-01',endDate:'2022-01-01'},{startDate:'2023-01-01',lastWorkingDay:'2026-09-01',endDate:'2026-09-02',employmentStatus:'resigned'}]}),employee(2,{employmentStatus:'resigned',employmentPeriods:[{startDate:'2022-01-01',lastWorkingDay:'2025-12-31',endDate:'2026-01-01',employmentStatus:'resigned'}]})]
+ assert.deepEqual(sortEmployeeDirectory(rows,{column:'employmentEndDate',direction:'asc'}).map(e=>e.id),[2,1])
+ assert.equal(employeeMatchesDirectory(rows[0],{columns:{lastWorkingDay:['2026-09-01']}}),true)
+})
