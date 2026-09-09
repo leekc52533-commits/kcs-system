@@ -112,7 +112,7 @@ test('Sunday conflict remains pending while eligible schedules synchronize, incl
  assert.deepEqual(db.prepare('SELECT * FROM branches WHERE id=1').get(),before.branch)
  assert.deepEqual(db.prepare('SELECT * FROM weekly_route_plan_stops WHERE branch_id=1').all(),before.routes)
  assert.equal(getCollectionScheduleManagement('B2',db).frequency,'Once a week')
- assert.throws(()=>save(db,'B1',{frequency:'Once a week',weekdays:['Sunday']}),/Sunday is restricted/)
+ assert.throws(()=>save(db,'B1',{frequency:'Once a week',weekdays:['Sunday']}),/星期日/)
  const retry=synchronizeRouteScheduleBaseline(db,{today:'2026-09-07'});assert.equal(retry.applied,0);assert.ok(retry.pending.some(p=>p.branchId==='B1'&&p.issueCode==='SUNDAY_REVIEW_REQUIRED'))
 }finally{db.close()}})
 
