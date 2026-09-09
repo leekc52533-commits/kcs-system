@@ -66,7 +66,7 @@ export default function ProofPhotoPicker({value,onChange,onBusyChange,disabled=f
       <button type="button" className="secondary-mobile" onClick={closeCamera}>{t('photo.cancel')}</button>
     </div>}
     {processing&&<p role="status">{t('purchase.proofProcessing')}</p>}
-    {preview&&<img className="payment-proof-preview" src={preview} alt={t('purchase.proofPreview')}/>}
+    {preview&&<img className="payment-proof-preview" src={preview} alt={t('photo.preview')}/>}
     {value&&<><p className="proof-selected">✓ {t('purchase.proofSelected')} · {(value.blob.size/1024/1024).toFixed(1)} MB</p><button type="button" className="secondary-mobile proof-remove" disabled={disabled||processing||camera} onClick={()=>{onChange(null);setError('')}}>{t('purchase.removePhoto')}</button></>}
   </div>
 }

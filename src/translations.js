@@ -3669,6 +3669,7 @@ operationalUiMessages.push(...[
     "无法准备照片上传，请重试。"
   ]
 ])
+operationalUiMessages.push(...[["Payment / Receipt Proof (optional)", "Payment / Receipt Proof (optional)", "Bukti Bayaran / Resit (pilihan)", "付款／收据证明（选填）"], ["IC Front", "IC Front", "Bahagian depan kad pengenalan", "身份证正面"], ["IC Back", "IC Back", "Bahagian belakang kad pengenalan", "身份证背面"], ["Before Photo", "Before Photo", "Gambar sebelum", "维修前照片"], ["After Photo", "After Photo", "Gambar selepas", "维修后照片"], ["Receipt", "Receipt", "Resit", "收据"], ["Photo", "Photo", "Gambar", "照片"], ["Invoice", "Invoice", "Invois", "发票"], ["File", "File", "Fail", "文件"], ["Replace", "Replace", "Ganti", "替换"]])
 const operationalAliases=new Map()
 for(const row of operationalUiMessages)for(const text of row)operationalAliases.set(normalizeUiText(text),row)
 export function translateUi(language,source,variables={}){
@@ -3714,3 +3715,15 @@ Object.assign(messages.en,{"photo.cameraUnavailable": "Camera unavailable. Allow
 Object.assign(messages.ms,{"photo.cameraUnavailable": "Kamera tidak tersedia. Benarkan akses kamera dalam pelayar, atau gunakan butang kamera telefon di bawah.", "photo.systemCamera": "Guna kamera telefon", "photo.cameraPreview": "Pratonton kamera", "photo.opening": "Membuka kamera…", "photo.capture": "Ambil gambar", "photo.cancel": "Batal kamera", "photo.captureFailed": "Gambar tidak dapat diambil. Cuba lagi atau pilih daripada galeri."})
 
 Object.assign(messages.zh,{"photo.cameraUnavailable": "无法打开相机。请允许浏览器使用相机，或使用下方的手机相机按钮。", "photo.systemCamera": "使用手机相机", "photo.cameraPreview": "相机预览", "photo.opening": "正在打开相机…", "photo.capture": "拍摄照片", "photo.cancel": "取消拍照", "photo.captureFailed": "无法拍摄照片，请重试或从相册选择。"})
+
+Object.assign(messages.en,{"photo.choosePdf": "Choose PDF file", "photo.removeFile": "Remove file", "photo.uploadFailed": "Upload failed. Try again.", "photo.readWeight": "Read weight from photo"})
+
+Object.assign(messages.ms,{"photo.choosePdf": "Pilih fail PDF", "photo.removeFile": "Buang fail", "photo.uploadFailed": "Muat naik gagal. Cuba lagi.", "photo.readWeight": "Baca berat daripada gambar"})
+
+Object.assign(messages.zh,{"photo.choosePdf": "选择 PDF 文件", "photo.removeFile": "删除文件", "photo.uploadFailed": "上传失败，请重试。", "photo.readWeight": "识别照片中的重量"})
+
+Object.assign(messages.en,{"photo.preview": "Selected photo preview", "photo.confirmUpload": "Confirm and upload"})
+
+Object.assign(messages.ms,{"photo.preview": "Pratonton gambar dipilih", "photo.confirmUpload": "Sahkan dan muat naik"})
+
+Object.assign(messages.zh,{"photo.preview": "已选择的照片预览", "photo.confirmUpload": "确认并上传"})
