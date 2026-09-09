@@ -1,4 +1,4 @@
-import {navigateWithinApp} from './navigation.js'
+import RouteBranchEditor from './RouteBranchEditor.jsx'
 import {useUi} from './i18n.jsx'
 import {DispatchScheduleTools} from './DispatchScheduleTools.jsx'
 import {useState} from 'react'
@@ -22,6 +22,7 @@ export default function RouteCustomerList({day,route,days,canEdit,onReorder,busy
 function CustomerRow({stop,index,day,route,days,canEdit,editable,onReorder,busy}){
   const ui=useUi()
 
+  const[masterOpen,setMasterOpen]=useState(false)
   const[open,setOpen]=useState(false),[adjust,setAdjust]=useState(false),[date]=useState(day.dispatch_date),[targetRoute,setTargetRoute]=useState(String(route.routeNumber)),[reason,setReason]=useState(''),[saving,setSaving]=useState(false),[error,setError]=useState('')
   const targetDay=days.find(item=>item.dispatch_date===date)
   const protectedStop=Boolean(stop.hasBill||stop.arrivedAt||stop.completedAt||['active','completed','cancelled'].includes(stop.status))
@@ -43,7 +44,7 @@ function CustomerRow({stop,index,day,route,days,canEdit,editable,onReorder,busy}
       {stop.timeRestriction&&<p>{ui("约定时段：")}{stop.timeRestriction}</p>}
       {[['Parking',stop.parkingNote],['Truck access',stop.truckAccess],['GPS note',stop.gpsRemark],['跟进原因',stop.overrideReason]].filter(([,value])=>value).map(([label,value])=><p key={label}>{ui(label)}: <span data-i18n-raw>{value}</span></p>)}
       {canEdit&&<DispatchScheduleTools {...{stop,day,days}} routeNumber={route.routeNumber}/>}
-      <div className="route-customer-links">{gps?<a href={`https://www.google.com/maps/dir/?api=1&destination=${stop.latitude},${stop.longitude}`} target="_blank" rel="noreferrer">{ui("导航")}</a>:<span>{ui("GPS 未记录")}</span>}<a href={`?page=customers&tab=branches&branch=${encodeURIComponent(formatBranchId(stop.branchId))}`} onClick={event=>{event.preventDefault();navigateWithinApp(event.currentTarget.href,ui("You have unsaved changes. Discard them?"))}}>{ui("客户主资料")}</a>{canEdit&&<button type="button" disabled={!editable||protectedStop||saving} onClick={()=>setAdjust(value=>!value)}>{ui("转到其他 ROUTE")}</button>}</div>
+      <div className="route-customer-links">{gps?<a href={`https://www.google.com/maps/dir/?api=1&destination=${stop.latitude},${stop.longitude}`} target="_blank" rel="noreferrer">{ui("导航")}</a>:<span>{ui("GPS 未记录")}</span>}<a href={`?page=customers&tab=branches&branch=${encodeURIComponent(formatBranchId(stop.branchId))}`} onClick={event=>{event.preventDefault();setMasterOpen(true)}}>{ui("客户主资料")}</a>{canEdit&&<button type="button" disabled={!editable||protectedStop||saving} onClick={()=>setAdjust(value=>!value)}>{ui("转到其他 ROUTE")}</button>}</div>
       {canEdit&&(!editable||protectedStop)&&<small>{protectedStop?ui("已有执行或单据，保留原始收货记录。"):ui("调整前请先撤回批准；执行中的日期不能移动客户。")}</small>}
       {adjust&&editable&&!protectedStop&&<fieldset disabled={saving}><legend>{ui("调整当天 ROUTE（收货日期不变）")}</legend>
         
@@ -52,5 +53,6 @@ function CustomerRow({stop,index,day,route,days,canEdit,editable,onReorder,busy}
         <button type="button" disabled={!reason.trim()||!targetDay||(date===day.dispatch_date&&Number(targetRoute)===route.routeNumber)} onClick={save}>{saving?ui("保存中…"):ui("确认调整")}</button><button type="button" onClick={()=>setAdjust(false)}>{ui("取消")}</button>
       </fieldset>}
     </div>}
+    {masterOpen&&<RouteBranchEditor branchId={stop.branchId} onClose={()=>setMasterOpen(false)}/>}
   </li>
 }
