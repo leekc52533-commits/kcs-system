@@ -3683,6 +3683,13 @@ operationalUiMessages.push(
  ['Entered By','Entered By','Dimasukkan oleh','录入人'],
  ['Entered Time','Entered Time','Masa dimasukkan','录入时间']
 )
+operationalUiMessages.push(
+ ['From Date','From Date','Tarikh mula','开始日期'],['To Date','To Date','Tarikh akhir','结束日期'],
+ ['Search all expense records','Search all expense records','Cari semua rekod perbelanjaan','搜索费用记录'],
+ ['Employee, description or reference','Employee, description or reference','Pekerja, keterangan atau rujukan','员工、说明或参考号码'],
+ ['Find an option','Find an option','Cari pilihan','搜索选项'],['Select value','Select value','Pilih nilai','选择内容'],
+ ['Close','Close','Tutup','关闭']
+)
 for(const row of operationalUiMessages)for(const text of row)operationalAliases.set(normalizeUiText(text),row)
 export function translateUi(language,source,variables={}){
   const value=String(source??''),normalized=normalizeUiText(value),row=operationalAliases.get(normalized)
