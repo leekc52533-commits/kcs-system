@@ -3670,6 +3670,7 @@ operationalUiMessages.push(...[
   ]
 ])
 operationalUiMessages.push(...[["Payment / Receipt Proof (optional)", "Payment / Receipt Proof (optional)", "Bukti Bayaran / Resit (pilihan)", "付款／收据证明（选填）"], ["IC Front", "IC Front", "Bahagian depan kad pengenalan", "身份证正面"], ["IC Back", "IC Back", "Bahagian belakang kad pengenalan", "身份证背面"], ["Before Photo", "Before Photo", "Gambar sebelum", "维修前照片"], ["After Photo", "After Photo", "Gambar selepas", "维修后照片"], ["Receipt", "Receipt", "Resit", "收据"], ["Photo", "Photo", "Gambar", "照片"], ["Invoice", "Invoice", "Invois", "发票"], ["File", "File", "Fail", "文件"], ["Replace", "Replace", "Ganti", "替换"]])
+operationalUiMessages.push(...[["等待客户来电后安排收货", "Awaiting customer call to arrange collection", "Menunggu panggilan pelanggan untuk mengatur kutipan", "等待客户来电后安排收货"], ["已暂停定期收货", "Regular collection is paused", "Kutipan berkala dihentikan sementara", "已暂停定期收货"]])
 const operationalAliases=new Map()
 for(const row of operationalUiMessages)for(const text of row)operationalAliases.set(normalizeUiText(text),row)
 export function translateUi(language,source,variables={}){
