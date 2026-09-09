@@ -1,0 +1,16 @@
+import test,{after} from 'node:test'
+import assert from 'node:assert/strict'
+import React,{act,useState} from 'react'
+import {createServer} from 'vite'
+import {JSDOM} from 'jsdom'
+const dom=new JSDOM('<html><body><div id="root"></div></body></html>',{url:'https://localhost/'})
+for(const k of ['window','document','Node','NodeFilter','HTMLElement','MutationObserver','Event','MouseEvent','localStorage','sessionStorage','FileReader'])globalThis[k]=dom.window[k]
+Object.defineProperty(globalThis,'navigator',{value:dom.window.navigator,configurable:true});globalThis.IS_REACT_ACT_ENVIRONMENT=true
+const{createRoot}=await import('react-dom/client'),vite=await createServer({logLevel:'silent',server:{middlewareMode:true},appType:'custom'})
+after(()=>vite.close())
+const{default:Fields,emptyExpenseDetails}=await vite.ssrLoadModule('/src/ExpenseDetailFields.jsx'),{I18nProvider}=await vite.ssrLoadModule('/src/i18n.jsx')
+let last,resolveRead;globalThis.fetch=async()=>({ok:true,json:async()=>await new Promise(resolve=>{resolveRead=resolve})})
+function Harness({category,photo,language='en'}){const[form,setForm]=useState({...emptyExpenseDetails,amount:'20',companyName:'Manually entered'});last=form;return React.createElement(I18nProvider,{language},React.createElement(Fields,{form,setForm,category,proof:photo,vehicles:[{id:1,registrationNumber:'QAB123'}]}))}
+const click=async n=>{await act(async()=>n.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})))}
+test('vehicle fields required, Other optional, translations and vehicle option preserve values',async()=>{for(const language of ['en','ms','zh']){const root=createRoot(document.getElementById('root'));await act(async()=>root.render(React.createElement(Harness,{category:'Fuel',language})));assert.equal(document.querySelectorAll('[required]').length,4);assert.equal(document.querySelector('select option[value="1"]').textContent,'QAB123');assert.ok(!document.body.textContent.includes('expenseDetail.'));await act(async()=>root.render(React.createElement(Harness,{category:'Other',language})));assert.equal(document.querySelectorAll('[required]').length,0);await act(async()=>root.unmount())}})
+test('OCR fills blank fields only and a replaced photo cannot receive stale suggestions',async()=>{const root=createRoot(document.getElementById('root')),photo={name:'proof.jpg',blob:new dom.window.Blob(['test'],{type:'image/jpeg'})};await act(async()=>root.render(React.createElement(Harness,{category:'Fuel',photo})));await click(document.querySelector('button'));await act(async()=>new Promise(r=>setTimeout(r,30)));await act(async()=>resolveRead({status:'review',fields:{amount:'99',companyName:'Wrong overwrite',referenceNumber:'INV-1',odometerKm:'500'}}));assert.equal(last.amount,'20');assert.equal(last.companyName,'Manually entered');assert.equal(last.referenceNumber,'INV-1');await click(document.querySelector('button'));await act(async()=>new Promise(r=>setTimeout(r,30)));await act(async()=>root.render(React.createElement(Harness,{category:'Fuel',photo:{...photo,name:'new.jpg'}})));await act(async()=>resolveRead({status:'review',fields:{tinNumber:'OLD-TIN'}}));assert.equal(last.tinNumber,'');await act(async()=>root.unmount())})
