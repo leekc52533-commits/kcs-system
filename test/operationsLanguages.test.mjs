@@ -90,3 +90,23 @@ test('area and zone creation dialog translates labels and preserves input values
  const add=[...view.container.querySelectorAll('button')].find(b=>b.textContent===translateUi(lang,'＋ Add Zone Group'));assert.ok(add);await act(async()=>add.click());const dialog=view.container.querySelector('[role="dialog"]');assert.ok(dialog);noChinese(lang,dialog.outerHTML);assert.ok(dialog.textContent.includes(translateUi(lang,'Zone Group Name')));assert.ok(dialog.textContent.includes(translateUi(lang,'Code (optional)')))
  }finally{await view.close()}}
 })
+
+test('switching to On Call clears locked weekdays and saves without a frequency detour',async()=>{
+ for(const lang of ['en','ms','zh']){
+ calls=[];const view=await mount(lang,schedule.ScheduleEditor,{item:{...item,frequency:'Every 3 Weeks',weekdays:['Wednesday'],anchorDate:'2026-02-19',effectiveDate:'2026-09-09'},t:k=>k,onClose:noop,onSaved:noop})
+ try{const c=view.container,frequency=c.querySelector('option[value="On Call"]').parentElement
+ await act(async()=>{frequency.value='On Call';frequency.dispatchEvent(new Event('change',{bubbles:true}))})
+ assert.equal(c.querySelectorAll('input[type=checkbox]:checked').length,0)
+ assert.ok(c.textContent.includes(translateUi(lang,'等待客户来电后安排收货')))
+ assert.ok(!c.textContent.includes(translateUi(lang,'请先补全有效的周期设置')))
+ assert.equal(c.querySelectorAll('input[type=date]')[1].value,'2026-09-09')
+ const reason=c.querySelector('textarea');await act(async()=>{Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,'value').set.call(reason,'Customer will call');reason.dispatchEvent(new Event('input',{bubbles:true}))})
+ await act(async()=>c.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})))
+ const saved=calls.find(([url,o])=>url.includes('/collection-schedule')&&o.method==='PATCH');assert.ok(saved);const payload=JSON.parse(saved[1].body);assert.equal(payload.frequency,'On Call');assert.deepEqual(payload.weekdays,[]);assert.equal(payload.anchorDate,'');assert.equal(payload.effectiveDate,'2026-09-09')
+ await act(async()=>{frequency.value='Once a week';frequency.dispatchEvent(new Event('change',{bubbles:true}))});assert.equal(c.querySelector('input[type=checkbox]').disabled,false)
+ }finally{await view.close()}
+ }
+})
+test('opening legacy On Call data removes stale selected weekdays from the editor',()=>{
+ const markup=html('zh',schedule.ScheduleEditor,{item:{...item,frequency:'On Call',weekdays:['Wednesday']},t:k=>k,onClose:noop,onSaved:noop});const d=new JSDOM(markup).window.document;assert.equal(d.querySelectorAll('input[type=checkbox]:checked').length,0);assert.match(d.body.textContent,/等待客户来电后安排收货/)
+})
