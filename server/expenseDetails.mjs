@@ -11,7 +11,8 @@ export function normalizeExpenseDetails(payload,db){
  if(vehicleId!==null&&(!Number.isInteger(vehicleId)||!vehicle))throw invalid()
  if(meter!==null&&(!Number.isFinite(meter)||meter<0||meter>10000000))throw invalid()
  if(companyName.length>250||referenceNumber.length>150||tinNumber.length>100||remarks.length>2000)throw invalid()
- if(category!=='Other'&&(!vehicle||meter===null||!referenceNumber||!companyName))throw invalid()
+ if(!referenceNumber||!companyName)throw invalid()
+ if(category!=='Other'&&(!vehicle||meter===null))throw invalid()
  return{category,description:category==='Other'?(String(payload.description||'').trim()||'Other'):category,vehicleId,vehiclePlate:vehicle?.registrationNumber||vehicle?.vehicleCode||null,odometerKm:meter,companyName,referenceNumber,tinNumber,remarks}
 }
 export function saveExpenseDetails(db,kind,id,value){db.prepare('INSERT INTO expense_details(employee_transaction_id,admin_expense_id,category,vehicle_id,vehicle_plate,odometer_km,company_name,tin_number,remarks) VALUES(?,?,?,?,?,?,?,?,?)').run(kind==='employee'?id:null,kind==='admin'?id:null,value.category,value.vehicleId,value.vehiclePlate,value.odometerKm,value.companyName||null,value.tinNumber||null,value.remarks||null)}
