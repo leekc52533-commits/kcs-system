@@ -1,3 +1,4 @@
+import {applyArchiveColumns} from '../shared/archiveColumns.mjs'
 import fs from 'node:fs'
 import path from 'node:path'
 import ExcelJS from 'exceljs'
@@ -27,9 +28,10 @@ export function listPurchaseBillArchive(filters={},database=defaultDb){
     pb.status,pb.issued_at issuedAt,pp.id proofId,pp.original_name proofName,pp.created_at proofUploadedAt
     FROM purchase_bills pb LEFT JOIN purchase_payment_proofs pp ON pp.purchase_bill_id=pb.id WHERE ${query.sql} ORDER BY pb.service_date DESC,pb.id DESC`).all(...query.params)
   const itemStatement=database.prepare(`SELECT product_name_snapshot item,short_form_snapshot shortForm,unit_snapshot unit,quantity,unit_price_cents unitPriceCents,line_total_cents itemTotalCents FROM purchase_bill_items WHERE purchase_bill_id=? ORDER BY id`)
-  const items=headers.map(row=>({...row,totalCents:Number(row.totalCents),proofId:row.proofId?Number(row.proofId):null,items:itemStatement.all(row.id).map(item=>({...item,quantity:Number(item.quantity),unitPriceCents:Number(item.unitPriceCents),itemTotalCents:Number(item.itemTotalCents)}))}))
+  const table=applyArchiveColumns('purchase',headers,filters)
+  const items=table.items.map(row=>({...row,totalCents:Number(row.totalCents),proofId:row.proofId?Number(row.proofId):null,items:itemStatement.all(row.id).map(item=>({...item,quantity:Number(item.quantity),unitPriceCents:Number(item.unitPriceCents),itemTotalCents:Number(item.itemTotalCents)}))}))
   const employees=database.prepare(`SELECT DISTINCT pb.driver_employee_id id,pb.driver_name_snapshot name FROM purchase_bills pb WHERE pb.service_date>=? AND pb.service_date<? ORDER BY name`).all(query.from,query.to)
-  return{rangeLabel:query.label,from:query.from,to:query.to,items,employees}
+  return{rangeLabel:query.label,from:query.from,to:query.to,items,employees,filterOptions:table.filterOptions}
 }
 
 export function purchaseBillRows(filters={},database=defaultDb){

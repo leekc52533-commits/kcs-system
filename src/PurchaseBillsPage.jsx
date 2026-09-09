@@ -17,11 +17,11 @@ const columns=[['serviceDateLabel','Date'],['billNumber','PO No.'],['paymentMeth
 
 export default function PurchaseBillsPage({onBack}){
   const ui=useUi(),tableRef=useRef(null),[openFilter,setOpenFilter]=useState(null)
-  const[filters,setFilters]=useState({from:firstOfMonth(),to:today(),search:'',paymentMethod:'',employeeId:''}),[columnFilters,setColumnFilters]=useState({}),[data,setData]=useState(null),[error,setError]=useState(''),[loading,setLoading]=useState(false),[open,setOpen]=useState(null),[showWeights,setShowWeights]=useState(false)
-  const query=useMemo(()=>new URLSearchParams(Object.entries(filters).filter(([,value])=>value)).toString(),[filters])
-  useEffect(()=>{let active=true;setLoading(true);setError('');setColumnFilters({});apiRequest(`/api/purchase-bills?${query}`).then(result=>active&&setData(result)).catch(item=>active&&setError(item.message)).finally(()=>active&&setLoading(false));return()=>{active=false}},[query])
+  const[filters,setFilters]=useState({from:firstOfMonth(),to:today(),search:'',paymentMethod:'',employeeId:''}),[columnFilters,setColumnFilters]=useState({}),[sort,setSort]=useState({}),[data,setData]=useState(null),[error,setError]=useState(''),[loading,setLoading]=useState(false),[open,setOpen]=useState(null),[showWeights,setShowWeights]=useState(false)
+  const query=useMemo(()=>new URLSearchParams(Object.entries({...filters,columns:JSON.stringify(columnFilters),sortKey:sort.key,sortDirection:sort.direction}).filter(([,value])=>value)).toString(),[filters,columnFilters,sort])
+  useEffect(()=>{let active=true;setLoading(true);setError('');apiRequest(`/api/purchase-bills?${query}`).then(result=>active&&setData(result)).catch(item=>active&&setError(item.message)).finally(()=>active&&setLoading(false));return()=>{active=false}},[query])
   const rows=useMemo(()=>(data?.items||[]).map(bill=>({...bill,serviceDateLabel:displayDate(bill.serviceDate),car:bill.registrationNumber||bill.vehicleCode||'',totalLabel:money(bill.totalCents),proofLabel:bill.proofId?'Uploaded':bill.paymentMethod==='Credit'?'Not required':'Missing',statusLabel:bill.status==='voided'?'Voided':'Issued'})),[data])
-  const displayed=useMemo(()=>rows.filter(row=>Object.entries(columnFilters).every(([key,value])=>!value||String(row[key]??'')===value)),[rows,columnFilters])
+  const displayed=rows
   const setColumn=(key,value)=>setColumnFilters(current=>({...current,[key]:value}))
   if(showWeights)return <WeightRecordsPage from={filters.from} to={filters.to} onBack={()=>setShowWeights(false)}/>
   return <div className="page purchase-archive expense-records">
@@ -31,9 +31,9 @@ export default function PurchaseBillsPage({onBack}){
       <button type="button" onClick={()=>{window.location.href=`/api/purchase-bills/export.xlsx?${query}`}}>{ui('Download Excel with Payment Proofs')}</button></div>
     {error&&<div className="data-error">{error}</div>}{loading&&!data&&<div className="data-loading">{ui('Loading Purchase Bills…')}</div>}
     <div className="archive-table" ref={tableRef}><table><thead><tr>{columns.map(([key,label])=>{
- const serverKey={paymentMethod:'paymentMethod',issuedBy:'employeeId'}[key]
- const options=key==='paymentMethod'?['Cash','Credit'].map(value=>({value,label:ui(value)})):key==='issuedBy'?(data?.employees||[]).map(e=>({value:String(e.id),label:e.name})):[...new Set(rows.map(row=>String(row[key]??'')).filter(Boolean))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})).map(value=>({value,label:['proofLabel','statusLabel'].includes(key)?ui(value):value}))
- return <FilterHeader key={key} label={ui(label)} value={serverKey?filters[serverKey]:columnFilters[key]||''} options={options} open={openFilter===key} onOpen={()=>setOpenFilter(key)} onClose={()=>setOpenFilter(null)} search={['billNumber','customerName','branchName'].includes(key)?filters.search:undefined} onSearch={['billNumber','customerName','branchName'].includes(key)?value=>setFilters(current=>({...current,search:value})):undefined} searchLabel="Search purchase bills" searchPlaceholder="PO No., Customer, Branch or Branch ID" onChange={value=>serverKey?setFilters(current=>({...current,[serverKey]:value})):setColumn(key,value)}/>
+ const translated=['expenseTypeLabel','category','paymentMethod','receiptLabel','proofLabel','statusLabel']
+ const options=(data?.filterOptions?.[key]||['',...new Set(rows.map(row=>String(row[key]??'')).filter(Boolean))]).map(value=>({value,label:value===''?ui('Blank'):translated.includes(key)?ui(value):value}))
+ return <FilterHeader key={key} label={ui(label)} value={columnFilters[key]??null} sortDirection={sort.key===key?sort.direction:null} onSort={direction=>setSort(direction?{key,direction}:{})} options={options} open={openFilter===key} onOpen={()=>setOpenFilter(key)} onClose={()=>setOpenFilter(null)} search={['billNumber','customerName','branchName'].includes(key)?filters.search:undefined} onSearch={['billNumber','customerName','branchName'].includes(key)?value=>setFilters(current=>({...current,search:value})):undefined} searchLabel="Search purchase bills" searchPlaceholder="PO No., Customer, Branch or Branch ID" onChange={value=>setColumn(key,value)}/>
  })}</tr></thead><tbody>{displayed.map(bill=><BillRow key={bill.id} bill={bill} expanded={open===bill.id} toggle={()=>setOpen(open===bill.id?null:bill.id)}/>)}</tbody></table>{!loading&&data&&!displayed.length&&<div className="archive-empty">{ui('No Purchase Bills found for this selection.')}</div>}</div>
     <TableBottomScroll scrollRef={tableRef}/>
   </div>

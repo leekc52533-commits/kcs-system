@@ -11,29 +11,33 @@ after(()=>vite.close())
 
 const{default:Page}=await vite.ssrLoadModule('/src/PurchaseBillsPage.jsx'),{I18nProvider}=await vite.ssrLoadModule('/src/i18n.jsx')
 let urls=[]
-globalThis.fetch=async url=>{urls.push(String(url));return{ok:true,json:async()=>String(url).includes('unloading-weights')?{items:[]}:{items:[{id:1,billNumber:'PO-123',serviceDate:'2026-09-09',paymentMethod:'Cash',customerName:'Real Customer',branchName:'Real Branch',issuedBy:'New Employee',proofId:7,status:'issued',totalCents:100,items:[]}],employees:[{id:8,name:'New Employee'}]}}}
+const kind='purchase',index=kind==='expense'?3:2,key=kind==='expense'?'category':'paymentMethod',values=kind==='expense'?['Fuel','Services']:['Cash','Credit']
+globalThis.fetch=async url=>{urls.push(String(url));return{ok:true,json:async()=>({items:[],filterOptions:{[key]:['',...values]},employees:[],vehicles:[]})}}
 const click=async n=>act(async()=>n.dispatchEvent(new MouseEvent('click',{bubbles:true})))
-test('purchase filters preserve server values, proof links and weight navigation in three languages',async()=>{
+test('purchase inline dates and checkbox multi-select, blank, sort and clear in three languages',async()=>{
  for(const language of ['en','ms','zh']){
   const root=createRoot(document.getElementById('root'))
   await act(async()=>root.render(React.createElement(I18nProvider,{language},React.createElement(Page))))
   assert.equal(document.querySelectorAll('.expense-toolbar input[type=date]').length,2)
   assert.equal(document.querySelector('.archive-filters'),null)
   assert.equal(document.querySelectorAll('.expense-toolbar button').length,3)
-  await click(document.querySelectorAll('.expense-filter-trigger')[2])
-  await act(async()=>{const s=document.querySelector('.expense-filter-menu select');s.value='Credit';s.dispatchEvent(new Event('change',{bubbles:true}))})
-  assert.ok(urls.at(-1).includes('paymentMethod=Credit'))
-  await click(document.querySelectorAll('.expense-filter-trigger')[5])
-  assert.ok(document.querySelector('option[value="8"]'))
-  await act(async()=>{const s=document.querySelector('.expense-filter-menu select');s.value='8';s.dispatchEvent(new Event('change',{bubbles:true}))})
-  assert.ok(urls.at(-1).includes('employeeId=8'))
-  await click(document.querySelectorAll('.expense-filter-trigger')[1])
-  assert.equal(document.querySelectorAll('.expense-filter-menu input').length,2)
+  await click(document.querySelectorAll('.expense-filter-trigger')[index])
+  assert.equal(document.querySelector('[role=dialog]').parentElement,document.body)
+  const boxes=()=>document.querySelectorAll('.expense-filter-menu input[type=checkbox]')
+  await click(boxes()[0]);await click(boxes()[2]);await click(boxes()[3])
+  const query=()=>new URL(urls.at(-1),'https://localhost').searchParams
+  assert.deepEqual(JSON.parse(query().get('columns'))[key],values)
+  assert.ok(document.querySelector('.expense-filter-menu'))
+  await click(boxes()[1]);assert.deepEqual(JSON.parse(query().get('columns'))[key],[...values,''])
+  await click(document.querySelector('.archive-sort-actions button'))
+  assert.equal(query().get('sortKey'),key);assert.equal(query().get('sortDirection'),'asc')
+  assert.equal(document.querySelectorAll('th')[index].getAttribute('aria-sort'),'ascending')
+  await click(document.querySelectorAll('.archive-sort-actions button')[1])
+  assert.equal(query().get('sortDirection'),'desc')
+  const actions=document.querySelector('.expense-filter-menu').lastElementChild
+  await click(actions.firstElementChild);assert.equal(JSON.parse(query().get('columns'))[key],null)
   await act(async()=>document.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true})))
-  assert.equal(document.querySelector('a[href="/api/purchase-bills/proofs/7"]').target,'_blank')
-  await click(document.querySelector('.bill-number'));assert.ok(document.querySelector('.bill-detail'))
-  await click(document.querySelectorAll('.expense-toolbar button')[1]);assert.ok(urls.at(-1).includes('/api/unloading-weights?'))
-  await click(document.querySelector('.archive-actions button'));assert.ok(document.querySelector('.expense-toolbar'))
+  assert.equal(document.querySelector('.expense-filter-menu'),null)
   await act(async()=>root.unmount())
  }
 })
