@@ -11,3 +11,14 @@ export function backOrFallback(fallback,message){
   else fallback()
   return true
 }
+
+// In-app links must remain usable when a fresh supervisor entry starts at Overview.
+export function navigateWithinApp(url,message){
+  if(!confirmNavigation(message))return false
+  const target=new URL(url,window.location.href)
+  if(target.origin!==window.location.origin)return false
+  dirty=false
+  window.history.pushState({kcsPage:target.searchParams.get('page')||'dashboard'},'',target)
+  window.dispatchEvent(new PopStateEvent('popstate',{state:window.history.state}))
+  return true
+}
