@@ -26,6 +26,7 @@ export function employeeMatchesDirectory(employee, filters) {
   const query = (filters.search || '').trim().toLowerCase()
   const searchable = `${employee.name || ''} ${employee.employeeCode || ''} ${employee.phone || ''} ${employee.nationalIdMasked || ''} ${employee.nationalIdSuffix || ''}`.toLowerCase()
   if (query && !searchable.includes(query)) return false
+  if (Object.entries(filters.columns || {}).some(([column, chosen]) => Array.isArray(chosen) && !chosen.includes(String(employeeDirectoryValue(employee, column)).trim()))) return false
   const selected = (value) => Array.isArray(value) ? value : value ? [value] : []
   const statuses = selected(filters.status)
   const roles = selected(filters.jobRole)
@@ -40,10 +41,13 @@ export function employeeMatchesDirectory(employee, filters) {
   return true
 }
 
-const currentPeriod = (employee) => [...(employee.employmentPeriods || [])].reverse().find((period) => !period.endDate && period.employmentStatus === 'active')
+export const employeeDirectoryPeriod = (employee) => {
+  const periods = [...(employee.employmentPeriods || [])].reverse()
+  return periods.find(period => !period.endDate && period.employmentStatus === 'active') || periods[0]
+}
 
 export function employeeDirectoryValue(employee, column) {
-  const period = currentPeriod(employee)
+  const period = employeeDirectoryPeriod(employee)
   return ({
     employeeCode: employee.employeeCode,
     name: employee.name,
