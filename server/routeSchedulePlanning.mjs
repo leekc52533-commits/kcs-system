@@ -1,3 +1,4 @@
+import {sundaySettings} from './sundayPlanning.mjs'
 import {planningDate} from '../shared/planningDates.js'
 import {existingRouteEvidence} from './routePlanningEvidence.mjs'
 import {parseScheduleWeekdays,recurrenceTypeForFrequency,validateRecurrenceConfig,weekdayName,isSundayCustomerAllowed,nextCollectionDate} from '../shared/scheduleRecurrence.js'
@@ -6,17 +7,20 @@ export const WEEKDAYS=['Sunday','Monday','Tuesday','Wednesday','Thursday','Frida
 export function branchRouteRows(db,branchId){return db.prepare('SELECT r.* FROM weekly_route_plan_stops r JOIN weekly_route_plans p ON p.id=r.plan_id WHERE p.is_active=1 AND r.branch_id=? ORDER BY r.weekday,r.stop_sequence').all(branchId)}
 
 // Used inside the schedule transaction: schedule and fixed Route membership commit together.
-export function syncScheduleRouteRows(db,branchId,after,routeNumber){
+function syncScheduleRouteRowsInternal(db,branchId,after,routeNumber){
  const plan=db.prepare('SELECT id FROM weekly_route_plans WHERE is_active=1').get();if(!plan)return
  const rows=branchRouteRows(db,branchId),routes=[...new Set(rows.map(r=>r.route_number))]
  const requested=routeNumber==null?null:Number(routeNumber)
+ const special=after.sundayRouteNumber
+ if(special!=null&&(!Number.isInteger(special)||special<1||special>5))throw Object.assign(new Error('请选择有效的星期日执行路线'),{statusCode:400})
  if(requested!=null&&(!Number.isInteger(requested)||requested<1||requested>5))throw new Error('Invalid Route')
  const weekdays=after.weekdays.map(d=>WEEKDAYS.indexOf(d))
  if(weekdays.some(d=>d<0))throw new Error('Invalid weekday')
+ if(requested){for(const row of rows){if(row.route_number===requested)continue;const ref=db.prepare('SELECT * FROM weekly_route_plan_stops WHERE plan_id=? AND route_number=? ORDER BY weekday LIMIT 1').get(plan.id,requested);if(!ref)throw Object.assign(new Error('所选 ROUTE 尚无基础路线'),{statusCode:400});const seq=db.prepare('SELECT COALESCE(MAX(stop_sequence),0)+1 n FROM weekly_route_plan_stops WHERE plan_id=? AND weekday=? AND (route_number=? OR vehicle_registration_number=?)').get(plan.id,row.weekday,requested,ref.vehicle_registration_number).n;db.prepare('UPDATE weekly_route_plan_stops SET route_number=?,vehicle_registration_number=?,stop_sequence=? WHERE plan_id=? AND weekday=? AND branch_id=?').run(requested,ref.vehicle_registration_number,seq,plan.id,row.weekday,branchId)}}
  const missing=weekdays.filter(d=>!rows.some(r=>r.weekday===d))
  if(missing.length&&routes.length>1&&!requested)throw new Error('此客户属于多条 ROUTE，请在派车中指定新增星期的 ROUTE。')
  const route=requested||routes[0]
- if(missing.length&&!route)throw new Error('请先在派车中选择客户所属 ROUTE。')
+ if(missing.length&&!route)throw Object.assign(new Error('请选择客户所属 ROUTE，当前没有可沿用的固定路线。'),{statusCode:400})
  for(const weekday of missing){
   const ref=rows.find(r=>r.route_number===route)||db.prepare('SELECT * FROM weekly_route_plan_stops WHERE plan_id=? AND route_number=? ORDER BY weekday,stop_sequence LIMIT 1').get(plan.id,route)
   if(!ref)throw new Error('所选 ROUTE 尚无基础路线，请先确认路线资料。')
@@ -50,7 +54,7 @@ export function routeScheduleProposals(db,today=kuchingDate()){
     // Mirror the schedule editor's Sunday rule before classifying an automatic proposal.
     // Existing Sunday schedules are grandfathered; a Route row alone is not approval.
     const previousWeekdays=parseScheduleWeekdays(s?s.days_of_week:b.assigned_weekdays)
-    const sundayConflict=weekdays.includes('Sunday')&&!previousWeekdays.includes('Sunday')&&!isSundayCustomerAllowed({customerName:b.customer_name,branchName:b.branch_name})
+    const sundayConflict=weekdays.includes('Sunday')&&!previousWeekdays.includes('Sunday')&&!isSundayCustomerAllowed({customerName:b.customer_name,branchName:b.branch_name})&&!sundaySettings(db,b.id).sundayConfirmed
     result.push({...item,automatic:!sundayConflict,...(sundayConflict?{issueCode:'SUNDAY_REVIEW_REQUIRED',issue:'路线表包含星期日，但现有排程未获星期日许可；保留原排程，请主管核对收货星期'}:{}),proposal:{frequency:frequencies[weekdays.length],weekdays,anchorDate:planningDate(s?.anchor_date)||'',effectiveDate:planningDate(s?.effective_date)||today,monthlyOccurrence:null}})
    }
   }else{
@@ -80,4 +84,8 @@ export function routeScheduleProposals(db,today=kuchingDate()){
   }
  }
  return result
+}
+
+export function syncScheduleRouteRows(db,branchId,after,routeNumber){
+ try{return syncScheduleRouteRowsInternal(db,branchId,after,routeNumber)}catch(e){if(!e.code)e.statusCode=e.statusCode||400;throw e}
 }
