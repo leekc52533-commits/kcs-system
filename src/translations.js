@@ -3690,6 +3690,33 @@ operationalUiMessages.push(
  ['Find an option','Find an option','Cari pilihan','搜索选项'],['Select value','Select value','Pilih nilai','选择内容'],
  ['Close','Close','Tutup','关闭']
 )
+operationalUiMessages.push(
+ ['Unloading Weight Records','Unloading Weight Records','Rekod berat pemunggahan','卸货重量记录'],
+ ['Download Excel with Payment Proofs','Download Excel with Payment Proofs','Muat turun Excel berserta bukti bayaran','下载Excel（含付款证明）'],
+ ['Search purchase bills','Search purchase bills','Cari bil pembelian','搜索收购单据'],
+ ['PO No., Customer, Branch or Branch ID','PO No., Customer, Branch or Branch ID','No. PO, pelanggan, cawangan atau ID cawangan','单据号码、客户、分店或分店编号'],
+ ['Loading Purchase Bills…','Loading Purchase Bills…','Memuatkan bil pembelian…','正在加载收购单据…'],
+ ['No Purchase Bills found for this selection.','No Purchase Bills found for this selection.','Tiada bil pembelian untuk pilihan ini.','没有符合条件的收购单据。'],
+ ['Issued By','Issued By','Dikeluarkan oleh','开单员工'],
+ ['View proof','View proof','Lihat bukti','查看付款证明'],
+ ['Bill Items','Bill Items','Item bil','单据明细'],
+ ['Item Total','Item Total','Jumlah item','项目合计'],
+ ['Issued at','Issued at','Dikeluarkan pada','开单时间'],
+ ['Electronic records cannot be deleted.','Electronic records cannot be deleted.','Rekod elektronik tidak boleh dipadam.','电子记录不能删除。'],
+ ['Uploaded','Uploaded','Dimuat naik','已上传'],['Missing','Missing','Tiada','缺少'],
+ ['Not required','Not required','Tidak diperlukan','无需提供'],
+ ['Issued','Issued','Dikeluarkan','已开单'],['Voided','Voided','Dibatalkan','已作废']
+)
+operationalUiMessages.push(
+ ['PO No.','PO No.','No. PO','收购单号'],
+ ['Payment Method','Payment Method','Kaedah bayaran','付款方式'],
+ ['Customer Name','Customer Name','Nama pelanggan','客户名称'],
+ ['Car','Car','Kenderaan','车辆'],
+ ['Payment Proof','Payment Proof','Bukti bayaran','付款证明'],
+ ['Quantity','Quantity','Kuantiti','数量'],
+ ['Unit','Unit','Unit','单位'],
+ ['Price','Price','Harga','单价']
+)
 for(const row of operationalUiMessages)for(const text of row)operationalAliases.set(normalizeUiText(text),row)
 export function translateUi(language,source,variables={}){
   const value=String(source??''),normalized=normalizeUiText(value),row=operationalAliases.get(normalized)
