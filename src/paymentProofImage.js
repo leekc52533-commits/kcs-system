@@ -15,9 +15,19 @@ const htmlImage=file=>new Promise((resolve,reject)=>{
 
 export async function processPaymentProof(file,{createBitmap=globalThis.createImageBitmap,createCanvas=()=>document.createElement('canvas'),loadImage=htmlImage}={}){
   if(!file)throw new Error('Select a payment proof photo.')
-  const type=String(file.type||'').toLowerCase()
-  if(!supported.has(type))throw new Error('Unsupported photo format. Use JPEG, PNG, HEIC or WebP.')
   if(!file.size||file.size>SOURCE_LIMIT)throw new Error('The original photo is too large. Use a photo smaller than 25 MB.')
+  let type=String(file.type||'').toLowerCase()
+  // Some Android camera providers omit the MIME type. Inspect bytes, not the
+  // extension, so a PDF renamed to .jpg is still rejected.
+  if((!type||type==='application/octet-stream')&&file.slice){
+    const bytes=new Uint8Array(await file.slice(0,16).arrayBuffer()),ascii=(start,end)=>String.fromCharCode(...bytes.slice(start,end))
+    if(bytes[0]===255&&bytes[1]===216&&bytes[2]===255)type='image/jpeg'
+    else if(bytes[0]===137&&ascii(1,4)==='PNG'&&bytes[4]===13&&bytes[5]===10&&bytes[6]===26&&bytes[7]===10)type='image/png'
+    else if(ascii(0,4)==='RIFF'&&ascii(8,12)==='WEBP')type='image/webp'
+    else if(ascii(4,8)==='ftyp'&&['heic','heix','hevc','hevx','mif1'].includes(ascii(8,12)))type='image/heic'
+    if(supported.has(type)){const name=file.name;file=new File([file],name||'camera',{type})}
+  }
+  if(!supported.has(type))throw new Error('Unsupported photo format. Use JPEG, PNG, HEIC or WebP.')
   let bitmap
   if(typeof createBitmap==='function'){
     try{bitmap=await createBitmap(file,{imageOrientation:'from-image'})}catch{try{bitmap=await createBitmap(file)}catch{/* Use the broadly supported HTML Image fallback below. */}}
