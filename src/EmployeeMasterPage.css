@@ -22,3 +22,11 @@
 .employee-account-card>fieldset{border:0;padding:0;margin:0;min-width:0;display:grid;gap:12px}
 
 .employee-master-v2 .employee-toolbar.employee-groups{display:flex;flex-wrap:nowrap;align-items:center;gap:10px;overflow-x:auto;max-width:100%;padding:8px 0;margin:0 0 18px;scrollbar-width:thin}.employee-master-v2 .employee-toolbar.employee-groups>button{flex:0 0 auto;white-space:nowrap;min-height:44px;padding:10px 18px;border:1px solid #bdd5ce;border-radius:12px;background:#fff;color:#24584b;font-weight:800}.employee-master-v2 .employee-toolbar.employee-groups>button.active{background:#186e5c;color:#fff}.employee-master-v2 .employee-toolbar .employee-back{min-width:48px}
+
+/* Match the continuous archive header, without browser-default button boxes. */
+.employee-master-v2 .employee-directory-table th{background:#f0f5f7;color:#526675;vertical-align:middle;min-width:9em}
+.employee-master-v2 .employee-directory-table .expense-filter-trigger{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:44px;padding:0;border:0;border-radius:0;box-shadow:none;background:transparent;color:inherit;font:inherit;font-weight:800;text-align:left;cursor:pointer}
+.employee-master-v2 .employee-directory-table .archive-filter-label{min-width:0;max-width:12em;white-space:normal;word-break:normal;overflow-wrap:normal;line-height:1.35}
+.employee-master-v2 .employee-directory-table .expense-filter-trigger>span[aria-hidden]{flex:none;white-space:nowrap}
+.employee-master-v2 .employee-directory-table .expense-filter-trigger.active{color:#186e5c}
+.employee-master-v2 .employee-directory-table .expense-filter-trigger:focus-visible{outline:2px solid #186e5c;outline-offset:4px}
