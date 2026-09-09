@@ -111,6 +111,7 @@ export function updateAccount(id,payload,actor,meta={},database=defaultDb){
   const duplicate=database.prepare('SELECT id FROM auth_accounts WHERE username=? COLLATE NOCASE AND id<>?').get(requestedUsername,id)
   if(duplicate)throw new Error('用户名已经使用')
   const isActive=payload.isActive==null?current.is_active:(payload.isActive?1:0)
+  if(isActive&&current.employment_status!=='active'){const error=new Error('STAFF_ACCOUNT_INELIGIBLE');error.code='STAFF_ACCOUNT_INELIGIBLE';throw error}
   if(currentRole==='owner_admin'&&!isActive){
     const activeOwners=database.prepare("SELECT COUNT(*) count FROM auth_accounts WHERE is_active=1 AND COALESCE(system_role,role) IN ('owner_admin','admin')").get().count
     if(activeOwners<=1)throw new Error('不可停用最后一个 Owner Admin')
@@ -122,6 +123,7 @@ export function updateAccount(id,payload,actor,meta={},database=defaultDb){
     change(database,current,'is_active',current.is_active,isActive,actor)
     database.prepare(`UPDATE auth_accounts SET username=?,role=?,system_role=?,is_active=?,disabled_at=CASE WHEN ?=0 THEN CURRENT_TIMESTAMP ELSE NULL END,failed_login_count=CASE WHEN ? THEN 0 ELSE failed_login_count END,locked_until=CASE WHEN ? THEN NULL ELSE locked_until END,updated_at=CURRENT_TIMESTAMP WHERE id=?`)
       .run(requestedUsername,legacyRole(requestedRole),requestedRole,isActive,isActive,payload.unlock?1:0,payload.unlock?1:0,id)
+    if(!isActive||payload.password)database.prepare('UPDATE auth_sessions SET revoked_at=CURRENT_TIMESTAMP WHERE account_id=? AND revoked_at IS NULL').run(id)
     if(payload.password)database.prepare(`UPDATE auth_accounts SET password_hash=?,must_change_password=1,password_changed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(hashPassword(payload.password),id)
     if(Array.isArray(payload.permissions)){
       if(!isOwner(actor))throw new Error('只有Owner Admin可以修改额外权限')
