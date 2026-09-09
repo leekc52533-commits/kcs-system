@@ -1,3 +1,4 @@
+import {SUNDAY_GROUPS,isSunday,sundayGroup,sundayDutyRoute,executionRoute,sundaySettings} from './sundayPlanning.mjs'
 import {routeScheduleProposals} from './routeSchedulePlanning.mjs'
 import { createHash } from 'node:crypto'
 import { db as defaultDb } from './database.mjs'
@@ -87,7 +88,7 @@ function carryForwardVehicleDriver(database,day,vehicleId){
   if(targetTrips.some(row=>row.driverId))return{updated:false,reason:'TARGET_DRIVER_EXISTS'}
   const candidates=database.prepare(`SELECT d.id dispatchId,d.vehicle_id vehicleId,dd.dispatch_date sourceDate,d.driver_id driverId,d.driver_employment_period_id driverEmploymentPeriodId,e.job_role jobRole
     FROM dispatch_trips dt JOIN dispatch_days dd ON dd.id=dt.dispatch_day_id JOIN dispatches d ON d.id=dt.dispatch_id LEFT JOIN employees e ON e.id=d.driver_id
-    WHERE dd.dispatch_date<?
+    WHERE dd.dispatch_date<? AND strftime('%w',dd.dispatch_date)<>'0'
     ORDER BY dd.dispatch_date DESC,dt.trip_number,dt.id`).all(targetDate)
   const source=candidates.map(row=>{
     const original=database.prepare(`SELECT j.value FROM dispatch_change_logs l,json_each(l.before_json,'$.trips') j WHERE l.change_type='route_day_handover' AND json_extract(j.value,'$.id')=? ORDER BY l.id LIMIT 1`).get(row.dispatchId)
@@ -116,6 +117,35 @@ export function carryForwardVehicleDrivers({startDate=iso(),endDate=null}={},dat
   return withImmediateTransaction(database,()=>{for(const day of days){const vehicles=database.prepare('SELECT DISTINCT vehicle_id vehicleId FROM daily_route_assignments WHERE dispatch_day_id=? AND vehicle_id IS NOT NULL ORDER BY vehicle_id').all(day.id);for(const vehicle of vehicles){const result=carryForwardVehicleDriver(database,day,vehicle.vehicleId);if(result.updated)carried.push(result)}}return{startDate:start,endDate:endDate?end:null,daysChecked:days.length,driversCarried:carried.length,carried}})
 }
 
+// Sunday grouping changes only untouched draft days. Approved/executed work stays intact.
+function prepareSundayDay(database,day){
+ if(!isSunday(day.dispatch_date)||database.prepare('SELECT 1 FROM sunday_dispatch_setup WHERE dispatch_day_id=?').get(day.id))return null
+ const manual=database.prepare("SELECT 1 FROM dispatch_change_logs WHERE dispatch_day_id=? AND change_type IN ('daily_route_vehicle_assigned','vehicle_assignment_updated','route_day_handover','route_customer_adjusted','temporary_stops_assigned_to_route') LIMIT 1").get(day.id)
+ if(protectedDayReason(database,day)||database.prepare('SELECT 1 FROM daily_route_approvals WHERE dispatch_day_id=?').get(day.id)||manual)return{date:day.dispatch_date,kind:'sunday_review',message:'星期日已有主管安排或批准，保留原安排；请主管核对两组合并任务。'}
+ if(database.prepare('SELECT 1 FROM purchase_bills WHERE dispatch_day_id=? UNION SELECT 1 FROM unloading_weight_records WHERE dispatch_day_id=?').get(day.id,day.id))return{date:day.dispatch_date,kind:'sunday_review',message:'星期日已有单据或卸货记录，保留原安排，请主管核对。'}
+ const rows=database.prepare("SELECT ds.* FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id WHERE dt.dispatch_day_id=? AND ds.status<>'cancelled' ORDER BY ds.route_number,ds.route_stop_sequence,ds.id").all(day.id)
+ if(rows.some(r=>r.arrived_at||r.completed_at||database.prepare('SELECT 1 FROM purchase_bills WHERE dispatch_stop_id=?').get(r.id)))return{date:day.dispatch_date,kind:'sunday_review',message:'星期日已有执行记录，保留原安排，请主管核对。'}
+ const pool=ensureUnassignedTrip(database,day),counters=new Map()
+ let sequence=database.prepare('SELECT COALESCE(MAX(stop_sequence),0) n FROM dispatch_stops WHERE dispatch_id=? AND stop_sequence>0').get(pool.dispatch_id).n
+ for(const row of rows){const route=executionRoute(database,row.branch_id,day.dispatch_date,row.route_number);const n=(counters.get(route)||0)+1;counters.set(route,n);database.prepare('UPDATE dispatch_stops SET dispatch_id=?,dispatch_trip_id=?,stop_sequence=?,route_number=?,route_stop_sequence=? WHERE id=?').run(pool.dispatch_id,pool.id,++sequence,route,route?n:null,row.id)}
+ database.prepare('DELETE FROM daily_route_assignments WHERE dispatch_day_id=?').run(day.id)
+ database.prepare('DELETE FROM dispatch_vehicle_assistants WHERE dispatch_day_id=?').run(day.id)
+ database.prepare('UPDATE dispatches SET driver_id=NULL,assistant_id=NULL,driver_employment_period_id=NULL,assistant_employment_period_id=NULL WHERE id IN(SELECT dispatch_id FROM dispatch_trips WHERE dispatch_day_id=?)').run(day.id)
+ database.prepare('INSERT INTO sunday_dispatch_setup(dispatch_day_id) VALUES(?)').run(day.id)
+ invalidateDispatchDay(database,day.dispatch_date,'sunday_groups_prepared','day',day.id,null,{groups:SUNDAY_GROUPS},'System')
+ return null
+}
+function carrySundayCrew(database,day,vehicleId){
+ if(database.prepare('SELECT 1 FROM dispatch_vehicle_assistants WHERE dispatch_day_id=? AND vehicle_id=?').get(day.id,vehicleId)||database.prepare("SELECT 1 FROM dispatch_change_logs WHERE dispatch_day_id=? AND change_type IN ('vehicle_assignment_updated','route_day_handover')").get(day.id))return
+ const source=database.prepare("SELECT a.dispatch_day_id dayId FROM dispatch_vehicle_assistants a JOIN dispatch_days d ON d.id=a.dispatch_day_id WHERE a.vehicle_id=? AND d.dispatch_date<? AND strftime('%w',d.dispatch_date)<>'0' ORDER BY d.dispatch_date DESC LIMIT 1").get(vehicleId,day.dispatch_date)
+ if(!source)return
+ for(const row of database.prepare('SELECT employee_id id FROM dispatch_vehicle_assistants WHERE dispatch_day_id=? AND vehicle_id=?').all(source.dayId,vehicleId)){
+ const usable=database.prepare("SELECT 1 FROM employees e WHERE e.id=? AND e.is_active=1 AND e.employment_status='active' AND (lower(e.job_role) IN ('assistant','crew','attendant / crew') OR EXISTS(SELECT 1 FROM employee_job_roles r WHERE r.employee_id=e.id AND r.role='Attendant / Crew' AND r.is_active=1)) AND NOT EXISTS(SELECT 1 FROM route_employee_availability a WHERE a.employee_id=e.id AND a.availability_date=? AND a.status<>'available')").get(row.id,day.dispatch_date)
+ const busy=database.prepare('SELECT 1 FROM dispatch_vehicle_assistants WHERE dispatch_day_id=? AND employee_id=? UNION SELECT 1 FROM dispatches d JOIN dispatch_trips t ON t.dispatch_id=d.id WHERE t.dispatch_day_id=? AND (d.driver_id=? OR d.assistant_id=?)').get(day.id,row.id,day.id,row.id,row.id)
+ if(usable&&!busy)database.prepare('INSERT INTO dispatch_vehicle_assistants(dispatch_day_id,vehicle_id,employee_id,employment_period_id) VALUES(?,?,?,?)').run(day.id,vehicleId,row.id,currentEmploymentPeriod(database,row.id))
+ }
+}
+
 // Fill only missing assignments; explicit choices (including clearing) always win.
 function fillRouteVehicleDefaults(database,startDate,onlyDayIds=null){
   let vehiclesCarried=0
@@ -123,13 +153,15 @@ function fillRouteVehicleDefaults(database,startDate,onlyDayIds=null){
   for(const day of days){
     if(onlyDayIds&&!onlyDayIds.has(day.id))continue
     if(protectedDayReason(database,day))continue
+    if(isSunday(day.dispatch_date)&&!database.prepare('SELECT 1 FROM sunday_dispatch_setup WHERE dispatch_day_id=?').get(day.id))continue
     const routes=database.prepare("SELECT DISTINCT ds.route_number routeNumber FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id WHERE dt.dispatch_day_id=? AND ds.route_number IS NOT NULL AND ds.status<>'cancelled' ORDER BY ds.route_number").all(day.id)
     for(const {routeNumber} of routes){
       if(database.prepare('SELECT 1 FROM daily_route_assignments WHERE dispatch_day_id=? AND route_number=?').get(day.id,routeNumber))continue
       if(database.prepare("SELECT 1 FROM dispatch_change_logs WHERE dispatch_day_id=? AND entity_type='route' AND entity_id=? AND change_type='daily_route_vehicle_assigned' LIMIT 1").get(day.id,String(routeNumber)))continue
-      const source=database.prepare(`SELECT COALESCE((SELECT json_extract(l.before_json,'$.vehicleId') FROM dispatch_change_logs l WHERE l.dispatch_day_id=dd.id AND l.change_type='route_day_handover' AND l.entity_id=CAST(a.route_number AS TEXT) ORDER BY l.id LIMIT 1),a.vehicle_id) vehicleId,dd.dispatch_date sourceDate FROM daily_route_assignments a JOIN dispatch_days dd ON dd.id=a.dispatch_day_id WHERE a.route_number=? AND dd.dispatch_date<? ORDER BY dd.dispatch_date DESC LIMIT 1`).get(routeNumber,day.dispatch_date)
+      const duty=isSunday(day.dispatch_date)&&sundayGroup(routeNumber)?sundayDutyRoute(day.dispatch_date,sundayGroup(routeNumber)):routeNumber
+      const source=database.prepare(`SELECT COALESCE((SELECT json_extract(l.before_json,'$.vehicleId') FROM dispatch_change_logs l WHERE l.dispatch_day_id=dd.id AND l.change_type='route_day_handover' AND l.entity_id=CAST(a.route_number AS TEXT) ORDER BY l.id LIMIT 1),a.vehicle_id) vehicleId,dd.dispatch_date sourceDate FROM daily_route_assignments a JOIN dispatch_days dd ON dd.id=a.dispatch_day_id WHERE a.route_number=? AND dd.dispatch_date<? AND strftime('%w',dd.dispatch_date)<>'0' ORDER BY dd.dispatch_date DESC LIMIT 1`).get(duty,day.dispatch_date)
       if(!source?.vehicleId)continue
-      const cleared=database.prepare("SELECT 1 FROM dispatch_change_logs l JOIN dispatch_days dd ON dd.id=l.dispatch_day_id WHERE dd.dispatch_date>=? AND dd.dispatch_date<? AND l.entity_type='route' AND l.entity_id=? AND l.change_type='daily_route_vehicle_assigned' AND json_extract(l.after_json,'$.vehicleId') IS NULL LIMIT 1").get(source.sourceDate,day.dispatch_date,String(routeNumber))
+      const cleared=database.prepare("SELECT 1 FROM dispatch_change_logs l JOIN dispatch_days dd ON dd.id=l.dispatch_day_id WHERE dd.dispatch_date>=? AND dd.dispatch_date<? AND strftime('%w',dd.dispatch_date)<>'0' AND l.entity_type='route' AND l.entity_id=? AND l.change_type='daily_route_vehicle_assigned' AND json_extract(l.after_json,'$.vehicleId') IS NULL LIMIT 1").get(source.sourceDate,day.dispatch_date,String(duty))
       if(cleared)continue
       const usable=database.prepare("SELECT 1 FROM vehicles v WHERE v.id=? AND v.operational_status IN ('available','active') AND v.status IN ('available','assigned') AND (v.is_temporary=0 OR v.temporary_date=?) AND NOT EXISTS(SELECT 1 FROM route_vehicle_availability va WHERE va.vehicle_id=v.id AND va.availability_date=? AND va.status<>'available')").get(source.vehicleId,day.dispatch_date,day.dispatch_date)
       if(!usable||database.prepare('SELECT 1 FROM daily_route_assignments WHERE dispatch_day_id=? AND vehicle_id=?').get(day.id,source.vehicleId))continue
@@ -139,11 +171,11 @@ function fillRouteVehicleDefaults(database,startDate,onlyDayIds=null){
       let sequence=database.prepare('SELECT COALESCE(MAX(stop_sequence),0) n FROM dispatch_stops WHERE dispatch_id=? AND stop_sequence>0').get(target.dispatch_id).n
       for(const stop of stops)database.prepare('UPDATE dispatch_stops SET dispatch_id=?,dispatch_trip_id=?,stop_sequence=? WHERE id=?').run(target.dispatch_id,target.id,++sequence,stop.id)
       database.prepare("INSERT INTO daily_route_assignments(dispatch_day_id,route_number,vehicle_id,assigned_by) VALUES(?,?,?,'System default')").run(day.id,routeNumber,source.vehicleId)
-      normalizeTripSequences(database,[...stops.map(s=>s.tripId),target.id])
+      // Existing sequence gaps reserve cancelled history; append without compaction.
       invalidateDispatchDay(database,day.dispatch_date,'route_vehicle_carried_forward','route',routeNumber,null,source,'System')
       vehiclesCarried++
     }
-    for(const row of database.prepare('SELECT vehicle_id vehicleId FROM daily_route_assignments WHERE dispatch_day_id=? AND vehicle_id IS NOT NULL').all(day.id))carryForwardVehicleDriver(database,day,row.vehicleId)
+    for(const row of database.prepare('SELECT vehicle_id vehicleId FROM daily_route_assignments WHERE dispatch_day_id=? AND vehicle_id IS NOT NULL').all(day.id)){carryForwardVehicleDriver(database,day,row.vehicleId);if(isSunday(day.dispatch_date))carrySundayCrew(database,day,row.vehicleId)}
   }
   return{vehiclesCarried}
 }
@@ -194,6 +226,7 @@ export function applyWeeklyRoutePlanToDay(database,day){
     const choice=JSON.parse(log.after_json||'{}'),stop=allStops.find(item=>item.id===Number(log.entity_id)&&item.status!=='cancelled')
     if(stop&&choice.date===day.dispatch_date)overrides.set(stop.branchId,{branchId:stop.branchId,routeNumber:choice.routeNumber,tripNumber:1,stopSequence:choice.routeStopSequence||9999})
   }
+  routes=routes.map(r=>({...r,routeNumber:executionRoute(database,r.branchId,day.dispatch_date,r.routeNumber)}))
   routes=[...routes.filter(item=>!overrides.has(item.branchId)),...overrides.values()]
 
   const assignments=new Map(database.prepare('SELECT route_number routeNumber,vehicle_id vehicleId FROM daily_route_assignments WHERE dispatch_day_id=?').all(day.id).map(row=>[row.routeNumber,row.vehicleId]))
@@ -248,6 +281,7 @@ function generateRange({startDate=iso(),generatedBy='Supervisor',count=7,onlyMis
         database.prepare(`UPDATE dispatch_stops SET status='cancelled',superseded_reason='Schedule exception',superseded_at=CURRENT_TIMESTAMP,superseded_by='System' WHERE source_schedule_id=? AND dispatch_trip_id IN(SELECT id FROM dispatch_trips WHERE dispatch_day_id=?) AND status<>'completed'`).run(item.schedule_id,day.id)
       }
       applyWeeklyRoutePlanToDay(database,day)
+      prepareSundayDay(database,day)
     }
     fillRouteVehicleDefaults(database,start,onlyMissing?createdDayIds:null)
     database.exec('COMMIT')
@@ -259,8 +293,9 @@ export function ensureRollingWeek({startDate=iso(),generatedBy='Supervisor'}={},
   const start=iso(startDate),end=addDays(start,6)
   const count=database.prepare('SELECT COUNT(*) n FROM dispatch_days WHERE dispatch_date BETWEEN ? AND ?').get(start,end).n
   if(count!==7)generateRange({startDate:start,generatedBy,count:7,onlyMissing:true},database)
+  const sundayReview=withImmediateTransaction(database,()=>{const reviews=[];for(let i=0;i<7;i++){const d=dayByDate(database,addDays(start,i));if(d){const warning=prepareSundayDay(database,d);if(warning)reviews.push(warning)}}fillRouteVehicleDefaults(database,start);return reviews})
   const scheduleReview=reconcileScheduleWindow({startDate:start,changedBy:generatedBy},database)
-  return {...getDispatchWeek({startDate:start},database),scheduleReview,planningReview:routeScheduleProposals(database,start)}
+  return {...getDispatchWeek({startDate:start},database),scheduleReview:[...sundayReview,...scheduleReview],planningReview:routeScheduleProposals(database,start)}
 }
 export function generateWeek(payload={},database=defaultDb){return generateRange({...payload,count:7},database)}
 export function generateDay(payload={},database=defaultDb){return generateRange({...payload,count:1},database)}
@@ -319,7 +354,7 @@ function dayView(database, day) {
   const assignmentRows=database.prepare('SELECT route_number routeNumber,vehicle_id vehicleId,assigned_by assignedBy,updated_at updatedAt FROM daily_route_assignments WHERE dispatch_day_id=?').all(day.id),assignmentByRoute=new Map(assignmentRows.map(row=>[row.routeNumber,row]))
   const definitionRows=database.prepare(`SELECT d.route_number routeNumber,d.display_name displayName FROM weekly_route_definitions d JOIN weekly_route_plans p ON p.id=d.plan_id WHERE p.is_active=1`).all(),definitionByRoute=new Map(definitionRows.map(row=>[row.routeNumber,row.displayName]))
   const approvalRows=database.prepare('SELECT route_number routeNumber,route_signature routeSignature,actor approvedBy,reason approvalReason,approved_at approvedAt FROM daily_route_approvals WHERE dispatch_day_id=?').all(day.id),approvalByRoute=new Map(approvalRows.map(row=>[row.routeNumber,row]))
-  const routeBoards=[1,2,3,4,5].map(routeNumber=>{const assignment=assignmentByRoute.get(routeNumber)||{},vehicle=vehicles.find(item=>item.id===assignment.vehicleId),routeStops=stops.filter(stop=>stop.routeNumber===routeNumber).sort((a,b)=>(a.routeStopSequence??999999)-(b.routeStopSequence??999999)||a.id-b.id),approval=approvalByRoute.get(routeNumber),approved=Boolean(routeStops.length&&approval&&approval.routeSignature===routeSignature(database,day.id,routeNumber));return{routeNumber,name:definitionByRoute.get(routeNumber)||`Route ${routeNumber}`,vehicleId:assignment.vehicleId??null,vehicle:vehicle?.vehicle??null,registrationNumber:vehicle?.registrationNumber??null,assignedBy:assignment.assignedBy??null,updatedAt:assignment.updatedAt??null,customerCount:routeStops.length,stops:routeStops,approvalStatus:routeStops.length?(approved?'approved':approval?'reapproval_required':'pending'):'empty',approvedBy:approved?approval.approvedBy:null,approvedAt:approved?approval.approvedAt:null,approvalReason:approved?approval.approvalReason:null}})
+  const routeBoards=[1,2,3,4,5].map(routeNumber=>{const assignment=assignmentByRoute.get(routeNumber)||{},vehicle=vehicles.find(item=>item.id===assignment.vehicleId),routeStops=stops.filter(stop=>stop.routeNumber===routeNumber).sort((a,b)=>(a.routeStopSequence??999999)-(b.routeStopSequence??999999)||a.id-b.id),approval=approvalByRoute.get(routeNumber),approved=Boolean(routeStops.length&&approval&&approval.routeSignature===routeSignature(database,day.id,routeNumber));return{routeNumber,name:isSunday(day.dispatch_date)&&database.prepare('SELECT 1 FROM sunday_dispatch_setup WHERE dispatch_day_id=?').get(day.id)&&SUNDAY_GROUPS.find(g=>g.routeNumber===routeNumber)?SUNDAY_GROUPS.find(g=>g.routeNumber===routeNumber).name:definitionByRoute.get(routeNumber)||`Route ${routeNumber}`,vehicleId:assignment.vehicleId??null,vehicle:vehicle?.vehicle??null,registrationNumber:vehicle?.registrationNumber??null,assignedBy:assignment.assignedBy??null,updatedAt:assignment.updatedAt??null,customerCount:routeStops.length,stops:routeStops,approvalStatus:routeStops.length?(approved?'approved':approval?'reapproval_required':'pending'):'empty',approvedBy:approved?approval.approvedBy:null,approvedAt:approved?approval.approvedAt:null,approvalReason:approved?approval.approvalReason:null}})
   const extraUnassignedStops=unassignedStops.filter(stop=>stop.routeNumber==null)
   const unassignedGroups=[...new Map(extraUnassignedStops.map(stop=>[stop.areaId??'unassigned',{areaId:stop.areaId??null,areaName:stop.area||'未分区',zoneGroupId:stop.zoneGroupId??'pending',zoneGroupName:stop.zoneGroup||'待确认',zoneSortOrder:stop.zoneSortOrder??9999}])).values()].map(group=>{
     const groupedStops=extraUnassignedStops.filter(stop=>(stop.areaId??null)===group.areaId),weights=groupedStops.filter(stop=>stop.estimatedWeightKg!=null)
@@ -336,7 +371,7 @@ function dayView(database, day) {
   const warningCount=missingGpsCount+missingWeightCount+timeRestrictionCount+vehicleBoards.filter(board=>board.customerCount>0&&!board.driverId).length+vehicleBoards.filter(board=>board.overCapacity).length+specials.filter(x=>x.requestType==='potential_new'&&newCustomerMissing(x).length).length
   const previewSummary={stopCount:stops.length,estimatedWeightKg:weightedStops.reduce((sum,stop)=>sum+Number(stop.estimatedWeightKg),0),weightedStopCount:weightedStops.length,missingWeightCount,missingGpsCount,timeRestrictionCount,unassignedCount:unassignedStops.length,warningCount}
   const approval=database.prepare("SELECT actor approvedBy,created_at approvedAt,reason approvalReason FROM dispatch_approvals WHERE dispatch_day_id=? AND action IN ('approve','reapprove') ORDER BY id DESC LIMIT 1").get(day.id)||{}
-  return {...day,...approval,noGoodsNotices,stops,trips:assignedTrips,vehicleBoards,routeBoards,unassignedStops,extraUnassignedStops,unassignedGroups,unassignedZones,specialRequests:specials,deferRequests:listDeferRequestsForDay(day.id,database),warningCount,previewSummary,legacyUnassignedTripCount:allTrips.filter(item=>!item.vehicleId).length}
+  return {...day,sundayGrouped:isSunday(day.dispatch_date)&&Boolean(database.prepare('SELECT 1 FROM sunday_dispatch_setup WHERE dispatch_day_id=?').get(day.id)),...approval,noGoodsNotices,stops,trips:assignedTrips,vehicleBoards,routeBoards,unassignedStops,extraUnassignedStops,unassignedGroups,unassignedZones,specialRequests:specials,deferRequests:listDeferRequestsForDay(day.id,database),warningCount,previewSummary,legacyUnassignedTripCount:allTrips.filter(item=>!item.vehicleId).length}
 }
 
 const resourceOptions=(database)=>({
@@ -704,9 +739,9 @@ export function assignRouteVehicle(date,routeNumber,payload={},database=defaultD
       ON CONFLICT(dispatch_day_id,route_number) DO UPDATE SET vehicle_id=excluded.vehicle_id,assigned_by=excluded.assigned_by,updated_at=CURRENT_TIMESTAMP`).run(day.id,route,vehicleId,actor(payload.changedBy))
     else database.prepare('DELETE FROM daily_route_assignments WHERE dispatch_day_id=? AND route_number=?').run(day.id,route)
     if(vehicleId)carryForwardVehicleDriver(database,day,vehicleId)
-    normalizeTripSequences(database,[...touched,target.id])
+    // Keep original sequence slots, including cancelled history.
     invalidateDispatchDay(database,day.dispatch_date,'daily_route_vehicle_assigned','route',route,before,{routeNumber:route,vehicleId},payload.changedBy)
-    fillRouteVehicleDefaults(database,addDays(day.dispatch_date,1))
+    if(!isSunday(day.dispatch_date))fillRouteVehicleDefaults(database,addDays(day.dispatch_date,1))
     database.exec('COMMIT');return getDispatchDay(date,database)
   }catch(error){database.exec('ROLLBACK');throw error}
 }
@@ -733,7 +768,7 @@ export function assignVehicleDay(date,vehicleId,payload,database=defaultDb){
     for(let tripNumber=1;tripNumber<=3;tripNumber+=1){const trip=ensureVehicleTrip(database,day,Number(vehicleId),tripNumber);const dispatch=database.prepare('SELECT * FROM dispatches WHERE id=?').get(trip.dispatch_id),driverId=payload.driverId===undefined?dispatch.driver_id:payload.driverId,assistantId=assistantIds===null?dispatch.assistant_id:(assistantIds[0]||null);database.prepare(`UPDATE dispatches SET driver_id=?,driver_employment_period_id=?,assistant_id=?,assistant_employment_period_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(driverId,currentEmploymentPeriod(database,driverId),assistantId,currentEmploymentPeriod(database,assistantId),trip.dispatch_id);if(payload.startLocation)writeStartLocationSnapshot(database,trip.dispatch_id,resolveStartLocation(payload.startLocation,{driverId,canViewEmployeeHome:Boolean(payload.canViewEmployeeHome)},database));if(payload.endLocationId!==undefined)writeCommercialSnapshot(database,trip.dispatch_id,{buyer:dispatch.buyer_reference_id?{buyerReferenceId:dispatch.buyer_reference_id,buyerCode:dispatch.buyer_code,buyerName:dispatch.buyer_name}:null,endLocation:payload.endLocationId?resolvePrimaryEndLocation(payload.endLocationId,database):null})}
     invalidateDispatchDay(database,day.dispatch_date,'vehicle_assignment_updated','vehicle',vehicleId,before,{...payload,assistantIds},payload.changedBy)
     const selectedDriver=payload.driverId?database.prepare('SELECT job_role jobRole FROM employees WHERE id=?').get(payload.driverId):null
-    if(payload.driverId&&!isTemporarySupervisorDriver(selectedDriver)){const futureDays=database.prepare(`SELECT DISTINCT dd.id,dd.dispatch_date FROM dispatch_days dd JOIN daily_route_assignments a ON a.dispatch_day_id=dd.id
+    if(!isSunday(day.dispatch_date)&&payload.driverId&&!isTemporarySupervisorDriver(selectedDriver)){const futureDays=database.prepare(`SELECT DISTINCT dd.id,dd.dispatch_date FROM dispatch_days dd JOIN daily_route_assignments a ON a.dispatch_day_id=dd.id
       WHERE dd.dispatch_date>? AND dd.status IN ('draft','reapproval_required','approved') AND a.vehicle_id=? ORDER BY dd.dispatch_date`).all(day.dispatch_date,vehicleId);for(const futureDay of futureDays)carryForwardVehicleDriver(database,futureDay,Number(vehicleId))}
     database.exec('COMMIT');return getDispatchDay(date,database)
   }catch(error){database.exec('ROLLBACK');throw error}
@@ -1003,13 +1038,33 @@ export function reconcileScheduleWindow({startDate=iso(),changedBy='System',conf
    }
    const protectedReason=protectedDayReason(database,day)||database.prepare('SELECT 1 FROM daily_route_approvals WHERE dispatch_day_id=? LIMIT 1').get(day.id)&&'已有路线批准'
    for(const {schedule,extra} of expected.values()){
-    if(findBranchServiceDateStop(database,schedule.branch_id,date))continue
+    const existingStop=findBranchServiceDateStop(database,schedule.branch_id,date)
+    if(existingStop){
+      if(isSunday(date)&&database.prepare('SELECT 1 FROM sunday_dispatch_setup WHERE dispatch_day_id=?').get(day.id)){
+        const setting=sundaySettings(database,schedule.branch_id),desired=executionRoute(database,schedule.branch_id,date,existingStop.route_number)
+        if(setting.sundayConfirmed&&(!setting.effectiveDate||date>=setting.effectiveDate)&&desired&&Number(desired)!==Number(existingStop.route_number)){
+          const manual=database.prepare("SELECT 1 FROM dispatch_change_logs WHERE dispatch_day_id=? AND entity_id=? AND change_type='route_customer_adjusted'").get(day.id,String(existingStop.id))
+          const protectedStop=database.prepare("SELECT 1 FROM dispatch_stops s WHERE s.id=? AND (s.arrived_at IS NOT NULL OR s.completed_at IS NOT NULL OR EXISTS(SELECT 1 FROM purchase_bills b WHERE b.dispatch_stop_id=s.id))").get(existingStop.id)
+          if(protectedReason||manual||protectedStop)review.push({date,branchId:schedule.source_branch_id,kind:'sunday_review',message:'星期日执行路线已改变，原安排已有批准、执行或人工调整，请主管核对。'})
+          else{
+            const vehicle=database.prepare('SELECT vehicle_id id FROM daily_route_assignments WHERE dispatch_day_id=? AND route_number=?').get(day.id,desired)
+            const target=vehicle?.id?ensureVehicleTrip(database,day,vehicle.id,1):ensureUnassignedTrip(database,day)
+            const n=database.prepare('SELECT COALESCE(MAX(stop_sequence),0)+1 n FROM dispatch_stops WHERE dispatch_id=?').get(target.dispatch_id).n
+            const rn=database.prepare('SELECT COALESCE(MAX(s.route_stop_sequence),0)+1 n FROM dispatch_stops s JOIN dispatch_trips t ON t.id=s.dispatch_trip_id WHERE t.dispatch_day_id=? AND s.route_number=?').get(day.id,desired).n
+            database.prepare('UPDATE dispatch_stops SET dispatch_id=?,dispatch_trip_id=?,stop_sequence=?,route_number=?,route_stop_sequence=? WHERE id=?').run(target.dispatch_id,target.id,n,desired,rn,existingStop.id)
+            invalidateDispatchDay(database,date,'sunday_customer_execution_changed','dispatch_stop',existingStop.id,{routeNumber:existingStop.route_number},{routeNumber:desired},changedBy)
+          }
+        }
+      }
+      continue
+    }
     // Explicit skips/cancellations remain historical decisions. Sync cancellations may be restored.
     if(database.prepare("SELECT 1 FROM dispatch_stops WHERE branch_id=? AND service_date=? AND status='cancelled' AND COALESCE(superseded_reason,'')<>'schedule_sync_removed'").get(schedule.branch_id,date))continue
     if(protectedReason&&confirmedDate!==date){review.push({date,branchId:schedule.source_branch_id,branchName:schedule.branch_name,kind:'missing',message:'应收客户尚未加入；请主管核对并撤回批准后补排'});continue}
     const mapping=plan&&database.prepare('SELECT route_number routeNumber FROM weekly_route_plan_stops WHERE plan_id=? AND weekday=? AND branch_id=?').get(plan.id,weekdayForDate(date),schedule.branch_id)
     const choices=plan?database.prepare('SELECT DISTINCT route_number routeNumber FROM weekly_route_plan_stops WHERE plan_id=? AND branch_id=?').all(plan.id,schedule.branch_id):[]
-    const route=mapping?.routeNumber||(extra&&choices.length===1?choices[0].routeNumber:null)
+    const baseRoute=mapping?.routeNumber||(extra&&choices.length===1?choices[0].routeNumber:null)
+    const route=executionRoute(database,schedule.branch_id,date,baseRoute)
     if(confirmedDate===date&&route&&database.prepare("SELECT 1 FROM dispatch_stops ds JOIN dispatches d ON d.id=ds.dispatch_id JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id WHERE dt.dispatch_day_id=? AND ds.route_number=? AND d.status='completed'").get(day.id,route)){review.push({date,branchId:schedule.source_branch_id,branchName:schedule.branch_name,kind:'completed',message:'所属 ROUTE 已完成，请主管安排临时增加到其他日期'});continue}
     const approval=route&&database.prepare('SELECT route_signature signature FROM daily_route_approvals WHERE dispatch_day_id=? AND route_number=?').get(day.id,route)
     const preserveApproval=approval&&(approval.signature===routeSignature(database,day.id,route)||day.status==='in_progress')
