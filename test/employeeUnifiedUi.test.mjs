@@ -16,13 +16,14 @@ const click=async node=>{assert.ok(node);await act(async()=>node.dispatchEvent(n
 test('one employee list defaults current, opens full inline account editor and groups former employees',async()=>{
  const root=createRoot(document.getElementById('root')),props={resources:{employees,locations:[],areas:[]},currentUser:{role:'admin',systemRole:'owner_admin'},account:{id:99,role:'owner_admin'},reload:async()=>{}}
  await act(async()=>root.render(React.createElement(I18nProvider,{language:'en'},React.createElement(Page,props))))
+ assert.equal(document.querySelectorAll('.employee-toolbar .active').length,1)
  assert.equal(document.querySelectorAll('.entity-name-link').length,1)
  await click(document.querySelector('.entity-name-link'))
  const panel=document.querySelector('.employee-inline-panel');assert.ok(panel.closest('tr').previousElementSibling.textContent.includes('First Employee'))
  assert.ok(panel.querySelector('.employee-account-card'));assert.ok([...panel.querySelectorAll('button')].some(b=>b.textContent==='Reset password'))
  await click([...panel.querySelectorAll('button')].find(b=>b.textContent==='Disable login'))
  assert.deepEqual(writes,[['/api/auth/accounts/10',{isActive:false}]])
- await click(document.querySelectorAll('.employee-groups button')[1])
+ await click(document.querySelector('[data-staff-view=departed]'))
  assert.equal(document.querySelectorAll('.entity-name-link').length,1);assert.equal(document.querySelector('.entity-name-link').textContent,'Former Employee')
  await click(document.querySelector('.entity-name-link'))
  assert.ok([...document.querySelectorAll('button')].find(b=>b.textContent==='Enable login').disabled)
@@ -31,7 +32,10 @@ test('one employee list defaults current, opens full inline account editor and g
 test('new employee offers optional account within same form in all languages',async()=>{
  for(const language of ['en','ms','zh']){
  const root=createRoot(document.getElementById('root'));await act(async()=>root.render(React.createElement(I18nProvider,{language},React.createElement(Page,{resources:{employees,locations:[],areas:[]},currentUser:{role:'admin',systemRole:'owner_admin'},account:{role:'owner_admin'},reload:async()=>{}}))))
- await click(document.querySelector('.employee-toolbar .primary'))
+ await click(document.querySelector('[data-staff-view=create]'))
+ assert.equal(document.querySelectorAll('.employee-toolbar .active').length,1)
+ assert.equal(document.querySelector('.employee-toolbar .active').dataset.staffView,'create')
+ assert.ok(!document.querySelector('.employee-create-mode').textContent.includes('Usual/Familiar'))
  const box=document.querySelector('.employee-create-mode input[type=checkbox]');await click(box)
  assert.ok(document.querySelector('.employee-create-mode input[autocomplete="new-password"]'))
  assert.ok(!document.body.textContent.includes('staff.createLogin'))
