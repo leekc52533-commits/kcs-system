@@ -1,7 +1,8 @@
+import {routeRequestSchemaSql} from './migrationV55.mjs'
 import {sundaySchemaSql} from './sundayPlanning.mjs'
-export const SCHEMA_VERSION = 54
+export const SCHEMA_VERSION = 55
 
-export const schemaSql = sundaySchemaSql + `
+export const schemaSql = routeRequestSchemaSql + sundaySchemaSql + `
 CREATE TABLE IF NOT EXISTS schema_meta (
   version INTEGER PRIMARY KEY,
   applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
