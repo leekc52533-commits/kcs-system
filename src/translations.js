@@ -3613,6 +3613,62 @@ export const operationalUiMessages = [
 ]
 
 const normalizeUiText=value=>String(value??'').trim().replace(/\s+/g,' ')
+operationalUiMessages.push(...[
+  [
+    "Select a payment proof photo.",
+    "Select a payment proof photo.",
+    "Pilih gambar bukti pembayaran.",
+    "请选择付款证明照片。"
+  ],
+  [
+    "Unsupported photo format. Use JPEG, PNG, HEIC or WebP.",
+    "Unsupported photo format. Use JPEG, PNG, HEIC or WebP.",
+    "Format gambar tidak disokong. Gunakan JPEG, PNG, HEIC atau WebP.",
+    "不支持此照片格式，请使用 JPEG、PNG、HEIC 或 WebP。"
+  ],
+  [
+    "The original photo is too large. Use a photo smaller than 25 MB.",
+    "The original photo is too large. Use a photo smaller than 25 MB.",
+    "Gambar asal terlalu besar. Gunakan gambar kurang daripada 25 MB.",
+    "原照片太大，请选择小于 25 MB 的照片。"
+  ],
+  [
+    "This phone cannot decode HEIC. Set the camera to JPEG or upload a screenshot.",
+    "This phone cannot decode HEIC. Set the camera to JPEG or upload a screenshot.",
+    "Telefon ini tidak dapat membaca HEIC. Tetapkan kamera kepada JPEG atau muat naik tangkapan skrin.",
+    "此手机无法读取 HEIC，请将相机设为 JPEG 或上传截图。"
+  ],
+  [
+    "This photo could not be read. Retake it or choose a JPEG/PNG image.",
+    "This photo could not be read. Retake it or choose a JPEG/PNG image.",
+    "Gambar ini tidak dapat dibaca. Ambil semula atau pilih gambar JPEG/PNG.",
+    "无法读取照片，请重新拍摄或选择 JPEG／PNG 图片。"
+  ],
+  [
+    "The browser could not compress this photo.",
+    "The browser could not compress this photo.",
+    "Pelayar tidak dapat memampatkan gambar ini.",
+    "浏览器无法压缩这张照片。"
+  ],
+  [
+    "The browser could not prepare this photo.",
+    "The browser could not prepare this photo.",
+    "Pelayar tidak dapat memproses gambar ini.",
+    "浏览器无法处理这张照片。"
+  ],
+  [
+    "The compressed proof is still too large. Retake it at a lower camera resolution.",
+    "The compressed proof is still too large. Retake it at a lower camera resolution.",
+    "Gambar selepas dimampatkan masih terlalu besar. Ambil semula dengan resolusi kamera lebih rendah.",
+    "压缩后的照片仍然太大，请降低相机分辨率重新拍摄。"
+  ],
+  [
+    "The processed proof could not be prepared for upload.",
+    "The processed proof could not be prepared for upload.",
+    "Gambar yang diproses tidak dapat disediakan untuk muat naik.",
+    "无法准备照片上传，请重试。"
+  ]
+])
 const operationalAliases=new Map()
 for(const row of operationalUiMessages)for(const text of row)operationalAliases.set(normalizeUiText(text),row)
 export function translateUi(language,source,variables={}){
@@ -3652,3 +3708,9 @@ for(const [language,replacements] of Object.entries({ms:{Area:'Kawasan',Areas:'K
 Object.assign(messages.en,{'nav.cashFloat':'Cash float'})
 Object.assign(messages.ms,{'nav.cashFloat':'Wang runcit'})
 Object.assign(messages.zh,{'nav.cashFloat':'备用金'})
+
+Object.assign(messages.en,{"photo.cameraUnavailable": "Camera unavailable. Allow camera access in your browser, or use the phone camera button below.", "photo.systemCamera": "Use phone camera", "photo.cameraPreview": "Camera preview", "photo.opening": "Opening camera…", "photo.capture": "Capture photo", "photo.cancel": "Cancel camera", "photo.captureFailed": "Could not capture the photo. Try again or choose from gallery."})
+
+Object.assign(messages.ms,{"photo.cameraUnavailable": "Kamera tidak tersedia. Benarkan akses kamera dalam pelayar, atau gunakan butang kamera telefon di bawah.", "photo.systemCamera": "Guna kamera telefon", "photo.cameraPreview": "Pratonton kamera", "photo.opening": "Membuka kamera…", "photo.capture": "Ambil gambar", "photo.cancel": "Batal kamera", "photo.captureFailed": "Gambar tidak dapat diambil. Cuba lagi atau pilih daripada galeri."})
+
+Object.assign(messages.zh,{"photo.cameraUnavailable": "无法打开相机。请允许浏览器使用相机，或使用下方的手机相机按钮。", "photo.systemCamera": "使用手机相机", "photo.cameraPreview": "相机预览", "photo.opening": "正在打开相机…", "photo.capture": "拍摄照片", "photo.cancel": "取消拍照", "photo.captureFailed": "无法拍摄照片，请重试或从相册选择。"})
