@@ -1,3 +1,4 @@
+import {expenseServiceDate} from '../shared/cashCalendar.js'
 import {cashDay,employeeSpending} from './cashFloatOverview.mjs'
 import {applyArchiveColumns} from '../shared/archiveColumns.mjs'
 import {normalizeExpenseDetails,saveExpenseDetails,expenseVehicles} from './expenseDetails.mjs'
@@ -87,7 +88,7 @@ function addTransaction(employeeId,type,signedAmount,payload,context,database,up
 }
 
 export function addCashFloatTopUp(employeeId,payload={},context={},database=defaultDb,options={}){const channel=String(payload.paymentChannel||'');if(!['Cash','TNG','Bank Transfer'].includes(channel))throw fail('Select Cash, TNG or Bank Transfer.');return addTransaction(employeeId,'top_up',positiveCents(payload.amount),{...payload,paymentChannel:channel},context,database,options.uploadsRoot)}
-export function addCashFloatExpense(employeeId,payload={},context={},database=defaultDb,options={}){if(!payload.proof)throw fail('Receipt photo is required.','PHOTO_REQUIRED');const details=normalizeExpenseDetails(payload,database);return addTransaction(employeeId,'expense',-positiveCents(payload.amount),{...payload,...details,expenseDetails:details,paymentChannel:'System'},context,database,options.uploadsRoot)}
+export function addCashFloatExpense(employeeId,payload={},context={},database=defaultDb,options={}){payload={...payload,serviceDate:expenseServiceDate(payload.serviceDate,{now:context.now||new Date(),allowPast:context.allowPast!==false})};if(!payload.proof)throw fail('Receipt photo is required.','PHOTO_REQUIRED');const details=normalizeExpenseDetails(payload,database);return addTransaction(employeeId,'expense',-positiveCents(payload.amount),{...payload,...details,expenseDetails:details,paymentChannel:'System'},context,database,options.uploadsRoot)}
 
 export const ADMIN_PAYMENT_METHODS=['Cash','Bank Transfer','TNG','Card']
 export function addAdminExpense(payload={},context={},database=defaultDb,options={}){
