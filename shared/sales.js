@@ -11,3 +11,14 @@ export function filterSales(rows,query={}){
  if(salesColumns.includes(query.sortKey)&&['asc','desc'].includes(query.sortDirection)){const k=query.sortKey,sign=query.sortDirection==='asc'?1:-1;items.sort((a,b)=>sign*(['weightKg','unitPrice','amount','total'].includes(k)?Number(a[k])-Number(b[k]):collator.compare(str(a[k]),str(b[k]))))}
  return{items,filterOptions:options}
 }
+
+// Re-read machine-filled values, while retaining edits made by the reviewer.
+export function mergeSalesRecognition(form,fields={},previous={}){
+ const next={...form,reviewed:false}
+ for(const key of ['buyerId','vehicleId','billNumber','settlementDate','total']){
+  if(!next[key]||Object.hasOwn(previous,key)&&String(next[key])===String(previous[key]))next[key]=fields[key]||''
+ }
+ const empty=form.lines.length===1&&Object.values(form.lines[0]).every(v=>!v)
+ if((empty||previous.lines&&JSON.stringify(form.lines)===JSON.stringify(previous.lines))&&fields.lines?.length)next.lines=fields.lines
+ return next
+}

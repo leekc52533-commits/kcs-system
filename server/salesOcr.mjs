@@ -32,18 +32,38 @@ export function parseSalesOcr(text,masters={buyers:[],vehicles:[]}){
  }
  return fields
 }
+export const salesOcrScore=fields=>fields.lines.reduce((n,l)=>n+(l.weightKg&&l.unitPrice&&l.amount&&salesLineCents(l.weightKg,l.unitPrice)===Math.round(Number(l.amount)*100)?10:0)+(l.slipNumber?2:0),0)+(fields.billNumber?3:0)+(fields.settlementDate?3:0)
 export async function recognizeSales(proof,masters){
  const parsed=image(proof);if(reading)return{status:'busy',fields:{}}
  let folder;reading=true
- try{folder=await fs.mkdtemp(path.join(os.tmpdir(),'kcs-sales-'));const file=path.join(folder,'settlement.'+parsed.extension);await fs.writeFile(file,parsed.bytes,{mode:0o600});const{stdout}=await run(process.env.KCS_TESSERACT_PATH||'tesseract',[file,'stdout','-l','eng','--psm','6'],{timeout:15000,maxBuffer:1000000});let fields=parseSalesOcr(stdout,masters)
-  // A temporary enlarged/deskewed copy improves line reading; the submitted original stays untouched.
-  try{const enhanced=path.join(folder,'enhanced.png');await run(process.env.KCS_CONVERT_PATH||'convert',['-limit','memory','128MiB','-limit','map','256MiB',file,'-colorspace','Gray','-resize','2400x','-deskew','40%','-sharpen','0x1',enhanced],{timeout:10000,maxBuffer:100000});const second=await run(process.env.KCS_TESSERACT_PATH||'tesseract',[enhanced,'stdout','-l','eng','--psm','6'],{timeout:15000,maxBuffer:1000000});const candidate=parseSalesOcr(second.stdout,masters)
-   const score=rows=>rows.reduce((n,l)=>n+(l.weightKg&&l.unitPrice&&l.amount&&salesLineCents(l.weightKg,l.unitPrice)===Math.round(Number(l.amount)*100)?10:0)+(l.slipNumber?1:0),0)
-   if(score(candidate.lines)>score(fields.lines))fields.lines=candidate.lines
-   for(const k of ['settlementDate','billNumber','buyerId','vehicleId','total'])if(!fields[k]&&candidate[k])fields[k]=candidate[k]
+ const deadline=Date.now()+45000
+ const execute=(program,args,maximum=8000)=>{const remaining=deadline-Date.now();if(remaining<500)throw Error('OCR deadline');return run(program,args,{timeout:Math.min(maximum,remaining),maxBuffer:1000000})}
+ const convert=process.env.KCS_CONVERT_PATH||'convert',tesseract=process.env.KCS_TESSERACT_PATH||'tesseract'
+ const convertArgs=['-limit','memory','128MiB','-limit','map','256MiB']
+ const read=async file=>{const{stdout}=await execute(tesseract,[file,'stdout','-l','eng','--psm','6']);return parseSalesOcr(stdout,masters)}
+ try{
+  folder=await fs.mkdtemp(path.join(os.tmpdir(),'kcs-sales-'));const file=path.join(folder,'settlement.'+parsed.extension);await fs.writeFile(file,parsed.bytes,{mode:0o600})
+  let rotation=0,oriented=file,fields=await read(file)
+  // Deskew only corrects small angles. Sideways/upside-down documents need quarter turns first.
+  if(salesOcrScore(fields)<10){
+   for(const angle of [90,180,270]){
+    if(deadline-Date.now()<12000)break
+    const trial=path.join(folder,'turn-'+angle+'.png')
+    try{await execute(convert,[...convertArgs,file,'-rotate',String(angle),trial]);const candidate=await read(trial)
+     if(salesOcrScore(candidate)>salesOcrScore(fields)){fields=candidate;rotation=angle;oriented=trial}
+     if(salesOcrScore(fields)>=10&&fields.lines.length)break
+    }catch{/* try another direction while the request budget permits */}
+   }
+  }
+  try{
+   const enhanced=path.join(folder,'enhanced.png');await execute(convert,[...convertArgs,oriented,'-colorspace','Gray','-resize','2400x','-deskew','40%','-sharpen','0x1',enhanced]);const candidate=await read(enhanced)
+   if(salesOcrScore(candidate)>salesOcrScore(fields))fields.lines=candidate.lines
+   for(const k of ['settlementDate','billNumber','buyerId','vehicleId','total','factoryText'])if(!fields[k]&&candidate[k])fields[k]=candidate[k]
    const sum=fields.lines.reduce((n,l)=>n+Math.round(Number(l.amount||0)*100),0);if(sum>0&&Math.round(Number(candidate.total)*100)===sum&&Math.round(Number(fields.total)*100)!==sum)fields.total=candidate.total
-  }catch{/* original OCR remains available when preprocessing cannot run */}
-  return{status:fields.lines.length?'review':'unreadable',fields}}
- catch(e){return{status:e.code==='ENOENT'?'unavailable':'unreadable',fields:{}}}
+  }catch{/* original orientation-corrected OCR remains available */}
+  let previewDataUrl
+  if(rotation){try{const preview=path.join(folder,'preview.jpg');await execute(convert,[...convertArgs,oriented,'-resize','1000x1000>','-quality','85',preview],3000);previewDataUrl='data:image/jpeg;base64,'+(await fs.readFile(preview)).toString('base64')}catch{}}
+  return{status:fields.lines.length?'review':'unreadable',fields,rotation,previewDataUrl,factoryMatch:fields.buyerId?'matched':fields.factoryText?'unmatched':'unreadable'}
+ }catch(e){return{status:e.code==='ENOENT'?'unavailable':'unreadable',fields:{}}}
  finally{reading=false;if(folder)await fs.rm(folder,{recursive:true,force:true})}
 }
