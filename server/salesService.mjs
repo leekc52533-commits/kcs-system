@@ -54,7 +54,7 @@ export async function exportSales(query,context,db=defaultDb,{uploadsRoot}={}){
  const{items}=listSales(query,context,db),book=new ExcelJS.Workbook(),sheet=book.addWorksheet('Sales')
  sheet.addRow(salesColumns);items.forEach(r=>sheet.addRow(salesColumns.map(k=>['amount','total','weightKg','unitPrice'].includes(k)?Number(r[k]):String(r[k]??''))))
  sheet.columns.forEach(c=>c.width=24);sheet.getRow(1).font={bold:true};sheet.views=[{state:'frozen',ySplit:1}]
- const proofs=book.addWorksheet('Settlement Photos');proofs.getColumn(1).width=100
+ const proofs=book.addWorksheet('Bill Photos');proofs.getColumn(1).width=100
  let row=1
  for(const id of new Set(items.map(r=>r.id))){const record=salesRecord(id,context,db),p=salesPhoto(id,context,db),file=path.resolve(uploadsRoot,p.storage_key);proofs.getCell(row,1).value=record.billNumber+' — '+record.buyerName;row++
   if(file.startsWith(path.resolve(uploadsRoot)+path.sep)&&fs.existsSync(file)&&['image/jpeg','image/png'].includes(p.content_type)){const imageId=book.addImage({buffer:fs.readFileSync(file),extension:p.content_type==='image/jpeg'?'jpeg':'png'});proofs.addImage(imageId,{tl:{col:0,row:row-1},ext:{width:720,height:540}});row+=29}else{proofs.getCell(row++,1).value='View original: /api/sales/'+id+'/photo'}

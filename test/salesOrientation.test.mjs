@@ -26,3 +26,10 @@ test('reread replaces OCR values but retains manual fields and edited lines',()=
  assert.equal(next.billNumber,'CP-correct');assert.equal(next.total,'100');assert.equal(next.buyerId,'3');assert.deepEqual(next.lines,fields.lines);assert.equal(next.reviewed,false)
  assert.deepEqual(mergeSalesRecognition({...form,lines:[{slipNumber:'TN-manual'}]},fields,previous).lines,[{slipNumber:'TN-manual'}])
 })
+
+test('dot-matrix factory bill number is recovered from the original photo', {skip:!process.env.KCS_SALES_BILL_FIXTURE}, async()=>{
+ const data=await fs.readFile(process.env.KCS_SALES_BILL_FIXTURE)
+ const result=await recognizeSales({dataUrl:'data:image/jpeg;base64,'+data.toString('base64')},{buyers:[],vehicles:[]})
+ assert.equal(result.fields.billNumber,'CP-2026091028')
+ assert.equal(result.fields.settlementDate,'2026-09-10')
+})
