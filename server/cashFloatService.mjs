@@ -1,3 +1,4 @@
+import {cashDay,employeeSpending} from './cashFloatOverview.mjs'
 import {applyArchiveColumns} from '../shared/archiveColumns.mjs'
 import {normalizeExpenseDetails,saveExpenseDetails,expenseVehicles} from './expenseDetails.mjs'
 import crypto from 'node:crypto'
@@ -46,7 +47,7 @@ export function listCashFloatAccounts(filters={},database=defaultDb){
     FROM cash_float_members m JOIN employees e ON e.id=m.employee_id LEFT JOIN cash_float_accounts a ON a.employee_id=e.id
     WHERE m.is_selected=1 AND e.is_active=1 AND e.employment_status='active'
     ORDER BY CASE WHEN lower(COALESCE(e.job_role,''))='driver' THEN 0 ELSE 1 END,e.name`).all()
-  return{date,vehicles:expenseVehicles(database),items:rows.map(row=>row.targetFloatCents==null?{employeeId:Number(row.employeeId),employeeCode:row.employeeCode,employeeName:row.employeeName,configured:false}: {...serializeAccount(row,database,date),configured:true})}
+  return{date,spending:employeeSpending(database,validDate(filters.from||date),validDate(filters.to||date)),vehicles:expenseVehicles(database),items:rows.map(row=>row.targetFloatCents==null?{employeeId:Number(row.employeeId),employeeCode:row.employeeCode,employeeName:row.employeeName,configured:false}: {...serializeAccount(row,database,date),day:cashDay(database,row.employeeId,date),configured:true})}
 }
 
 export function listCashFloatEmployees(database=defaultDb){return{items:database.prepare(`SELECT e.id employeeId,e.employee_code employeeCode,e.name employeeName,e.job_role jobRole,
