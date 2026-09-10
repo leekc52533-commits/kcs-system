@@ -13,7 +13,7 @@ const htmlImage=file=>new Promise((resolve,reject)=>{
   image.src=url
 })
 
-export async function processPaymentProof(file,{createBitmap=globalThis.createImageBitmap,createCanvas=()=>document.createElement('canvas'),loadImage=htmlImage}={}){
+export async function processPaymentProof(file,{preserveJpeg=false,createBitmap=globalThis.createImageBitmap,createCanvas=()=>document.createElement('canvas'),loadImage=htmlImage}={}){
   if(!file)throw new Error('Select a payment proof photo.')
   if(!file.size||file.size>SOURCE_LIMIT)throw new Error('The original photo is too large. Use a photo smaller than 25 MB.')
   let type=String(file.type||'').toLowerCase()
@@ -34,6 +34,11 @@ export async function processPaymentProof(file,{createBitmap=globalThis.createIm
   }
   if(!bitmap){try{bitmap=await loadImage(file)}catch{throw new Error(type==='image/heic'||type==='image/heif'?'This phone cannot decode HEIC. Set the camera to JPEG or upload a screenshot.':'This photo could not be read. Retake it or choose a JPEG/PNG image.')}}
   try{
+    // Sales dot-matrix text can lose strokes on a second JPEG encoding.
+    // Decode first to validate the image; retain original bytes only within both limits.
+    if(preserveJpeg&&['image/jpeg','image/jpg'].includes(type)&&file.size<=OUTPUT_LIMIT&&Math.max(bitmap.width,bitmap.height)<=MAX_EDGE){
+      return{blob:file,name:String(file.name||'sales-bill').replace(/\.[^.]+$/, '')+'.jpg',type:'image/jpeg',width:bitmap.width,height:bitmap.height,originalSize:file.size}
+    }
     const source=bitmap.source||bitmap,scale=Math.min(1,MAX_EDGE/Math.max(bitmap.width,bitmap.height)),canvas=createCanvas();canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));const context=canvas.getContext('2d',{alpha:false});if(!context)throw new Error('The browser could not prepare this photo.');context.fillStyle='#fff';context.fillRect(0,0,canvas.width,canvas.height);context.drawImage(source,0,0,canvas.width,canvas.height)
     let blob
     for(const quality of [.88,.8,.72,.64]){blob=await canvasBlob(canvas,'image/jpeg',quality);if(blob.size<=OUTPUT_LIMIT)break}

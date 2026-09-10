@@ -4,7 +4,7 @@ import {processPaymentProof} from './paymentProofImage.js'
 
 // Keep the camera inside the page so launching another Android activity cannot
 // discard the pending stop/bill. A native camera input remains an explicit fallback.
-export default function ProofPhotoPicker({value,onChange,onBusyChange,disabled=false}){
+export default function ProofPhotoPicker({value,onChange,onBusyChange,disabled=false,preserveJpeg=false}){
   const {t}=useI18n(),ui=useUi()
   const [camera,setCamera]=useState(false),[ready,setReady]=useState(false),[processing,setProcessing]=useState(false),[fallback,setFallback]=useState(false),[error,setError]=useState(''),[preview,setPreview]=useState('')
   const video=useRef(null),stream=useRef(null),generation=useRef(0),busyCallback=useRef(onBusyChange),occupied=useRef(false)
@@ -29,7 +29,7 @@ export default function ProofPhotoPicker({value,onChange,onBusyChange,disabled=f
   }
   const prepare=async(file,request)=>{
     setProcessing(true);setError('');markBusy(true)
-    try{const photo=await processPaymentProof(file);if(request===generation.current){onChange(photo);closeCamera()}}
+    try{const photo=await processPaymentProof(file,{preserveJpeg});if(request===generation.current){onChange(photo);closeCamera()}}
     catch(item){if(request===generation.current)setError(item.message||'purchase.proofProcessFailed')}
     finally{if(request===generation.current){setProcessing(false);markBusy(camera)}}
   }
