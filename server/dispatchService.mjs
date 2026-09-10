@@ -227,6 +227,8 @@ export function applyWeeklyRoutePlanToDay(database,day){
     const choice=JSON.parse(log.after_json||'{}'),stop=allStops.find(item=>item.id===Number(log.entity_id)&&item.status!=='cancelled')
     if(stop&&choice.date===day.dispatch_date)overrides.set(stop.branchId,{branchId:stop.branchId,routeNumber:choice.routeNumber,tripNumber:1,stopSequence:choice.routeStopSequence||9999})
   }
+  // Persist reviewed date/route choices even if a draft is regenerated.
+  for(const choice of database.prepare('SELECT branch_id branchId,route_number routeNumber FROM driver_date_reviews WHERE approved_date=? ORDER BY request_id').all(day.dispatch_date))overrides.set(choice.branchId,{...choice,tripNumber:1,stopSequence:9999})
   routes=routes.map(r=>({...r,routeNumber:executionRoute(database,r.branchId,day.dispatch_date,r.routeNumber)}))
   routes=[...routes.filter(item=>!overrides.has(item.branchId)),...overrides.values()]
 
@@ -276,7 +278,7 @@ function generateRange({startDate=iso(),generatedBy='Supervisor',count=7,onlyMis
       for(const schedule of schedules) if(scheduleMatchesDate(schedule,date)){const result=addScheduledStop(database,day,schedule);if(result.created)createdStops+=1;else{reusedStops+=1;if(result.code==='DUPLICATE_BRANCH_SERVICE_DATE'&&Number(result.existingScheduleId)!==Number(result.attemptedScheduleId))duplicateStops.push(result)}}
       const additions=database.prepare(`SELECT s.*,b.area_id FROM schedule_exceptions e JOIN branch_schedules s ON s.id=e.schedule_id LEFT JOIN branches b ON b.id=s.branch_id LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN zone_groups z ON z.id=COALESCE(a.confirmed_zone_group_id,a.zone_group_id) LEFT JOIN route_templates rt ON rt.zone_group_id=z.id AND rt.is_active=1 LEFT JOIN route_template_areas rta ON rta.route_template_id=rt.id AND rta.area_id=a.id LEFT JOIN route_template_branches rtb ON rtb.route_template_id=rt.id AND rtb.branch_id=b.id WHERE e.target_date=? AND e.exception_type IN ('move_date','add_extra_collection','customer_request') AND b.lifecycle_status='ACTIVE' ORDER BY COALESCE(z.sort_order,999999),CASE WHEN rta.area_order IS NULL THEN 1 ELSE 0 END,rta.area_order,CASE WHEN rtb.branch_order IS NULL THEN 1 ELSE 0 END,rtb.branch_order,COALESCE(b.branch_name,''),b.id,s.id`).all(date)
       for(const schedule of additions){const result=addScheduledStop(database,day,schedule,'exception');if(result.created)createdStops+=1;else{reusedStops+=1;if(result.code==='DUPLICATE_BRANCH_SERVICE_DATE'&&Number(result.existingScheduleId)!==Number(result.attemptedScheduleId))duplicateStops.push(result)}}
-      const removals=database.prepare(`SELECT schedule_id FROM schedule_exceptions WHERE original_date=? AND exception_type IN ('move_date','cancel_date','pause_once')`).all(date)
+      const removals=database.prepare(`SELECT schedule_id FROM schedule_exceptions WHERE original_date=? AND exception_type IN ('move_date','cancel_date','pause_once') AND (exception_type<>'move_date' OR target_date<>original_date)`).all(date)
       for(const item of removals){
         database.prepare("UPDATE schedule_occurrences SET dispatch_stop_id=NULL,status='cancelled',updated_at=CURRENT_TIMESTAMP WHERE schedule_id=? AND planned_date=?").run(item.schedule_id,date)
         database.prepare(`UPDATE dispatch_stops SET status='cancelled',superseded_reason='Schedule exception',superseded_at=CURRENT_TIMESTAMP,superseded_by='System' WHERE source_schedule_id=? AND dispatch_trip_id IN(SELECT id FROM dispatch_trips WHERE dispatch_day_id=?) AND status<>'completed'`).run(item.schedule_id,day.id)
@@ -1034,7 +1036,7 @@ export function reconcileScheduleWindow({startDate=iso(),changedBy='System',conf
    const expected=new Map()
    for(const schedule of schedules){
     const extra=exceptions.some(e=>e.schedule_id===schedule.id&&e.target_date===date&&['move_date','add_extra_collection','customer_request'].includes(e.exception_type))
-    const removed=exceptions.some(e=>e.schedule_id===schedule.id&&e.original_date===date&&['move_date','cancel_date','pause_once'].includes(e.exception_type))
+    const removed=exceptions.some(e=>e.schedule_id===schedule.id&&e.original_date===date&&['move_date','cancel_date','pause_once'].includes(e.exception_type)&&(e.exception_type!=='move_date'||e.target_date!==date))
     if(!removed&&(extra||scheduleMatchesDate(schedule,date)))expected.set(schedule.branch_id,{schedule,extra})
    }
    const protectedReason=protectedDayReason(database,day)||database.prepare('SELECT 1 FROM daily_route_approvals WHERE dispatch_day_id=? LIMIT 1').get(day.id)&&'已有路线批准'
@@ -1136,4 +1138,53 @@ export function recordCustomerReportedNoGoods(stopId,payload={},context={},datab
   if(approval){database.prepare('UPDATE daily_route_approvals SET route_signature=? WHERE dispatch_day_id=? AND route_number=?').run(routeSignature(database,day.id,stop.route_number),day.id,stop.route_number);database.prepare('UPDATE dispatch_days SET status=? WHERE id=?').run(day.status,day.id)}
   return{ok:true,visited:false}
  })
+}
+
+// Reconcile only this customer's generated future plans. Never regenerate other customers
+// or alter a started trip. The caller commits this with the review and master schedule.
+export function syncReviewedBranchSchedule({branchId,scheduleId,startDate,excludeStopId,changedBy},database=defaultDb){
+ const schedule=database.prepare('SELECT * FROM branch_schedules WHERE id=?').get(scheduleId),preserved=[]
+ for(const day of database.prepare('SELECT * FROM dispatch_days WHERE dispatch_date>=? ORDER BY dispatch_date').all(startDate)){
+  const date=day.dispatch_date,existing=findBranchServiceDateStop(database,branchId,date)
+  if(existing?.id===excludeStopId)continue
+  const exceptions=database.prepare('SELECT * FROM schedule_exceptions WHERE schedule_id=? AND (original_date=? OR target_date=?)').all(scheduleId,date,date)
+  const removed=exceptions.some(e=>e.original_date===date&&['move_date','cancel_date','pause_once'].includes(e.exception_type)&&(e.exception_type!=='move_date'||e.target_date!==date))
+  const extra=exceptions.some(e=>e.target_date===date&&['move_date','add_extra_collection','customer_request'].includes(e.exception_type))
+  const due=!removed&&(extra||scheduleMatchesDate(schedule,date))
+  if(!existing&&!due)continue
+  const worked=existing&&(existing.arrived_at||existing.completed_at||['active','completed'].includes(existing.status)||existing.override_note||
+   database.prepare("SELECT 1 FROM purchase_bills WHERE dispatch_stop_id=? UNION ALL SELECT 1 FROM stop_documents WHERE dispatch_stop_id=? UNION ALL SELECT 1 FROM stop_step_records WHERE dispatch_stop_id=? UNION ALL SELECT 1 FROM driver_date_requests WHERE dispatch_stop_id=? AND status='pending' UNION ALL SELECT 1 FROM driver_defer_requests WHERE dispatch_stop_id=? AND status='pending'").get(existing.id,existing.id,existing.id,existing.id,existing.id))
+  const executing=['published','in_progress','completed'].includes(day.status)||database.prepare("SELECT 1 FROM dispatch_trips t JOIN dispatches d ON d.id=t.dispatch_id WHERE t.dispatch_day_id=? AND (t.execution_status<>'not_started' OR d.status IN ('released','in_progress','completed'))").get(day.id)
+  if(worked||executing){preserved.push(date);continue}
+  if(existing&&!due){
+   database.prepare("UPDATE dispatch_stops SET status='cancelled',superseded_reason='schedule_sync_removed',superseded_by=?,superseded_at=CURRENT_TIMESTAMP WHERE id=?").run(changedBy,existing.id)
+   database.prepare("UPDATE schedule_occurrences SET status='cancelled',dispatch_stop_id=NULL,updated_at=CURRENT_TIMESTAMP WHERE dispatch_stop_id=?").run(existing.id)
+   invalidateDispatchDay(database,date,'schedule_sync_removed','dispatch_stop',existing.id,existing,null,changedBy);continue
+  }
+  // Explicit one-time exceptions and manual work stay in effect.
+  const explicit=database.prepare('SELECT route_number n FROM driver_date_reviews WHERE branch_id=? AND approved_date=? ORDER BY request_id DESC LIMIT 1').get(branchId,date)
+  const mapping=database.prepare('SELECT r.route_number n FROM weekly_route_plan_stops r JOIN weekly_route_plans p ON p.id=r.plan_id WHERE p.is_active=1 AND r.branch_id=? ORDER BY (r.weekday=?) DESC,r.weekday LIMIT 1').get(branchId,weekdayForDate(date))
+  const route=explicit?.n||executionRoute(database,branchId,date,mapping?.n)
+  if(existing&&existing.route_number===route)continue
+  if(!existing&&database.prepare("SELECT 1 FROM dispatch_stops WHERE branch_id=? AND service_date=? AND status='cancelled' AND COALESCE(superseded_reason,'')<>'schedule_sync_removed'").get(branchId,date))continue
+  const assigned=database.prepare("SELECT a.vehicle_id FROM daily_route_assignments a JOIN vehicles v ON v.id=a.vehicle_id WHERE a.dispatch_day_id=? AND a.route_number=? AND v.status IN ('active','available','assigned') AND v.operational_status IN ('active','available') AND (v.is_temporary=0 OR v.temporary_date=?)").get(day.id,route??null,date)
+  const trip=assigned?ensureVehicleTrip(database,day,assigned.vehicle_id,1):ensureUnassignedTrip(database,day)
+  const added=existing?null:addScheduledStop(database,day,schedule,extra?'exception':'recurrence'),id=existing?.id||added?.stopId
+  if(!id){preserved.push(date);continue}
+  const sequence=database.prepare('SELECT COALESCE(MAX(stop_sequence),0)+1 n FROM dispatch_stops WHERE dispatch_id=?').get(trip.dispatch_id).n
+  const routeSequence=database.prepare('SELECT COALESCE(MAX(s.route_stop_sequence),0)+1 n FROM dispatch_stops s JOIN dispatch_trips t ON t.id=s.dispatch_trip_id WHERE t.dispatch_day_id=? AND s.route_number=?').get(day.id,route??null).n
+  database.prepare('UPDATE dispatch_stops SET dispatch_id=?,dispatch_trip_id=?,stop_sequence=?,route_number=?,route_stop_sequence=? WHERE id=?').run(trip.dispatch_id,trip.id,sequence,route??null,routeSequence,id)
+  invalidateDispatchDay(database,date,'reviewed_schedule_synced','dispatch_stop',id,existing||null,{routeNumber:route},changedBy)
+ }
+ // Generating future occurrences must not advance the master's next collection past today.
+ const changes=database.prepare('SELECT * FROM schedule_exceptions WHERE schedule_id=?').all(scheduleId)
+ let next=nextCollectionDate(schedule,startDate)
+ for(let i=0;next&&i<=changes.length;i++){
+  if(!changes.some(e=>e.original_date===next&&['move_date','cancel_date','pause_once'].includes(e.exception_type)&&(e.exception_type!=='move_date'||e.target_date!==next)))break
+  next=nextCollectionDate(schedule,addDays(next,1))
+ }
+ const extras=changes.filter(e=>e.target_date>=startDate&&['move_date','add_extra_collection','customer_request'].includes(e.exception_type)).map(e=>e.target_date)
+ const nextDate=[next,...extras].filter(Boolean).sort()[0]||null
+ database.prepare('UPDATE branch_schedules SET next_collection_date=? WHERE id=?').run(nextDate,scheduleId)
+ return preserved
 }

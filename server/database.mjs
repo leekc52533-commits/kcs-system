@@ -1,3 +1,4 @@
+import {applyV58Migration,ensureV58Schema} from './migrationV58.mjs'
 import {applyV57Migration,ensureV57Schema} from './migrationV57.mjs'
 import {applyV56Migration,ensureV56Schema} from './migrationV56.mjs'
 import {applyV55Migration,ensureV55Schema} from './migrationV55.mjs'
@@ -324,6 +325,9 @@ else if(postV55Version>=56)ensureV56Schema(db)
 const postV56Version=Number(db.prepare('SELECT MAX(version) v FROM schema_meta').get().v)
 if(postV56Version===56)applyV57Migration(db)
 else if(postV56Version>=57)ensureV57Schema(db)
+const postV57Version=Number(db.prepare('SELECT MAX(version) v FROM schema_meta').get().v)
+if(postV57Version===57)applyV58Migration(db)
+else if(postV57Version>=58)ensureV58Schema(db)
 const officialVehicles = [
   ['Lorry 1','QAV3468','available',0,null],
   ['Lorry 2','QAA4293N','active',1,null],

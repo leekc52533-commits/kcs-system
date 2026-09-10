@@ -1,8 +1,11 @@
+import {getCollectionScheduleManagement,saveCollectionScheduleManagement} from './collectionScheduleManagementService.mjs'
+import {weekdayName} from '../shared/scheduleRecurrence.js'
+import {planningDate} from '../shared/planningDates.js'
 import {db as defaultDb} from './database.mjs'
 import {kuchingDate} from '../shared/kuchingTime.js'
 import {isRouteTrialDate} from '../shared/routeTrial.js'
 import {withImmediateTransaction,assertBranchServiceDateAvailable} from './branchServiceDateGuard.mjs'
-import {driverToday,createStop,invalidateDispatchDay} from './dispatchService.mjs'
+import {driverToday,createStop,invalidateDispatchDay,syncReviewedBranchSchedule} from './dispatchService.mjs'
 
 const fail=(code,statusCode=409)=>{throw Object.assign(new Error(code),{code:code.replace('routeTrial.','ROUTE_TRIAL_').toUpperCase(),statusCode})}
 const lookup=(db,id)=>db.prepare(`SELECT s.*,t.execution_status,t.id trip_id,t.dispatch_day_id day_id,dd.dispatch_date,dd.status day_status,d.vehicle_id,d.driver_id,b.jodoo_branch_id branch_code,b.branch_name
@@ -55,48 +58,91 @@ export function requestDriverDate(id,payload,context={},db=defaultDb){
  })
 }
 
+// Only current definitions with an eligible, unstarted assigned vehicle can be approved.
+export function driverDateReviewOptions(date,db=defaultDb){
+ if(!planningDate(date)||planningDate(date)!==date)fail('routeTrial.invalidReviewDate',400)
+ const day=db.prepare('SELECT * FROM dispatch_days WHERE dispatch_date=?').get(date)
+ const routes=db.prepare(`SELECT r.route_number routeNumber,r.display_name name,a.vehicle_id vehicleId,v.registration_number plate,
+  CASE WHEN a.vehicle_id IS NOT NULL AND v.operational_status IN ('active','available') AND v.status IN ('active','available','assigned') AND (v.is_temporary=0 OR v.temporary_date=?)
+   AND NOT EXISTS(SELECT 1 FROM dispatch_trips t JOIN dispatches d ON d.id=t.dispatch_id WHERE t.dispatch_day_id=a.dispatch_day_id AND d.vehicle_id=a.vehicle_id AND (t.execution_status<>'not_started' OR d.status IN ('released','in_progress','completed')))
+   THEN 1 ELSE 0 END available
+  FROM weekly_route_definitions r JOIN weekly_route_plans p ON p.id=r.plan_id
+  LEFT JOIN daily_route_assignments a ON a.route_number=r.route_number AND a.dispatch_day_id=?
+  LEFT JOIN vehicles v ON v.id=a.vehicle_id WHERE p.is_active=1 ORDER BY r.route_number`).all(date,day?.id??null)
+ return{date,dayReady:!!day&&['draft','reapproval_required','approved','in_progress'].includes(day.status),revision:day?.revision??null,routes:routes.map(r=>({...r,available:!!r.available&&!!day&&['draft','reapproval_required','approved','in_progress'].includes(day.status)}))}
+}
+
 export function listDriverDateRequests(db=defaultDb){
- const routes=db.prepare('SELECT r.route_number routeNumber,r.display_name name FROM weekly_route_definitions r JOIN weekly_route_plans p ON p.id=r.plan_id WHERE p.is_active=1 ORDER BY r.route_number').all()
- return db.prepare(`SELECT r.id,r.source_date sourceDate,r.target_date targetDate,r.reason,r.status,e.name employeeName,b.jodoo_branch_id branchId,b.branch_name branchName,s.route_number routeNumber,v.registration_number plate FROM driver_date_requests r JOIN dispatch_stops s ON s.id=r.dispatch_stop_id JOIN branches b ON b.id=s.branch_id JOIN employees e ON e.id=r.employee_id JOIN dispatches d ON d.id=s.dispatch_id LEFT JOIN vehicles v ON v.id=d.vehicle_id WHERE r.status='pending' ORDER BY r.requested_at,r.id`).all().map(r=>({...r,routes}))
+ return db.prepare(`SELECT r.id,r.source_date sourceDate,r.target_date targetDate,r.reason,r.status,e.name employeeName,b.id internalBranchId,b.jodoo_branch_id branchId,b.branch_name branchName,s.route_number routeNumber,v.registration_number plate FROM driver_date_requests r JOIN dispatch_stops s ON s.id=r.dispatch_stop_id JOIN branches b ON b.id=s.branch_id JOIN employees e ON e.id=r.employee_id JOIN dispatches d ON d.id=s.dispatch_id LEFT JOIN vehicles v ON v.id=d.vehicle_id WHERE r.status='pending' ORDER BY r.requested_at,r.id`).all().map(r=>({...r,routes:driverDateReviewOptions(r.targetDate,db).routes,schedule:getCollectionScheduleManagement(r.internalBranchId,db)}))
 }
 
 export function decideDriverDate(id,decision,payload,context={},db=defaultDb){
  if(!['owner','owner_admin','operations_admin','supervisor'].includes(context.role))fail('routeTrial.supervisorOnly',403)
- if(!['approved','rejected'].includes(decision)||!String(payload.reason||'').trim())fail('routeTrial.reviewReason',400)
+ if(!['approved','rejected'].includes(decision)||!String(payload.reason||'').trim()||String(payload.reason).length>1000)fail('routeTrial.reviewReason',400)
  return withImmediateTransaction(db,()=>{
   const r=db.prepare('SELECT * FROM driver_date_requests WHERE id=?').get(Number(id))
   if(!r)fail('routeTrial.notFound',404)
   if(r.status!=='pending'){if(r.status===decision)return{id:r.id,status:r.status,idempotent:true};fail('routeTrial.stale')}
   const s=lookup(db,r.dispatch_stop_id),actor=context.employeeName||String(context.employeeId),reason=String(payload.reason).trim()
-  let targetStop=null
+  let targetStop=null,preservedDates=[]
   if(decision==='approved'){
+   const today=context.today||kuchingDate(),date=String(payload.targetDate||r.target_date),scope=payload.scope||'once',route=Number(payload.routeNumber)
+   if(!planningDate(date)||planningDate(date)!==date||date<today)fail('routeTrial.invalidReviewDate',400)
+   if(!['once','permanent'].includes(scope))fail('routeTrial.invalidScope',400)
    if(!s||s.dispatch_date!==r.source_date||hasWork(db,s)||pendingDefer(db,s))fail('routeTrial.protected')
-   if(r.source_date<(context.today||kuchingDate())||r.target_date<=(context.today||kuchingDate()))fail('routeTrial.stale')
-   const target=db.prepare('SELECT * FROM dispatch_days WHERE dispatch_date=?').get(r.target_date)
-   if(!target||!['draft','reapproval_required','approved'].includes(target.status))fail('routeTrial.targetNotReady')
-   const route=Number(payload.routeNumber),definition=db.prepare('SELECT r.route_number FROM weekly_route_definitions r JOIN weekly_route_plans p ON p.id=r.plan_id WHERE p.is_active=1 AND r.route_number=?').get(route)
-   const assignment=db.prepare('SELECT vehicle_id FROM daily_route_assignments WHERE dispatch_day_id=? AND route_number=?').get(target.id,route)
-   if(!definition||!assignment?.vehicle_id)fail('routeTrial.chooseRoute')
-   if(!db.prepare("SELECT 1 FROM vehicles WHERE id=? AND operational_status IN ('available','active') AND status IN ('available','assigned') AND (is_temporary=0 OR temporary_date=?)").get(assignment.vehicle_id,r.target_date))fail('routeTrial.targetNotReady')
-   const protectedVehicle=db.prepare("SELECT 1 FROM dispatch_trips t JOIN dispatches d ON d.id=t.dispatch_id WHERE t.dispatch_day_id=? AND d.vehicle_id=? AND (t.execution_status<>'not_started' OR d.status IN ('released','in_progress','completed'))").get(target.id,assignment.vehicle_id)
-   if(protectedVehicle)fail('routeTrial.targetNotReady')
-   assertBranchServiceDateAvailable(db,s.branch_id,r.target_date,{entryPoint:'driver_date_approval'})
-   const created=createStop({date:r.target_date,branchId:s.branch_code,vehicleId:assignment.vehicle_id,tripNumber:1,estimatedWeightKg:s.estimated_weight_kg,changedBy:actor},db)
+   if(r.source_date<today)fail('routeTrial.stale')
+   if(date===s.dispatch_date&&route===s.route_number)fail('routeTrial.noChange',400)
+   const options=driverDateReviewOptions(date,db),chosen=options.routes.find(x=>x.routeNumber===route)
+   if(!options.dayReady)fail('routeTrial.targetNotReady')
+   if(!chosen?.vehicleId)fail('routeTrial.chooseRoute')
+   if(!chosen.available)fail('routeTrial.targetNotReady')
+   if(payload.targetRevision!=null&&Number(payload.targetRevision)!==options.revision)fail('routeTrial.stale')
+   const target=db.prepare('SELECT * FROM dispatch_days WHERE dispatch_date=?').get(date)
+   assertBranchServiceDateAvailable(db,s.branch_id,date,{excludeStopId:s.id,entryPoint:'driver_date_approval'})
+   let before=null,after=null
+   if(scope==='permanent'){
+    before=getCollectionScheduleManagement(s.branch_id,db)
+    if(!before||before.blocked||!before.internalScheduleId||before.internalScheduleId!==s.source_schedule_id)fail('routeTrial.scheduleReview',400)
+    if(!payload.expectedScheduleUpdatedAt||payload.expectedScheduleUpdatedAt!==before.updatedAt)fail('routeTrial.stale')
+    const sourceDay=weekdayName(s.dispatch_date),targetDay=weekdayName(date)
+    if(!before.weekdays.includes(sourceDay)||sourceDay!==targetDay&&before.weekdays.includes(targetDay))fail('routeTrial.weekdayConflict',400)
+    const weekdays=before.weekdays.map(x=>x===sourceDay?targetDay:x)
+    const nth=Math.floor((Number(date.slice(-2))-1)/7)+1
+    const saved=saveCollectionScheduleManagement(s.branch_id,{...before,weekdays,routeNumber:route,
+     anchorDate:['interval_weeks','monthly'].includes(before.recurrenceType)?date:before.anchorDate,
+     effectiveDate:s.dispatch_date,monthlyOccurrence:before.recurrenceType==='monthly'?(nth===5?-1:nth):before.monthlyOccurrence,
+     sundayRouteNumber:targetDay==='Sunday'?route:before.sundayRouteNumber,sundayAuthorized:payload.sundayAuthorized===true,
+     expectedUpdatedAt:payload.expectedScheduleUpdatedAt,reason,changedBy:actor},db)
+    after=saved.after
+   }
+   // Cancel before inserting so a same-day route transfer respects branch/date uniqueness.
+   // The enclosing transaction restores everything if any later write fails.
+   db.prepare("UPDATE dispatch_stops SET status='cancelled',override_reason=?,override_note='driver_date_approved',override_at=CURRENT_TIMESTAMP WHERE id=?").run(reason,s.id)
+   db.prepare("UPDATE schedule_occurrences SET status='cancelled',updated_at=CURRENT_TIMESTAMP WHERE dispatch_stop_id=?").run(s.id)
+   const created=createStop({date,branchId:s.branch_code,vehicleId:chosen.vehicleId,tripNumber:1,estimatedWeightKg:s.estimated_weight_kg,changedBy:actor},db)
    const routeSequence=db.prepare('SELECT COALESCE(MAX(s.route_stop_sequence),0)+1 n FROM dispatch_stops s JOIN dispatch_trips t ON t.id=s.dispatch_trip_id WHERE t.dispatch_day_id=? AND s.route_number=?').get(target.id,route).n
    db.prepare('UPDATE dispatch_stops SET source_schedule_id=?,route_number=?,route_stop_sequence=? WHERE id=?').run(s.source_schedule_id,route,routeSequence,created.id)
    targetStop=created.id
-   db.prepare("UPDATE dispatch_stops SET status='cancelled',override_reason=?,override_note='driver_date_approved',override_at=CURRENT_TIMESTAMP WHERE id=?").run(reason,s.id)
-   db.prepare("UPDATE schedule_occurrences SET status='cancelled',updated_at=CURRENT_TIMESTAMP WHERE dispatch_stop_id=?").run(s.id)
-   if(s.source_schedule_id)db.prepare("INSERT INTO schedule_exceptions(branch_id,schedule_id,exception_type,original_date,target_date,permanent,reason,created_by) VALUES(?,?,'move_date',?,?,0,?,?)").run(s.branch_id,s.source_schedule_id,r.source_date,r.target_date,reason,actor)
+   if(s.source_schedule_id){
+    db.prepare("INSERT INTO schedule_exceptions(branch_id,schedule_id,exception_type,original_date,target_date,permanent,reason,created_by) VALUES(?,?,?,?,?,0,?,?)").run(s.branch_id,s.source_schedule_id,date===s.dispatch_date?'add_extra_collection':'move_date',s.dispatch_date,date,reason,actor)
+    db.prepare("INSERT INTO schedule_occurrences(schedule_id,branch_id,planned_date,occurrence_source,status,dispatch_stop_id) VALUES(?,?,?,'exception','planned',?) ON CONFLICT(schedule_id,planned_date) DO UPDATE SET status='planned',dispatch_stop_id=excluded.dispatch_stop_id,occurrence_source='exception',updated_at=CURRENT_TIMESTAMP").run(s.source_schedule_id,s.branch_id,date,targetStop)
+   }
+   db.prepare('INSERT INTO driver_date_reviews(request_id,branch_id,approved_date,route_number,scope,schedule_before_json,schedule_after_json) VALUES(?,?,?,?,?,?,?)').run(r.id,s.branch_id,date,route,scope,JSON.stringify(before),JSON.stringify(after))
+   if(scope==='permanent'){
+    preservedDates=syncReviewedBranchSchedule({branchId:s.branch_id,scheduleId:s.source_schedule_id,startDate:s.dispatch_date,excludeStopId:targetStop,changedBy:actor},db)
+    after.nextCollectionDate=db.prepare('SELECT next_collection_date date FROM branch_schedules WHERE id=?').get(s.source_schedule_id).date
+    db.prepare('UPDATE driver_date_reviews SET preserved_dates_json=?,schedule_after_json=? WHERE request_id=?').run(JSON.stringify(preservedDates),JSON.stringify(after),r.id)
+   }
    if(!db.prepare("SELECT 1 FROM dispatch_stops WHERE dispatch_trip_id=? AND status<>'cancelled'").get(s.trip_id)&&s.execution_status==='in_progress'){
     db.prepare("UPDATE dispatch_trips SET execution_status='completed',completed_at=CURRENT_TIMESTAMP,completed_by_employee_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(context.employeeId,s.trip_id)
-    db.prepare("UPDATE dispatches SET status='completed',updated_at=CURRENT_TIMESTAMP WHERE id=?").run(s.dispatch_id)
+    // Other trips on this dispatch must also be complete before closing the dispatch.
+    if(!db.prepare("SELECT 1 FROM dispatch_trips WHERE dispatch_id=? AND execution_status<>'completed'").get(s.dispatch_id))db.prepare("UPDATE dispatches SET status='completed',updated_at=CURRENT_TIMESTAMP WHERE id=?").run(s.dispatch_id)
     audit(db,s,actor,'empty_trip_closed_after_date_approval',{status:'in_progress'},{status:'completed',tripId:s.trip_id})
    }
-   invalidateDispatchDay(db,r.source_date,'driver_date_approved','dispatch_stop',s.id,{status:s.status},{status:'cancelled',targetStopId:targetStop,targetDate:r.target_date},actor)
+   invalidateDispatchDay(db,r.source_date,'driver_date_approved','dispatch_stop',s.id,{status:s.status},{status:'cancelled',targetStopId:targetStop,targetDate:date,routeNumber:route,scope},actor)
   }
   db.prepare('UPDATE driver_date_requests SET status=?,reviewed_by=?,review_reason=?,reviewed_at=CURRENT_TIMESTAMP,target_stop_id=? WHERE id=?').run(decision,actor,reason,targetStop,r.id)
-  audit(db,s,actor,'driver_date_request_'+decision,{requestId:r.id,status:'pending'},{status:decision,targetStopId:targetStop,reason})
-  return{id:r.id,status:decision,targetStopId:targetStop}
+  audit(db,s,actor,'driver_date_request_'+decision,{requestId:r.id,status:'pending'},{status:decision,targetStopId:targetStop,reason,preservedDates})
+  return{id:r.id,status:decision,targetStopId:targetStop,preservedDates}
  })
 }
