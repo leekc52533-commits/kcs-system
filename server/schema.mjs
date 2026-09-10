@@ -1,11 +1,12 @@
+import {noGoodsNoticeSchemaSql} from './migrationV59.mjs'
 import {dateReviewSchemaSql} from './migrationV58.mjs'
 import {billVoidSchemaSql} from './migrationV57.mjs'
 import {expenseDetailsSchemaSql} from './migrationV56.mjs'
 import {routeRequestSchemaSql} from './migrationV55.mjs'
 import {sundaySchemaSql} from './sundayPlanning.mjs'
-export const SCHEMA_VERSION = 58
+export const SCHEMA_VERSION = 59
 
-export const schemaSql = dateReviewSchemaSql + billVoidSchemaSql + expenseDetailsSchemaSql + routeRequestSchemaSql + sundaySchemaSql + `
+export const schemaSql = noGoodsNoticeSchemaSql + dateReviewSchemaSql + billVoidSchemaSql + expenseDetailsSchemaSql + routeRequestSchemaSql + sundaySchemaSql + `
 CREATE TABLE IF NOT EXISTS schema_meta (
   version INTEGER PRIMARY KEY,
   applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP

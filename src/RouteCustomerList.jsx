@@ -1,3 +1,4 @@
+import {NoGoodsRecord} from './NoGoodsNotice.jsx'
 import {DateRequestReview} from './DriverDateApprovals.jsx'
 import {useI18n} from './i18n.jsx'
 import RouteBranchEditor from './RouteBranchEditor.jsx'
@@ -17,8 +18,10 @@ function collectionStatus(stop){
 }
 
 export default function RouteCustomerList({day,route,days,canEdit,onReorder,busy}){
+  const{t}=useI18n()
   const editable=canEdit&&['draft','reapproval_required'].includes(day.status)
-  return <ol className="route-customer-list">{route.stops.map((stop,index)=><CustomerRow key={stop.id} {...{stop,index,day,route,days,canEdit,editable,onReorder,busy}}/>)}</ol>
+  const skipped=route.stops.filter(stop=>stop.noGoodsNotice)
+  return <><ol className="route-customer-list">{route.stops.map((stop,index)=>!stop.noGoodsNotice&&<CustomerRow key={stop.id} {...{stop,index,day,route,days,canEdit,editable,onReorder,busy}}/>)}</ol>{skipped.length>0&&<details className="no-goods-archive"><summary>{t('ng.title')} ({skipped.length})</summary>{skipped.map(stop=><NoGoodsRecord key={stop.id} stop={stop} canRestore={canEdit} onSaved={()=>window.dispatchEvent(new Event('kcs-handover-saved'))}/>)}</details>}</>
 }
 
 function CustomerRow({stop,index,day,route,days,canEdit,editable,onReorder,busy}){

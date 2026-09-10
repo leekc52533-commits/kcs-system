@@ -1,3 +1,4 @@
+import {NoGoodsButton,NoGoodsRecord} from './NoGoodsNotice.jsx'
 import BillVoidPage from './BillVoidPage.jsx'
 import ExpenseDetailFields,{emptyExpenseDetails,ExpenseMerchantFields} from './ExpenseDetailFields.jsx'
 import DriverRouteTools from './DriverRouteTools.jsx'
@@ -160,7 +161,7 @@ function CashFloatMobileCard(){
 function TodayView({data,preview=false}){
   const ui=useUi()
 
-  const{t}=useI18n(),[route,setRoute]=useState(data),[busy,setBusy]=useState(''),[error,setError]=useState(''),[message,setMessage]=useState(''),[proofs,setProofs]=useState({}),[openStopId,setOpenStopId]=useState(()=>{if(preview)return null;try{return Number(sessionStorage.getItem('kcs-mobile-open-stop'))||null}catch{return null}}),[deferReasons,setDeferReasons]=useState({}),[deferTimes,setDeferTimes]=useState({})
+  const{t}=useI18n(),[route,setRoute]=useState(data),[busy,setBusy]=useState(''),[error,setError]=useState(''),[message,setMessage]=useState(''),[openStopId,setOpenStopId]=useState(()=>{if(preview)return null;try{return Number(sessionStorage.getItem('kcs-mobile-open-stop'))||null}catch{return null}}),[deferReasons,setDeferReasons]=useState({}),[deferTimes,setDeferTimes]=useState({})
   useEffect(()=>setRoute(data),[data])
   useEffect(()=>{if(preview)return;try{if(openStopId)sessionStorage.setItem('kcs-mobile-open-stop',String(openStopId));else sessionStorage.removeItem('kcs-mobile-open-stop')}catch{/* no-op */}},[openStopId,preview])
   const refresh=()=>api(preview?'/api/mobile/tomorrow':'/api/mobile/today').then(setRoute)
@@ -171,9 +172,7 @@ function TodayView({data,preview=false}){
   const completeStop=stop=>run('complete-'+stop.id,()=>api('/api/mobile/stops/'+stop.id+'/complete',{method:'POST',body:'{}'}),ui('Stop completed. Next Stop is now available.'),true)
   const deferStop=stop=>{if(!deferTimes[stop.id]){setError(t('mobile.returnTimeRequired'));return}return run('defer-'+stop.id,()=>api('/api/mobile/stops/'+stop.id+'/defer',{method:'POST',body:JSON.stringify({reason:deferReasons[stop.id]||'customer_requested_return',expectedReturnTime:deferTimes[stop.id]})}),t('mobile.deferWaiting'),false)}
   const completeTrip=trip=>run('complete-trip-'+trip.id,()=>api('/api/mobile/trips/'+trip.id+'/complete',{method:'POST',body:'{}'}),ui('Trip completed.'))
-  const updateProof=(id,values)=>setProofs(current=>({...current,[id]:{reason:'',photo:null,...current[id],...values}}))
   const toggleStop=id=>setOpenStopId(current=>current===id?null:id)
-  const noGoods=async stop=>{const proof=proofs[stop.id]||{};if(!String(proof.reason||'').trim()){setError(ui("No Goods reason is required."));return}if(!proof.photo){setError(ui("A No Goods photo is required."));return}if(proof.photo.blob.size>8*1024*1024){setError(ui("Photo must be no larger than 8 MB."));return}setBusy('no-goods-'+stop.id);setError('');setMessage('');try{await api('/api/mobile/stops/'+stop.id+'/no-goods',{method:'POST',body:JSON.stringify({reason:proof.reason,photo:await proofData(proof.photo)})});updateProof(stop.id,{reason:'',photo:null});await refresh();setOpenStopId(null);setMessage(ui("No Goods proof saved. Next Stop is now available."))}catch(item){setError(item.message)}finally{setBusy('')}}
   if(!route)return <section><h1>{t(preview?'mobile.tomorrow':'mobile.today')}</h1>{!preview&&<CashFloatMobileCard/>}<p>{t('mobile.routeLoading')}</p></section>
   if(!route.routeAvailable)return <section><h1>{t(preview?'mobile.tomorrow':'mobile.today')}</h1>{!preview&&<CashFloatMobileCard/>}<p>{t(preview?(route.reason==='NO_VEHICLE_ASSIGNED'?'mobile.tomorrowNoVehicle':'mobile.tomorrowNotApproved'):(route.reason==='NO_VEHICLE_ASSIGNED'?'mobile.noVehicleAssigned':'mobile.notApproved'))}</p></section>
   return <section className="driver-route">
@@ -184,16 +183,16 @@ function TodayView({data,preview=false}){
     {message&&<div className="mobile-message" role="status">{ui(message)}</div>}
     {error&&<div className="auth-error" role="alert">{ui(error)}</div>}
     {!preview&&route.trialOrderEnabled&&<p className="mobile-message">{t('routeTrial.banner')}</p>}
-    <div className="driver-route-summary"><strong>{route.date} · {ui(route.weekday)}</strong><span>{t('mobile.routeStatus')}: {t(!route.approved?'dateReview.awaitDeparture':route.status==='in_progress'?'mobile.inProgress':'mobile.approved')}</span><span>{t('mobile.totalStops')}: {route.totalStops} · {t('mobile.completed')}: {route.completedStops} · {t('mobile.pending')}: {route.pendingStops}</span></div>
+    <div className="driver-route-summary"><strong>{route.date} · {ui(route.weekday)}</strong><span>{t('mobile.routeStatus')}: {t(!route.approved?'dateReview.awaitDeparture':route.status==='in_progress'?'mobile.inProgress':'mobile.approved')}</span><span>{t('mobile.totalStops')}: {route.totalStops} · {t('mobile.completed')}: {route.completedStops} · {t('mobile.pending')}: {route.pendingStops} · {t('ng.title')}: {route.noGoodsCount||0}</span></div>
     {route.trips.map(trip=><article className="mobile-card driver-trip" key={trip.id}>
       <h2><span data-i18n-raw>{trip.registrationNumber||trip.vehicleCode}</span></h2>
       <p>{ui("Trip")}{trip.tripNumber} · {trip.completedCount||0}/{trip.totalCount||trip.stops.length} {t('mobile.completed')} · {t(trip.executionStatus==='in_progress'?'mobile.inProgress':trip.executionStatus==='completed'?'mobile.completed':'mobile.notStarted')}</p>
       {trip.approved===false&&<p className="route-preview-notice">{t('dateReview.draftVisible')}</p>}
       {!preview&&trip.canStart&&<button type="button" className="primary-mobile" disabled={Boolean(busy)} onClick={()=>start(trip)}>{busy==='trip-'+trip.id?t('common.processing'):t('mobile.startTrip')}</button>}
       {!preview&&trip.canComplete&&<button type="button" className="primary-mobile" disabled={Boolean(busy)} onClick={()=>completeTrip(trip)}>{busy==='complete-trip-'+trip.id?t('common.processing'):ui("Complete Trip")}</button>}
-      {trip.stops.map(stop=>{
-        const current=trip.currentStopId===stop.id,ended=stop.status==='completed',pendingApproval=stop.deferApprovalStatus==='pending',proof=proofs[stop.id]||{},ready=stop.billCreated&&(stop.billPaymentMethod==='Credit'||stop.paymentProofUploaded),label=stop.stopSequence+'. '+stop.customerName+' — '+stop.branchName,canOpen=preview||trip.approved===false||current||stop.deferred||ended&&stop.billCreated,expanded=preview||(openStopId==null?current:openStopId===stop.id)&&canOpen
-        const adjustmentTools=!preview&&<DriverRouteTools {...{stop,trip,route,run}} busy={Boolean(busy)}/>
+      {trip.stops.filter(stop=>!['no_goods','no_goods_notice'].includes(stop.completionOutcome)).map(stop=>{
+        const current=trip.currentStopId===stop.id,ended=stop.status==='completed',pendingApproval=stop.deferApprovalStatus==='pending',ready=stop.billCreated&&(stop.billPaymentMethod==='Credit'||stop.paymentProofUploaded),label=stop.stopSequence+'. '+stop.customerName+' — '+stop.branchName,canOpen=preview||trip.approved===false||current||stop.deferred||ended&&stop.billCreated,expanded=preview||(openStopId==null?current:openStopId===stop.id)&&canOpen
+        const adjustmentTools=!preview&&<><DriverRouteTools {...{stop,trip,route,run}} busy={Boolean(busy)}/><NoGoodsButton stop={stop} disabled={Boolean(busy)} onSaved={refresh}/></>
         if(!expanded)return <div className={'driver-stop collapsed-stop'+(stop.deferred?' deferred-stop':pendingApproval?' defer-pending':'')} key={stop.id}>{canOpen?<button type="button" className="stop-name-button" onClick={()=>toggleStop(stop.id)}><b><span data-i18n-raw>{label}</span></b><span>{pendingApproval?t('mobile.waitingSupervisor')+' ▼':stop.deferred?ui("COME BACK LATER ▼"):current?ui("OPEN ▼"):'▼'}</span></button>:<b><span data-i18n-raw>{label}</span></b>}{adjustmentTools}</div>
         if(!preview&&ended)return <div className="driver-stop collapsed-stop" key={stop.id}><button type="button" className="stop-name-button" onClick={()=>toggleStop(stop.id)}><b><span data-i18n-raw>{label}</span></b><span>▲</span></button><PurchaseBillPanel stop={stop} onChanged={refresh} readOnly/></div>
         const mapUrl=stopMapUrl(stop),status=stop.arrivedAt?'Arrived':'Pending'
@@ -214,10 +213,10 @@ function TodayView({data,preview=false}){
           {!preview&&stop.canFinish&&!stop.deferred&&!stop.billCreated&&<div className="driver-defer"><label>{t('mobile.comeBackLater')}<select value={deferReasons[stop.id]||'customer_requested_return'} onChange={event=>setDeferReasons(current=>({...current,[stop.id]:event.target.value}))}><option value="customer_requested_return">{t('mobile.deferCustomerRequest')}</option><option value="no_space_available">{t('mobile.deferNoSpace')}</option><option value="other">{t('mobile.deferOther')}</option></select></label><label>{t('mobile.expectedReturnTime')}<input type="time" required value={deferTimes[stop.id]||''} onChange={event=>setDeferTimes(current=>({...current,[stop.id]:event.target.value}))}/></label><button type="button" className="secondary-mobile" disabled={Boolean(busy)||!deferTimes[stop.id]} onClick={()=>deferStop(stop)}>{busy==='defer-'+stop.id?t('common.processing'):t('mobile.requestDeferApproval')}</button></div>}
           {!preview&&stop.canFinish&&<PurchaseBillPanel stop={stop} onChanged={refresh}/>}
           {!preview&&stop.canFinish&&ready&&<button type="button" className="primary-mobile next-customer" disabled={Boolean(busy)} onClick={()=>completeStop(stop)}>{busy==='complete-'+stop.id?t('common.processing'):ui("Complete and continue to next customer")}</button>}
-          {!preview&&stop.canFinish&&<div className="driver-no-goods"><label>{ui("No Goods reason")}<textarea value={proof.reason||''} onChange={event=>updateProof(stop.id,{reason:event.target.value})}/></label><b>{ui("No Goods photo")}</b><ProofPhotoPicker value={proof.photo} disabled={Boolean(busy)&&busy!=='photo-'+stop.id} onBusyChange={active=>setBusy(active?'photo-'+stop.id:'')} onChange={photo=>updateProof(stop.id,{photo})}/><button type="button" className="secondary-mobile" disabled={Boolean(busy)} onClick={()=>noGoods(stop)}>{busy==='no-goods-'+stop.id?ui("Uploading…"):ui("No Goods")}</button></div>}
         </div>
       })}
     </article>)}
+    {route.trips.some(trip=>trip.stops.some(stop=>['no_goods','no_goods_notice'].includes(stop.completionOutcome)))&&<details className="no-goods-archive"><summary>{t('ng.title')} ({route.noGoodsCount||0})</summary>{route.trips.flatMap(trip=>trip.stops).filter(stop=>['no_goods','no_goods_notice'].includes(stop.completionOutcome)).map(stop=><NoGoodsRecord key={stop.id} stop={stop}/>)}</details>}
   </section>
 }
 
