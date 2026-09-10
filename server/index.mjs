@@ -1,9 +1,10 @@
+import {canManageDispatch} from '../shared/dispatchAccess.js'
 import {listBillVoids,requestBillVoid,decideBillVoid} from './purchaseBillVoidService.mjs'
 import {getReplacementBilling,reissuePurchaseBill,uploadReplacementProof} from './purchaseBillingService.mjs'
 import {recognizeExpenseReceipt} from './expenseReceiptOcr.mjs'
 import {expenseVehicles} from './expenseDetails.mjs'
 import {createEmployeeWithAccount} from './employeeAccountService.mjs'
-import {reorderDriverStop,requestDriverDate,listDriverDateRequests,decideDriverDate,driverDateReviewOptions} from './driverRouteAdjustmentService.mjs'
+import {reorderDriverStop,requestDriverDate,listDriverDateRequests,decideDriverDate,driverDateReviewOptions,plannedCustomerReview,changePlannedCustomer} from './driverRouteAdjustmentService.mjs'
 import {kuchingDate as scheduleToday,addCalendarDays as scheduleAddDays} from '../shared/kuchingTime.js'
 import {addTemporaryRouteCollection,recordCustomerReportedNoGoods,reconcileScheduleWindow} from './dispatchService.mjs'
 import {ensureRollingWeek} from './dispatchService.mjs'
@@ -69,7 +70,7 @@ const networkUrls=()=>Object.values(os.networkInterfaces()).flat().filter(item=>
 function permissionFor(pathname){if(pathname.startsWith('/api/mobile/'))return'mobile';if(/^\/api\/gps-collector\/branch\/[^/]+\/withdraw$/.test(pathname)||pathname==='/api/gps-collector'||/^\/api\/gps-collector\/\d+\/(adopt|review|photo)$/.test(pathname)||/^\/api\/temporary-locations\/\d+\/adopt$/.test(pathname))return'gps_review';if(pathname.startsWith('/api/gps-collection')||/^\/api\/gps-collector\/branch\/[^/]+$/.test(pathname))return'gps_capture';if(pathname.startsWith('/api/auth/accounts')||pathname==='/api/auth/audit')return'accounts';if(/^\/api\/gps-migration\/(?:batches\/\d+\/commit|rows\/\d+\/resolve)$/.test(pathname))return'gps_migration_approve';if(pathname.startsWith('/api/gps-migration'))return'gps_migration';return'desktop'}
 
 const canManageEmployees=session=>accountCan(session,'employee_manage')
-const canManageSchedules=session=>accountCan(session,'schedule_manage')||['owner_admin','supervisor'].includes(session.role)
+const canManageSchedules=canManageDispatch
 const canManageBuyers=session=>['owner_admin','operations_admin','supervisor','office'].includes(session.role)
 const canManageOperationalLocations=session=>['owner_admin','operations_admin','supervisor','office'].includes(session.role)
 const canManageBranches=session=>['owner_admin','operations_admin','supervisor','office'].includes(session.role)
@@ -77,7 +78,7 @@ const canViewIdentity=session=>accountCan(session,'sensitive_data')||accountCan(
 const canViewPayroll=session=>accountCan(session,'sensitive_data')||accountCan(session,'employee_payroll_sensitive')
 const canViewPurchaseBills=session=>['owner','owner_admin','operations_admin','supervisor','office','dispatcher'].includes(String(session.role).toLowerCase())
 const canManageCashFloat=session=>['owner','owner_admin','operations_admin','supervisor','office'].includes(String(session.role).toLowerCase())
-const canApproveDriverDefer=session=>['owner','owner_admin','operations_admin','supervisor'].includes(String(session.role).toLowerCase())
+const canApproveDriverDefer=canManageDispatch
 
 async function readJson(request, maxBytes = 15_000_000) {
   const chunks = []
@@ -130,6 +131,7 @@ const server = http.createServer(async (request, response) => {
     if(request.method==='POST'&&url.pathname==='/api/expenses/recognize'){if(!canManageCashFloat(session)&&!mobileCashFloat(session.employeeId).configured)return sendJson(response,403,{error:'Expense access is restricted.'});return sendJson(response,200,await recognizeExpenseReceipt((await readJson(request)).payload.proof,expenseVehicles(db)))}
     if (request.method === 'POST' && url.pathname === '/api/mobile/cash-float/expenses') return sendJson(response,201,addCashFloatExpense(session.employeeId,(await readJson(request)).payload,{employeeId:session.employeeId,employeeName:session.employeeName},db,{uploadsRoot:uploadsDir}))
     if (request.method === 'POST' && /^\/api\/mobile\/stops\/\d+\/(trial-reorder|request-date)$/.test(url.pathname)) {const parts=url.pathname.split('/'),payload=(await readJson(request)).payload,context={employeeId:session.employeeId,role:session.role};return sendJson(response,200,parts[5]==='trial-reorder'?reorderDriverStop(Number(parts[4]),payload,context):requestDriverDate(Number(parts[4]),payload,context))}
+    if (['GET','POST'].includes(request.method) && /^\/api\/dispatch\/stops\/\d+\/review-change$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});const id=Number(url.pathname.split('/')[4]),context={role:session.role,employeeId:session.employeeId,employeeName:session.employeeName};return sendJson(response,200,request.method==='GET'?plannedCustomerReview(id,context):changePlannedCustomer(id,(await readJson(request)).payload,context))}
     if (request.method === 'GET' && url.pathname === '/api/dispatch/date-requests/options') {if(!canApproveDriverDefer(session))return sendJson(response,403,{error:'Supervisor permission required'});return sendJson(response,200,driverDateReviewOptions(url.searchParams.get('date')))}
     if (request.method === 'GET' && url.pathname === '/api/dispatch/date-requests/pending') {if(!canApproveDriverDefer(session))return sendJson(response,403,{error:'Supervisor permission required'});return sendJson(response,200,{items:listDriverDateRequests()})}
     if (request.method === 'POST' && /^\/api\/dispatch\/date-requests\/\d+\/(approve|reject)$/.test(url.pathname)) {if(!canApproveDriverDefer(session))return sendJson(response,403,{error:'Supervisor permission required'});const parts=url.pathname.split('/');return sendJson(response,200,decideDriverDate(Number(parts[4]),parts[5]==='approve'?'approved':'rejected',(await readJson(request)).payload,{employeeId:session.employeeId,employeeName:session.employeeName,role:session.role}))}
@@ -271,7 +273,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'GET' && url.pathname === '/api/schedules') return sendJson(response, 200, schedules(Object.fromEntries(url.searchParams)))
     if (request.method === 'GET' && url.pathname === '/api/collection-schedule-management') return sendJson(response,200,{items:listCollectionScheduleManagement(Object.fromEntries(url.searchParams))})
     if (request.method === 'GET' && /^\/api\/branches\/[^/]+\/collection-schedule$/.test(url.pathname)) {const item=getCollectionScheduleManagement(decodeURIComponent(url.pathname.split('/')[3]));return item?sendJson(response,200,item):sendJson(response,404,{error:'Active Branch not found.'})}
-    if (request.method === 'PATCH' && /^\/api\/branches\/[^/]+\/collection-schedule$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});const payload=(await readJson(request)).payload;return sendJson(response,200,saveCollectionScheduleManagement(decodeURIComponent(url.pathname.split('/')[3]),{...payload,sundayAuthorized:['owner_admin','operations_admin','supervisor'].includes(session.role),changedBy:session.employeeName}))}
+    if (request.method === 'PATCH' && /^\/api\/branches\/[^/]+\/collection-schedule$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});const payload=(await readJson(request)).payload;return sendJson(response,200,saveCollectionScheduleManagement(decodeURIComponent(url.pathname.split('/')[3]),{...payload,sundayAuthorized:canManageDispatch(session),changedBy:session.employeeName}))}
     if (request.method === 'GET' && url.pathname === '/api/data-quality/summary') return sendJson(response, 200, dataQualitySummary())
     if (request.method === 'GET' && url.pathname === '/api/dispatch/week') return sendJson(response, 200, getDispatchWeek(Object.fromEntries(url.searchParams)))
     if (request.method === 'GET' && url.pathname === '/api/dispatch/start-location-options') {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});const driverId=Number(url.searchParams.get('driverId'))||null,includeEmployeeHome=canManageEmployees(session);return sendJson(response,200,getStartLocationOptions({driverId,includeEmployeeHome}))}

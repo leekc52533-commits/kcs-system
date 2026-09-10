@@ -35,7 +35,8 @@ test('pending request does not change route and duplicate retries are idempotent
 test('approval preserves original record as cancelled and creates a single assigned future stop',()=>{const{db,ids}=fixture(),r=request(db,ids[0]),before=db.prepare('SELECT * FROM branch_schedules').all(),result=approve(db,r.id);assert.equal(db.prepare('SELECT status FROM dispatch_stops WHERE id=?').get(ids[0]).status,'cancelled');const target=db.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(result.targetStopId);assert.equal(target.service_date,'2026-09-11');assert.equal(target.route_number,1);assert.equal(target.source_schedule_id,1);assert.equal(db.prepare('SELECT vehicle_id FROM dispatches WHERE id=?').get(target.dispatch_id).vehicle_id,1);assert.equal(db.prepare('SELECT COUNT(*) n FROM schedule_exceptions').get().n,1);assert.deepEqual(db.prepare('SELECT * FROM branch_schedules').all(),before);assert.equal(approve(db,r.id).idempotent,true);assert.equal(db.prepare('PRAGMA integrity_check').get().integrity_check,'ok');assert.equal(db.prepare('PRAGMA foreign_key_check').all().length,0);db.close()})
 test('non-supervisor approval is rejected and rejected request retains original stop',()=>{const{db,ids}=fixture(),r=request(db,ids[0]);assert.throws(()=>decideDriverDate(r.id,'approved',{routeNumber:1,reason:'Forged'},context,db),/supervisorOnly/);decideDriverDate(r.id,'rejected',{reason:'Keep today'},supervisor,db);assert.notEqual(db.prepare('SELECT status FROM dispatch_stops WHERE id=?').get(ids[0]).status,'cancelled');db.close()})
 test('execution after request prevents approval',()=>{const{db,ids}=fixture(),r=request(db,ids[0]);db.prepare("UPDATE dispatch_stops SET arrived_at='now',status='active' WHERE id=?").run(ids[0]);assert.throws(()=>approve(db,r.id),/protected/);assert.equal(db.prepare('SELECT status FROM driver_date_requests').get().status,'pending');db.close()})
-test('invalid dates and missing target vehicle cannot remove original stop',()=>{const{db,ids}=fixture();assert.throws(()=>requestDriverDate(ids[0],{targetDate:'2026-02-30',reason:'x'},context,db),/dateReason/);const r=request(db,ids[0]);db.exec('DELETE FROM daily_route_assignments');assert.throws(()=>approve(db,r.id),/chooseRoute/);assert.notEqual(db.prepare('SELECT status FROM dispatch_stops WHERE id=?').get(ids[0]).status,'cancelled');db.close()})
+test('invalid dates are rejected but missing target vehicles allow queued route assignment',()=>{const{db,ids}=fixture();assert.throws(()=>requestDriverDate(ids[0],{targetDate:'2026-02-30',reason:'x'},context,db),/dateReason/);const r=request(db,ids[0]);db.exec('DELETE FROM daily_route_assignments');const result=approve(db,r.id),stop=db.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(result.targetStopId);assert.equal(stop.route_number,1);assert.equal(db.prepare('SELECT vehicle_id FROM dispatches WHERE id=?').get(stop.dispatch_id).vehicle_id,null);assert.equal(db.prepare('SELECT status FROM dispatch_stops WHERE id=?').get(ids[0]).status,'cancelled');db.close()})
+
 test('audit failure rolls back order and all date approval writes',()=>{const{db,ids,trip}=fixture();db.exec("CREATE TRIGGER audit_fail BEFORE INSERT ON dispatch_change_logs WHEN NEW.change_type='driver_trial_order_changed' BEGIN SELECT RAISE(ABORT,'audit failure'); END");assert.throws(()=>reorderDriverStop(ids[1],{direction:'up',expectedOrder:ids},context,db),/audit failure/);assert.deepEqual(order(db,trip),ids);const r=request(db,ids[0]);db.exec("CREATE TRIGGER approve_fail BEFORE INSERT ON dispatch_change_logs WHEN NEW.change_type='driver_date_request_approved' BEGIN SELECT RAISE(ABORT,'audit failure'); END");assert.throws(()=>approve(db,r.id),/audit failure/);assert.notEqual(db.prepare('SELECT status FROM dispatch_stops WHERE id=?').get(ids[0]).status,'cancelled');assert.equal(db.prepare("SELECT COUNT(*) n FROM dispatch_stops WHERE service_date='2026-09-11'").get().n,0);db.close()})
 test('migration is additive and idempotent',()=>{const db=new DatabaseSync(':memory:');db.exec(schemaSql);db.exec('DROP TABLE driver_date_requests;INSERT INTO schema_meta(version) VALUES(54)');assert.equal(applyV55Migration(db).schemaVersion,55);assert.equal(applyV55Migration(db).noOp,true);db.close()})
 test('an existing target customer blocks approval without cancelling the source',()=>{const{db,ids}=fixture(),r=request(db,ids[0]),targetDay=db.prepare("SELECT id FROM dispatch_days WHERE dispatch_date='2026-09-11'").get();db.exec("INSERT INTO dispatches(dispatch_date,vehicle_id,status) VALUES('2026-09-11',1,'draft')");const dispatchId=db.prepare('SELECT MAX(id) id FROM dispatches').get().id;db.prepare('INSERT INTO dispatch_trips(dispatch_day_id,dispatch_id,trip_number) VALUES(?,?,1)').run(targetDay.id,dispatchId);const tripId=db.prepare('SELECT MAX(id) id FROM dispatch_trips').get().id;db.prepare("INSERT INTO dispatch_stops(dispatch_id,dispatch_trip_id,branch_id,stop_sequence,service_date,status) VALUES(?,?,1,1,'2026-09-11','locked')").run(dispatchId,tripId);assert.throws(()=>approve(db,r.id),/existingProtected/);assert.notEqual(db.prepare('SELECT status FROM dispatch_stops WHERE id=?').get(ids[0]).status,'cancelled');db.close()})
@@ -154,4 +155,46 @@ test('failure after reusing target rolls back its placement, occurrence and sour
  assert.deepEqual(db.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(targetId),before)
  assert.notEqual(db.prepare('SELECT status FROM dispatch_stops WHERE id=?').get(ids[0]).status,'cancelled')
  assert.equal(db.prepare('SELECT COUNT(*) n FROM schedule_exceptions').get().n,0);db.close()
+})
+
+test('office can approve a missing future day without assigning vehicle; rollback removes auto-created day',async()=>{
+ const{driverDateReviewOptions}=await import('../server/driverRouteAdjustmentService.mjs')
+ const{db,ids}=fixture(),r=request(db,ids[0]),date='2026-09-24',office={...supervisor,role:'office'}
+ assert.equal(driverDateReviewOptions(date,db).dayReady,false)
+ assert.equal(driverDateReviewOptions(date,db).routes[0].available,true)
+ db.exec("CREATE TRIGGER future_fail BEFORE INSERT ON driver_date_reviews BEGIN SELECT RAISE(ABORT,'future audit failure'); END")
+ assert.throws(()=>decideDriverDate(r.id,'approved',{targetDate:date,routeNumber:1,reason:'Future day'},office,db),/future audit failure/)
+ assert.equal(db.prepare('SELECT id FROM dispatch_days WHERE dispatch_date=?').get(date),undefined)
+ assert.equal(db.prepare('SELECT status FROM driver_date_requests WHERE id=?').get(r.id).status,'pending')
+ db.exec('DROP TRIGGER future_fail')
+ const result=decideDriverDate(r.id,'approved',{targetDate:date,routeNumber:1,reason:'Future day'},office,db)
+ assert.ok(db.prepare('SELECT id FROM dispatch_days WHERE dispatch_date=?').get(date))
+ assert.equal(db.prepare('SELECT service_date FROM dispatch_stops WHERE id=?').get(result.targetStopId).service_date,date)
+ assert.equal(db.prepare("SELECT COUNT(*) n FROM dispatch_stops WHERE branch_id=1 AND service_date=? AND status<>'cancelled'").get(date).n,1)
+ assert.equal(db.prepare('PRAGMA foreign_key_check').all().length,0);db.close()
+})
+test('office direct planner changes need no employee request; driver and crew cannot make direct changes',async()=>{
+ const{changePlannedCustomer}=await import('../server/driverRouteAdjustmentService.mjs')
+ const{db,ids}=fixture(),body={targetDate:'2026-09-24',routeNumber:1,reason:'Office reschedule'}
+ for(const role of ['driver','crew'])assert.throws(()=>changePlannedCustomer(ids[0],body,{...supervisor,role},db),/supervisorOnly/)
+ assert.equal(db.prepare('SELECT COUNT(*) n FROM driver_date_requests').get().n,0)
+ const result=changePlannedCustomer(ids[0],body,{...supervisor,role:'office'},db)
+ assert.equal(result.status,'approved');assert.equal(db.prepare('SELECT COUNT(*) n FROM driver_date_requests').get().n,1);db.close()
+})
+test('assigned unapproved plans are visible but cannot start or arrive, including crew views',()=>{
+ const{db,ids,trip}=fixture()
+ db.exec("UPDATE dispatch_days SET status='draft';DELETE FROM daily_route_approvals;UPDATE dispatch_trips SET execution_status='not_started';UPDATE dispatches SET status='draft',assistant_id=4")
+ for(const ctx of [context,{...context,role:'crew',employeeId:4}]){
+  const view=driverToday(ctx,db)
+  assert.equal(view.routeAvailable,true);assert.equal(view.approved,false);assert.equal(view.trips[0].canStart,false)
+  assert.ok(view.trips[0].stops.every(s=>!s.canArrive&&!s.canFinish))
+ }
+ assert.throws(()=>startDriverTrip(trip,context,db),/Approved/)
+ assert.equal(driverToday({...context,employeeId:2},db).trips.length,0);db.close()
+})
+
+test('dispatch access is shared by office and management, never driver/crew even with extra permissions',async()=>{
+ const{canManageDispatch}=await import('../shared/dispatchAccess.js')
+ for(const role of ['owner_admin','operations_admin','supervisor','office'])assert.equal(canManageDispatch({role}),true)
+ for(const role of ['driver','crew','unknown',''])assert.equal(canManageDispatch({role,permissions:['schedule_manage']}),false)
 })
