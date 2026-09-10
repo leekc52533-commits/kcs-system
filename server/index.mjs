@@ -1,3 +1,5 @@
+import {assertSalesAccess,salesMasters,listSales,salesRecord,saveSales,salesPhoto,exportSales} from './salesService.mjs'
+import {recognizeSales} from './salesOcr.mjs'
 import {submitNoGoodsNotice,restoreNoGoodsNotice,noGoodsNoticePhoto} from './noGoodsNoticeService.mjs'
 import {canManageDispatch} from '../shared/dispatchAccess.js'
 import {listBillVoids,requestBillVoid,decideBillVoid} from './purchaseBillVoidService.mjs'
@@ -130,6 +132,15 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && /^\/api\/mobile\/unloading-weights\/\d+\/confirm$/.test(url.pathname)) return sendJson(response,200,confirmUnloadingWeight(Number(url.pathname.split('/')[4]),(await readJson(request)).payload,{employeeId:session.employeeId,role:session.role}))
     if (request.method === 'GET' && url.pathname === '/api/mobile/cash-float') return sendJson(response,200,mobileCashFloat(session.employeeId))
     if(request.method==='POST'&&url.pathname==='/api/expenses/recognize'){if(!canManageCashFloat(session)&&!mobileCashFloat(session.employeeId).configured)return sendJson(response,403,{error:'Expense access is restricted.'});return sendJson(response,200,await recognizeExpenseReceipt((await readJson(request)).payload.proof,expenseVehicles(db)))}
+    if(url.pathname==='/api/sales'||url.pathname.startsWith('/api/sales/')){
+      assertSalesAccess(session)
+      if(request.method==='GET'&&url.pathname==='/api/sales')return sendJson(response,200,listSales(Object.fromEntries(url.searchParams),session))
+      if(request.method==='POST'&&url.pathname==='/api/sales')return sendJson(response,200,saveSales((await readJson(request)).payload,session,db,{uploadsRoot:uploadsDir}))
+      if(request.method==='POST'&&url.pathname==='/api/sales/recognize')return sendJson(response,200,await recognizeSales((await readJson(request)).payload.proof,salesMasters()))
+      if(request.method==='GET'&&url.pathname==='/api/sales/export.xlsx'){const file=await exportSales(Object.fromEntries(url.searchParams),session,db,{uploadsRoot:uploadsDir});response.writeHead(200,{'Content-Type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','Content-Disposition':'attachment; filename="Sales-with-Settlements.xlsx"'});return response.end(file)}
+      if(request.method==='GET'&&/^\/api\/sales\/\d+$/.test(url.pathname))return sendJson(response,200,salesRecord(Number(url.pathname.split('/')[3]),session))
+      if(request.method==='GET'&&/^\/api\/sales\/\d+\/photo$/.test(url.pathname)){const proof=salesPhoto(Number(url.pathname.split('/')[3]),session),file=path.resolve(uploadsDir,proof.storage_key);if(!file.startsWith(path.resolve(uploadsDir)+path.sep)||!fs.existsSync(file))return sendJson(response,404,{error:'Proof not found'});response.writeHead(200,{'Content-Type':proof.content_type,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'});return fs.createReadStream(file).pipe(response)}
+    }
     if (request.method === 'POST' && url.pathname === '/api/mobile/cash-float/expenses') return sendJson(response,201,addCashFloatExpense(session.employeeId,(await readJson(request)).payload,{employeeId:session.employeeId,employeeName:session.employeeName},db,{uploadsRoot:uploadsDir}))
     if (request.method === 'POST' && /^\/api\/mobile\/stops\/\d+\/(trial-reorder|request-date)$/.test(url.pathname)) {const parts=url.pathname.split('/'),payload=(await readJson(request)).payload,context={employeeId:session.employeeId,role:session.role};return sendJson(response,200,parts[5]==='trial-reorder'?reorderDriverStop(Number(parts[4]),payload,context):requestDriverDate(Number(parts[4]),payload,context))}
     if (['GET','POST'].includes(request.method) && /^\/api\/dispatch\/stops\/\d+\/review-change$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});const id=Number(url.pathname.split('/')[4]),context={role:session.role,employeeId:session.employeeId,employeeName:session.employeeName};return sendJson(response,200,request.method==='GET'?plannedCustomerReview(id,context):changePlannedCustomer(id,(await readJson(request)).payload,context))}

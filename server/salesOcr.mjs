@@ -1,0 +1,49 @@
+import fs from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+import {execFile} from 'node:child_process'
+import {promisify} from 'node:util'
+import {image} from './driverExecutionService.mjs'
+import {validSalesDate,salesLineCents} from '../shared/sales.js'
+const run=promisify(execFile)
+let reading=false
+const normalize=s=>String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'')
+const distance=(a,b)=>{let row=Array.from({length:b.length+1},(_,i)=>i);for(let i=1;i<=a.length;i++){const next=[i];for(let j=1;j<=b.length;j++)next[j]=Math.min(next[j-1]+1,row[j]+1,row[j-1]+(a[i-1]===b[j-1]?0:1));row=next}return row[b.length]}
+const decimal=s=>String(s||'').replaceAll(',','')
+export function parseSalesOcr(text,masters={buyers:[],vehicles:[]}){
+ const raw=String(text),lines=raw.split(/\r?\n/).map(s=>s.trim()),fields={lines:[]}
+ const dateLine=lines.find(l=>/\bDate\b/i.test(l)),date=dateLine?.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/)
+ if(date){const iso=`${date[3]}-${date[2].padStart(2,'0')}-${date[1].padStart(2,'0')}`;if(validSalesDate(iso))fields.settlementDate=iso}
+ const number=raw.match(/\bCP\s*[-:]\s*(\d{8,})\b/i)||raw.match(/(?:Invoice|Settlement)\s*(?:No\.?|Number|#)\s*[:=-]?\s*([A-Z0-9][A-Z0-9/-]+)/i)
+ if(number)fields.billNumber=number[0].match(/^CP/i)?'CP-'+number[1]:number[1]
+ const name=lines.find(l=>/\b(?:SDN|SON)\s+(?:BHD|RHD)\b/i.test(l));if(name)fields.factoryText=name
+ const buyers=masters.buyers.filter(b=>lines.some(l=>normalize(l).includes(normalize(b.name))));if(buyers.length===1)fields.buyerId=String(buyers[0].id)
+ if(!fields.buyerId&&name){const header=normalize(name.split(/(?:BHD|RHD)/i)[0]+'BHD');const matches=masters.buyers.filter(b=>{const n=normalize(b.name);if(n.length<8)return false;for(let start=0;start<header.length;start++)for(let len=n.length-2;len<=n.length+2;len++)if(distance(n,header.slice(start,start+len))<=Math.floor(n.length*.15))return true;return false});if(matches.length===1)fields.buyerId=String(matches[0].id)}
+ const vehicles=masters.vehicles.filter(v=>v.plate&&lines.some(l=>l.toUpperCase().split(/[^A-Z0-9]+/).some(token=>token===normalize(v.plate)||token.replace(/^O/,'Q')===normalize(v.plate))));if(vehicles.length===1)fields.vehicleId=String(vehicles[0].id)
+ const total=lines.findLast(l=>/Final\s*Total/i.test(l))?.match(/([\d,]+\.\d{2,3})/);if(total)fields.total=Number(decimal(total[1])).toFixed(2)
+ for(const line of lines){
+  if(!/\b(?:KG|TN)\b/i.test(line)||!/\d/.test(line)||/UOM|U\/\s*Price/i.test(line))continue
+  const slip=line.match(/\bTN\s*[- ]?\s*(\d+)\b/i),delivery=line.match(/\b(\d{2})\/(\d{2})\b/)
+  if(!slip&&!/CORRUGATED|BOX/i.test(line))continue
+  const numeric=[...line.matchAll(/\b(\d[\d,]*\.\d{2,6})\b/g)].map(m=>decimal(m[1]))
+  const desc=line.match(/(?:^|\s)([A-Z][A-Z /-]+?)\s+\d{2}\/\d{2}/i)?.[1]?.trim()||''
+  let deliveryDate='';if(delivery&&fields.settlementDate){const year=Number(fields.settlementDate.slice(0,4)),md=`${delivery[2]}-${delivery[1]}`;const guess=`${md>fields.settlementDate.slice(5)?year-1:year}-${md}`;if(validSalesDate(guess))deliveryDate=guess}
+  fields.lines.push({slipNumber:slip?'TN-'+slip[1]:'',description:desc,deliveryDate,weightKg:numeric.length>=3?numeric.at(-3):'',unitPrice:numeric.length>=2?numeric.at(-2):'',amount:numeric.length>=1?Number(numeric.at(-1)).toFixed(2):''})
+ }
+ return fields
+}
+export async function recognizeSales(proof,masters){
+ const parsed=image(proof);if(reading)return{status:'busy',fields:{}}
+ let folder;reading=true
+ try{folder=await fs.mkdtemp(path.join(os.tmpdir(),'kcs-sales-'));const file=path.join(folder,'settlement.'+parsed.extension);await fs.writeFile(file,parsed.bytes,{mode:0o600});const{stdout}=await run(process.env.KCS_TESSERACT_PATH||'tesseract',[file,'stdout','-l','eng','--psm','6'],{timeout:15000,maxBuffer:1000000});let fields=parseSalesOcr(stdout,masters)
+  // A temporary enlarged/deskewed copy improves line reading; the submitted original stays untouched.
+  try{const enhanced=path.join(folder,'enhanced.png');await run(process.env.KCS_CONVERT_PATH||'convert',['-limit','memory','128MiB','-limit','map','256MiB',file,'-colorspace','Gray','-resize','2400x','-deskew','40%','-sharpen','0x1',enhanced],{timeout:10000,maxBuffer:100000});const second=await run(process.env.KCS_TESSERACT_PATH||'tesseract',[enhanced,'stdout','-l','eng','--psm','6'],{timeout:15000,maxBuffer:1000000});const candidate=parseSalesOcr(second.stdout,masters)
+   const score=rows=>rows.reduce((n,l)=>n+(l.weightKg&&l.unitPrice&&l.amount&&salesLineCents(l.weightKg,l.unitPrice)===Math.round(Number(l.amount)*100)?10:0)+(l.slipNumber?1:0),0)
+   if(score(candidate.lines)>score(fields.lines))fields.lines=candidate.lines
+   for(const k of ['settlementDate','billNumber','buyerId','vehicleId','total'])if(!fields[k]&&candidate[k])fields[k]=candidate[k]
+   const sum=fields.lines.reduce((n,l)=>n+Math.round(Number(l.amount||0)*100),0);if(sum>0&&Math.round(Number(candidate.total)*100)===sum&&Math.round(Number(fields.total)*100)!==sum)fields.total=candidate.total
+  }catch{/* original OCR remains available when preprocessing cannot run */}
+  return{status:fields.lines.length?'review':'unreadable',fields}}
+ catch(e){return{status:e.code==='ENOENT'?'unavailable':'unreadable',fields:{}}}
+ finally{reading=false;if(folder)await fs.rm(folder,{recursive:true,force:true})}
+}
