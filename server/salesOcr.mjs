@@ -61,6 +61,25 @@ export async function recognizeSales(proof,masters){
    for(const k of ['settlementDate','billNumber','buyerId','vehicleId','total','factoryText'])if(!fields[k]&&candidate[k])fields[k]=candidate[k]
    const sum=fields.lines.reduce((n,l)=>n+Math.round(Number(l.amount||0)*100),0);if(sum>0&&Math.round(Number(candidate.total)*100)===sum&&Math.round(Number(fields.total)*100)!==sum)fields.total=candidate.total
   }catch{/* original orientation-corrected OCR remains available */}
+  // Isolate the bill header: dot-matrix numbers need a separate single-line pass.
+  if(!fields.billNumber){try{
+   const header=path.join(folder,'bill-header.png')
+   await execute(convert,[...convertArgs,oriented,'-resize','1280x','-gravity','NorthWest','-crop','440x150+800+235','+repage','-colorspace','Gray','-contrast-stretch','2%x2%','-resize','300%',header])
+   const {stdout}=await execute(tesseract,[header,'stdout','-l','eng','--psm','6','tsv'])
+   const words=stdout.split(/\r?\n/).slice(1).map(l=>l.split('\t')).filter(c=>c[0]==='5')
+   const headerFields=parseSalesOcr(words.map(c=>c[11]).join(' '),masters)
+   if(!fields.settlementDate&&headerFields.settlementDate)fields.settlementDate=headerFields.settlementDate
+   const tokens=words.filter(c=>/^(?:CP|P)[-:]?\d/i.test(c[11]||''))
+   if(tokens.length===1){
+    const c=tokens[0],h=Number(c[9])/3,x=Math.max(0,Math.floor(800+Number(c[6])/3-3.3*h)),y=Math.max(0,Math.floor(235+Number(c[7])/3-.18*h))
+    const w=Math.ceil(Number(c[8])/3+4.1*h),height=Math.round(h*1.75),line=path.join(folder,'bill-number.png')
+    await execute(convert,[...convertArgs,oriented,'-resize','1280x','-gravity','NorthWest','-crop',`${w}x${height}+${x}+${y}`,'+repage','-colorspace','Gray','-contrast-stretch','2%x2%','-negate','-morphology','Close','Rectangle:1x2','-negate','-resize','300%',line])
+    const result=await execute(tesseract,[line,'stdout','-l','eng','--psm','7','-c','tessedit_char_whitelist=CP0123456789-'])
+    const number=parseSalesOcr(result.stdout,masters).billNumber
+    // CP date-coded bills must agree with the independently read printed date.
+    if(number&&fields.settlementDate&&number.startsWith('CP-'+fields.settlementDate.replaceAll('-','')))fields.billNumber=number
+   }
+  }catch{/* preserve the draft if the local header cannot be read */}}
   let previewDataUrl
   if(rotation){try{const preview=path.join(folder,'preview.jpg');await execute(convert,[...convertArgs,oriented,'-resize','1000x1000>','-quality','85',preview],3000);previewDataUrl='data:image/jpeg;base64,'+(await fs.readFile(preview)).toString('base64')}catch{}}
   return{status:fields.lines.length?'review':'unreadable',fields,rotation,previewDataUrl,factoryMatch:fields.buyerId?'matched':fields.factoryText?'unmatched':'unreadable'}
