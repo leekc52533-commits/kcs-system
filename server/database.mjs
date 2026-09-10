@@ -1,3 +1,4 @@
+import {applyV61Migration} from './migrationV61.mjs'
 import {applyV60Migration,ensureV60Schema} from './migrationV60.mjs'
 import {applyV59Migration,ensureV59Schema} from './migrationV59.mjs'
 import {applyV58Migration,ensureV58Schema} from './migrationV58.mjs'
@@ -336,6 +337,7 @@ else if(postV58Version>=59)ensureV59Schema(db)
 const postV59Version=Number(db.prepare('SELECT MAX(version) v FROM schema_meta').get().v)
 if(postV59Version===59)applyV60Migration(db)
 else if(postV59Version>=60)ensureV60Schema(db)
+applyV61Migration(db)
 const officialVehicles = [
   ['Lorry 1','QAV3468','available',0,null],
   ['Lorry 2','QAA4293N','active',1,null],

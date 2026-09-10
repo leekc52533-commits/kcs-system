@@ -1,0 +1,10 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import {DatabaseSync} from 'node:sqlite'
+import {applyV61Migration,ensureV61Schema} from '../server/migrationV61.mjs'
+import {readMenu,saveMenu} from '../server/menuLayoutService.mjs'
+import {defaultMenuLayout} from '../shared/menuLayout.js'
+function fixture(){const db=new DatabaseSync(':memory:');db.exec("PRAGMA foreign_keys=ON;CREATE TABLE schema_meta(version INTEGER);INSERT INTO schema_meta VALUES(60);CREATE TABLE auth_accounts(id INTEGER PRIMARY KEY,username TEXT,is_active INTEGER);INSERT INTO auth_accounts VALUES(9,'kcadmin',1),(10,'another-admin',1);");applyV61Migration(db);return db}
+test('only pinned account ID can write; admins and spoofed usernames cannot',()=>{const db=fixture(),payload={layout:defaultMenuLayout(),revision:0};assert.equal(readMenu(db,{id:9}).canEdit,true);for(const user of [{id:10,role:'owner_admin',username:'kcadmin'},{role:'owner_admin'},{}])assert.throws(()=>saveMenu(db,user,payload),e=>e.statusCode===403);assert.equal(db.prepare('SELECT COUNT(*) n FROM company_menu_audit').get().n,0);db.close()})
+test('company order persists for other accounts, stale and invalid updates are atomic',()=>{const db=fixture(),layout=defaultMenuLayout();layout.top.reverse();layout.documents.reverse();saveMenu(db,{id:9},{layout,revision:0});assert.deepEqual(readMenu(db,{id:10}).layout,layout);assert.throws(()=>saveMenu(db,{id:9},{layout,revision:0}),e=>e.statusCode===409);assert.throws(()=>saveMenu(db,{id:9},{layout:{...layout,top:['sales']},revision:1}),e=>e.statusCode===400);assert.equal(readMenu(db,{id:9}).revision,1);assert.equal(db.prepare('SELECT COUNT(*) n FROM company_menu_audit').get().n,1);db.close()})
+test('owner binding survives username changes and migration reruns',()=>{const db=fixture();db.exec("UPDATE auth_accounts SET username='renamed' WHERE id=9;UPDATE auth_accounts SET username='kcadmin' WHERE id=10;");ensureV61Schema(db);assert.equal(readMenu(db,{id:9}).canEdit,true);assert.equal(readMenu(db,{id:10}).canEdit,false);assert.equal(db.prepare('SELECT MAX(version) v FROM schema_meta').get().v,61);db.close()})
