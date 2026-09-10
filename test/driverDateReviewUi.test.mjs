@@ -44,3 +44,29 @@ test('missing target plans disable approval but keep rejection and planner avail
  assert.equal(document.querySelectorAll('.date-review-actions')[1].lastElementChild.disabled,false)
  await act(async()=>root.unmount())
 })
+
+test('future date with unassigned active routes permits office confirmation',async()=>{
+ globalThis.fetch=async()=>new Response(JSON.stringify({dayReady:false,revision:null,routes:[{routeNumber:1,name:'ROUTE 1',available:true,vehicleReady:false,vehicleId:null}]}),{status:200,headers:{'content-type':'application/json'}})
+ const root=createRoot(document.getElementById('root'))
+ await act(async()=>root.render(React.createElement(I18nProvider,{language:'zh'},React.createElement(DateRequestReview,{item,onSaved:()=>{}}))))
+ await change(document.querySelector('select'),'1');await change(document.querySelector('textarea'),'确认改期')
+ assert.equal(document.querySelector('.primary').disabled,false)
+ assert.ok(document.body.textContent.includes('待配车'))
+ await act(async()=>root.unmount())
+})
+
+test('customer card opens direct date/route editor on an approved plan without an employee request',async()=>{
+ const{default:RouteCustomerList}=await vite.ssrLoadModule('/src/RouteCustomerList.jsx')
+ const calls=[]
+ globalThis.fetch=async(url,init={})=>{calls.push({url,init});return new Response(JSON.stringify(String(url).includes('/options')?{dayReady:false,routes:[{routeNumber:1,name:'ROUTE 1',available:true,vehicleReady:false}]}:init.method==='POST'?{status:'approved'}:item),{status:200,headers:{'content-type':'application/json'}})}
+ const root=createRoot(document.getElementById('root'))
+ const day={id:1,dispatch_date:'2026-09-10',status:'approved'},route={routeNumber:1,stops:[{id:1,branchId:'10065',branchName:'DIY BSQ',status:'locked'}]}
+ await act(async()=>root.render(React.createElement(I18nProvider,{language:'zh'},React.createElement(RouteCustomerList,{day,route,days:[day],canEdit:true,onReorder:()=>{}}))))
+ await click(document.querySelector('.route-customer-name'))
+ const edit=[...document.querySelectorAll('button')].find(b=>b.textContent==='修改日期／路线')
+ assert.equal(edit.disabled,false);await click(edit)
+ await change(document.querySelector('.date-request-review select'),'1');await change(document.querySelector('.date-request-review textarea'),'办公室确认')
+ await click(document.querySelector('.date-request-review .primary'))
+ assert.ok(calls.some(c=>c.url==='/api/dispatch/stops/1/review-change'&&c.init.method==='POST'))
+ await act(async()=>root.unmount())
+})

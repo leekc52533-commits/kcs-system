@@ -1,3 +1,4 @@
+import {canManageDispatch} from '../shared/dispatchAccess.js'
 import {useUi} from './i18n.jsx'
 import {DispatchPlanningReview,DispatchScheduleTools} from './DispatchScheduleTools.jsx'
 import RouteCustomerList from './RouteCustomerList.jsx'
@@ -26,11 +27,11 @@ export default function WeeklyDispatchPage({currentUser}){
   const ui=useUi()
 
   const{t}=useI18n()
-  const[reviewDate]=useState(()=>{const date=sessionStorage.getItem('kcs-review-planner-date');sessionStorage.removeItem('kcs-review-planner-date');return /^\d{4}-\d{2}-\d{2}$/.test(date||'')?date:null})
+  const[reviewDate,setReviewDate]=useState(()=>{const date=sessionStorage.getItem('kcs-review-planner-date');sessionStorage.removeItem('kcs-review-planner-date');return /^\d{4}-\d{2}-\d{2}$/.test(date||'')?date:null})
   const[displayMode,setDisplayMode]=useState('dispatch'),[selectedWeekDate,setSelectedWeekDate]=useState(reviewDate||localDate()),[selectedRouteNumber,setSelectedRouteNumber]=useState(1),[data,setData]=useState(null),[error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false)
-  const canEditDispatch=['owner_admin','operations_admin','supervisor'].includes(currentUser.systemRole)||currentUser.permissions?.includes('schedule_manage')
+  const canEditDispatch=canManageDispatch(currentUser)
   const canManageVehicles=['owner_admin','operations_admin'].includes(currentUser.systemRole)||currentUser.permissions?.includes('vehicle_manage')
-  const canApproveDefer=['owner','owner_admin','operations_admin','supervisor'].includes(currentUser.systemRole||currentUser.role)
+  const canApproveDefer=canManageDispatch(currentUser)
   const loadSequence=useRef(0)
   const load=useCallback(async()=>{const sequence=++loadSequence.current;setError('');try{
     const result=await request(reviewDate?`/api/dispatch/week?startDate=${reviewDate}`:canEditDispatch?'/api/dispatch/ensure-rolling-week':`/api/dispatch/week?startDate=${localDate()}`,!reviewDate&&canEditDispatch?{method:'POST'}:undefined)
@@ -59,11 +60,12 @@ export default function WeeklyDispatchPage({currentUser}){
   const visibleDays=displayMode==='route'?(data?.days||[]):(data?.days||[]).filter(day=>day.dispatch_date===activeWeekDate)
   const prepareReviewDay=async()=>{setBusy(true);setError('');try{await request('/api/dispatch/generate-day',{method:'POST',body:JSON.stringify({payload:{startDate:reviewDate,onlyMissing:true}})});await load()}catch(e){setError(e.message)}finally{setBusy(false)}}
   return <div className="page planner-page">
+    <label className="planner-date-picker">{t('dateReview.date')}<input type="date" value={reviewDate||localDate()} onChange={e=>{if(e.target.value){setReviewDate(e.target.value);setSelectedWeekDate(e.target.value)}}}/></label>
     {reviewDate&&data&&!data.days.some(d=>d.dispatch_date===reviewDate)&&<section className="planner-message"><p>{reviewDate} · {t('dateReview.missingDay')}</p>{canEditDispatch&&<button disabled={busy} onClick={prepareReviewDay}>{t('dateReview.prepareDay')}</button>}</section>}
     <div className="planner-navigation"><div className="planner-toolbar planner-view-toolbar"><div><button className={displayMode==='dispatch'?'active':''} onClick={()=>setDisplayMode('dispatch')}>{ui("派车")}</button><button className={displayMode==='route'?'active':''} onClick={()=>setDisplayMode('route')}>{ui("Route")}</button></div></div>{data?.days?.length>0&&(displayMode==='dispatch'?<WeekDayTabs days={data.days} selectedDate={activeWeekDate} onSelect={setSelectedWeekDate}/>:<RouteWeekTabs days={data.days} selectedRouteNumber={selectedRouteNumber} onSelect={setSelectedRouteNumber}/>)}</div>
     {message&&<div className="planner-message">✓ {ui(message)}</div>}{error&&<div className="data-error">{ui(error)}</div>}
     {data&&canEditDispatch&&<DispatchPlanningReview data={data}/>}
-    {!data?<div className="data-loading">{t('planner.loading')}</div>:<div className={displayMode==='route'?'route-week-board':'week-board week-board--single-day'}>{data.days.length===0?<div className="empty-week"><h2>{t('planner.empty')}</h2><p>{t('planner.emptyHelp')}</p></div>:visibleDays.map(day=><DayColumn days={data.days} canHandover={['owner_admin','operations_admin','supervisor'].includes(currentUser.systemRole||currentUser.role)} key={day.id} day={day} displayMode={displayMode} selectedRouteNumber={selectedRouteNumber} vehicles={data.vehicles||[]} employees={data.employees||[]} buyers={data.buyers||[]} endLocations={data.endLocations||[]} busy={busy} hasUnsavedChanges={false} patchStop={patchStop} patchTrip={patchTrip} handleDrop={handleDrop} assignStopsToRoute={assignStopsToRoute} assignRoute={assignRoute} renameRoute={renameRoute} reorderRouteCustomer={reorderRouteCustomer} approveSingleRoute={approveSingleRoute} withdrawDayApproval={withdrawDayApproval} assignVehicle={assignVehicle} transferVehicle={transferVehicle} addTemporaryVehicle={addTemporaryVehicle} addPermanentVehicle={addPermanentVehicle} moveStop={moveStop} decideDefer={decideDefer} canApproveDefer={canApproveDefer} canEditDispatch={canEditDispatch} canManageVehicles={canManageVehicles}/>)}</div>}
+    {!data?<div className="data-loading">{t('planner.loading')}</div>:<div className={displayMode==='route'?'route-week-board':'week-board week-board--single-day'}>{data.days.length===0?<div className="empty-week"><h2>{t('planner.empty')}</h2><p>{t('planner.emptyHelp')}</p></div>:visibleDays.map(day=><DayColumn days={data.days} canHandover={canManageDispatch(currentUser)} key={day.id} day={day} displayMode={displayMode} selectedRouteNumber={selectedRouteNumber} vehicles={data.vehicles||[]} employees={data.employees||[]} buyers={data.buyers||[]} endLocations={data.endLocations||[]} busy={busy} hasUnsavedChanges={false} patchStop={patchStop} patchTrip={patchTrip} handleDrop={handleDrop} assignStopsToRoute={assignStopsToRoute} assignRoute={assignRoute} renameRoute={renameRoute} reorderRouteCustomer={reorderRouteCustomer} approveSingleRoute={approveSingleRoute} withdrawDayApproval={withdrawDayApproval} assignVehicle={assignVehicle} transferVehicle={transferVehicle} addTemporaryVehicle={addTemporaryVehicle} addPermanentVehicle={addPermanentVehicle} moveStop={moveStop} decideDefer={decideDefer} canApproveDefer={canApproveDefer} canEditDispatch={canEditDispatch} canManageVehicles={canManageVehicles}/>)}</div>}
   </div>
 }
 

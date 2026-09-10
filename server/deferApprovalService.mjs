@@ -3,7 +3,7 @@ import {withImmediateTransaction} from './branchServiceDateGuard.mjs'
 
 const fail=(message,code='INVALID_STATUS',statusCode=409)=>{const error=new Error(message);error.code=code;error.statusCode=statusCode;return error}
 const nowKuching=(input=new Date())=>{const parts=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuching',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(input)).map(part=>[part.type,part.value]));return`${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}+08:00`}
-const supervisorRoles=new Set(['owner','owner_admin','operations_admin','supervisor'])
+const supervisorRoles=new Set(['owner','owner_admin','operations_admin','supervisor','office','dispatcher'])
 
 export function listDeferRequestsForDay(dayId,database=defaultDb){
   return database.prepare(`SELECT r.id,r.dispatch_stop_id stopId,r.dispatch_trip_id tripId,r.driver_employee_id driverEmployeeId,r.reason,r.expected_return_time expectedReturnTime,r.expected_return_at expectedReturnAt,r.status,r.requested_at requestedAt,r.reviewed_by_name_snapshot reviewedBy,r.review_reason reviewReason,r.reviewed_at reviewedAt,

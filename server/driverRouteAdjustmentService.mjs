@@ -1,3 +1,4 @@
+import {canManageDispatch} from '../shared/dispatchAccess.js'
 import {getCollectionScheduleManagement,saveCollectionScheduleManagement} from './collectionScheduleManagementService.mjs'
 import {weekdayName} from '../shared/scheduleRecurrence.js'
 import {planningDate} from '../shared/planningDates.js'
@@ -5,7 +6,7 @@ import {db as defaultDb} from './database.mjs'
 import {kuchingDate} from '../shared/kuchingTime.js'
 import {isRouteTrialDate} from '../shared/routeTrial.js'
 import {withImmediateTransaction,assertBranchServiceDateAvailable,findBranchServiceDateStop} from './branchServiceDateGuard.mjs'
-import {driverToday,createStop,invalidateDispatchDay,syncReviewedBranchSchedule,placeReviewedScheduledStop} from './dispatchService.mjs'
+import {driverToday,createStop,invalidateDispatchDay,syncReviewedBranchSchedule,placeReviewedScheduledStop,generateDay} from './dispatchService.mjs'
 
 const fail=(code,statusCode=409)=>{throw Object.assign(new Error(code),{code:code.replace('routeTrial.','ROUTE_TRIAL_').toUpperCase(),statusCode})}
 const lookup=(db,id)=>db.prepare(`SELECT s.*,t.execution_status,t.id trip_id,t.dispatch_day_id day_id,dd.dispatch_date,dd.status day_status,d.vehicle_id,d.driver_id,b.jodoo_branch_id branch_code,b.branch_name
@@ -58,7 +59,7 @@ export function requestDriverDate(id,payload,context={},db=defaultDb){
  })
 }
 
-// Only current definitions with an eligible, unstarted assigned vehicle can be approved.
+// A route can be planned before its date, vehicle or driver has been prepared.
 export function driverDateReviewOptions(date,db=defaultDb){
  if(!planningDate(date)||planningDate(date)!==date)fail('routeTrial.invalidReviewDate',400)
  const day=db.prepare('SELECT * FROM dispatch_days WHERE dispatch_date=?').get(date)
@@ -69,7 +70,7 @@ export function driverDateReviewOptions(date,db=defaultDb){
   FROM weekly_route_definitions r JOIN weekly_route_plans p ON p.id=r.plan_id
   LEFT JOIN daily_route_assignments a ON a.route_number=r.route_number AND a.dispatch_day_id=?
   LEFT JOIN vehicles v ON v.id=a.vehicle_id WHERE p.is_active=1 ORDER BY r.route_number`).all(date,day?.id??null)
- return{date,dayReady:!!day&&['draft','reapproval_required','approved','in_progress'].includes(day.status),revision:day?.revision??null,routes:routes.map(r=>({...r,available:!!r.available&&!!day&&['draft','reapproval_required','approved','in_progress'].includes(day.status)}))}
+ return{date,dayReady:!!day,revision:day?.revision??null,routes:routes.map(r=>({...r,vehicleReady:!!r.available,vehicleId:r.available?r.vehicleId:null,plate:r.available?r.plate:null,available:true}))}
 }
 
 export function listDriverDateRequests(db=defaultDb){
@@ -77,7 +78,7 @@ export function listDriverDateRequests(db=defaultDb){
 }
 
 export function decideDriverDate(id,decision,payload,context={},db=defaultDb){
- if(!['owner','owner_admin','operations_admin','supervisor'].includes(context.role))fail('routeTrial.supervisorOnly',403)
+ if(!canManageDispatch(context))fail('routeTrial.supervisorOnly',403)
  if(!['approved','rejected'].includes(decision)||!String(payload.reason||'').trim()||String(payload.reason).length>1000)fail('routeTrial.reviewReason',400)
  return withImmediateTransaction(db,()=>{
   const r=db.prepare('SELECT * FROM driver_date_requests WHERE id=?').get(Number(id))
@@ -92,12 +93,13 @@ export function decideDriverDate(id,decision,payload,context={},db=defaultDb){
    if(!s||s.dispatch_date!==r.source_date||hasWork(db,s)||pendingDefer(db,s))fail('routeTrial.protected')
    if(r.source_date<today)fail('routeTrial.stale')
    if(date===s.dispatch_date&&route===s.route_number)fail('routeTrial.noChange',400)
-   const options=driverDateReviewOptions(date,db),chosen=options.routes.find(x=>x.routeNumber===route)
-   if(!options.dayReady)fail('routeTrial.targetNotReady')
-   if(!chosen?.vehicleId)fail('routeTrial.chooseRoute')
-   if(!chosen.available)fail('routeTrial.targetNotReady')
+   let options=driverDateReviewOptions(date,db)
+   if(!options.routes.some(x=>x.routeNumber===route))fail('routeTrial.chooseRoute')
    if(payload.targetRevision!=null&&Number(payload.targetRevision)!==options.revision)fail('routeTrial.stale')
+   if(!options.dayReady){generateDay({startDate:date,onlyMissing:true,generatedBy:actor},db);options=driverDateReviewOptions(date,db)}
+   const chosen=options.routes.find(x=>x.routeNumber===route)
    const target=db.prepare('SELECT * FROM dispatch_days WHERE dispatch_date=?').get(date)
+   if(target.status==='completed')fail('routeTrial.protected')
    const existing=findBranchServiceDateStop(db,s.branch_id,date,{excludeStopId:s.id})
    const targetExisting=existing?lookup(db,existing.id):null
    // Reuse a generated occurrence rather than creating a duplicate on an already due day.
@@ -156,5 +158,26 @@ export function decideDriverDate(id,decision,payload,context={},db=defaultDb){
   db.prepare('UPDATE driver_date_requests SET status=?,reviewed_by=?,review_reason=?,reviewed_at=CURRENT_TIMESTAMP,target_stop_id=? WHERE id=?').run(decision,actor,reason,targetStop,r.id)
   audit(db,s,actor,'driver_date_request_'+decision,{requestId:r.id,status:'pending'},{status:decision,targetStopId:targetStop,reason,preservedDates})
   return{id:r.id,status:decision,targetStopId:targetStop,preservedDates}
+ })
+}
+
+export function plannedCustomerReview(id,context={},db=defaultDb){
+ if(!canManageDispatch(context))fail('routeTrial.supervisorOnly',403)
+ const s=lookup(db,id)
+ if(!s)fail('routeTrial.notFound',404)
+ return{id:s.id,sourceDate:s.dispatch_date,targetDate:s.dispatch_date,branchId:s.branch_code,branchName:s.branch_name,schedule:getCollectionScheduleManagement(s.branch_id,db)}
+}
+export function changePlannedCustomer(id,payload,context={},db=defaultDb){
+ if(!canManageDispatch(context))fail('routeTrial.supervisorOnly',403)
+ return withImmediateTransaction(db,()=>{
+  const s=lookup(db,id)
+  if(!s||hasWork(db,s))fail('routeTrial.protected')
+  let r=db.prepare("SELECT id FROM driver_date_requests WHERE dispatch_stop_id=? AND status='pending'").get(s.id)
+  if(!r){
+   const insert=db.prepare('INSERT INTO driver_date_requests(dispatch_stop_id,employee_id,source_date,target_date,reason) VALUES(?,?,?,?,?)').run(s.id,context.employeeId,s.dispatch_date,String(payload.targetDate||''),String(payload.reason||''))
+   r={id:Number(insert.lastInsertRowid)}
+   audit(db,s,context.employeeName||context.employeeId,'office_schedule_change_requested',null,{requestId:r.id,targetDate:payload.targetDate,routeNumber:payload.routeNumber})
+  }
+  return decideDriverDate(r.id,'approved',payload,context,db)
  })
 }

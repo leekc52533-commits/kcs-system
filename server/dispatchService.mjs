@@ -1,3 +1,4 @@
+import {canManageDispatch} from '../shared/dispatchAccess.js'
 import {isRouteTrialDate} from '../shared/routeTrial.js'
 import {SUNDAY_GROUPS,isSunday,sundayGroup,sundayDutyRoute,executionRoute,sundaySettings} from './sundayPlanning.mjs'
 import {routeScheduleProposals} from './routeSchedulePlanning.mjs'
@@ -259,7 +260,8 @@ export function applyWeeklyRoutePlanToDay(database,day){
 
 function generateRange({startDate=iso(),generatedBy='Supervisor',count=7,onlyMissing=false}={}, database=defaultDb) {
   const start=iso(startDate)
-  database.exec('BEGIN IMMEDIATE')
+  const ownsTransaction=!database.isTransaction
+  if(ownsTransaction)database.exec('BEGIN IMMEDIATE')
   try {
     assertRouteGenerationReady(database)
     database.prepare(`INSERT INTO weekly_dispatch_plans(week_start,generated_by) VALUES(?,?) ON CONFLICT(week_start) DO NOTHING`).run(start,actor(generatedBy))
@@ -287,9 +289,9 @@ function generateRange({startDate=iso(),generatedBy='Supervisor',count=7,onlyMis
       prepareSundayDay(database,day)
     }
     fillRouteVehicleDefaults(database,start,onlyMissing?createdDayIds:null)
-    database.exec('COMMIT')
+    if(ownsTransaction)database.exec('COMMIT')
     return {weekStart:start,dayCount:count,createdStops,reusedStops,protectedDays,duplicateStops,...(count===1?{day:getDispatchDay(start,database)}:getDispatchWeek({startDate:start},database))}
-  } catch(error){if(database.isTransaction)database.exec('ROLLBACK');throw error}
+  } catch(error){if(ownsTransaction&&database.isTransaction)database.exec('ROLLBACK');throw error}
 }
 // Fill the rolling window without regenerating any existing day or its approvals.
 export function ensureRollingWeek({startDate=iso(),generatedBy='Supervisor'}={},database=defaultDb){
@@ -597,7 +599,7 @@ export function updateStop(id,payload,database=defaultDb){
 
 export function adjustRouteCustomer(id,payload={},context={},database=defaultDb){
   const fail=(message,statusCode=409)=>{throw Object.assign(new Error(message),{statusCode})}
-  if(!['owner_admin','operations_admin','supervisor'].includes(context.role))fail('只有主管可以调整路线客户。',403)
+  if(!canManageDispatch(context))fail('只有主管可以调整路线客户。',403)
   const date=payload.date,route=Number(payload.routeNumber),reason=String(payload.reason||'').trim()
   if(!/^\d{4}-\d{2}-\d{2}$/.test(date||'')||!Number.isInteger(route)||route<1||route>5||!reason)fail('请选择日期、ROUTE，并填写原因。',400)
   return withImmediateTransaction(database,()=>{
@@ -813,7 +815,7 @@ export function transferVehicleDay(date,sourceVehicleId,payload,database=default
 // Today's operational assignment changes; immutable bill/weight snapshots are never rewritten.
 export function handoverRoute(date,routeNumber,payload={},context={},database=defaultDb){
   const fail=message=>Object.assign(new Error(message),{statusCode:409})
-  if(!['supervisor','operations_admin','owner_admin'].includes(context.role))throw Object.assign(new Error('Supervisor permission required'),{statusCode:403})
+  if(!canManageDispatch(context))throw Object.assign(new Error('Supervisor permission required'),{statusCode:403})
   if(date!==(context.today||iso()))throw fail('只能调整当天；其他日期请使用正常派车安排')
   const reason=String(payload.reason||'').trim(),vehicleId=Number(payload.vehicleId),driverId=Number(payload.driverId),route=Number(routeNumber)
   if(!reason)throw fail('请填写调整原因')
@@ -976,7 +978,6 @@ function driverRouteForDate({employeeId,role,date,preview=false},database){
   const approvalRows=database.prepare('SELECT route_number routeNumber,route_signature routeSignature FROM daily_route_approvals WHERE dispatch_day_id=?').all(day.id)
   const executionStarted=['in_progress','completed'].includes(day.status),approvedRoutes=new Set(approvalRows.filter(row=>executionStarted||row.routeSignature===routeSignature(database,day.id,row.routeNumber)).map(row=>Number(row.routeNumber)))
   const legacyWholeDayApproval=['approved','in_progress'].includes(day.status)&&approvalRows.length===0
-  if(!legacyWholeDayApproval&&!approvedRoutes.size)return empty('NO_APPROVED_ROUTE')
   const assignment=isDriver?'d.driver_id=?':`(d.assistant_id=? OR EXISTS(SELECT 1 FROM dispatch_vehicle_assistants dva WHERE dva.dispatch_day_id=dt.dispatch_day_id AND dva.vehicle_id=d.vehicle_id AND dva.employee_id=?))`
   const params=isDriver?[day.id,Number(employeeId)]:[day.id,Number(employeeId),Number(employeeId)]
   const trips=database.prepare(`SELECT dt.id,dt.trip_number tripNumber,dt.execution_status executionStatus,dt.started_at startedAt${tripCompletion},d.vehicle_id vehicleId,v.vehicle_code vehicleCode,v.vehicle_name vehicleName,v.registration_number registrationNumber
@@ -989,10 +990,10 @@ function driverRouteForDate({employeeId,role,date,preview=false},database){
       CASE WHEN b.latitude IS NOT NULL AND b.longitude IS NOT NULL THEN 1 ELSE 0 END gpsAvailable
       FROM dispatch_stops ds JOIN branches b ON b.id=ds.branch_id LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN driver_defer_requests dr ON dr.id=(SELECT r.id FROM driver_defer_requests r WHERE r.dispatch_stop_id=ds.id ORDER BY r.id DESC LIMIT 1)
       WHERE ds.dispatch_trip_id=? AND ds.status<>'cancelled' AND lower(COALESCE(b.status,'active'))='active'
-      ORDER BY ds.stop_sequence,ds.id`).all(trip.id).filter(stop=>legacyWholeDayApproval||approvedRoutes.has(Number(stop.routeNumber))).map(stop=>({...stop,dateRequest:database.prepare('SELECT id,status,target_date targetDate,review_reason reviewReason FROM driver_date_requests WHERE dispatch_stop_id=? ORDER BY id DESC LIMIT 1').get(stop.id)||null,deferred:Boolean(stop.deferred),gpsAvailable:Boolean(stop.gpsAvailable),billCreated:Boolean(stop.billCreated),paymentProofUploaded:Boolean(stop.paymentProofUploaded)}))})).filter(trip=>trip.stops.length).map((trip,index,trips)=>{const current=trip.executionStatus==='in_progress'?trip.stops.find(stop=>!stop.deferred&&!['completed','cancelled'].includes(stop.status)):null,earlierOpen=trips.some(other=>other.vehicleId===trip.vehicleId&&other.tripNumber<trip.tripNumber&&other.stops.length&&other.executionStatus!=='completed'),finished=trip.stops.filter(stop=>stop.status==='completed').length;return{...trip,completedCount:finished,totalCount:trip.stops.length,canComplete:trip.executionStatus==='in_progress'&&finished===trip.stops.length,canStart:['approved','reapproval_required','in_progress'].includes(day.status)&&trip.executionStatus==='not_started'&&!earlierOpen,currentStopId:current?.id||null,stops:trip.stops.map(stop=>({...stop,canArrive:Boolean((stop.deferred||current&&current.id===stop.id)&&!stop.arrivedAt),canFinish:Boolean((stop.deferred||current&&current.id===stop.id)&&stop.arrivedAt&&stop.status==='active'&&stop.deferApprovalStatus!=='pending')}))}})
+      ORDER BY ds.stop_sequence,ds.id`).all(trip.id).map(stop=>({...stop,dateRequest:database.prepare('SELECT id,status,target_date targetDate,review_reason reviewReason FROM driver_date_requests WHERE dispatch_stop_id=? ORDER BY id DESC LIMIT 1').get(stop.id)||null,deferred:Boolean(stop.deferred),gpsAvailable:Boolean(stop.gpsAvailable),billCreated:Boolean(stop.billCreated),paymentProofUploaded:Boolean(stop.paymentProofUploaded)}))})).filter(trip=>trip.stops.length).map((trip,index,trips)=>{const tripApproved=legacyWholeDayApproval||trip.stops.every(stop=>approvedRoutes.has(Number(stop.routeNumber))),current=tripApproved&&trip.executionStatus==='in_progress'?trip.stops.find(stop=>!stop.deferred&&!['completed','cancelled'].includes(stop.status)):null,earlierOpen=trips.some(other=>other.vehicleId===trip.vehicleId&&other.tripNumber<trip.tripNumber&&other.stops.length&&other.executionStatus!=='completed'),finished=trip.stops.filter(stop=>stop.status==='completed').length;return{...trip,approved:tripApproved,completedCount:finished,totalCount:trip.stops.length,canComplete:!preview&&tripApproved&&trip.executionStatus==='in_progress'&&finished===trip.stops.length,canStart:!preview&&tripApproved&&['approved','reapproval_required','in_progress'].includes(day.status)&&trip.executionStatus==='not_started'&&!earlierOpen,currentStopId:current?.id||null,stops:trip.stops.map(stop=>({...stop,canArrive:Boolean(!preview&&tripApproved&&(stop.deferred||current&&current.id===stop.id)&&!stop.arrivedAt),canFinish:Boolean(!preview&&tripApproved&&(stop.deferred||current&&current.id===stop.id)&&stop.arrivedAt&&stop.status==='active'&&stop.deferApprovalStatus!=='pending')}))}})
   if(!trips.length)return empty('NO_VEHICLE_ASSIGNED')
   const stops=trips.flatMap(trip=>trip.stops),vehicles=[...new Map(trips.map(trip=>[trip.vehicleId,{id:trip.vehicleId,vehicleCode:trip.vehicleCode,vehicleName:trip.vehicleName,registrationNumber:trip.registrationNumber}])).values()]
-  return{date,weekday,preview,trialOrderEnabled:!preview&&isRouteTrialDate(date),status:day.status,approved:true,routeAvailable:true,jodooUrl:String(process.env.JODOO_FORM_URL||'https://www.jodoo.com/'),trips,vehicles,totalStops:stops.length,completedStops:stops.filter(stop=>stop.status==='completed').length,pendingStops:stops.filter(stop=>stop.status!=='completed').length}
+  return{date,weekday,preview,trialOrderEnabled:!preview&&isRouteTrialDate(date)&&trips.some(trip=>trip.approved&&trip.executionStatus==='in_progress'),status:day.status,approved:trips.every(trip=>trip.approved),routeAvailable:true,jodooUrl:String(process.env.JODOO_FORM_URL||'https://www.jodoo.com/'),trips,vehicles,totalStops:stops.length,completedStops:stops.filter(stop=>stop.status==='completed').length,pendingStops:stops.filter(stop=>stop.status!=='completed').length}
 }
 
 /** Backwards-compatible today endpoint service. The date is server-derived in production. */
@@ -1103,7 +1104,7 @@ export function reconcileScheduleWindow({startDate=iso(),changedBy='System',conf
 }
 
 export function addTemporaryRouteCollection(stopId,payload={},context={},database=defaultDb){
- if(!['owner_admin','operations_admin','supervisor'].includes(context.role))throw new Error('Supervisor permission is required')
+ if(!canManageDispatch(context))throw new Error('Supervisor permission is required')
  const date=String(payload.date||''),reason=String(payload.reason||'').trim(),today=context.today||iso()
  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||Number.isNaN(Date.parse(date))||new Date(date+'T00:00:00Z').toISOString().slice(0,10)!==date||date<today||date>addDays(today,6)||!reason)throw new Error('请选择今天起七天内的日期，并填写原因。')
  return withImmediateTransaction(database,()=>{
@@ -1123,7 +1124,7 @@ export function addTemporaryRouteCollection(stopId,payload={},context={},databas
 }
 
 export function recordCustomerReportedNoGoods(stopId,payload={},context={},database=defaultDb){
- if(!['owner_admin','operations_admin','supervisor'].includes(context.role))throw new Error('Supervisor permission is required')
+ if(!canManageDispatch(context))throw new Error('Supervisor permission is required')
  const reason=String(payload.reason||'').trim();if(!reason)throw new Error('请填写客户通知内容及原因')
  return withImmediateTransaction(database,()=>{
   const stop=draftStopById(database,stopId);if(!stop)throw new Error('Stop not found')
@@ -1195,7 +1196,7 @@ export function placeReviewedScheduledStop({stopId,date,vehicleId,routeNumber,ch
  const before=draftStopById(database,stopId),day=dayByDate(database,date)
  if(!before||before.dispatch_date!==date)throw new Error('Target occurrence changed')
  assertBranchServiceDateAvailable(database,before.branch_id,date,{excludeStopId:stopId,entryPoint:'reuse_reviewed_occurrence'})
- const target=ensureVehicleTrip(database,day,vehicleId,1)
+ const target=vehicleId?ensureVehicleTrip(database,day,vehicleId,1):ensureUnassignedTrip(database,day)
  if(before.dispatch_trip_id===target.id&&before.route_number===routeNumber){
   invalidateDispatchDay(database,date,'date_review_occurrence_reused','dispatch_stop',stopId,before,{routeNumber},changedBy)
   return

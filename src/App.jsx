@@ -60,7 +60,7 @@ export default function App(){return <AppErrorBoundary><AppContent/></AppErrorBo
 
 function DesktopApp({account,onLogout,onChangePassword,onEnterMobile}){
   const{t,language}=useI18n()
-  const managementEntry=['supervisor','operations_admin','owner_admin'].includes(account.role)
+  const managementEntry=['supervisor','operations_admin','owner_admin','office'].includes(account.role)
   const initial=()=>{if(managementEntry)return{page:'dashboard',tab:''};const query=new URLSearchParams(window.location.search);return resolvePage(query.get('page')||'dashboard',query.get('tab')||'')}
   const start=initial(),initialZoneId=()=>managementEntry?'':new URLSearchParams(window.location.search).get('zone')||'',[page,setPage]=useState(start.page),[pageTab,setPageTab]=useState(start.tab),[routeZoneId,setRouteZoneId]=useState(initialZoneId),[menuOpen,setMenuOpen]=useState(false)
   useEffect(()=>{if(managementEntry)window.history.replaceState({kcsPage:'dashboard'},'',window.location.pathname+'?page=dashboard')},[])

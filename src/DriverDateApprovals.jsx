@@ -5,7 +5,7 @@ import {kuchingDate} from '../shared/kuchingTime.js'
 import {weekdayName} from '../shared/scheduleRecurrence.js'
 import './DriverDateApprovals.css'
 
-export function DateRequestReview({item,onSaved,onPlanner}){
+export function DateRequestReview({item,onSaved,onPlanner,submitUrl}){
  const{t}=useI18n(),ui=useUi()
  const[date,setDate]=useState(item.targetDate),[route,setRoute]=useState(''),[scope,setScope]=useState('once'),[reason,setReason]=useState(''),[sunday,setSunday]=useState(false)
  const[schedule]=useState(item.schedule),[options,setOptions]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[reload,setReload]=useState(0)
@@ -15,23 +15,23 @@ export function DateRequestReview({item,onSaved,onPlanner}){
  },[date,reload])
  const decide=async decision=>{
   setBusy(true);setError('')
-  try{const result=await apiRequest(`/api/dispatch/date-requests/${item.id}/${decision}`,{method:'POST',body:JSON.stringify({reason,targetDate:date,routeNumber:route,scope,targetRevision:options?.revision,expectedScheduleUpdatedAt:schedule?.updatedAt,sundayAuthorized:sunday})});onSaved(result,decision);window.dispatchEvent(new Event('kcs-handover-saved'))}
+  try{const result=await apiRequest(submitUrl||`/api/dispatch/date-requests/${item.id}/${decision}`,{method:'POST',body:JSON.stringify({reason,targetDate:date,routeNumber:route,scope,targetRevision:options?.revision,expectedScheduleUpdatedAt:schedule?.updatedAt,sundayAuthorized:sunday})});onSaved(result,decision);window.dispatchEvent(new Event('kcs-handover-saved'))}
   catch(e){setError(e.message)}finally{setBusy(false)}
  }
- const ready=options?.dayReady&&options.routes.some(r=>r.available),chosen=options?.routes.find(r=>String(r.routeNumber)===route)
+ const ready=options?.routes.some(r=>r.available),chosen=options?.routes.find(r=>String(r.routeNumber)===route)
  const weekdays=(schedule?.weekdays||[]).map(day=>day===weekdayName(item.sourceDate)?weekdayName(date||item.targetDate):day)
  return <div className="date-request-review">
   <label>{t('dateReview.date')}<input type="date" min={kuchingDate()} value={date} disabled={busy} onChange={e=>setDate(e.target.value)}/></label>
   <small>{t('dateReview.sameDay')}</small><small>{t('dateReview.reuseHelp')}</small>
-  <label>{t('routeTrial.targetRoute')}<select value={route} disabled={busy||!options} onChange={e=>setRoute(e.target.value)}><option value="">{t('common.select')}</option>{options?.routes.map(r=><option data-i18n-raw key={r.routeNumber} value={r.routeNumber} disabled={!r.available}>{r.name}{r.plate?` · ${r.plate}`:''}{r.available?'':` · ${t('dateReview.unavailable')}`}</option>)}</select></label>
-  {!ready&&<p>{options?t('routeTrial.approvalHelp'):t('dateReview.loading')}</p>}
-  <div className="date-review-actions"><button type="button" disabled={busy} onClick={()=>onPlanner?.(date)}>{t('dateReview.planner')}</button><button type="button" disabled={busy} onClick={()=>setReload(x=>x+1)}>{t('dateReview.reload')}</button></div>
+  <label>{t('routeTrial.targetRoute')}<select value={route} disabled={busy||!options} onChange={e=>setRoute(e.target.value)}><option value="">{t('common.select')}</option>{options?.routes.map(r=><option data-i18n-raw key={r.routeNumber} value={r.routeNumber} disabled={!r.available}>{r.name}{r.plate?` · ${r.plate}`:''}{r.vehicleReady===false?` · ${t('dateReview.waitVehicle')}`:''}</option>)}</select></label>
+  <p>{t('dateReview.autoPlan')}</p>{!ready&&<p>{options?t('routeTrial.chooseRoute'):t('dateReview.loading')}</p>}
+  <div className="date-review-actions">{onPlanner&&<button type="button" disabled={busy} onClick={()=>onPlanner(date)}>{t('dateReview.planner')}</button>}<button type="button" disabled={busy} onClick={()=>setReload(x=>x+1)}>{t('dateReview.reload')}</button></div>
   <label>{t('dateReview.scope')}<select value={scope} disabled={busy} onChange={e=>setScope(e.target.value)}><option value="once">{t('dateReview.once')}</option><option value="permanent">{t('dateReview.permanent')}</option></select></label>
   <p>{t(scope==='once'?'dateReview.onceHelp':'dateReview.permanentHelp')}</p>
   {scope==='permanent'&&<><p>{t('schedule.weekdays')}: {(schedule?.weekdays||[]).map(ui).join(', ')} → {weekdays.map(ui).join(', ')}<br/>{t('schedule.effectiveDate')}: {item.sourceDate}</p>{weekdays.includes('Sunday')&&!schedule?.weekdays.includes('Sunday')&&<label><input type="checkbox" checked={sunday} disabled={busy} onChange={e=>setSunday(e.target.checked)}/>{t('dateReview.sunday')}</label>}</>}
   <label>{t('routeTrial.reviewReason')}<textarea maxLength={1000} value={reason} disabled={busy} onChange={e=>setReason(e.target.value)}/></label>
   {error&&<p role="alert">{error}</p>}
-  <div className="date-review-actions"><button type="button" className="primary" disabled={busy||!date||!chosen?.available||!reason.trim()} onClick={()=>decide('approve')}>{t('dateReview.approve')}</button><button type="button" disabled={busy||!reason.trim()} onClick={()=>decide('reject')}>{t('deferApproval.reject')}</button></div>
+  <div className="date-review-actions"><button type="button" className="primary" disabled={busy||!date||!chosen?.available||!reason.trim()} onClick={()=>decide('approve')}>{t('dateReview.approve')}</button>{!submitUrl&&<button type="button" disabled={busy||!reason.trim()} onClick={()=>decide('reject')}>{t('deferApproval.reject')}</button>}</div>
  </div>
 }
 export default function DriverDateApprovals({onPlanner}){
