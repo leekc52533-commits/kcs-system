@@ -3882,3 +3882,9 @@ Object.assign(messages.en,{"cf.dailyRecords": "Daily records", "cf.month": "Mont
 Object.assign(messages.ms,{"cf.dailyRecords": "Rekod harian", "cf.month": "Bulan", "cf.unlocked": "Jumlah harian dikemas kini apabila pejabat memasukkan rekod lewat. Pilih tarikh untuk melihat butiran di bawah.", "cf.day": "Tarikh", "cf.enteredAt": "Masa direkodkan", "apiError.cash_date_invalid": "Pilih tarikh perbelanjaan yang sah sehingga hari ini.", "apiError.cash_date_restricted": "Pekerja hanya boleh menghantar perbelanjaan hari ini. Minta pejabat merekodkan tarikh lepas."})
 
 Object.assign(messages.zh,{"cf.dailyRecords": "每日记录", "cf.month": "月份", "cf.unlocked": "每日汇总不锁账，办公室补录后会更新。点击日期，可在下方查看当天费用明细。", "cf.day": "日期", "cf.enteredAt": "实际录入时间", "apiError.cash_date_invalid": "请选择有效的费用日期，不能晚于今天。", "apiError.cash_date_restricted": "员工只能提交今天的费用，过去日期请由办公室补录。"})
+
+Object.assign(messages.en,{"cf.downloadDaily": "Download daily records", "cf.pickDate": "Select a date"})
+
+Object.assign(messages.ms,{"cf.downloadDaily": "Muat turun rekod harian", "cf.pickDate": "Pilih tarikh"})
+
+Object.assign(messages.zh,{"cf.downloadDaily": "下载每日记录", "cf.pickDate": "选择日期"})
