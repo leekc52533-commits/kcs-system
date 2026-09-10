@@ -26,15 +26,16 @@ export default function WeeklyDispatchPage({currentUser}){
   const ui=useUi()
 
   const{t}=useI18n()
-  const[displayMode,setDisplayMode]=useState('dispatch'),[selectedWeekDate,setSelectedWeekDate]=useState(localDate()),[selectedRouteNumber,setSelectedRouteNumber]=useState(1),[data,setData]=useState(null),[error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false)
+  const[reviewDate]=useState(()=>{const date=sessionStorage.getItem('kcs-review-planner-date');sessionStorage.removeItem('kcs-review-planner-date');return /^\d{4}-\d{2}-\d{2}$/.test(date||'')?date:null})
+  const[displayMode,setDisplayMode]=useState('dispatch'),[selectedWeekDate,setSelectedWeekDate]=useState(reviewDate||localDate()),[selectedRouteNumber,setSelectedRouteNumber]=useState(1),[data,setData]=useState(null),[error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false)
   const canEditDispatch=['owner_admin','operations_admin','supervisor'].includes(currentUser.systemRole)||currentUser.permissions?.includes('schedule_manage')
   const canManageVehicles=['owner_admin','operations_admin'].includes(currentUser.systemRole)||currentUser.permissions?.includes('vehicle_manage')
   const canApproveDefer=['owner','owner_admin','operations_admin','supervisor'].includes(currentUser.systemRole||currentUser.role)
   const loadSequence=useRef(0)
   const load=useCallback(async()=>{const sequence=++loadSequence.current;setError('');try{
-    const result=await request(canEditDispatch?'/api/dispatch/ensure-rolling-week':`/api/dispatch/week?startDate=${localDate()}`,canEditDispatch?{method:'POST'}:undefined)
+    const result=await request(reviewDate?`/api/dispatch/week?startDate=${reviewDate}`:canEditDispatch?'/api/dispatch/ensure-rolling-week':`/api/dispatch/week?startDate=${localDate()}`,!reviewDate&&canEditDispatch?{method:'POST'}:undefined)
     if(sequence===loadSequence.current)setData(result)
-  }catch(e){if(sequence===loadSequence.current)setError(e.message)}},[canEditDispatch])
+  }catch(e){if(sequence===loadSequence.current)setError(e.message)}},[canEditDispatch,reviewDate])
   useEffect(()=>{load()},[load])
   useEffect(()=>{const refresh=()=>load();window.addEventListener('kcs-handover-saved',refresh);return()=>window.removeEventListener('kcs-handover-saved',refresh)},[load])
   useEffect(()=>{const wake=()=>{if(document.visibilityState==='visible')load()};const timer=setInterval(load,10000);window.addEventListener('focus',load);document.addEventListener('visibilitychange',wake);return()=>{clearInterval(timer);window.removeEventListener('focus',load);document.removeEventListener('visibilitychange',wake)}},[load])
@@ -56,7 +57,9 @@ export default function WeeklyDispatchPage({currentUser}){
   const decideDefer=async(item,decision)=>{const reason=prompt(t(decision==='approve'?'deferApproval.approveReason':'deferApproval.rejectReason'));if(!reason)return;setBusy(true);setError('');try{await request(`/api/dispatch/defer-requests/${item.id}/${decision}`,{method:'POST',body:JSON.stringify({reason})});setMessage(t(decision==='approve'?'deferApproval.approvedMessage':'deferApproval.rejectedMessage',{branch:item.branchName}));await load()}catch(e){setError(e.message)}finally{setBusy(false)}}
   const activeWeekDate=data?.days?.some(day=>day.dispatch_date===selectedWeekDate)?selectedWeekDate:data?.days?.[0]?.dispatch_date
   const visibleDays=displayMode==='route'?(data?.days||[]):(data?.days||[]).filter(day=>day.dispatch_date===activeWeekDate)
+  const prepareReviewDay=async()=>{setBusy(true);setError('');try{await request('/api/dispatch/generate-day',{method:'POST',body:JSON.stringify({payload:{startDate:reviewDate,onlyMissing:true}})});await load()}catch(e){setError(e.message)}finally{setBusy(false)}}
   return <div className="page planner-page">
+    {reviewDate&&data&&!data.days.some(d=>d.dispatch_date===reviewDate)&&<section className="planner-message"><p>{reviewDate} · {t('dateReview.missingDay')}</p>{canEditDispatch&&<button disabled={busy} onClick={prepareReviewDay}>{t('dateReview.prepareDay')}</button>}</section>}
     <div className="planner-navigation"><div className="planner-toolbar planner-view-toolbar"><div><button className={displayMode==='dispatch'?'active':''} onClick={()=>setDisplayMode('dispatch')}>{ui("派车")}</button><button className={displayMode==='route'?'active':''} onClick={()=>setDisplayMode('route')}>{ui("Route")}</button></div></div>{data?.days?.length>0&&(displayMode==='dispatch'?<WeekDayTabs days={data.days} selectedDate={activeWeekDate} onSelect={setSelectedWeekDate}/>:<RouteWeekTabs days={data.days} selectedRouteNumber={selectedRouteNumber} onSelect={setSelectedRouteNumber}/>)}</div>
     {message&&<div className="planner-message">✓ {ui(message)}</div>}{error&&<div className="data-error">{ui(error)}</div>}
     {data&&canEditDispatch&&<DispatchPlanningReview data={data}/>}

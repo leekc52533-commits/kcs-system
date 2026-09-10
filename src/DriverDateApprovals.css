@@ -1,0 +1,12 @@
+.dashboard-approvals.date-request-approvals article {display:block;min-width:0;padding:16px}
+.dashboard-approvals.date-request-approvals article .date-request-summary {display:flex;flex-direction:column;align-items:flex-start;gap:10px;width:100%;background:transparent;border:0;color:inherit;text-align:left;white-space:normal;overflow-wrap:anywhere}
+.date-request-review {display:grid;gap:12px;max-width:760px;width:100%;margin-top:16px}
+.date-request-review label {display:flex;flex-direction:column;gap:8px}
+.date-request-review input:not([type=checkbox]),.date-request-review select,.date-request-review textarea {box-sizing:border-box;width:100%;min-width:0;padding:12px;border:1px solid #b7d3cc;border-radius:12px;font:inherit;background:white;color:#203b35}
+.date-request-review input[type=checkbox] {accent-color:#187363;width:20px;height:20px}
+.date-review-actions {display:flex;gap:12px;flex-wrap:wrap}
+.date-request-approvals .date-review-actions button {border:1px solid #b7d3cc;border-radius:12px;padding:12px 18px;color:#176b5d;background:white;font:inherit;font-weight:700;white-space:normal}
+.date-request-approvals .date-review-actions button.primary {background:#187363;color:white}
+.date-review-actions button:disabled {opacity:.5}
+.date-request-review p {margin:0;overflow-wrap:anywhere}
+.schedule-adjustments {padding:12px;border:1px solid #b7d3cc;border-radius:12px}

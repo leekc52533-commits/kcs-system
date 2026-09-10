@@ -40,3 +40,78 @@ test('audit failure rolls back order and all date approval writes',()=>{const{db
 test('migration is additive and idempotent',()=>{const db=new DatabaseSync(':memory:');db.exec(schemaSql);db.exec('DROP TABLE driver_date_requests;INSERT INTO schema_meta(version) VALUES(54)');assert.equal(applyV55Migration(db).schemaVersion,55);assert.equal(applyV55Migration(db).noOp,true);db.close()})
 test('an existing target customer blocks approval without cancelling the source',()=>{const{db,ids}=fixture(),r=request(db,ids[0]),targetDay=db.prepare("SELECT id FROM dispatch_days WHERE dispatch_date='2026-09-11'").get();db.exec("INSERT INTO dispatches(dispatch_date,vehicle_id,status) VALUES('2026-09-11',1,'draft')");const dispatchId=db.prepare('SELECT MAX(id) id FROM dispatches').get().id;db.prepare('INSERT INTO dispatch_trips(dispatch_day_id,dispatch_id,trip_number) VALUES(?,?,1)').run(targetDay.id,dispatchId);const tripId=db.prepare('SELECT MAX(id) id FROM dispatch_trips').get().id;db.prepare("INSERT INTO dispatch_stops(dispatch_id,dispatch_trip_id,branch_id,stop_sequence,service_date,status) VALUES(?,?,1,1,'2026-09-11','locked')").run(dispatchId,tripId);assert.throws(()=>approve(db,r.id),/Duplicate Branch Service Date/);assert.notEqual(db.prepare('SELECT status FROM dispatch_stops WHERE id=?').get(ids[0]).status,'cancelled');db.close()})
 test('approving the last stop out closes an otherwise empty running trip',()=>{const{db,ids,trip}=fixture();db.prepare("UPDATE dispatch_stops SET status='cancelled' WHERE id IN (?,?)").run(ids[1],ids[2]);const r=request(db,ids[0]);approve(db,r.id);assert.equal(db.prepare('SELECT execution_status status FROM dispatch_trips WHERE id=?').get(trip).status,'completed');db.close()})
+
+test('review allows active vehicles, a supervisor-selected date, and a same-day route transfer',()=>{
+ const{db,ids}=fixture(),r=request(db,ids[0])
+ db.exec("UPDATE vehicles SET operational_status='active' WHERE id=2;INSERT INTO weekly_route_definitions(plan_id,route_number,display_name) VALUES(1,2,'Other route');INSERT INTO daily_route_assignments(dispatch_day_id,route_number,vehicle_id,assigned_by) SELECT id,2,2,'Supervisor' FROM dispatch_days WHERE dispatch_date='2026-09-10'")
+ const result=decideDriverDate(r.id,'approved',{targetDate:today,routeNumber:2,scope:'once',reason:'Other vehicle today'},supervisor,db)
+ const target=db.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(result.targetStopId)
+ assert.equal(target.service_date,today);assert.equal(target.route_number,2)
+ assert.equal(db.prepare('SELECT target_date FROM driver_date_requests WHERE id=?').get(r.id).target_date,'2026-09-11')
+ assert.equal(db.prepare('SELECT scope FROM driver_date_reviews').get().scope,'once')
+ assert.equal(db.prepare("SELECT COUNT(*) n FROM dispatch_stops WHERE branch_id=1 AND service_date=? AND status<>'cancelled'").get(today).n,1)
+ assert.equal(db.prepare('PRAGMA foreign_key_check').all().length,0);db.close()
+})
+
+test('permanent approval synchronizes Customer Schedule and generated future occurrences; regeneration retains the approved route',async()=>{
+ const{getCollectionScheduleManagement}=await import('../server/collectionScheduleManagementService.mjs')
+ const{db,ids}=fixture()
+ db.exec("INSERT INTO weekly_route_plan_stops(plan_id,weekday,branch_id,vehicle_registration_number,trip_number,stop_sequence,route_number) VALUES(1,4,1,'V1',1,1,1)")
+ generateWeek({startDate:'2026-09-17'},db)
+ db.exec("UPDATE dispatch_days SET status='approved' WHERE dispatch_date='2026-09-17'")
+ const originalFuture=db.prepare("SELECT id FROM dispatch_stops WHERE branch_id=1 AND service_date='2026-09-17' AND status<>'cancelled'").get().id
+ const before=getCollectionScheduleManagement(1,db),r=request(db,ids[0])
+ const result=decideDriverDate(r.id,'approved',{targetDate:'2026-09-11',routeNumber:1,scope:'permanent',reason:'Every Friday',expectedScheduleUpdatedAt:before.updatedAt},supervisor,db)
+ const after=getCollectionScheduleManagement(1,db)
+ assert.deepEqual(after.weekdays,['Friday']);assert.equal(after.homeRouteNumber,1);assert.equal(after.nextCollectionDate,'2026-09-11')
+ assert.equal(after.adjustments[0].scope,'permanent');assert.equal(after.adjustments[0].date,'2026-09-11')
+ assert.equal(db.prepare('SELECT status FROM dispatch_stops WHERE id=?').get(originalFuture).status,'cancelled')
+ assert.equal(db.prepare("SELECT status FROM dispatch_days WHERE dispatch_date='2026-09-17'").get().status,'reapproval_required')
+ assert.equal(db.prepare("SELECT COUNT(*) n FROM dispatch_stops WHERE branch_id=1 AND service_date='2026-09-18' AND status<>'cancelled'").get().n,1)
+ assert.equal(db.prepare("SELECT route_number FROM dispatch_stops WHERE branch_id=1 AND service_date='2026-09-18' AND status<>'cancelled'").get().route_number,1)
+ generateWeek({startDate:'2026-09-11'},db)
+ assert.equal(db.prepare('SELECT route_number FROM dispatch_stops WHERE id=?').get(result.targetStopId).route_number,1)
+ assert.equal(db.prepare('PRAGMA foreign_key_check').all().length,0);db.close()
+})
+
+test('permanent approval preserves executed future history and rolls back entirely on audit failure',async()=>{
+ const{getCollectionScheduleManagement}=await import('../server/collectionScheduleManagementService.mjs')
+ const{db,ids}=fixture()
+ db.exec("INSERT INTO weekly_route_plan_stops(plan_id,weekday,branch_id,vehicle_registration_number,trip_number,stop_sequence,route_number) VALUES(1,4,1,'V1',1,1,1)")
+ generateWeek({startDate:'2026-09-17'},db)
+ db.exec("UPDATE dispatch_stops SET status='completed',arrived_at='now',completed_at='now' WHERE branch_id=1 AND service_date='2026-09-17'")
+ const old=db.prepare("SELECT * FROM dispatch_stops WHERE branch_id=1 AND service_date='2026-09-17'").get(),before=getCollectionScheduleManagement(1,db),r=request(db,ids[0]),body={routeNumber:1,scope:'permanent',reason:'Every Friday',expectedScheduleUpdatedAt:before.updatedAt}
+ db.exec("CREATE TRIGGER review_fail BEFORE INSERT ON driver_date_reviews BEGIN SELECT RAISE(ABORT,'review audit failure'); END")
+ assert.throws(()=>decideDriverDate(r.id,'approved',body,supervisor,db),/review audit failure/)
+ assert.deepEqual(getCollectionScheduleManagement(1,db),before)
+ assert.notEqual(db.prepare('SELECT status FROM dispatch_stops WHERE id=?').get(ids[0]).status,'cancelled')
+ db.exec('DROP TRIGGER review_fail')
+ const result=decideDriverDate(r.id,'approved',body,supervisor,db)
+ assert.ok(result.preservedDates.includes('2026-09-17'))
+ assert.deepEqual(db.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(old.id),old);db.close()
+})
+
+test('once-only date and route survive regeneration even without membership on the target weekday',()=>{
+ const{db,ids}=fixture(),r=request(db,ids[0]);approve(db,r.id)
+ generateWeek({startDate:'2026-09-11'},db)
+ const rows=db.prepare("SELECT * FROM dispatch_stops WHERE branch_id=1 AND service_date='2026-09-11' AND status<>'cancelled'").all()
+ assert.equal(rows.length,1);assert.equal(rows[0].route_number,1);db.close()
+})
+
+test('permanent changes reject stale schedules and duplicate weekdays without changing original records',async()=>{
+ const{getCollectionScheduleManagement}=await import('../server/collectionScheduleManagementService.mjs')
+ const{db,ids}=fixture(),r=request(db,ids[0]),before=getCollectionScheduleManagement(1,db)
+ assert.throws(()=>decideDriverDate(r.id,'approved',{routeNumber:1,scope:'permanent',reason:'x',expectedScheduleUpdatedAt:'old'},supervisor,db),/stale/)
+ db.exec("UPDATE branch_schedules SET days_of_week='Thursday,Friday',frequency='Twice a week' WHERE id=1")
+ assert.throws(()=>decideDriverDate(r.id,'approved',{routeNumber:1,scope:'permanent',reason:'x',expectedScheduleUpdatedAt:getCollectionScheduleManagement(1,db).updatedAt},supervisor,db),/weekdayConflict/)
+ assert.equal(db.prepare('SELECT COUNT(*) n FROM driver_date_reviews').get().n,0);db.close()
+})
+
+test('schema 58 adds review history without changing existing requests and is idempotent',async()=>{
+ const{applyV58Migration}=await import('../server/migrationV58.mjs')
+ const{db,ids}=fixture(),r=request(db,ids[0]),before=db.prepare('SELECT * FROM driver_date_requests').all()
+ db.exec('DROP TABLE driver_date_reviews;DELETE FROM schema_meta;INSERT INTO schema_meta(version) VALUES(57)')
+ assert.equal(applyV58Migration(db).schemaVersion,58);assert.equal(applyV58Migration(db).noOp,true)
+ assert.deepEqual(db.prepare('SELECT * FROM driver_date_requests').all(),before)
+ assert.equal(db.prepare('PRAGMA integrity_check').get().integrity_check,'ok');assert.equal(db.prepare('PRAGMA foreign_key_check').all().length,0);db.close()
+})
