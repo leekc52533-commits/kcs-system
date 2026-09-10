@@ -3822,3 +3822,9 @@ Object.assign(messages.en,{"dateReview.missingDay": "This target date has not be
 Object.assign(messages.ms,{"dateReview.missingDay": "Tarikh sasaran ini belum dijana.", "dateReview.prepareDay": "Jana tarikh penghantaran ini"})
 
 Object.assign(messages.zh,{"dateReview.missingDay": "目标日期尚未生成派车安排。", "dateReview.prepareDay": "建立此日期的派车安排"})
+
+Object.assign(messages.en,{"dateReview.reuseHelp": "If this customer is already scheduled on the selected date, reuse its unstarted scheduled stop and apply the selected route.", "routeTrial.existingProtected": "This customer already has a protected or separate arrangement on the target date. Check its execution, documents or pending requests in the planner first.", "apiError.route_trial_existingprotected": "This customer already has a protected or separate arrangement on the target date. Check its execution, documents or pending requests in the planner first."})
+
+Object.assign(messages.ms,{"dateReview.reuseHelp": "Jika pelanggan ini sudah dijadualkan pada tarikh dipilih, gunakan hentian berjadual yang belum bermula dan tetapkan laluan dipilih.", "routeTrial.existingProtected": "Pelanggan ini mempunyai rekod dilindungi atau aturan berasingan pada tarikh sasaran. Semak pelaksanaan, dokumen atau permohonan tertunda dalam perancang dahulu.", "apiError.route_trial_existingprotected": "Pelanggan ini mempunyai rekod dilindungi atau aturan berasingan pada tarikh sasaran. Semak pelaksanaan, dokumen atau permohonan tertunda dalam perancang dahulu."})
+
+Object.assign(messages.zh,{"dateReview.reuseHelp": "目标日期已有该客户的未执行固定排程时，沿用该记录并调整为所选路线，不重复新增。", "routeTrial.existingProtected": "该客户在目标日期已有受保护记录或独立安排。请先在派车中核对执行、单据或待批准申请。", "apiError.route_trial_existingprotected": "该客户在目标日期已有受保护记录或独立安排。请先在派车中核对执行、单据或待批准申请。"})

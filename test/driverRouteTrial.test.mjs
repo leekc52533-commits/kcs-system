@@ -38,7 +38,7 @@ test('execution after request prevents approval',()=>{const{db,ids}=fixture(),r=
 test('invalid dates and missing target vehicle cannot remove original stop',()=>{const{db,ids}=fixture();assert.throws(()=>requestDriverDate(ids[0],{targetDate:'2026-02-30',reason:'x'},context,db),/dateReason/);const r=request(db,ids[0]);db.exec('DELETE FROM daily_route_assignments');assert.throws(()=>approve(db,r.id),/chooseRoute/);assert.notEqual(db.prepare('SELECT status FROM dispatch_stops WHERE id=?').get(ids[0]).status,'cancelled');db.close()})
 test('audit failure rolls back order and all date approval writes',()=>{const{db,ids,trip}=fixture();db.exec("CREATE TRIGGER audit_fail BEFORE INSERT ON dispatch_change_logs WHEN NEW.change_type='driver_trial_order_changed' BEGIN SELECT RAISE(ABORT,'audit failure'); END");assert.throws(()=>reorderDriverStop(ids[1],{direction:'up',expectedOrder:ids},context,db),/audit failure/);assert.deepEqual(order(db,trip),ids);const r=request(db,ids[0]);db.exec("CREATE TRIGGER approve_fail BEFORE INSERT ON dispatch_change_logs WHEN NEW.change_type='driver_date_request_approved' BEGIN SELECT RAISE(ABORT,'audit failure'); END");assert.throws(()=>approve(db,r.id),/audit failure/);assert.notEqual(db.prepare('SELECT status FROM dispatch_stops WHERE id=?').get(ids[0]).status,'cancelled');assert.equal(db.prepare("SELECT COUNT(*) n FROM dispatch_stops WHERE service_date='2026-09-11'").get().n,0);db.close()})
 test('migration is additive and idempotent',()=>{const db=new DatabaseSync(':memory:');db.exec(schemaSql);db.exec('DROP TABLE driver_date_requests;INSERT INTO schema_meta(version) VALUES(54)');assert.equal(applyV55Migration(db).schemaVersion,55);assert.equal(applyV55Migration(db).noOp,true);db.close()})
-test('an existing target customer blocks approval without cancelling the source',()=>{const{db,ids}=fixture(),r=request(db,ids[0]),targetDay=db.prepare("SELECT id FROM dispatch_days WHERE dispatch_date='2026-09-11'").get();db.exec("INSERT INTO dispatches(dispatch_date,vehicle_id,status) VALUES('2026-09-11',1,'draft')");const dispatchId=db.prepare('SELECT MAX(id) id FROM dispatches').get().id;db.prepare('INSERT INTO dispatch_trips(dispatch_day_id,dispatch_id,trip_number) VALUES(?,?,1)').run(targetDay.id,dispatchId);const tripId=db.prepare('SELECT MAX(id) id FROM dispatch_trips').get().id;db.prepare("INSERT INTO dispatch_stops(dispatch_id,dispatch_trip_id,branch_id,stop_sequence,service_date,status) VALUES(?,?,1,1,'2026-09-11','locked')").run(dispatchId,tripId);assert.throws(()=>approve(db,r.id),/Duplicate Branch Service Date/);assert.notEqual(db.prepare('SELECT status FROM dispatch_stops WHERE id=?').get(ids[0]).status,'cancelled');db.close()})
+test('an existing target customer blocks approval without cancelling the source',()=>{const{db,ids}=fixture(),r=request(db,ids[0]),targetDay=db.prepare("SELECT id FROM dispatch_days WHERE dispatch_date='2026-09-11'").get();db.exec("INSERT INTO dispatches(dispatch_date,vehicle_id,status) VALUES('2026-09-11',1,'draft')");const dispatchId=db.prepare('SELECT MAX(id) id FROM dispatches').get().id;db.prepare('INSERT INTO dispatch_trips(dispatch_day_id,dispatch_id,trip_number) VALUES(?,?,1)').run(targetDay.id,dispatchId);const tripId=db.prepare('SELECT MAX(id) id FROM dispatch_trips').get().id;db.prepare("INSERT INTO dispatch_stops(dispatch_id,dispatch_trip_id,branch_id,stop_sequence,service_date,status) VALUES(?,?,1,1,'2026-09-11','locked')").run(dispatchId,tripId);assert.throws(()=>approve(db,r.id),/existingProtected/);assert.notEqual(db.prepare('SELECT status FROM dispatch_stops WHERE id=?').get(ids[0]).status,'cancelled');db.close()})
 test('approving the last stop out closes an otherwise empty running trip',()=>{const{db,ids,trip}=fixture();db.prepare("UPDATE dispatch_stops SET status='cancelled' WHERE id IN (?,?)").run(ids[1],ids[2]);const r=request(db,ids[0]);approve(db,r.id);assert.equal(db.prepare('SELECT execution_status status FROM dispatch_trips WHERE id=?').get(trip).status,'completed');db.close()})
 
 test('review allows active vehicles, a supervisor-selected date, and a same-day route transfer',()=>{
@@ -114,4 +114,44 @@ test('schema 58 adds review history without changing existing requests and is id
  assert.equal(applyV58Migration(db).schemaVersion,58);assert.equal(applyV58Migration(db).noOp,true)
  assert.deepEqual(db.prepare('SELECT * FROM driver_date_requests').all(),before)
  assert.equal(db.prepare('PRAGMA integrity_check').get().integrity_check,'ok');assert.equal(db.prepare('PRAGMA foreign_key_check').all().length,0);db.close()
+})
+
+function existingScheduledTarget(db){
+ const day=db.prepare("SELECT id FROM dispatch_days WHERE dispatch_date='2026-09-11'").get()
+ db.exec("INSERT INTO dispatches(dispatch_date,vehicle_id,status) VALUES('2026-09-11',2,'draft')")
+ const dispatch=db.prepare('SELECT MAX(id) id FROM dispatches').get().id
+ db.prepare('INSERT INTO dispatch_trips(dispatch_day_id,dispatch_id,trip_number) VALUES(?,?,1)').run(day.id,dispatch)
+ const trip=db.prepare('SELECT MAX(id) id FROM dispatch_trips').get().id
+ const result=db.prepare("INSERT INTO dispatch_stops(dispatch_id,dispatch_trip_id,branch_id,source_schedule_id,stop_sequence,service_date,status,route_number) VALUES(?,?,1,1,1,'2026-09-11','locked',2)").run(dispatch,trip)
+ const id=Number(result.lastInsertRowid)
+ db.prepare("INSERT INTO schedule_occurrences(schedule_id,branch_id,planned_date,status,dispatch_stop_id) VALUES(1,1,'2026-09-11','generated',?)").run(id)
+ return id
+}
+test('approval reuses the already scheduled target, changes its route and retains occurrence identity',()=>{
+ const{db,ids}=fixture(),targetId=existingScheduledTarget(db),r=request(db,ids[0]),count=db.prepare('SELECT COUNT(*) n FROM dispatch_stops').get().n
+ const result=approve(db,r.id)
+ assert.equal(result.targetStopId,targetId)
+ const target=db.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(targetId)
+ assert.equal(target.route_number,1);assert.equal(db.prepare('SELECT vehicle_id FROM dispatches WHERE id=?').get(target.dispatch_id).vehicle_id,1)
+ assert.equal(db.prepare('SELECT COUNT(*) n FROM dispatch_stops').get().n,count)
+ assert.equal(db.prepare("SELECT COUNT(*) n FROM dispatch_stops WHERE branch_id=1 AND service_date='2026-09-11' AND status<>'cancelled'").get().n,1)
+ assert.equal(db.prepare("SELECT dispatch_stop_id id FROM schedule_occurrences WHERE schedule_id=1 AND planned_date='2026-09-11'").get().id,targetId)
+ assert.equal(db.prepare('SELECT status FROM dispatch_stops WHERE id=?').get(ids[0]).status,'cancelled')
+ assert.equal(approve(db,r.id).idempotent,true)
+ assert.equal(db.prepare('PRAGMA foreign_key_check').all().length,0);db.close()
+})
+test('existing target with execution cannot be reused and source stays intact',()=>{
+ const{db,ids}=fixture(),targetId=existingScheduledTarget(db),r=request(db,ids[0])
+ db.prepare("UPDATE dispatch_stops SET status='completed',arrived_at='now',completed_at='now' WHERE id=?").run(targetId)
+ assert.throws(()=>approve(db,r.id),/existingProtected/)
+ assert.equal(db.prepare('SELECT status FROM driver_date_requests WHERE id=?').get(r.id).status,'pending')
+ assert.notEqual(db.prepare('SELECT status FROM dispatch_stops WHERE id=?').get(ids[0]).status,'cancelled');db.close()
+})
+test('failure after reusing target rolls back its placement, occurrence and source cancellation',()=>{
+ const{db,ids}=fixture(),targetId=existingScheduledTarget(db),r=request(db,ids[0]),before=db.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(targetId)
+ db.exec("CREATE TRIGGER merge_fail BEFORE INSERT ON driver_date_reviews BEGIN SELECT RAISE(ABORT,'merge audit failure'); END")
+ assert.throws(()=>approve(db,r.id),/merge audit failure/)
+ assert.deepEqual(db.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(targetId),before)
+ assert.notEqual(db.prepare('SELECT status FROM dispatch_stops WHERE id=?').get(ids[0]).status,'cancelled')
+ assert.equal(db.prepare('SELECT COUNT(*) n FROM schedule_exceptions').get().n,0);db.close()
 })

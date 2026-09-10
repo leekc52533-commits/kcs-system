@@ -13,3 +13,7 @@ Duplicate branch/date guards, request status, source execution/document protecti
 Validation: 39 focused service/UI tests covering three languages, inline decisions, date-specific options, once/permanent synchronization, same-day transfer, duplicates, permissions, execution protection, rollback, regeneration and additive migration. Production build succeeds. Phone interaction remains to be checked after deployment.
 
 Deployment: `scripts/apply-date-review-production.sh`, requires schema 57 and EXPECTED_COMMIT, builds staged frontend, backs up database/UI, restarts API for schema 58 migration, verifies integrity/foreign keys and internal/public health, then switches the frontend entry file.
+
+## Existing scheduled target correction
+
+The production video showed DUPLICATE_BRANCH_SERVICE_DATE: the requested target date already had a generated occurrence for the same customer. Approval now reuses that unstarted same-schedule occurrence, retains its ID and occurrence link, and applies the selected route/vehicle. The source is cancelled only within the successful transaction. Executed/documented/overridden targets, different/manual schedules and pending requests remain protected. Added regression cases cover reuse across routes, duplicate-submit idempotency, executed targets and rollback. Schema remains 58; deploy using apply-date-review-reuse-production.sh.
