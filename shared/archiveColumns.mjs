@@ -3,6 +3,7 @@ const date=value=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(text(value));return m
 const money=value=>`RM ${(Number(value||0)/100).toFixed(2)}`
 const entered=value=>{const time=text(value).match(/T(\d{2}:\d{2})/)?.[1];return time?`${date(value)} ${time}`:date(value)}
 export const archiveKeys={
+ ledger:['serviceDateLabel','employeeName','transactionTypeLabel','amountLabel','paymentChannel','ledgerReference','description','createdBy','createdAtLabel','receiptLabel'],
  expense:['serviceDateLabel','expenseTypeLabel','employeeName','category','description','amountLabel','paymentMethod','referenceNumber','vehiclePlate','odometerKm','companyName','tinNumber','remarks','createdBy','createdAtLabel','receiptLabel'],
  purchase:['serviceDateLabel','billNumber','paymentMethod','customerName','branchName','issuedBy','crew','car','totalLabel','proofLabel','statusLabel']
 }
@@ -10,6 +11,8 @@ export function archiveValue(kind,row,key,sort=false){
  if(!archiveKeys[kind]?.includes(key))return ''
  if(key==='serviceDateLabel')return sort?text(row.serviceDate):date(row.serviceDate)
  if(key==='createdAtLabel')return sort?text(row.createdAt):entered(row.createdAt)
+ if(key==='transactionTypeLabel')return ({opening_balance:'Opening Balance',top_up:'Top Up',cash_purchase:'Cash Purchase',expense:'Expense',reversal:'Reversal',adjustment:'Adjustment'})[row.transactionType]||text(row.transactionType)
+ if(key==='ledgerReference')return text(row.billNumber||row.referenceNumber)
  if(key==='amountLabel')return sort?Number(row.amountCents):money(row.amountCents)
  if(key==='totalLabel')return sort?Number(row.totalCents):money(row.totalCents)
  if(key==='odometerKm')return row.odometerKm==null?'':sort?Number(row.odometerKm):text(row.odometerKm)

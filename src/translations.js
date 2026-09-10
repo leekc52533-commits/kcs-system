@@ -3888,3 +3888,13 @@ Object.assign(messages.en,{"cf.downloadDaily": "Download daily records", "cf.pic
 Object.assign(messages.ms,{"cf.downloadDaily": "Muat turun rekod harian", "cf.pickDate": "Pilih tarikh"})
 
 Object.assign(messages.zh,{"cf.downloadDaily": "下载每日记录", "cf.pickDate": "选择日期"})
+
+Object.assign(messages.en,{"cf.downloadLedger":"Download Cash Float Ledger"})
+Object.assign(messages.ms,{"cf.downloadLedger":"Muat turun lejar wang runcit"})
+Object.assign(messages.zh,{"cf.downloadLedger":"下载备用金流水账"})
+
+Object.assign(messages.en,{"cf.ledger.title": "Cash Float Ledger", "cf.ledger.employee": "Employee", "cf.ledger.type": "Type", "cf.ledger.amount": "Amount", "cf.ledger.channel": "Channel", "cf.ledger.reference": "Reference / PO", "cf.ledger.description": "Description", "cf.ledger.by": "Entered By", "cf.ledger.proof": "Proof", "cf.ledger.Opening Balance": "Opening Balance", "cf.ledger.Top Up": "Top Up", "cf.ledger.Cash Purchase": "Cash Purchase", "cf.ledger.Expense": "Expense", "cf.ledger.Reversal": "Reversal", "cf.ledger.Adjustment": "Adjustment", "cf.ledger.Uploaded": "Uploaded", "cf.ledger.Missing": "Missing", "cf.ledger.Cash": "Cash", "cf.ledger.Bank Transfer": "Bank Transfer", "cf.ledger.System": "System"})
+
+Object.assign(messages.ms,{"cf.ledger.title": "Lejar wang runcit", "cf.ledger.employee": "Pekerja", "cf.ledger.type": "Jenis", "cf.ledger.amount": "Amaun", "cf.ledger.channel": "Saluran", "cf.ledger.reference": "Rujukan / PO", "cf.ledger.description": "Keterangan", "cf.ledger.by": "Direkodkan oleh", "cf.ledger.proof": "Bukti", "cf.ledger.Opening Balance": "Baki awal", "cf.ledger.Top Up": "Tambah nilai", "cf.ledger.Cash Purchase": "Pembelian tunai", "cf.ledger.Expense": "Perbelanjaan", "cf.ledger.Reversal": "Pembalikan", "cf.ledger.Adjustment": "Pelarasan", "cf.ledger.Uploaded": "Dimuat naik", "cf.ledger.Missing": "Tiada", "cf.ledger.Cash": "Tunai", "cf.ledger.Bank Transfer": "Pindahan bank", "cf.ledger.System": "Sistem"})
+
+Object.assign(messages.zh,{"cf.ledger.title": "备用金流水账", "cf.ledger.employee": "员工", "cf.ledger.type": "类型", "cf.ledger.amount": "金额", "cf.ledger.channel": "付款方式", "cf.ledger.reference": "参考号／买货单号", "cf.ledger.description": "说明", "cf.ledger.by": "录入人", "cf.ledger.proof": "凭证", "cf.ledger.Opening Balance": "初始余额", "cf.ledger.Top Up": "加款", "cf.ledger.Cash Purchase": "现金买货", "cf.ledger.Expense": "费用", "cf.ledger.Reversal": "冲销", "cf.ledger.Adjustment": "调整", "cf.ledger.Uploaded": "已上传", "cf.ledger.Missing": "未上传", "cf.ledger.Cash": "现金", "cf.ledger.Bank Transfer": "银行转账", "cf.ledger.System": "系统"})
