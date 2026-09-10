@@ -3870,3 +3870,9 @@ Object.assign(messages.en,{"cf.category.Fuel": "Fuel", "cf.category.Services": "
 Object.assign(messages.ms,{"cf.category.Fuel": "Minyak", "cf.category.Services": "Servis", "cf.category.Repair": "Pembaikan", "cf.category.Spare Parts": "Alat ganti", "cf.category.Road Tax": "Cukai jalan", "cf.category.Puspakom": "Puspakom", "cf.category.Insurance": "Insurans", "cf.category.Other": "Lain-lain"})
 
 Object.assign(messages.zh,{"cf.category.Fuel": "汽油", "cf.category.Services": "保养", "cf.category.Repair": "修理", "cf.category.Spare Parts": "零件", "cf.category.Road Tax": "路税", "cf.category.Puspakom": "Puspakom", "cf.category.Insurance": "保险", "cf.category.Other": "其他"})
+
+Object.assign(messages.en,{"cf.totalTitle": "Employee Cash Spending", "cf.allPurchases": "Cash purchases", "cf.voids": "Voided cash purchases", "cf.total": "Total cash spending", "cf.scope": "Excludes credit purchases, Admin Expense and top-ups. Voids adjust cash bills in the selected bill-date range."})
+
+Object.assign(messages.ms,{"cf.totalTitle": "Perbelanjaan tunai pekerja", "cf.allPurchases": "Pembelian tunai", "cf.voids": "Pembelian tunai dibatalkan", "cf.total": "Jumlah perbelanjaan tunai", "cf.scope": "Tidak termasuk pembelian kredit, perbelanjaan admin dan tambah nilai. Pembatalan mengikut tarikh bil tunai dipilih."})
+
+Object.assign(messages.zh,{"cf.totalTitle": "员工现金总开销", "cf.allPurchases": "现金买货", "cf.voids": "已作废现金买货", "cf.total": "现金总开销", "cf.scope": "不包含赊账、Admin Expense 和备用金加款。作废按所选现金单据日期范围扣除。"})
