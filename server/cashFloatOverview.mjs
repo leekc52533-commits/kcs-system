@@ -31,3 +31,12 @@ export function employeeSpending(db,from,to){
  const expenseCents=expenseItems.reduce((sum,item)=>sum+item.amountCents,0)
  return{from,to,...bills,expenseCents,expenseItems,totalCents:bills.purchaseCents+expenseCents-bills.voidCents}
 }
+
+export function dailyEmployeeSpending(db,month){
+ if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(month)))throw Object.assign(Error('CASH_DATE_INVALID'),{code:'CASH_DATE_INVALID',statusCode:400})
+ const from=month+'-01',last=new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5,7)),0)).getUTCDate(),to=month+'-'+last
+ const days=new Map(Array.from({length:last},(_,i)=>{const date=month+'-'+String(i+1).padStart(2,'0');return[date,{date,purchaseCents:0,voidCents:0,expenseCents:0,totalCents:0}]}))
+ for(const row of db.prepare(`SELECT service_date date,SUM(total_cents) purchaseCents,SUM(CASE WHEN status='voided' THEN total_cents ELSE 0 END) voidCents FROM purchase_bills WHERE payment_method='Cash' AND service_date BETWEEN ? AND ? GROUP BY service_date`).all(from,to)){if(days.has(row.date))Object.assign(days.get(row.date),row)}
+ for(const row of db.prepare(`SELECT service_date date,-SUM(amount_cents) expenseCents FROM cash_float_transactions WHERE transaction_type='expense' AND voided_at IS NULL AND service_date BETWEEN ? AND ? GROUP BY service_date`).all(from,to)){if(days.has(row.date))Object.assign(days.get(row.date),row)}
+ return{month,items:[...days.values()].reverse().map(row=>({...row,totalCents:row.purchaseCents+row.expenseCents-row.voidCents}))}
+}

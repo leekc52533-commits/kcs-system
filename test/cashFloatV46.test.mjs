@@ -12,7 +12,7 @@ import {applyV48Migration} from '../server/migrationV48.mjs'
 import {addAdminExpense,addCashFloatExpense,addCashFloatTopUp,configureCashFloat,expenseRecordsWorkbook,listCashFloatAccounts,listCashFloatAlerts,listCashFloatEmployees,listExpenseRecords,mobileCashFloat,recordCashPurchase,setCashFloatEmployees} from '../server/cashFloatService.mjs'
 
 function fixture(){const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON;'+schemaSql);db.prepare('INSERT INTO schema_meta(version) VALUES(45)').run();db.prepare("INSERT INTO employees(id,employee_code,name,job_role,employment_status,is_active) VALUES(1,'SUP-1','Supervisor','supervisor','active',1),(2,'DRV-2','Driver Two','driver','active',1)").run();db.prepare("INSERT INTO vehicles(id,vehicle_code,registration_number,operational_status) VALUES(1,'V1','QTEST1','active')").run();return db}
-const office={employeeId:1,employeeName:'Supervisor',now:new Date('2026-09-03T00:00:00Z')}
+const office={employeeId:1,employeeName:'Supervisor',now:new Date()}
 const proof={name:'receipt.png',dataUrl:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='}
 const receiptRoot=()=>fs.mkdtempSync(path.join(os.tmpdir(),'kcs-receipt-'))
 

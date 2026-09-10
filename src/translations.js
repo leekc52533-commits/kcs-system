@@ -3876,3 +3876,9 @@ Object.assign(messages.en,{"cf.totalTitle": "Employee Cash Spending", "cf.allPur
 Object.assign(messages.ms,{"cf.totalTitle": "Perbelanjaan tunai pekerja", "cf.allPurchases": "Pembelian tunai", "cf.voids": "Pembelian tunai dibatalkan", "cf.total": "Jumlah perbelanjaan tunai", "cf.scope": "Tidak termasuk pembelian kredit, perbelanjaan admin dan tambah nilai. Pembatalan mengikut tarikh bil tunai dipilih."})
 
 Object.assign(messages.zh,{"cf.totalTitle": "员工现金总开销", "cf.allPurchases": "现金买货", "cf.voids": "已作废现金买货", "cf.total": "现金总开销", "cf.scope": "不包含赊账、Admin Expense 和备用金加款。作废按所选现金单据日期范围扣除。"})
+
+Object.assign(messages.en,{"cf.dailyRecords": "Daily records", "cf.month": "Month", "cf.unlocked": "Daily totals remain editable through authorized late entries. Select a date to see its expense items below.", "cf.day": "Date", "cf.enteredAt": "Entered time", "apiError.cash_date_invalid": "Choose a valid expense date no later than today.", "apiError.cash_date_restricted": "Employees can submit expenses only for today. Ask the office to record a past date."})
+
+Object.assign(messages.ms,{"cf.dailyRecords": "Rekod harian", "cf.month": "Bulan", "cf.unlocked": "Jumlah harian dikemas kini apabila pejabat memasukkan rekod lewat. Pilih tarikh untuk melihat butiran di bawah.", "cf.day": "Tarikh", "cf.enteredAt": "Masa direkodkan", "apiError.cash_date_invalid": "Pilih tarikh perbelanjaan yang sah sehingga hari ini.", "apiError.cash_date_restricted": "Pekerja hanya boleh menghantar perbelanjaan hari ini. Minta pejabat merekodkan tarikh lepas."})
+
+Object.assign(messages.zh,{"cf.dailyRecords": "每日记录", "cf.month": "月份", "cf.unlocked": "每日汇总不锁账，办公室补录后会更新。点击日期，可在下方查看当天费用明细。", "cf.day": "日期", "cf.enteredAt": "实际录入时间", "apiError.cash_date_invalid": "请选择有效的费用日期，不能晚于今天。", "apiError.cash_date_restricted": "员工只能提交今天的费用，过去日期请由办公室补录。"})
