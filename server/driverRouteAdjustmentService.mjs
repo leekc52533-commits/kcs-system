@@ -4,8 +4,8 @@ import {planningDate} from '../shared/planningDates.js'
 import {db as defaultDb} from './database.mjs'
 import {kuchingDate} from '../shared/kuchingTime.js'
 import {isRouteTrialDate} from '../shared/routeTrial.js'
-import {withImmediateTransaction,assertBranchServiceDateAvailable} from './branchServiceDateGuard.mjs'
-import {driverToday,createStop,invalidateDispatchDay,syncReviewedBranchSchedule} from './dispatchService.mjs'
+import {withImmediateTransaction,assertBranchServiceDateAvailable,findBranchServiceDateStop} from './branchServiceDateGuard.mjs'
+import {driverToday,createStop,invalidateDispatchDay,syncReviewedBranchSchedule,placeReviewedScheduledStop} from './dispatchService.mjs'
 
 const fail=(code,statusCode=409)=>{throw Object.assign(new Error(code),{code:code.replace('routeTrial.','ROUTE_TRIAL_').toUpperCase(),statusCode})}
 const lookup=(db,id)=>db.prepare(`SELECT s.*,t.execution_status,t.id trip_id,t.dispatch_day_id day_id,dd.dispatch_date,dd.status day_status,d.vehicle_id,d.driver_id,b.jodoo_branch_id branch_code,b.branch_name
@@ -98,7 +98,13 @@ export function decideDriverDate(id,decision,payload,context={},db=defaultDb){
    if(!chosen.available)fail('routeTrial.targetNotReady')
    if(payload.targetRevision!=null&&Number(payload.targetRevision)!==options.revision)fail('routeTrial.stale')
    const target=db.prepare('SELECT * FROM dispatch_days WHERE dispatch_date=?').get(date)
-   assertBranchServiceDateAvailable(db,s.branch_id,date,{excludeStopId:s.id,entryPoint:'driver_date_approval'})
+   const existing=findBranchServiceDateStop(db,s.branch_id,date,{excludeStopId:s.id})
+   const targetExisting=existing?lookup(db,existing.id):null
+   // Reuse a generated occurrence rather than creating a duplicate on an already due day.
+   // Manual/special arrangements and anything with work or pending requests need review.
+   if(targetExisting){
+    if(!s.source_schedule_id||targetExisting.source_schedule_id!==s.source_schedule_id||targetExisting.source_special_request_id||targetExisting.override_note||hasWork(db,targetExisting)||pendingDefer(db,targetExisting)||targetExisting.execution_status!=='not_started'||db.prepare("SELECT 1 FROM driver_date_requests WHERE dispatch_stop_id=? AND status='pending'").get(targetExisting.id))fail('routeTrial.existingProtected')
+   }else assertBranchServiceDateAvailable(db,s.branch_id,date,{excludeStopId:s.id,entryPoint:'driver_date_approval'})
    let before=null,after=null
    if(scope==='permanent'){
     before=getCollectionScheduleManagement(s.branch_id,db)
@@ -119,10 +125,16 @@ export function decideDriverDate(id,decision,payload,context={},db=defaultDb){
    // The enclosing transaction restores everything if any later write fails.
    db.prepare("UPDATE dispatch_stops SET status='cancelled',override_reason=?,override_note='driver_date_approved',override_at=CURRENT_TIMESTAMP WHERE id=?").run(reason,s.id)
    db.prepare("UPDATE schedule_occurrences SET status='cancelled',updated_at=CURRENT_TIMESTAMP WHERE dispatch_stop_id=?").run(s.id)
-   const created=createStop({date,branchId:s.branch_code,vehicleId:chosen.vehicleId,tripNumber:1,estimatedWeightKg:s.estimated_weight_kg,changedBy:actor},db)
-   const routeSequence=db.prepare('SELECT COALESCE(MAX(s.route_stop_sequence),0)+1 n FROM dispatch_stops s JOIN dispatch_trips t ON t.id=s.dispatch_trip_id WHERE t.dispatch_day_id=? AND s.route_number=?').get(target.id,route).n
-   db.prepare('UPDATE dispatch_stops SET source_schedule_id=?,route_number=?,route_stop_sequence=? WHERE id=?').run(s.source_schedule_id,route,routeSequence,created.id)
-   targetStop=created.id
+   if(targetExisting){
+    targetStop=targetExisting.id
+    placeReviewedScheduledStop({stopId:targetStop,date,vehicleId:chosen.vehicleId,routeNumber:route,changedBy:actor},db)
+    audit(db,s,actor,'driver_date_existing_occurrence_reused',targetExisting,{requestId:r.id,targetStopId:targetStop,date,routeNumber:route})
+   }else{
+    const created=createStop({date,branchId:s.branch_code,vehicleId:chosen.vehicleId,tripNumber:1,estimatedWeightKg:s.estimated_weight_kg,changedBy:actor},db)
+    const routeSequence=db.prepare('SELECT COALESCE(MAX(s.route_stop_sequence),0)+1 n FROM dispatch_stops s JOIN dispatch_trips t ON t.id=s.dispatch_trip_id WHERE t.dispatch_day_id=? AND s.route_number=?').get(target.id,route).n
+    db.prepare('UPDATE dispatch_stops SET source_schedule_id=?,route_number=?,route_stop_sequence=? WHERE id=?').run(s.source_schedule_id,route,routeSequence,created.id)
+    targetStop=created.id
+   }
    if(s.source_schedule_id){
     db.prepare("INSERT INTO schedule_exceptions(branch_id,schedule_id,exception_type,original_date,target_date,permanent,reason,created_by) VALUES(?,?,?,?,?,0,?,?)").run(s.branch_id,s.source_schedule_id,date===s.dispatch_date?'add_extra_collection':'move_date',s.dispatch_date,date,reason,actor)
     db.prepare("INSERT INTO schedule_occurrences(schedule_id,branch_id,planned_date,occurrence_source,status,dispatch_stop_id) VALUES(?,?,?,'exception','planned',?) ON CONFLICT(schedule_id,planned_date) DO UPDATE SET status='planned',dispatch_stop_id=excluded.dispatch_stop_id,occurrence_source='exception',updated_at=CURRENT_TIMESTAMP").run(s.source_schedule_id,s.branch_id,date,targetStop)

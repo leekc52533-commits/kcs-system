@@ -1188,3 +1188,20 @@ export function syncReviewedBranchSchedule({branchId,scheduleId,startDate,exclud
  database.prepare('UPDATE branch_schedules SET next_collection_date=? WHERE id=?').run(nextDate,scheduleId)
  return preserved
 }
+
+// Called after date-review eligibility checks inside the same immediate transaction.
+export function placeReviewedScheduledStop({stopId,date,vehicleId,routeNumber,changedBy},database=defaultDb){
+ if(!database.isTransaction)throw new Error('Date review transaction required')
+ const before=draftStopById(database,stopId),day=dayByDate(database,date)
+ if(!before||before.dispatch_date!==date)throw new Error('Target occurrence changed')
+ assertBranchServiceDateAvailable(database,before.branch_id,date,{excludeStopId:stopId,entryPoint:'reuse_reviewed_occurrence'})
+ const target=ensureVehicleTrip(database,day,vehicleId,1)
+ if(before.dispatch_trip_id===target.id&&before.route_number===routeNumber){
+  invalidateDispatchDay(database,date,'date_review_occurrence_reused','dispatch_stop',stopId,before,{routeNumber},changedBy)
+  return
+ }
+ const sequence=database.prepare('SELECT COALESCE(MAX(stop_sequence),0)+1 n FROM dispatch_stops WHERE dispatch_id=?').get(target.dispatch_id).n
+ const routeSequence=database.prepare('SELECT COALESCE(MAX(s.route_stop_sequence),0)+1 n FROM dispatch_stops s JOIN dispatch_trips t ON t.id=s.dispatch_trip_id WHERE t.dispatch_day_id=? AND s.route_number=?').get(day.id,routeNumber).n
+ database.prepare('UPDATE dispatch_stops SET dispatch_id=?,dispatch_trip_id=?,stop_sequence=?,route_number=?,route_stop_sequence=? WHERE id=?').run(target.dispatch_id,target.id,sequence,routeNumber,routeSequence,stopId)
+ invalidateDispatchDay(database,date,'date_review_occurrence_reused','dispatch_stop',stopId,before,{routeNumber,vehicleId},changedBy)
+}

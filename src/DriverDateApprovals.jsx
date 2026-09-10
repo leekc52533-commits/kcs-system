@@ -22,7 +22,7 @@ export function DateRequestReview({item,onSaved,onPlanner}){
  const weekdays=(schedule?.weekdays||[]).map(day=>day===weekdayName(item.sourceDate)?weekdayName(date||item.targetDate):day)
  return <div className="date-request-review">
   <label>{t('dateReview.date')}<input type="date" min={kuchingDate()} value={date} disabled={busy} onChange={e=>setDate(e.target.value)}/></label>
-  <small>{t('dateReview.sameDay')}</small>
+  <small>{t('dateReview.sameDay')}</small><small>{t('dateReview.reuseHelp')}</small>
   <label>{t('routeTrial.targetRoute')}<select value={route} disabled={busy||!options} onChange={e=>setRoute(e.target.value)}><option value="">{t('common.select')}</option>{options?.routes.map(r=><option data-i18n-raw key={r.routeNumber} value={r.routeNumber} disabled={!r.available}>{r.name}{r.plate?` · ${r.plate}`:''}{r.available?'':` · ${t('dateReview.unavailable')}`}</option>)}</select></label>
   {!ready&&<p>{options?t('routeTrial.approvalHelp'):t('dateReview.loading')}</p>}
   <div className="date-review-actions"><button type="button" disabled={busy} onClick={()=>onPlanner?.(date)}>{t('dateReview.planner')}</button><button type="button" disabled={busy} onClick={()=>setReload(x=>x+1)}>{t('dateReview.reload')}</button></div>
