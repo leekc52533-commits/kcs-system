@@ -24,7 +24,7 @@ const paymentValue = value => {
 }
 const json = value => value == null ? null : JSON.stringify(value)
 
-function nextMasterId(database,table,column,type){
+export function nextMasterId(database,table,column,type){
   const rows=database.prepare(`SELECT ${column} value FROM ${table}`).all()
   const highest=rows.reduce((max,row)=>{try{return Math.max(max,Number(parseTypedId(row.value,type))||0)}catch{return max}},0)
   const raw=String(highest+1).padStart(5,'0')

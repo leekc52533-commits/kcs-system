@@ -1,3 +1,4 @@
+import {temporaryProducts,temporaryPrice,temporaryIntake,notifyIntakeBill,assertNoPendingTripApproval} from './temporaryIntakeBilling.mjs'
 import {voidActor,voidEvent} from './purchaseBillVoidService.mjs'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
@@ -54,8 +55,9 @@ function bill(database,stopId){
 
 export function getPurchaseBilling(stopId,context={},database=defaultDb){
   const stop=stopForDriver(database,stopId,context,false),existing=bill(database,stopId)
-  const products=existing?[]:listBranchProducts(stop.branchId,database).filter(item=>item.isSelectable&&item.currentPrice!=null).map(item=>({...item,currentPrice:Number(item.currentPrice)}))
-  return{stop:{id:Number(stop.id),branchId:stop.branchCode,branchName:stop.branchName,customerName:stop.customerName,paymentMethod:stop.paymentMethod,arrived:Boolean(stop.arrivedAt)},bill:existing,products}
+  const temporary=Boolean(temporaryIntake(database,stopId))
+  const products=existing?[]:temporary?temporaryProducts(database,stopId):listBranchProducts(stop.branchId,database).filter(item=>item.isSelectable&&item.currentPrice!=null).map(item=>({...item,currentPrice:Number(item.currentPrice)}))
+  return{temporary,stop:{id:Number(stop.id),branchId:stop.branchCode,branchName:stop.branchName,customerName:stop.customerName,paymentMethod:stop.paymentMethod,arrived:Boolean(stop.arrivedAt)},bill:existing,products}
 }
 
 export function createPurchaseBill(stopId,payload={},context={},database=defaultDb){
@@ -63,6 +65,7 @@ export function createPurchaseBill(stopId,payload={},context={},database=default
   return withImmediateTransaction(database,()=>{
     const stop=context.replacesBillId?replacementStop(database,context.replacesBillId,context):stopForDriver(database,stopId,{employeeId,role,today},true),existing=bill(database,stopId)
     if(existing)return{...existing,idempotent:true}
+    if(temporaryIntake(database,stop.id))assertNoPendingTripApproval(database,stop.tripId)
     if(!context.replacesBillId&&database.prepare("SELECT id FROM purchase_bills WHERE dispatch_stop_id=? AND status='voided'").get(stop.id))throw fail('Use the void page to reissue.','VOID_USE_REISSUE')
     const weightMethod=String(payload.weightMethod||'').trim(),printChoice=String(payload.printChoice||'').trim()
     if(!['on_site','factory','estimated'].includes(weightMethod))throw fail('Select how the weight was determined.','WEIGHT_METHOD_REQUIRED',400)
@@ -71,7 +74,7 @@ export function createPurchaseBill(stopId,payload={},context={},database=default
     const ids=payload.items.map(item=>Number(item.productId))
     if(ids.some(id=>!Number.isInteger(id)||id<=0)||new Set(ids).size!==ids.length)throw fail('Each Product can appear only once.','DUPLICATE_PRODUCT',400)
     const items=payload.items.map(item=>{
-      const product=requireBranchProductPrice(stop.branchId,item.productId,database),quantity=Number(item.quantity)
+      const product=temporaryPrice(database,stop.id,item)||requireBranchProductPrice(stop.branchId,item.productId,database),quantity=Number(item.quantity)
       if(!Number.isFinite(quantity)||quantity<=0||quantity>1000000)throw fail(`Enter a valid quantity for ${product.fullName}.`,'INVALID_QUANTITY',400)
       const unitPriceCents=money(product.currentPrice),lineTotalCents=Math.round(quantity*unitPriceCents)
       return{...product,quantity,unitPriceCents,lineTotalCents}
@@ -89,6 +92,7 @@ export function createPurchaseBill(stopId,payload={},context={},database=default
     database.prepare('UPDATE dispatch_stops SET invoice_number=?,payment_status=?,collected_weight_kg=CASE WHEN ?>0 THEN ? ELSE collected_weight_kg END WHERE id=?').run(billNumber,stop.paymentMethod==='Cash'?'pending_proof':'credit',totalWeight,totalWeight,stop.id)
     database.prepare(`INSERT OR REPLACE INTO stop_step_records(dispatch_stop_id,step_key,completed_by,completed_at,payload_json) VALUES(?,'invoice_driver_confirmed',NULL,?,?)`).run(stop.id,issuedAt,JSON.stringify({method:'electronic_purchase_bill',billId:purchaseBillId,billNumber,paymentMethod:stop.paymentMethod,driverEmployeeId:Number(employeeId)}))
     recordCashPurchase({id:purchaseBillId,billNumber,paymentMethod:stop.paymentMethod,totalCents,serviceDate:stop.serviceDate,driverEmployeeId:Number(employeeId),driverName:stop.driverName},database,{now})
+    notifyIntakeBill(database,stop.id,purchaseBillId,items,employeeId)
     if(context.replacesBillId){
       database.prepare("UPDATE purchase_bill_void_requests SET replacement_bill_id=? WHERE purchase_bill_id=? AND status='approved'").run(purchaseBillId,Number(context.replacesBillId))
       const r=database.prepare("SELECT id FROM purchase_bill_void_requests WHERE purchase_bill_id=? AND status='approved'").get(Number(context.replacesBillId))
@@ -127,7 +131,7 @@ function replacementStop(database,billId,context){
 }
 export function getReplacementBilling(billId,context={},database=defaultDb){
  const stop=replacementStop(database,billId,context)
- return {stop,bill:bill(database,stop.id),products:listBranchProducts(stop.branchId,database).filter(p=>p.isSelectable&&p.currentPrice!=null)}
+ return {stop,bill:bill(database,stop.id),products:(temporaryProducts(database,stop.id)||listBranchProducts(stop.branchId,database)).filter(p=>p.isSelectable&&p.currentPrice!=null)}
 }
 export function reissuePurchaseBill(billId,payload={},context={},database=defaultDb){
  return withImmediateTransaction(database,()=>{

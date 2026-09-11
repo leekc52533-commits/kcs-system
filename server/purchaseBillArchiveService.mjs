@@ -14,7 +14,7 @@ const safeFile=value=>String(value||'').replace(/[^A-Za-z0-9._-]+/g,'_').replace
 
 function where(filters={}){
   const range=dateRange(filters),clauses=['pb.service_date>=?','pb.service_date<?'],params=[range.from,range.to]
-  const search=String(filters.search||'').trim();if(search){const q=`%${search}%`;clauses.push('(pb.bill_number LIKE ? OR pb.customer_name_snapshot LIKE ? OR pb.branch_name_snapshot LIKE ? OR pb.branch_code_snapshot LIKE ?)');params.push(q,q,q,q)}
+  const search=String(filters.search||'').trim();if(search){const q=`%${search}%`;clauses.push('(pb.bill_number LIKE ? OR pb.customer_name_snapshot LIKE ? OR pb.branch_name_snapshot LIKE ? OR pb.branch_code_snapshot LIKE ? OR EXISTS(SELECT 1 FROM temporary_customer_intakes i JOIN branches linked ON linked.id=i.linked_branch_id JOIN customers lc ON lc.id=linked.customer_id WHERE i.dispatch_stop_id=pb.dispatch_stop_id AND (linked.jodoo_branch_id LIKE ? OR linked.branch_name LIKE ? OR lc.name LIKE ?)))');params.push(q,q,q,q,q,q,q)}
   const paymentMethod=String(filters.paymentMethod||'');if(['Cash','Credit'].includes(paymentMethod)){clauses.push('pb.payment_method=?');params.push(paymentMethod)}
   const employeeId=Number(filters.employeeId);if(Number.isInteger(employeeId)&&employeeId>0){clauses.push('pb.driver_employee_id=?');params.push(employeeId)}
   return{...range,sql:clauses.join(' AND '),params}
