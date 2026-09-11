@@ -227,13 +227,14 @@ export function applyWeeklyRoutePlanToDay(database,day){
   const overrides=new Map(allStops.filter(stop=>stop.status!=='cancelled'&&stop.routeNumber!=null).map(stop=>[stop.branchId,{branchId:stop.branchId,routeNumber:stop.routeNumber,tripNumber:stop.tripNumber>0?stop.tripNumber:1,stopSequence:stop.routeStopSequence||9999}]))
   for(const log of database.prepare("SELECT entity_id,after_json FROM dispatch_change_logs WHERE dispatch_day_id=? AND change_type='route_customer_adjusted' ORDER BY id").all(day.id)){
     const choice=JSON.parse(log.after_json||'{}'),stop=allStops.find(item=>item.id===Number(log.entity_id)&&item.status!=='cancelled')
-    if(stop&&choice.date===day.dispatch_date)overrides.set(stop.branchId,{branchId:stop.branchId,routeNumber:choice.routeNumber,tripNumber:1,stopSequence:choice.routeStopSequence||9999})
+    if(stop&&choice.date===day.dispatch_date&&!overrides.has(stop.branchId))overrides.set(stop.branchId,{branchId:stop.branchId,routeNumber:choice.routeNumber,tripNumber:1,stopSequence:choice.routeStopSequence||9999})
   }
   // Persist reviewed date/route choices even if a draft is regenerated.
-  for(const choice of database.prepare('SELECT branch_id branchId,route_number routeNumber FROM driver_date_reviews WHERE approved_date=? ORDER BY request_id').all(day.dispatch_date))overrides.set(choice.branchId,{...choice,tripNumber:1,stopSequence:9999})
+  for(const choice of database.prepare('SELECT branch_id branchId,route_number routeNumber FROM driver_date_reviews WHERE approved_date=? ORDER BY request_id').all(day.dispatch_date))if(!overrides.has(choice.branchId))overrides.set(choice.branchId,{...choice,tripNumber:1,stopSequence:9999})
   routes=routes.map(r=>({...r,routeNumber:executionRoute(database,r.branchId,day.dispatch_date,r.routeNumber)}))
   routes=[...routes.filter(item=>!overrides.has(item.branchId)),...overrides.values()]
 
+  routes.sort((a,b)=>a.routeNumber-b.routeNumber||a.tripNumber-b.tripNumber||a.stopSequence-b.stopSequence)
   const assignments=new Map(database.prepare('SELECT route_number routeNumber,vehicle_id vehicleId FROM daily_route_assignments WHERE dispatch_day_id=?').all(day.id).map(row=>[row.routeNumber,row.vehicleId]))
   const pending=new Set(),plannedIds=new Set(),sequenceCounters=new Map()
   database.prepare(`UPDATE dispatch_stops SET stop_sequence=-id WHERE dispatch_trip_id IN(SELECT id FROM dispatch_trips WHERE dispatch_day_id=?)`).run(day.id)
@@ -532,6 +533,23 @@ export function publishDay(date,{publishedBy='Supervisor',promisedExceptionReaso
   database.prepare("INSERT INTO dispatch_approvals(dispatch_day_id,action,revision,actor,reason) VALUES(?,'publish',?,?,?)").run(day.id,day.revision,actor(publishedBy),promisedExceptionReason||null)
   return getDispatchDay(date,database)
 }
+export function reopenRoute(date,routeNumber,{reopenedBy='Supervisor',reason=''}={},database=defaultDb){
+  const withdrawalReason=String(reason||'').trim(),route=Number(routeNumber)
+  if(!withdrawalReason)throw new Error('Withdrawal reason is required.')
+  if(!Number.isInteger(route)||route<1||route>5)throw new Error('Route must be between 1 and 5')
+  return withImmediateTransaction(database,()=>{
+    const day=dayByDate(database,iso(date));if(!day)throw new Error('Dispatch day not found')
+    const approval=database.prepare('SELECT * FROM daily_route_approvals WHERE dispatch_day_id=? AND route_number=?').get(day.id,route)
+    if(!approval)throw new Error('Route approval not found.')
+    const protectedRoute=database.prepare(`SELECT 1 FROM dispatch_stops s JOIN dispatch_trips t ON t.id=s.dispatch_trip_id JOIN dispatches d ON d.id=s.dispatch_id WHERE t.dispatch_day_id=? AND s.route_number=? AND (d.status IN ('released','in_progress','completed') OR t.execution_status IN ('in_progress','completed') OR s.arrived_at IS NOT NULL OR s.completed_at IS NOT NULL OR EXISTS(SELECT 1 FROM purchase_bills b WHERE b.dispatch_stop_id=s.id)) LIMIT 1`).get(day.id,route)
+    if(protectedRoute||['published','in_progress','completed'].includes(day.status))throw new Error('This route has been released or started and cannot be withdrawn.')
+    database.prepare('DELETE FROM daily_route_approvals WHERE dispatch_day_id=? AND route_number=?').run(day.id,route)
+    database.prepare("UPDATE dispatch_days SET status=CASE WHEN status='in_progress' THEN status ELSE 'reapproval_required' END,revision=revision+1,approved_revision=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(day.id)
+    database.prepare(`INSERT INTO dispatch_change_logs(dispatch_day_id,actor,change_type,entity_type,entity_id,before_json,after_json,requires_reapproval) VALUES(?,?,'route_approval_withdrawn','daily_route',?,?,?,1)`).run(day.id,actor(reopenedBy),String(route),json(approval),json({routeNumber:route,reason:withdrawalReason}))
+    return getDispatchDay(date,database)
+  })
+}
+
 export function reopenDay(date,{reopenedBy='Supervisor',reason=''}={},database=defaultDb){
   const withdrawalReason=String(reason||'').trim();if(!withdrawalReason)throw new Error('Withdrawal reason is required.')
   return withImmediateTransaction(database,()=>{const day=dayByDate(database,iso(date));if(!day)throw new Error('Dispatch day not found');if(day.status!=='approved')throw new Error(`Only an Approved route can be withdrawn; current status is ${day.status}.`);const before={...day}
@@ -694,28 +712,20 @@ export function reorderRouteStop(date,routeNumber,payload={},database=defaultDb)
   const index=visible.findIndex(row=>row.id===stopId),targetIndex=index+(direction==='up'?-1:1)
   if(index<0)throw new Error('Customer is not in this Route')
   if(targetIndex<0||targetIndex>=visible.length)return getDispatchDay(serviceDate,database)
-  const plan=database.prepare('SELECT id FROM weekly_route_plans WHERE is_active=1 ORDER BY id DESC LIMIT 1').get()
-  if(!plan)throw new Error('Active weekly route plan not found')
-  const weekday=weekdayForDate(serviceDate),template=database.prepare(`SELECT rowid rowId,branch_id branchId,trip_number tripNumber,stop_sequence stopSequence FROM weekly_route_plan_stops
-    WHERE plan_id=? AND weekday=? AND route_number=? ORDER BY trip_number,stop_sequence,rowid`).all(plan.id,weekday,route)
-  const sourceIndex=template.findIndex(row=>row.branchId===visible[index].branchId),anchorIndex=template.findIndex(row=>row.branchId===visible[targetIndex].branchId)
-  if(sourceIndex<0||anchorIndex<0)throw new Error('Route template customer not found')
-  const reordered=[...template],moved=reordered.splice(sourceIndex,1)[0],anchor=reordered.findIndex(row=>row.branchId===visible[targetIndex].branchId)
-  reordered.splice(direction==='up'?anchor:anchor+1,0,moved)
-  database.exec('BEGIN IMMEDIATE')
-  try{
-    database.prepare('UPDATE weekly_route_plan_stops SET stop_sequence=stop_sequence+10000 WHERE plan_id=? AND weekday=? AND route_number=?').run(plan.id,weekday,route)
-    const updateTemplate=database.prepare('UPDATE weekly_route_plan_stops SET trip_number=?,stop_sequence=? WHERE rowid=?')
-    reordered.forEach((row,position)=>updateTemplate.run(row.tripNumber,position+1,row.rowId))
-    const sequenceByBranch=new Map(reordered.map((row,position)=>[row.branchId,position+1]))
-    const editableDays=database.prepare(`SELECT id FROM dispatch_days WHERE status IN ('draft','reapproval_required') AND CAST(strftime('%w',dispatch_date) AS INTEGER)=?`).all(weekday)
-    const updateDay=database.prepare(`UPDATE dispatch_stops SET route_stop_sequence=? WHERE branch_id=? AND route_number=? AND dispatch_trip_id IN(SELECT id FROM dispatch_trips WHERE dispatch_day_id=?) AND status<>'cancelled'`)
-    for(const editableDay of editableDays)for(const [branchId,sequence] of sequenceByBranch)updateDay.run(sequence,branchId,route,editableDay.id)
-    database.prepare("INSERT INTO master_change_history(entity_type,entity_id,change_type,before_json,after_json,reason,changed_by) VALUES('weekly_route_stop',?,'REORDER',?,?,?,?)")
-      .run(`${plan.id}:${weekday}:${visible[index].branchId}`,JSON.stringify({routeNumber:route,weekday,branchId:visible[index].branchId,position:index+1}),JSON.stringify({routeNumber:route,weekday,branchId:visible[index].branchId,position:targetIndex+1}),'Route customer order changed',changedBy)
-    database.exec('COMMIT')
+  return withImmediateTransaction(database,()=>{
+    const ordered=[...visible],moved=ordered.splice(index,1)[0];ordered.splice(targetIndex,0,moved)
+    const update=database.prepare('UPDATE dispatch_stops SET route_stop_sequence=? WHERE id=?')
+    ordered.forEach((row,position)=>update.run(position+1,row.id))
+    // Reuse this route's execution slots; leave other routes in the same dispatch untouched.
+    const slots=database.prepare(`SELECT ds.id,ds.dispatch_id dispatchId,ds.stop_sequence sequence FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id WHERE dt.dispatch_day_id=? AND ds.route_number=? AND ds.status<>'cancelled' ORDER BY ds.stop_sequence,ds.id`).all(day.id,route)
+    for(const dispatchId of new Set(slots.map(row=>row.dispatchId))){
+      const group=slots.filter(row=>row.dispatchId===dispatchId),ids=new Set(group.map(row=>row.id)),values=group.map(row=>row.sequence).sort((a,b)=>a-b)
+      for(const row of group)database.prepare('UPDATE dispatch_stops SET stop_sequence=-id WHERE id=?').run(row.id)
+      ordered.filter(row=>ids.has(row.id)).forEach((row,i)=>database.prepare('UPDATE dispatch_stops SET stop_sequence=? WHERE id=?').run(values[i],row.id))
+    }
+    invalidateDispatchDay(database,serviceDate,'route_order_changed','daily_route',route,visible.map(row=>row.id),ordered.map(row=>row.id),changedBy)
     return getDispatchDay(serviceDate,database)
-  }catch(error){database.exec('ROLLBACK');throw error}
+  })
 }
 
 /** Assigns one complete Route to a vehicle for this date only. Route membership and order never change. */
