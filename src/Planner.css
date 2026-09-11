@@ -30,3 +30,12 @@
 .planner-date-picker input{font:inherit;padding:10px 14px;border:1px solid #b7d3cc;border-radius:12px;background:white;color:#245b50;max-width:100%;box-sizing:border-box}
 
 .route-assignment-card summary{grid-template-columns:minmax(0,1fr) auto;align-items:center}.route-name-row{display:flex;align-items:center;gap:8px;min-width:0}.route-name-row>b{min-width:0;overflow-wrap:anywhere}.route-name-row>.route-name-edit{flex:0 0 auto;white-space:nowrap}
+
+.route-assignment-card .route-name-edit,
+.route-assignment-card .route-card-actions>button,
+.route-assignment-card .route-handover button{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;min-height:36px;max-width:100%;margin:0;padding:7px 12px;border:1px solid #b9d5ce;border-radius:9px;background:#fff;color:#176b5b;font-family:inherit;font-size:.82rem;font-weight:600;line-height:1.4;text-align:center;cursor:pointer}
+.route-assignment-card .route-card-actions>button.primary{background:#176b5b;border-color:#176b5b;color:#fff}
+.route-assignment-card .route-name-edit:disabled,.route-assignment-card .route-card-actions>button:disabled,.route-assignment-card .route-handover button:disabled{opacity:.5;cursor:not-allowed}
+.route-assignment-card .route-name-edit:focus-visible,.route-assignment-card .route-card-actions>button:focus-visible,.route-assignment-card .route-handover button:focus-visible{outline:3px solid #8dd3c2;outline-offset:2px}
+.route-assignment-card .route-handover{margin-top:8px}
+.route-assignment-card .route-handover button+button{margin-left:8px}
