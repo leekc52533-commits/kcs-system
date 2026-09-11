@@ -1,4 +1,4 @@
-import {temporaryProducts,temporaryPrice,temporaryIntake,notifyIntakeBill,assertNoPendingTripApproval} from './temporaryIntakeBilling.mjs'
+import {temporaryProducts,temporaryPrice,temporaryIntake,notifyIntakeBill,assertNoPendingTripApproval,isAdHocCollection} from './temporaryIntakeBilling.mjs'
 import {voidActor,voidEvent} from './purchaseBillVoidService.mjs'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
@@ -65,7 +65,7 @@ export function createPurchaseBill(stopId,payload={},context={},database=default
   return withImmediateTransaction(database,()=>{
     const stop=context.replacesBillId?replacementStop(database,context.replacesBillId,context):stopForDriver(database,stopId,{employeeId,role,today},true),existing=bill(database,stopId)
     if(existing)return{...existing,idempotent:true}
-    if(temporaryIntake(database,stop.id))assertNoPendingTripApproval(database,stop.tripId)
+    if(isAdHocCollection(database,stop.id))assertNoPendingTripApproval(database,stop.tripId)
     if(!context.replacesBillId&&database.prepare("SELECT id FROM purchase_bills WHERE dispatch_stop_id=? AND status='voided'").get(stop.id))throw fail('Use the void page to reissue.','VOID_USE_REISSUE')
     const weightMethod=String(payload.weightMethod||'').trim(),printChoice=String(payload.printChoice||'').trim()
     if(!['on_site','factory','estimated'].includes(weightMethod))throw fail('Select how the weight was determined.','WEIGHT_METHOD_REQUIRED',400)

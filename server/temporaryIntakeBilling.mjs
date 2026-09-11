@@ -28,3 +28,7 @@ export function assertNoPendingTripApproval(db,tripId){
   const e=Error('Wait for supervisor approval before continuing.');e.code='DEFER_APPROVAL_PENDING';e.statusCode=409;throw e
  }
 }
+
+export function isAdHocCollection(db,stopId){
+ return Boolean(temporaryIntake(db,stopId)||db.prepare("SELECT 1 FROM existing_customer_pickups WHERE dispatch_stop_id=? AND kind IN ('added','transferred')").get(Number(stopId)))
+}
