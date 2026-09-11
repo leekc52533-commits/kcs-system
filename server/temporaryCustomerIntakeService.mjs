@@ -1,3 +1,4 @@
+import {assertLocationFields} from '../shared/locationText.js'
 import {canManageDispatch} from '../shared/dispatchAccess.js'
 import {nextMasterId} from './customerMasterService.mjs'
 import {db as defaultDb} from './database.mjs'
@@ -18,6 +19,8 @@ export function intakeTrips(ctx={},db=defaultDb){
 }
 export function createIntake(payload={},ctx={},db=defaultDb){
  driver(db,ctx)
+ assertLocationFields(payload,['address'])
+ for(const key of ['contactPerson','whatsapp','address','remark'])if(String(payload[key]||'').length>2000)fail('INTAKE_FIELDS',400)
  const name=String(payload.name||'').trim(),phone=String(payload.phone||'').trim(),key=String(payload.requestKey||'')
  const lat=Number(payload.latitude),lng=Number(payload.longitude)
  if(!name||name.length>200||phone.length>60||!/^[-a-zA-Z0-9]{16,80}$/.test(key))fail('INTAKE_FIELDS',400)
@@ -32,7 +35,8 @@ export function createIntake(payload={},ctx={},db=defaultDb){
   const customerCode=nextMasterId(db,'customers','jodoo_customer_id','customer'),branchCode=nextMasterId(db,'branches','jodoo_branch_id','branch')
   const customerId=Number(db.prepare("INSERT INTO customers(jodoo_customer_id,name,phone,payment_type,default_payment_type,source_system,created_by) VALUES(?,?,?,'Cash','Cash','KCS Temporary',?)").run(customerCode,name,phone,String(ctx.employeeId)).lastInsertRowid)
   const branchId=Number(db.prepare("INSERT INTO branches(jodoo_branch_id,customer_id,branch_name,phone,latitude,longitude,gps_status,payment_type,collection_frequency,source_system,created_by) VALUES(?,?,?,?,?,?,'pending_review','Cash','On Call','KCS Temporary',?)").run(branchCode,customerId,name,phone,lat,lng,String(ctx.employeeId)).lastInsertRowid)
-  db.prepare('UPDATE branches SET source_customer_id=? WHERE id=?').run(customerCode,branchId)
+  db.prepare('UPDATE branches SET source_customer_id=?,contact_person=?,address=?,notes=? WHERE id=?').run(customerCode,payload.contactPerson||null,payload.address||null,payload.remark||null,branchId)
+  db.prepare('UPDATE customers SET contact_person=?,whatsapp=?,notes=? WHERE id=?').run(payload.contactPerson||null,payload.whatsapp||null,payload.remark||null,customerId)
   const seq=db.prepare('SELECT COALESCE(MAX(stop_sequence),0)+1 n FROM dispatch_stops WHERE dispatch_id=?').get(t.dispatch_id).n
   const routeSeq=db.prepare('SELECT COALESCE(MAX(route_stop_sequence),0)+1 n FROM dispatch_stops WHERE route_number=? AND service_date=?').get(route?.route_number??null,ctx.today||kuchingDate()).n
   const stopId=Number(db.prepare("INSERT INTO dispatch_stops(dispatch_id,dispatch_trip_id,branch_id,stop_sequence,status,service_date,dedupe_enforced,route_number,route_stop_sequence,override_note) VALUES(?,?,?,?,'available',?,1,?,?,'temporary_intake')").run(t.dispatch_id,t.id,branchId,seq,ctx.today||kuchingDate(),route?.route_number??null,routeSeq).lastInsertRowid)
