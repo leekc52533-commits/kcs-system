@@ -28,3 +28,5 @@
 
 .planner-date-picker{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:12px 0;color:#245b50;font-weight:700}
 .planner-date-picker input{font:inherit;padding:10px 14px;border:1px solid #b7d3cc;border-radius:12px;background:white;color:#245b50;max-width:100%;box-sizing:border-box}
+
+.route-assignment-card summary{grid-template-columns:minmax(0,1fr) auto;align-items:center}.route-name-row{display:flex;align-items:center;gap:8px;min-width:0}.route-name-row>b{min-width:0;overflow-wrap:anywhere}.route-name-row>.route-name-edit{flex:0 0 auto;white-space:nowrap}
