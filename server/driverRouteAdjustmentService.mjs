@@ -1,3 +1,5 @@
+import {requiresDriverApproval} from '../shared/driverChangePolicy.js'
+import {saveArrangementRequest} from './arrangementRequestStore.mjs'
 import {canManageDispatch} from '../shared/dispatchAccess.js'
 import {getCollectionScheduleManagement,saveCollectionScheduleManagement} from './collectionScheduleManagementService.mjs'
 import {weekdayName} from '../shared/scheduleRecurrence.js'
@@ -23,10 +25,12 @@ function owned(db,id,context){
 }
 const audit=(db,s,actor,type,before,after)=>db.prepare(`INSERT INTO dispatch_change_logs(dispatch_day_id,actor,change_type,entity_type,entity_id,before_json,after_json,requires_reapproval) VALUES(?,?,?,'dispatch_stop',?,?,?,0)`).run(s.day_id,String(actor),type,String(s.id),JSON.stringify(before),JSON.stringify(after))
 
-export function reorderDriverStop(id,payload,context={},db=defaultDb){
+export function reorderDriverStop(id,payload,context={},db=defaultDb){return reorderStop(id,payload,context,db,false)}
+export function applyApprovedDriverOrder(id,payload,requester,reviewer,db){if(!canManageDispatch(reviewer))fail('routeTrial.ownToday',403);return reorderStop(id,payload,requester,db,true)}
+function reorderStop(id,payload,context,db,approved){
  return withImmediateTransaction(db,()=>{
   const{s,trip,today}=owned(db,id,context)
-  if(!isRouteTrialDate(today))fail('routeTrial.expired',403)
+  if(!approved&&!requiresDriverApproval(today)&&!isRouteTrialDate(today))fail('routeTrial.expired',403)
   if(trip.executionStatus!=='in_progress')fail('routeTrial.startFirst')
   if(!['up','down'].includes(payload.direction))fail('routeTrial.invalidDirection',400)
   const rows=db.prepare("SELECT * FROM dispatch_stops WHERE dispatch_trip_id=? AND status<>'cancelled' ORDER BY stop_sequence,id").all(s.trip_id)
@@ -35,13 +39,14 @@ export function reorderDriverStop(id,payload,context={},db=defaultDb){
   if(rows.some(r=>r.status==='active'||pendingDefer(db,r)))fail('routeTrial.finishCurrent')
   const index=rows.findIndex(r=>r.id===s.id),other=rows[index+(payload.direction==='up'?-1:1)]
   if(!other||hasWork(db,s)||hasWork(db,other))fail('routeTrial.protected')
+  if(!approved&&requiresDriverApproval(today)){const reason=String(payload.reason||'').trim();if(!reason||reason.length>1000)fail('routeTrial.dateReason',400);return saveArrangementRequest(db,s,context,'order',reason,{direction:payload.direction,expectedOrder:payload.expectedOrder,otherStopId:other.id})}
   const before=rows.map(r=>({id:r.id,sequence:r.stop_sequence}))
   // Use a free sequence slot, then swap only the two untouched stops.
   const temporary=db.prepare('SELECT COALESCE(MIN(stop_sequence),0)-1 n FROM dispatch_stops WHERE dispatch_id=?').get(s.dispatch_id).n
   db.prepare('UPDATE dispatch_stops SET stop_sequence=? WHERE id=?').run(temporary,s.id)
   db.prepare('UPDATE dispatch_stops SET stop_sequence=? WHERE id=?').run(s.stop_sequence,other.id)
   db.prepare('UPDATE dispatch_stops SET stop_sequence=? WHERE id=?').run(other.stop_sequence,s.id)
-  audit(db,s,context.employeeId,'driver_trial_order_changed',before,{movedStop:s.id,otherStop:other.id,direction:payload.direction,trialStart:'2026-09-10',trialEnd:'2026-09-23'})
+  audit(db,s,context.employeeId,approved?'driver_order_approved':'driver_trial_order_changed',before,{movedStop:s.id,otherStop:other.id,direction:payload.direction,trialStart:'2026-09-10',trialEnd:'2026-09-13'})
   return{ok:true}
  })
 }

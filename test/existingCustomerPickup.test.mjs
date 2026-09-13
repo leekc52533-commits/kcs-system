@@ -8,7 +8,7 @@ import {approveDay,generateWeek,saveDraftAdjustments} from '../server/dispatchSe
 import {arriveAtStop,completeDriverStop,startDriverTrip,deferDriverStop} from '../server/driverExecutionService.mjs'
 import {createPurchaseBill} from '../server/purchaseBillingService.mjs'
 
-const date='2026-09-07',now=new Date('2026-09-07T01:00:00Z'),context={employeeId:1,role:'driver',today:date,now}
+const date='2026-09-14',now=new Date('2026-09-14T01:00:00Z'),context={employeeId:1,role:'driver',today:date,now}
 
 function fixture(){
   const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON;'+schemaSql);applyV28Migration(db);seedV22MasterData(db)
@@ -26,7 +26,7 @@ function fixture(){
   const tripId=db.prepare('SELECT id FROM dispatch_trips WHERE EXISTS(SELECT 1 FROM dispatch_stops WHERE dispatch_trip_id=dispatch_trips.id)').get().id;startDriverTrip(tripId,context,db)
   return{db,tripId,stops,productId:product.id}
 }
-const arrive=(db,id)=>arriveAtStop(id,{latitude:3.1001,longitude:101.6001,accuracy:10,captured_at:'2026-09-07T00:59:30Z'},context,db)
+const arrive=(db,id)=>arriveAtStop(id,{latitude:3.1001,longitude:101.6001,accuracy:10,captured_at:'2026-09-14T00:59:30Z'},context,db)
 
 import {searchPickupCustomers,pickupCustomerDetails,collectExistingCustomer,listExistingPickups,listCustomerTransfers,reviewCustomerTransfer} from '../server/existingCustomerPickupService.mjs'
 import {applyV63Migration} from '../server/migrationV63.mjs'
@@ -118,7 +118,7 @@ test('approval rechecks source arrival, target assignment, and date without part
   if(change==='driver')db.prepare('UPDATE dispatches SET driver_id=1 WHERE id=(SELECT dispatch_id FROM dispatch_trips WHERE id=?)').run(targetId)
   if(change==='vehicle')db.prepare('UPDATE dispatches SET vehicle_id=1 WHERE id=(SELECT dispatch_id FROM dispatch_trips WHERE id=?)').run(targetId)
   const before=db.prepare('SELECT * FROM dispatch_stops').all()
-  assert.throws(()=>reviewCustomerTransfer(r.requestId,{decision:'approved',reason:'Review'},{...manager,today:change==='date'?'2026-09-08':date},db))
+  assert.throws(()=>reviewCustomerTransfer(r.requestId,{decision:'approved',reason:'Review'},{...manager,today:change==='date'?'2026-09-15':date},db))
   assert.equal(db.prepare('SELECT status FROM customer_transfer_requests').get().status,'pending');assert.deepEqual(db.prepare('SELECT * FROM dispatch_stops').all(),before);db.close()
  }
 })

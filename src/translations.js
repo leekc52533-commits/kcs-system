@@ -4046,3 +4046,63 @@ Object.assign(messages.zh,{
   "apiError.pickup_pending": "此顾客已有另一项待审批的转车申请。",
   "apiError.pickup_stale": "日期、车辆安排或申请状态已改变，请刷新后重新检查。"
 })
+
+Object.assign(messages.en,{
+  "arrange.title": "Driver arrangement approvals",
+  "arrange.order": "Customer order change",
+  "arrange.no_goods": "No Goods request",
+  "arrange.up": "Request earlier stop",
+  "arrange.down": "Request later stop",
+  "arrange.sent": "Request submitted. The original arrangement stays until a supervisor approves.",
+  "arrange.requestNg": "Request No Goods skip",
+  "arrange.ngHelp": "Arrival has not been verified. Attach evidence and a reason; the stop is skipped only after supervisor approval.",
+  "arrange.onsiteHelp": "Arrival verified. Attach No Goods evidence and a reason to complete this stop.",
+  "arrange.policy": "From 14 September: order changes require supervisor approval. No Goods before verified arrival also requires approval; on-site No Goods with proof and temporary pickups remain available.",
+  "arrange.pending": "Awaiting approval",
+  "arrange.approved": "Approved",
+  "arrange.rejected": "Rejected",
+  "apiError.arrangement_reason": "Enter a reason of up to 1,000 characters.",
+  "apiError.arrangement_stale": "The date, vehicle or assignment has changed. Refresh and submit a new request.",
+  "apiError.arrangement_approval_required": "Arrival is not verified. Use Request No Goods skip for supervisor approval.",
+  "routeTrial.banner": "Free order trial ends on 13 September. From 14 September, changes require supervisor approval."
+})
+
+Object.assign(messages.ms,{
+  "arrange.title": "Kelulusan perubahan pemandu",
+  "arrange.order": "Perubahan urutan pelanggan",
+  "arrange.no_goods": "Permohonan tiada barang",
+  "arrange.up": "Mohon hentian lebih awal",
+  "arrange.down": "Mohon hentian lebih lewat",
+  "arrange.sent": "Permohonan dihantar. Susunan asal kekal sehingga diluluskan penyelia.",
+  "arrange.requestNg": "Mohon langkau: tiada barang",
+  "arrange.ngHelp": "Ketibaan belum disahkan. Lampirkan bukti dan sebab; hentian hanya dilangkau selepas kelulusan penyelia.",
+  "arrange.onsiteHelp": "Ketibaan disahkan. Lampirkan bukti tiada barang dan sebab untuk melengkapkan hentian ini.",
+  "arrange.policy": "Mulai 14 September: perubahan urutan memerlukan kelulusan penyelia. Tiada barang sebelum ketibaan disahkan juga memerlukan kelulusan; tiada barang di lokasi dengan bukti dan kutipan sementara masih dibenarkan.",
+  "arrange.pending": "Menunggu kelulusan",
+  "arrange.approved": "Diluluskan",
+  "arrange.rejected": "Ditolak",
+  "apiError.arrangement_reason": "Masukkan sebab sehingga 1,000 aksara.",
+  "apiError.arrangement_stale": "Tarikh, kenderaan atau tugasan telah berubah. Muat semula dan hantar permohonan baharu.",
+  "apiError.arrangement_approval_required": "Ketibaan belum disahkan. Guna permohonan langkau tiada barang untuk kelulusan penyelia.",
+  "routeTrial.banner": "Percubaan ubah urutan tamat pada 13 September. Mulai 14 September, perubahan memerlukan kelulusan penyelia."
+})
+
+Object.assign(messages.zh,{
+  "arrange.title": "司机安排修改审批",
+  "arrange.order": "顾客顺序修改",
+  "arrange.no_goods": "无货跳过申请",
+  "arrange.up": "申请提前收货顺序",
+  "arrange.down": "申请延后收货顺序",
+  "arrange.sent": "申请已提交，主管批准前保留原安排。",
+  "arrange.requestNg": "申请无货跳过",
+  "arrange.ngHelp": "尚未通过到店定位验证。请附上证明和原因，主管批准后才跳过。",
+  "arrange.onsiteHelp": "已通过到店定位验证，附上无货证明和原因即可完成本站。",
+  "arrange.policy": "9 月 14 日起：修改顺序须经主管批准；未到店无货须审批，已验证到店并附证明可直接跳过，临时收货保留。",
+  "arrange.pending": "等待主管批准",
+  "arrange.approved": "已批准",
+  "arrange.rejected": "已拒绝",
+  "apiError.arrangement_reason": "请填写原因，最多 1000 字。",
+  "apiError.arrangement_stale": "日期、车辆或安排已改变，请刷新并重新申请。",
+  "apiError.arrangement_approval_required": "尚未通过到店定位验证，请使用“申请无货跳过”交主管批准。",
+  "routeTrial.banner": "自由调整顺序试用至 9 月 13 日结束，9 月 14 日起改为主管审批。"
+})

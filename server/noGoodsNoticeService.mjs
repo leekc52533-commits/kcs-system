@@ -1,3 +1,5 @@
+import {requiresDriverApproval,hasVerifiedArrival} from '../shared/driverChangePolicy.js'
+import {pendingArrangement,saveArrangementRequest} from './arrangementRequestStore.mjs'
 import {db as defaultDb} from './database.mjs'
 import {withImmediateTransaction} from './branchServiceDateGuard.mjs'
 import {kuchingDate} from '../shared/kuchingTime.js'
@@ -34,17 +36,15 @@ export function submitNoGoodsNotice(id,payload={},context={},db=defaultDb,{uploa
   const s=stopFor(db,id),employee=assigned(db,s,context)
   if(s.dispatch_date!==(context.today||kuchingDate()))throw fail('NG_TODAY')
   const existing=activeNoGoodsNotice(db,s.id);if(existing)return{...existing,idempotent:true}
-  if(['cancelled','completed'].includes(s.status)||s.execution_status==='completed'||s.day_status==='completed'||db.prepare('SELECT 1 FROM purchase_bills WHERE dispatch_stop_id=?').get(s.id))throw fail('NG_PROTECTED')
+  if(['cancelled','completed'].includes(s.status)||s.execution_status==='completed'||s.trip_completed_at||s.day_status==='completed'||db.prepare('SELECT 1 FROM purchase_bills WHERE dispatch_stop_id=?').get(s.id))throw fail('NG_PROTECTED')
+  const needsApproval=requiresDriverApproval(context.today||kuchingDate())&&!hasVerifiedArrival(s)
+  const pending=pendingArrangement(db,s.id,'no_goods');if(needsApproval&&pending)return{id:pending.id,status:'pending',idempotent:true}
   const createdAt=new Date(context.now||Date.now()).toISOString()
   fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,photo.bytes,{flag:'wx'});written=true
-  const before={status:s.status,completion_outcome:s.completion_outcome,completed_at:s.completed_at,completed_by_employee_id:s.completed_by_employee_id,override_note:s.override_note,override_reason:s.override_reason}
-  const result=db.prepare(`INSERT INTO no_goods_notices(dispatch_stop_id,employee_id,employee_name,contact_method,reason,storage_key,content_type,original_name,created_at,before_json) VALUES(?,?,?,?,?,?,?,?,?,?)`).run(s.id,employee.id,employee.name,method,reason,key,photo.type,String(payload.photo?.name||'proof'),createdAt,JSON.stringify(before))
-  db.prepare("UPDATE dispatch_stops SET status='completed',completion_outcome='no_goods_notice',completed_at=?,completed_by_employee_id=? WHERE id=?").run(createdAt,employee.id,s.id)
-  // Preserve pending requests as superseded decisions, so a late approval cannot move a skipped stop.
-  db.prepare("UPDATE driver_date_requests SET status='rejected',reviewed_by='System',review_reason='Superseded by No Goods notice',reviewed_at=? WHERE dispatch_stop_id=? AND status='pending'").run(createdAt,s.id)
-  db.prepare("UPDATE driver_defer_requests SET status='rejected',reviewed_by_name_snapshot='System',review_reason='Superseded by No Goods notice',reviewed_at=? WHERE dispatch_stop_id=? AND status='pending'").run(createdAt,s.id)
-  audit(db,s,employee.id,'no_goods_notice_submitted',before,{noticeId:Number(result.lastInsertRowid),method,reason,arrivedAt:s.arrived_at,recurrenceUnchanged:true})
-  return{...activeNoGoodsNotice(db,s.id),idempotent:false}
+  if(needsApproval)return saveArrangementRequest(db,s,context,'no_goods',reason,{method,storage_key:key,content_type:photo.type,original_name:String(payload.photo?.name||'proof'),createdAt,employeeName:employee.name})
+  if(pending)db.prepare("UPDATE driver_arrangement_requests SET status='rejected',reviewed_at=?,reviewed_by='System',review_reason='Superseded by verified on-site No Goods proof' WHERE id=?").run(createdAt,pending.id)
+  return applyNotice(db,s,employee,method,reason,key,photo.type,String(payload.photo?.name||'proof'),createdAt)
+
  })}catch(e){if(written&&fs.existsSync(file))fs.unlinkSync(file);throw e}
 }
 export function restoreNoGoodsNotice(id,payload={},context={},db=defaultDb){
@@ -75,4 +75,24 @@ export function noGoodsNoticePhoto(id,context={},db=defaultDb){
  const n=db.prepare('SELECT * FROM no_goods_notices WHERE id=?').get(Number(id));if(!n)throw fail('NG_PROTECTED',404)
  if(!canManageDispatch(context))assigned(db,stopFor(db,n.dispatch_stop_id),context)
  return n
+}
+
+function applyNotice(db,s,employee,method,reason,key,contentType,originalName,createdAt){
+  const before={status:s.status,completion_outcome:s.completion_outcome,completed_at:s.completed_at,completed_by_employee_id:s.completed_by_employee_id,override_note:s.override_note,override_reason:s.override_reason}
+  const result=db.prepare(`INSERT INTO no_goods_notices(dispatch_stop_id,employee_id,employee_name,contact_method,reason,storage_key,content_type,original_name,created_at,before_json) VALUES(?,?,?,?,?,?,?,?,?,?)`).run(s.id,employee.id,employee.name,method,reason,key,contentType,originalName,createdAt,JSON.stringify(before))
+  db.prepare("UPDATE dispatch_stops SET status='completed',completion_outcome='no_goods_notice',completed_at=?,completed_by_employee_id=? WHERE id=?").run(createdAt,employee.id,s.id)
+  // Preserve pending requests as superseded decisions, so a late approval cannot move a skipped stop.
+  db.prepare("UPDATE driver_date_requests SET status='rejected',reviewed_by='System',review_reason='Superseded by No Goods notice',reviewed_at=? WHERE dispatch_stop_id=? AND status='pending'").run(createdAt,s.id)
+  db.prepare("UPDATE driver_defer_requests SET status='rejected',reviewed_by_name_snapshot='System',review_reason='Superseded by No Goods notice',reviewed_at=? WHERE dispatch_stop_id=? AND status='pending'").run(createdAt,s.id)
+  audit(db,s,employee.id,'no_goods_notice_submitted',before,{noticeId:Number(result.lastInsertRowid),method,reason,arrivedAt:s.arrived_at,recurrenceUnchanged:true})
+
+ return{...activeNoGoodsNotice(db,s.id),status:'approved',idempotent:false}
+}
+
+export function applyApprovedNoGoods(request,context,db){
+ if(!canManageDispatch(context))throw fail('NG_ACCESS',403)
+ const s=stopFor(db,request.dispatch_stop_id),proof=JSON.parse(request.payload_json)
+ if(!s||s.dispatch_date!==(context.today||kuchingDate())||['cancelled','completed'].includes(s.status)||s.execution_status==='completed'||s.trip_completed_at||s.day_status==='completed'||db.prepare('SELECT 1 FROM purchase_bills WHERE dispatch_stop_id=?').get(s.id))throw fail('NG_PROTECTED')
+ const employee=assigned(db,s,{employeeId:request.employee_id,role:request.employee_role})
+ return applyNotice(db,s,employee,proof.method,request.reason,proof.storage_key,proof.content_type,proof.original_name,new Date(context.now||Date.now()).toISOString())
 }

@@ -181,7 +181,7 @@ function TodayView({data,preview=false}){
     {!preview&&route.arrivalTestMode&&<div className="test-mode-warning">{ui("REMOTE ARRIVAL TEST MODE")}</div>}
     {message&&<div className="mobile-message" role="status">{ui(message)}</div>}
     {error&&<div className="auth-error" role="alert">{ui(error)}</div>}
-    {!preview&&route.trialOrderEnabled&&<p className="mobile-message">{t('routeTrial.banner')}</p>}
+    {!preview&&route.driverApprovalRequired&&<p className="mobile-message">{t('arrange.policy')}</p>}{!preview&&route.trialOrderEnabled&&<p className="mobile-message">{t('routeTrial.banner')}</p>}
     <div className="driver-route-summary"><strong>{route.date} · {ui(route.weekday)}</strong><span>{t('mobile.routeStatus')}: {t(!route.approved?'dateReview.awaitDeparture':route.status==='in_progress'?'mobile.inProgress':'mobile.approved')}</span><span>{t('mobile.totalStops')}: {route.totalStops} · {t('mobile.completed')}: {route.completedStops} · {t('mobile.pending')}: {route.pendingStops} · {t('ng.title')}: {route.noGoodsCount||0}</span></div>
     {route.trips.map(trip=><article className="mobile-card driver-trip" key={trip.id}>
       <h2><span data-i18n-raw>{trip.registrationNumber||trip.vehicleCode}</span></h2>

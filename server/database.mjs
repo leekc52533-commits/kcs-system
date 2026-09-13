@@ -1,3 +1,4 @@
+import {applyV64Migration} from './migrationV64.mjs'
 import {applyV63Migration} from './migrationV63.mjs'
 import {applyV62Migration} from './migrationV62.mjs'
 import {applyV61Migration} from './migrationV61.mjs'
@@ -342,6 +343,7 @@ else if(postV59Version>=60)ensureV60Schema(db)
 applyV61Migration(db)
 applyV62Migration(db)
 applyV63Migration(db)
+applyV64Migration(db)
 const officialVehicles = [
   ['Lorry 1','QAV3468','available',0,null],
   ['Lorry 2','QAA4293N','active',1,null],
