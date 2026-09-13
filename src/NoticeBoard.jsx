@@ -1,3 +1,4 @@
+import {DriverGuidePopup} from './DriverGuide.jsx'
 import NoticeArchive from './NoticeArchive.jsx'
 import {createContext,useCallback,useContext,useEffect,useRef,useState} from 'react'
 import {apiRequest as api} from './apiClient.js'
@@ -13,12 +14,14 @@ function UnreadPopup({item,remaining,onRead}){
  return <dialog ref={ref} className="notice-popup" aria-labelledby="notice-popup-title" onCancel={e=>e.preventDefault()}><h2 id="notice-popup-title">{t('notice.new')} ({remaining})</h2><NoticeText item={item}/>{error&&<p role="alert">{error}</p>}<button autoFocus className="notice-primary" disabled={busy} onClick={read}>{t(busy?'common.processing':'notice.acknowledge')}</button></dialog>
 }
 export function NoticeMobileProvider({children}){
- const{t}=useI18n(),[items,setItems]=useState([]),[error,setError]=useState(''),acknowledged=useRef(new Map()),generation=useRef(0)
- const load=useCallback(async()=>{const g=++generation.current;const r=await api('/api/mobile/notices');if(g!==generation.current)return;setItems(r.items.map(i=>({...i,readAt:i.readAt||acknowledged.current.get(i.id)||null})));setError('')},[])
+ const{t}=useI18n(),[items,setItems]=useState([]),[guide,setGuide]=useState(null),guideRead=useRef(new Map()),[error,setError]=useState(''),acknowledged=useRef(new Map()),generation=useRef(0)
+ const load=useCallback(async()=>{const g=++generation.current;const [r,nextGuide]=await Promise.all([api('/api/mobile/notices'),api('/api/mobile/guide')]);if(g!==generation.current)return;setGuide({...nextGuide,readAt:nextGuide.readAt||guideRead.current.get(nextGuide.version)||null});setItems(r.items.map(i=>({...i,readAt:i.readAt||acknowledged.current.get(i.id)||null})));setError('')},[])
  useEffect(()=>{let alive=true;const refresh=()=>{if(document.visibilityState==='hidden')return;load().catch(e=>{if(alive)setError(e.message)})};void refresh();const timer=setInterval(refresh,15000);window.addEventListener('focus',refresh);window.addEventListener('online',refresh);document.addEventListener('visibilitychange',refresh);return()=>{alive=false;generation.current++;clearInterval(timer);window.removeEventListener('focus',refresh);window.removeEventListener('online',refresh);document.removeEventListener('visibilitychange',refresh)}},[load])
  const read=async id=>{const r=await api(`/api/mobile/notices/${id}/read`,{method:'POST',body:'{}'});acknowledged.current.set(id,r.readAt);setItems(current=>current.map(i=>i.id===id?{...i,readAt:r.readAt}:i))}
+ const readGuide=async()=>{const r=await api('/api/mobile/guide/read',{method:'POST',body:JSON.stringify({version:guide.version})});guideRead.current.set(r.version,r.readAt);setGuide(r)}
+ const showGuide=guide?.active&&!guide.readAt
  const unread=items.filter(i=>!i.readAt).sort((a,b)=>Number(b.priority==='urgent')-Number(a.priority==='urgent')||a.id-b.id)
- return <NoticeContext.Provider value={{items,error,load}}>{children}{error&&<div className="notice-load-error" role="alert">{t('notice.loadFailed')} <button onClick={()=>load().catch(e=>setError(e.message))}>{t('notice.refresh')}</button></div>}{unread[0]&&<UnreadPopup key={unread[0].id} item={unread[0]} remaining={unread.length} onRead={read}/>}</NoticeContext.Provider>
+ return <NoticeContext.Provider value={{items,error,load}}>{children}{error&&<div className="notice-load-error" role="alert">{t('notice.loadFailed')} <button onClick={()=>load().catch(e=>setError(e.message))}>{t('notice.refresh')}</button></div>}{showGuide?<DriverGuidePopup key={guide.version} onRead={readGuide}/>:unread[0]&&<UnreadPopup key={unread[0].id} item={unread[0]} remaining={unread.length} onRead={read}/>}</NoticeContext.Provider>
 }
 export function NoticeHistory(){
  const{t}=useI18n(),{items,error,load}=useContext(NoticeContext),[search,setSearch]=useState(''),[refreshError,setRefreshError]=useState('')

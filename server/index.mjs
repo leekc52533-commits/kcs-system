@@ -1,3 +1,4 @@
+import {driverGuideStatus,acknowledgeDriverGuide} from './driverGuideService.mjs'
 import {noticeRecipients,publishNotice,employeeNotices,acknowledgeNotice,noticeManagement,noticeReadStatus} from './noticeBoardService.mjs'
 import {listArrangementRequests,reviewArrangementRequest,arrangementProof} from './driverArrangementService.mjs'
 import {searchPickupCustomers,pickupCustomerDetails,collectExistingCustomer,listExistingPickups,listCustomerTransfers,reviewCustomerTransfer} from './existingCustomerPickupService.mjs'
@@ -213,6 +214,8 @@ const server = http.createServer(async (request, response) => {
     if(request.method==='GET'&&url.pathname==='/api/notices')return sendJson(response,200,{items:noticeManagement(session)})
     if(request.method==='POST'&&url.pathname==='/api/notices')return sendJson(response,201,publishNotice((await readJson(request)).payload,session))
     if(request.method==='GET'&&/^\/api\/notices\/\d+\/receipts$/.test(url.pathname))return sendJson(response,200,{items:noticeReadStatus(Number(url.pathname.split('/')[3]),session)})
+    if(request.method==='GET'&&url.pathname==='/api/mobile/guide')return sendJson(response,200,driverGuideStatus(session))
+    if(request.method==='POST'&&url.pathname==='/api/mobile/guide/read')return sendJson(response,200,acknowledgeDriverGuide((await readJson(request)).payload,session))
     if(request.method==='GET'&&url.pathname==='/api/mobile/notices')return sendJson(response,200,{items:employeeNotices(session)})
     if(request.method==='POST'&&/^\/api\/mobile\/notices\/\d+\/read$/.test(url.pathname))return sendJson(response,200,acknowledgeNotice(Number(url.pathname.split('/')[4]),session))
     if(request.method==='GET'&&url.pathname==='/api/driver-arrangements')return sendJson(response,200,{items:listArrangementRequests(session)})
