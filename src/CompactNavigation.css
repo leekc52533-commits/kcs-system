@@ -31,3 +31,13 @@ body .table-bottom-scroll input[type=range]::-moz-range-track{height:10px;backgr
 body .table-bottom-scroll input[type=range]::-moz-range-thumb{height:10px;width:var(--scroll-thumb-width,60px);border:0;border-radius:8px;background:#aeb5bd}
 body .table-bottom-scroll input[type=range]:focus-visible{outline:2px solid #16866f;outline-offset:2px}
 body .table-bottom-scroll:hover input[type=range]::-webkit-slider-thumb{background:#858e98}
+/* Light sidebar, slightly darker than the adjacent workspace. */
+.shell .sidebar{background:#e5e9ef;color:#243440;border-right:1px solid #d5dce4}
+.shell .sidebar .brand{border-bottom-color:#cdd5de}
+.shell .sidebar .brand strong{color:#243440}
+.shell .sidebar .brand span,.shell .sidebar nav>small,.shell .sidebar footer small,.shell .sidebar footer>p{color:#60717e}
+.shell .sidebar footer{border-top-color:#cdd5de}
+.shell .sidebar footer strong{color:#304852}
+.shell .sidebar .company-navigation button{color:#344956}
+.shell .sidebar .company-navigation button:hover{background:#d9e0e8;color:#203a46}
+.shell .sidebar .company-navigation button.active{background:#ccd7e1;color:#163d4b}

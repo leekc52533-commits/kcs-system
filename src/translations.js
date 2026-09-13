@@ -4448,3 +4448,9 @@ Object.assign(messages.zh,{
   "apiError.preview_employee": "该员工没有有效的驾驶员或跟车员账号，请刷新员工名单。",
   "apiError.preview_read_only": "使用该员工保存的语言及系统现有资料；不会显示其手机实时画面、实时定位或未提交的草稿。"
 })
+
+Object.assign(messages.en,{"menu.folderHelp": "Create or rename folders. Use Move to, drag, or arrows to arrange pages. Save to apply the company menu.", "menu.folderName": "New folder name", "menu.addFolder": "Create folder", "menu.renameFolder": "Folder name", "menu.moveTo": "Move to", "menu.emptyFolder": "Empty folder. Move pages here using their dropdowns.", "menu.discard": "Discard the unsaved menu changes and close?"})
+
+Object.assign(messages.ms,{"menu.folderHelp": "Cipta atau namakan semula folder. Gunakan Pindah ke, seret atau anak panah untuk menyusun halaman. Simpan untuk digunakan seluruh syarikat.", "menu.folderName": "Nama folder baharu", "menu.addFolder": "Cipta folder", "menu.renameFolder": "Nama folder", "menu.moveTo": "Pindah ke", "menu.emptyFolder": "Folder kosong. Pindahkan halaman ke sini melalui senarai pilihan.", "menu.discard": "Buang perubahan menu yang belum disimpan dan tutup?"})
+
+Object.assign(messages.zh,{"menu.folderHelp": "可新增或改名文件夹，用“移到”、拖动或上下箭头整理页面。保存后全公司使用这个菜单。", "menu.folderName": "新文件夹名称", "menu.addFolder": "新建文件夹", "menu.renameFolder": "文件夹名称", "menu.moveTo": "移到", "menu.emptyFolder": "文件夹内暂无页面。可用页面旁的下拉框移入。", "menu.discard": "菜单有未保存的修改，要放弃修改并关闭吗？"})

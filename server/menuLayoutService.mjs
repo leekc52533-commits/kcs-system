@@ -7,7 +7,7 @@ export function saveMenu(db,account,payload){
  if(!current.canEdit)throw fail('MENU_OWNER_ONLY',403)
  if(!validMenuLayout(payload.layout))throw fail('MENU_INVALID',400)
  if(payload.revision!==current.revision)throw fail('MENU_STALE',409)
- const json=JSON.stringify({top:payload.layout.top,documents:payload.layout.documents})
+ const json=JSON.stringify(normalizeMenuLayout(payload.layout))
  db.prepare('UPDATE company_menu SET layout_json=?,revision=revision+1 WHERE id=1').run(json)
  db.prepare('INSERT INTO company_menu_audit(account_id,before_json,after_json) VALUES(?,?,?)').run(account.id,JSON.stringify(current.layout),json)
  const result=readMenu(db,account);db.exec('COMMIT');return result
