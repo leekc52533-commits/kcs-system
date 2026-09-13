@@ -1,3 +1,4 @@
+import {noticeRecipients,publishNotice,employeeNotices,acknowledgeNotice,noticeManagement,noticeReadStatus} from './noticeBoardService.mjs'
 import {listArrangementRequests,reviewArrangementRequest,arrangementProof} from './driverArrangementService.mjs'
 import {searchPickupCustomers,pickupCustomerDetails,collectExistingCustomer,listExistingPickups,listCustomerTransfers,reviewCustomerTransfer} from './existingCustomerPickupService.mjs'
 import {intakeTrips,createIntake,listIntakes,cancelIntake,reviewIntake,intakeMatchOptions} from './temporaryCustomerIntakeService.mjs'
@@ -208,6 +209,12 @@ const server = http.createServer(async (request, response) => {
     if (request.method==='GET' && url.pathname==='/api/mobile/customer-pickup-search') return sendJson(response,200,{items:searchPickupCustomers(url.searchParams.get('search'),session)})
     if (request.method==='GET' && url.pathname==='/api/mobile/customer-pickup-details') return sendJson(response,200,pickupCustomerDetails(url.searchParams.get('branchId'),session))
     if (request.method==='POST' && url.pathname==='/api/mobile/customer-pickups') return sendJson(response,200,collectExistingCustomer((await readJson(request)).payload,session))
+    if(request.method==='GET'&&url.pathname==='/api/notices/recipients')return sendJson(response,200,{items:noticeRecipients(session)})
+    if(request.method==='GET'&&url.pathname==='/api/notices')return sendJson(response,200,{items:noticeManagement(session)})
+    if(request.method==='POST'&&url.pathname==='/api/notices')return sendJson(response,201,publishNotice((await readJson(request)).payload,session))
+    if(request.method==='GET'&&/^\/api\/notices\/\d+\/receipts$/.test(url.pathname))return sendJson(response,200,{items:noticeReadStatus(Number(url.pathname.split('/')[3]),session)})
+    if(request.method==='GET'&&url.pathname==='/api/mobile/notices')return sendJson(response,200,{items:employeeNotices(session)})
+    if(request.method==='POST'&&/^\/api\/mobile\/notices\/\d+\/read$/.test(url.pathname))return sendJson(response,200,acknowledgeNotice(Number(url.pathname.split('/')[4]),session))
     if(request.method==='GET'&&url.pathname==='/api/driver-arrangements')return sendJson(response,200,{items:listArrangementRequests(session)})
     if(request.method==='POST'&&/^\/api\/driver-arrangements\/\d+\/review$/.test(url.pathname))return sendJson(response,200,reviewArrangementRequest(Number(url.pathname.split('/')[3]),(await readJson(request)).payload,session))
     if(request.method==='GET'&&/^\/api\/driver-arrangements\/\d+\/photo$/.test(url.pathname)){const proof=arrangementProof(Number(url.pathname.split('/')[3]),session),file=path.resolve(uploadsDir,proof.storage_key);if(!file.startsWith(path.resolve(uploadsDir)+path.sep)||!fs.existsSync(file))return sendJson(response,404,{error:'Proof not found'});response.writeHead(200,{'Content-Type':proof.content_type,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'});return fs.createReadStream(file).pipe(response)}
