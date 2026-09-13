@@ -1,31 +1,32 @@
 import {DriverGuidePopup} from './DriverGuide.jsx'
 import NoticeArchive from './NoticeArchive.jsx'
 import {createContext,useCallback,useContext,useEffect,useRef,useState} from 'react'
-import {apiRequest as api} from './apiClient.js'
+import {apiRequest as api,isEmployeePreview} from './apiClient.js'
 import {useI18n} from './i18n.jsx'
 import './NoticeBoard.css'
 const NoticeContext=createContext(null)
 const dateLabel=value=>new Date(value).toLocaleString('en-GB',{timeZone:'Asia/Kuching'})
 function NoticeText({item}){const{t}=useI18n();return <><span className={'notice-priority '+item.priority}>{t('notice.'+item.priority)}</span><h3 data-i18n-raw>{item.title}</h3><p className="notice-body" data-i18n-raw>{item.body}</p><small><span data-i18n-raw>{item.publisherName}</span> · {dateLabel(item.createdAt)}</small></>}
-function UnreadPopup({item,remaining,onRead}){
+function UnreadPopup({item,remaining,onRead,onDismiss}){
  const{t}=useI18n(),ref=useRef(null),[busy,setBusy]=useState(false),[error,setError]=useState('')
  useEffect(()=>{const d=ref.current,previous=document.activeElement;if(d.showModal)d.showModal();else d.setAttribute('open','');return()=>{if(d.close)d.close();previous?.focus?.()}},[])
  const read=async()=>{setBusy(true);setError('');try{await onRead(item.id)}catch(e){setError(e.message);setBusy(false)}}
- return <dialog ref={ref} className="notice-popup" aria-labelledby="notice-popup-title" onCancel={e=>e.preventDefault()}><h2 id="notice-popup-title">{t('notice.new')} ({remaining})</h2><NoticeText item={item}/>{error&&<p role="alert">{error}</p>}<button autoFocus className="notice-primary" disabled={busy} onClick={read}>{t(busy?'common.processing':'notice.acknowledge')}</button></dialog>
+ return <dialog ref={ref} className="notice-popup" aria-labelledby="notice-popup-title" onCancel={e=>e.preventDefault()}><h2 id="notice-popup-title">{t('notice.new')} ({remaining})</h2><NoticeText item={item}/>{error&&<p role="alert">{error}</p>}<button data-preview-safe={onDismiss?true:undefined} autoFocus className="notice-primary" disabled={busy} onClick={onDismiss||read}>{t(onDismiss?'preview.dismiss':busy?'common.processing':'notice.acknowledge')}</button></dialog>
 }
 export function NoticeMobileProvider({children}){
  const{t}=useI18n(),[items,setItems]=useState([]),[guide,setGuide]=useState(null),guideRead=useRef(new Map()),[error,setError]=useState(''),acknowledged=useRef(new Map()),generation=useRef(0)
+ const [dismissed,setDismissed]=useState([]),[guideDismissed,setGuideDismissed]=useState(false),preview=isEmployeePreview()
  const load=useCallback(async()=>{const g=++generation.current;const [r,nextGuide]=await Promise.all([api('/api/mobile/notices'),api('/api/mobile/guide')]);if(g!==generation.current)return;setGuide({...nextGuide,readAt:nextGuide.readAt||guideRead.current.get(nextGuide.version)||null});setItems(r.items.map(i=>({...i,readAt:i.readAt||acknowledged.current.get(i.id)||null})));setError('')},[])
  useEffect(()=>{let alive=true;const refresh=()=>{if(document.visibilityState==='hidden')return;load().catch(e=>{if(alive)setError(e.message)})};void refresh();const timer=setInterval(refresh,15000);window.addEventListener('focus',refresh);window.addEventListener('online',refresh);document.addEventListener('visibilitychange',refresh);return()=>{alive=false;generation.current++;clearInterval(timer);window.removeEventListener('focus',refresh);window.removeEventListener('online',refresh);document.removeEventListener('visibilitychange',refresh)}},[load])
  const read=async id=>{const r=await api(`/api/mobile/notices/${id}/read`,{method:'POST',body:'{}'});acknowledged.current.set(id,r.readAt);setItems(current=>current.map(i=>i.id===id?{...i,readAt:r.readAt}:i))}
  const readGuide=async()=>{const r=await api('/api/mobile/guide/read',{method:'POST',body:JSON.stringify({version:guide.version})});guideRead.current.set(r.version,r.readAt);setGuide(r)}
- const showGuide=guide?.active&&!guide.readAt
- const unread=items.filter(i=>!i.readAt).sort((a,b)=>Number(b.priority==='urgent')-Number(a.priority==='urgent')||a.id-b.id)
- return <NoticeContext.Provider value={{items,error,load}}>{children}{error&&<div className="notice-load-error" role="alert">{t('notice.loadFailed')} <button onClick={()=>load().catch(e=>setError(e.message))}>{t('notice.refresh')}</button></div>}{showGuide?<DriverGuidePopup key={guide.version} onRead={readGuide}/>:unread[0]&&<UnreadPopup key={unread[0].id} item={unread[0]} remaining={unread.length} onRead={read}/>}</NoticeContext.Provider>
+ const showGuide=guide?.active&&!guide.readAt&&!guideDismissed
+ const unread=items.filter(i=>!i.readAt&&!dismissed.includes(i.id)).sort((a,b)=>Number(b.priority==='urgent')-Number(a.priority==='urgent')||a.id-b.id)
+ return <NoticeContext.Provider value={{items,error,load}}>{children}{error&&<div className="notice-load-error" role="alert">{t('notice.loadFailed')} <button data-preview-safe onClick={()=>load().catch(e=>setError(e.message))}>{t('notice.refresh')}</button></div>}{showGuide?<DriverGuidePopup key={guide.version} onRead={readGuide} onDismiss={preview?()=>setGuideDismissed(true):undefined}/>:unread[0]&&<UnreadPopup key={unread[0].id} item={unread[0]} remaining={unread.length} onRead={read} onDismiss={preview?()=>setDismissed(d=>[...d,unread[0].id]):undefined}/>}</NoticeContext.Provider>
 }
 export function NoticeHistory(){
  const{t}=useI18n(),{items,error,load}=useContext(NoticeContext),[search,setSearch]=useState(''),[refreshError,setRefreshError]=useState('')
- return <section className="notice-board"><header><h1>{t('notice.title')}</h1><button onClick={()=>load().then(()=>setRefreshError('')).catch(e=>setRefreshError(e.message))}>{t('notice.refresh')}</button></header><label>{t('notice.search')}<input value={search} onChange={e=>setSearch(e.target.value)}/></label>{(error||refreshError)&&<p role="alert">{error||refreshError}</p>}{!items.length&&<p>{t('notice.empty')}</p>}{items.filter(i=>(i.title+' '+i.body).toLocaleLowerCase().includes(search.toLocaleLowerCase())).map(i=><article key={i.id}><NoticeText item={i}/><p>{t(i.readAt?'notice.read':'notice.unread')}{i.readAt&&<> · {dateLabel(i.readAt)}</>}</p></article>)}</section>
+ return <section className="notice-board"><header><h1>{t('notice.title')}</h1><button data-preview-safe onClick={()=>load().then(()=>setRefreshError('')).catch(e=>setRefreshError(e.message))}>{t('notice.refresh')}</button></header><label>{t('notice.search')}<input value={search} onChange={e=>setSearch(e.target.value)}/></label>{(error||refreshError)&&<p role="alert">{error||refreshError}</p>}{!items.length&&<p>{t('notice.empty')}</p>}{items.filter(i=>(i.title+' '+i.body).toLocaleLowerCase().includes(search.toLocaleLowerCase())).map(i=><article key={i.id}><NoticeText item={i}/><p>{t(i.readAt?'notice.read':'notice.unread')}{i.readAt&&<> · {dateLabel(i.readAt)}</>}</p></article>)}</section>
 }
 function PublishedNotice({item,initiallyOpen=false}){
  const{t}=useI18n(),[open,setOpen]=useState(initiallyOpen),[receipts,setReceipts]=useState([]),[error,setError]=useState('')

@@ -4394,3 +4394,57 @@ Object.assign(messages.zh,{
   "guide.next.finish": "检查单据与证明已保存，再完成该顾客。",
   "apiError.guide_stale": "请刷新指引，并在生效后重新确认阅读。"
 })
+
+Object.assign(messages.en,{
+  "preview.title": "Employee phone preview",
+  "preview.help": "Choose an employee to view their mobile pages. Taking over a vehicle remains a separate action.",
+  "preview.readOnly": "Read-only preview. Navigation is available; collection, changes, camera and read acknowledgements cannot be submitted.",
+  "preview.limit": "Uses this employee’s saved language and current server records. It does not show their live screen, GPS or unsent phone drafts.",
+  "preview.blocked": "This action is unavailable in preview. No employee record was changed.",
+  "preview.employee": "Employee",
+  "preview.select": "Select an employee",
+  "preview.close": "Close preview",
+  "preview.open": "View employee page",
+  "preview.snapshot": "Refresh to reload the latest records. Button availability is shown as it is for the employee; preview prevents execution.",
+  "preview.dismiss": "Close preview popup — keep employee unread",
+  "preview.password": "This account must change its password before entering the mobile pages.",
+  "apiError.preview_access": "Supervisor permission is required to preview employees.",
+  "apiError.preview_employee": "This employee has no active driver or crew login. Refresh the employee list.",
+  "apiError.preview_read_only": "Uses this employee’s saved language and current server records. It does not show their live screen, GPS or unsent phone drafts."
+})
+
+Object.assign(messages.ms,{
+  "preview.title": "Pratonton telefon pekerja",
+  "preview.help": "Pilih pekerja untuk melihat halaman telefon mereka. Mengambil alih kenderaan ialah tindakan berasingan.",
+  "preview.readOnly": "Pratonton sahaja. Navigasi tersedia; kutipan, perubahan, kamera dan pengesahan bacaan tidak boleh dihantar.",
+  "preview.limit": "Menggunakan bahasa tersimpan pekerja dan rekod semasa pelayan. Bukan skrin langsung, GPS atau draf belum dihantar dalam telefon mereka.",
+  "preview.blocked": "Tindakan ini tidak tersedia dalam pratonton. Tiada rekod pekerja diubah.",
+  "preview.employee": "Pekerja",
+  "preview.select": "Pilih pekerja",
+  "preview.close": "Tutup pratonton",
+  "preview.open": "Lihat halaman pekerja",
+  "preview.snapshot": "Muat semula untuk rekod terkini. Keadaan butang sama seperti untuk pekerja; pratonton menghalang pelaksanaan.",
+  "preview.dismiss": "Tutup pop timbul pratonton — kekalkan belum dibaca",
+  "preview.password": "Akaun ini perlu menukar kata laluan sebelum memasuki halaman telefon.",
+  "apiError.preview_access": "Kebenaran penyelia diperlukan untuk pratonton pekerja.",
+  "apiError.preview_employee": "Pekerja ini tiada log masuk pemandu atau kru aktif. Muat semula senarai pekerja.",
+  "apiError.preview_read_only": "Menggunakan bahasa tersimpan pekerja dan rekod semasa pelayan. Bukan skrin langsung, GPS atau draf belum dihantar dalam telefon mereka."
+})
+
+Object.assign(messages.zh,{
+  "preview.title": "员工手机预览",
+  "preview.help": "选择员工，查看其手机页面。真正代班仍需另外点击「由我代班」。",
+  "preview.readOnly": "只读预览：可切换页面和展开资料，不能提交收货、修改、拍照或确认员工已读。",
+  "preview.limit": "使用该员工保存的语言及系统现有资料；不会显示其手机实时画面、实时定位或未提交的草稿。",
+  "preview.blocked": "此操作不能在预览中执行，没有更改员工记录。",
+  "preview.employee": "选择员工",
+  "preview.select": "请选择员工",
+  "preview.close": "关闭预览",
+  "preview.open": "查看员工页面",
+  "preview.snapshot": "点击刷新可重新载入最新资料。按钮显示员工当前的可用状态，但在预览中不会执行操作。",
+  "preview.dismiss": "关闭此预览弹窗（员工仍为未读）",
+  "preview.password": "该员工账号需先修改初始密码，才能进入手机业务页面。",
+  "apiError.preview_access": "仅主管及授权管理人员可预览员工页面。",
+  "apiError.preview_employee": "该员工没有有效的驾驶员或跟车员账号，请刷新员工名单。",
+  "apiError.preview_read_only": "使用该员工保存的语言及系统现有资料；不会显示其手机实时画面、实时定位或未提交的草稿。"
+})

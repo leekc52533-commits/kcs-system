@@ -1,6 +1,11 @@
 import {translate,translateUi} from './translations.js'
 
 let activeLanguage='en'
+let previewEmployeeId=null
+export function setPreviewEmployee(id){previewEmployeeId=id?Number(id):null}
+export function isEmployeePreview(){return previewEmployeeId!==null}
+export function previewReadPath(url){return previewEmployeeId?`/api/acting-collector/preview/${previewEmployeeId}/read?path=${encodeURIComponent(url)}`:url}
+
 
 export function setApiLanguage(language){
   activeLanguage=['en','ms','zh'].includes(language)?language:'en'
@@ -17,7 +22,8 @@ export function apiErrorMessage(payload,fallbackKey='apiError.generic'){
 }
 
 export async function apiRequest(url,options={}){
-  const response=await fetch(url,{headers:{'Content-Type':'application/json',...(options.headers||{})},...options})
+  if(previewEmployeeId&&String(options.method||'GET').toUpperCase()!=='GET')throw Object.assign(new Error(translate(activeLanguage,'preview.readOnly')),{code:'PREVIEW_READ_ONLY'})
+  const response=await fetch(previewReadPath(url),{headers:{'Content-Type':'application/json',...(options.headers||{})},...options})
   const data=await response.json().catch(()=>({}))
   if(!response.ok){
     const requestId=data.requestId||response.headers.get('X-Request-ID')||''

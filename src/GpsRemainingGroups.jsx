@@ -10,12 +10,12 @@ export default function GpsRemainingGroups({items=[],onSelect,t}){
   return <div className="gps-area-groups">{groups.map(group=>{
     const open=expanded===group.key
     return <section className="gps-area-group" key={group.key}>
-      <button type="button" className="gps-area-group-toggle" aria-expanded={open} onClick={()=>setExpanded(current=>current===group.key?'':group.key)}>
+      <button data-preview-safe type="button" className="gps-area-group-toggle" aria-expanded={open} onClick={()=>setExpanded(current=>current===group.key?'':group.key)}>
         <span><b data-i18n-raw>{group.label}</b>{group.zoneGroup&&<small data-i18n-raw>{group.zoneGroup}</small>}</span>
         <strong aria-label={t('gpsCollection.groupCount',{count:group.items.length})}>{group.items.length}</strong>
         <i aria-hidden="true">{open?'▾':'▸'}</i>
       </button>
-      {open&&<div className="gps-area-branches">{group.items.map(branch=><button type="button" className="gps-branch-card" key={branch.internalId} onClick={()=>onSelect(branch)}>
+      {open&&<div className="gps-area-branches">{group.items.map(branch=><button data-preview-safe type="button" className="gps-branch-card" key={branch.internalId} onClick={()=>onSelect(branch)}>
         <b data-i18n-raw>{formatBranchId(branch.branchId)} — {branch.branchName}</b>
         <span data-i18n-raw>{formatCustomerId(branch.customerId)} — {branch.customerName}</span>
         <small data-i18n-raw>{branch.address||t('common.noAddress')}</small>

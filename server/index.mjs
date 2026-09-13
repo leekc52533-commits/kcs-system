@@ -1,3 +1,4 @@
+import {previewEmployees,previewAccount,previewReadUrl} from './employeePreviewService.mjs'
 import {driverGuideStatus,acknowledgeDriverGuide} from './driverGuideService.mjs'
 import {noticeRecipients,publishNotice,employeeNotices,acknowledgeNotice,noticeManagement,noticeReadStatus} from './noticeBoardService.mjs'
 import {listArrangementRequests,reviewArrangementRequest,arrangementProof} from './driverArrangementService.mjs'
@@ -119,9 +120,23 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && url.pathname === '/api/auth/bootstrap') return sendJson(response,201,bootstrapAccount((await readJson(request)).payload,meta(request)))
     if (request.method === 'POST' && url.pathname === '/api/auth/login') {const result=login((await readJson(request)).payload,meta(request));response.setHeader('Set-Cookie',sessionCookie(result.token,12*3600));return sendJson(response,200,{account:result.account,expiresAt:result.expiresAt})}
     if (request.method === 'POST' && url.pathname === '/api/integrations/jodoo/webhook') {const token=request.headers['x-jodoo-token']||url.searchParams.get('token');if(!verifyJodooWebhookToken(token))return sendJson(response,401,{error:'Invalid Jodoo webhook token'});const{rawBody,payload}=await readJson(request);return sendJson(response,202,{accepted:true,...recordJodooWebhook(rawBody,payload)})}
-    const session=getSession(cookies(request).kcs_session)
+    let session=getSession(cookies(request).kcs_session)
     if (request.method === 'GET' && url.pathname === '/api/auth/session') return sendJson(response,200,{account:session||null})
     if(!session)return sendJson(response,401,{error:'请先登录 KCS'})
+    if(url.pathname==='/api/acting-collector/preview-employees'){
+      if(request.method!=='GET')return sendJson(response,403,{code:'PREVIEW_READ_ONLY'})
+      return sendJson(response,200,{items:previewEmployees(session)})
+    }
+    const employeePreview=/^\/api\/acting-collector\/preview\/(\d+)(\/read)?$/.exec(url.pathname)
+    if(employeePreview){
+      if(request.method!=='GET')return sendJson(response,403,{code:'PREVIEW_READ_ONLY'})
+      const target=previewAccount(employeePreview[1],session)
+      response.setHeader('Cache-Control','private, no-store')
+      if(!employeePreview[2])return sendJson(response,200,{account:target,readOnly:true,asOf:new Date().toISOString()})
+      const readUrl=previewReadUrl(request.method,url.searchParams.get('path'))
+      url.pathname=readUrl.pathname;url.search=readUrl.search
+      session=target
+    }
     request.kcsSession=session
     if (request.method === 'POST' && url.pathname === '/api/auth/logout') {logout(session);response.setHeader('Set-Cookie',sessionCookie('',0));return sendJson(response,200,{ok:true})}
     if (request.method === 'POST' && url.pathname === '/api/auth/change-password') return sendJson(response,200,changePassword(session,(await readJson(request)).payload))

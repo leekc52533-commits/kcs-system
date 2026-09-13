@@ -14,7 +14,7 @@ export default function DriverRouteTools({stop,trip,route,busy,run}){
   {orderEnabled&&untouched(stop)&&<div><button type="button" disabled={busy||!canMove||!trip.stops[index-1]||!untouched(trip.stops[index-1])} onClick={()=>move('up')}>{t(route.driverApprovalRequired?'arrange.up':'routeTrial.up')}</button><button type="button" disabled={busy||!canMove||!trip.stops[index+1]||!untouched(trip.stops[index+1])} onClick={()=>move('down')}>{t(route.driverApprovalRequired?'arrange.down':'routeTrial.down')}</button></div>}
   {orderRequest&&<p>{t('arrange.order')} · {t('arrange.'+orderRequest.status)} <span data-i18n-raw>{orderRequest.reviewReason}</span></p>}
   {stop.dateRequest&&<p>{t('routeTrial.'+stop.dateRequest.status)} · {stop.dateRequest.targetDate}{stop.dateRequest.reviewReason&&<span data-i18n-raw> · {stop.dateRequest.reviewReason}</span>}</p>}
-  {untouched(stop)&&stop.dateRequest?.status!=='pending'&&<button type="button" disabled={busy} onClick={()=>setOpen(!open)}>{t(open?'common.cancel':'routeTrial.requestDate')}</button>}
+  {untouched(stop)&&stop.dateRequest?.status!=='pending'&&<button data-preview-safe type="button" disabled={busy} onClick={()=>setOpen(!open)}>{t(open?'common.cancel':'routeTrial.requestDate')}</button>}
   {open&&<div><label>{t('routeTrial.targetDate')}<input type="date" value={date} min={route.date} onChange={e=>setDate(e.target.value)}/></label><label>{t('routeTrial.reason')}<textarea maxLength={1000} value={reason} onChange={e=>setReason(e.target.value)}/></label><small>{t('routeTrial.pendingHelp')}</small><button type="button" disabled={busy||!reason.trim()||date<=route.date} onClick={submit}>{t('routeTrial.submit')}</button></div>}
  </div>
 }
