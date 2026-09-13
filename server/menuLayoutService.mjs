@@ -1,6 +1,6 @@
-import {defaultMenuLayout,validMenuLayout} from '../shared/menuLayout.js'
+import {defaultMenuLayout,validMenuLayout,normalizeMenuLayout} from '../shared/menuLayout.js'
 const fail=(code,statusCode)=>Object.assign(Error(code),{code,statusCode})
-export function readMenu(db,account){const row=db.prepare('SELECT * FROM company_menu WHERE id=1').get();return{layout:row?.layout_json?JSON.parse(row.layout_json):defaultMenuLayout(),revision:row?.revision||0,canEdit:Boolean(account?.id&&row?.owner_account_id===Number(account.id))}}
+export function readMenu(db,account){const row=db.prepare('SELECT * FROM company_menu WHERE id=1').get();return{layout:row?.layout_json?normalizeMenuLayout(JSON.parse(row.layout_json)):defaultMenuLayout(),revision:row?.revision||0,canEdit:Boolean(account?.id&&row?.owner_account_id===Number(account.id))}}
 export function saveMenu(db,account,payload){
  db.exec('BEGIN IMMEDIATE');try{
  const current=readMenu(db,account)

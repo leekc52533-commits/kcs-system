@@ -4223,3 +4223,9 @@ Object.assign(messages.zh,{
   "apiError.notice_retry": "本次内容与原提交不一致，请返回修改后重新提交。",
   "apiError.notice_missing": "找不到此通知。"
 })
+
+Object.assign(messages.en,{"notice.date": "Date", "notice.publisher": "Published by", "notice.readCount": "Read", "notice.unreadCount": "Unread", "notice.blank": "Blank", "notice.noMatches": "No notices match these filters."})
+
+Object.assign(messages.ms,{"notice.date": "Tarikh", "notice.publisher": "Penerbit", "notice.readCount": "Sudah dibaca", "notice.unreadCount": "Belum dibaca", "notice.blank": "Kosong", "notice.noMatches": "Tiada notis sepadan dengan penapis ini."})
+
+Object.assign(messages.zh,{"notice.date": "日期", "notice.publisher": "发布人", "notice.readCount": "已读人数", "notice.unreadCount": "未读人数", "notice.blank": "空白", "notice.noMatches": "没有符合筛选条件的通知。"})
