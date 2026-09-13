@@ -17,7 +17,10 @@
  :where(html,body,body *)::-webkit-scrollbar-thumb{background:transparent;border-radius:8px}
  :where(html,body,body *):hover::-webkit-scrollbar-thumb,:where(html,body,body *):focus-visible::-webkit-scrollbar-thumb{background:#aeb5bd}
  .sidebar nav.company-navigation{scrollbar-color:transparent transparent}
- .sidebar nav.company-navigation:hover,.sidebar nav.company-navigation:focus-within{scrollbar-color:#8d9dab transparent}
+ /* Mouse clicks retain focus, so focus-within must not keep the thumb visible. */
+ .sidebar nav.company-navigation:hover,.sidebar nav.company-navigation:focus-visible,.sidebar nav.company-navigation:has(:focus-visible){scrollbar-color:#8d9dab transparent}
+ .sidebar nav.company-navigation::-webkit-scrollbar-button{display:none}
+ .sidebar nav.company-navigation:not(:hover):not(:focus-visible):not(:has(:focus-visible))::-webkit-scrollbar-thumb{background:transparent}
 }
 @media(pointer:coarse){.sidebar .company-navigation button{min-height:44px}}
 /* The shared bottom handle replaces the native horizontal bar on these tables. */

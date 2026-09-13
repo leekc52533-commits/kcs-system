@@ -68,3 +68,5 @@ These requirements were confirmed by KC on 2026-09-09. Carry them forward for la
 - KC confirmed reference palette update on 2026-09-13: sidebar uses the supplied pale blue (#e8f3fe); file icons use reference purple (#8b70f3 with #b3a3ff accent). Keep yellow folder icons, existing compact spacing and menu behavior. This supersedes the prior grey-blue sidebar and blue file palette.
 
 - KC confirmed hierarchy colors on 2026-09-13: restore sidebar to prior pale grey-blue (#e5e9ef); top-level file icons stay purple, child-page icons inside every folder use light blue (#75bce8, accent #b9e3fa), and folders remain yellow. Apply the same distinction in the menu editor; moving a page changes its icon according to its current level. This supersedes the all-purple files and pale-blue sidebar palette.
+
+- Sidebar scrollbar fix confirmed by reported behavior on 2026-09-13: retained mouse-click focus must not keep the scrollbar visible after pointer leave. Use hover or keyboard focus-visible, never broad focus-within; retain keyboard focus indication and scrolling.
