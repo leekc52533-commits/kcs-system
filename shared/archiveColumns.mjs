@@ -5,7 +5,7 @@ const entered=value=>{const time=text(value).match(/T(\d{2}:\d{2})/)?.[1];return
 export const archiveKeys={
  ledger:['serviceDateLabel','employeeName','transactionTypeLabel','amountLabel','paymentChannel','ledgerReference','description','createdBy','createdAtLabel','receiptLabel'],
  expense:['serviceDateLabel','expenseTypeLabel','employeeName','category','description','amountLabel','paymentMethod','referenceNumber','vehiclePlate','odometerKm','companyName','tinNumber','remarks','createdBy','createdAtLabel','receiptLabel'],
- purchase:['serviceDateLabel','billNumber','paymentMethod','customerName','branchName','issuedBy','crew','car','totalLabel','proofLabel','statusLabel']
+ purchase:['serviceDateLabel','billNumber','paymentMethod','customerName','branchName','issuedBy','crew','car','totalLabel','proofLabel','customerReceipt','statusLabel']
 }
 export function archiveValue(kind,row,key,sort=false){
  if(!archiveKeys[kind]?.includes(key))return ''
@@ -17,6 +17,7 @@ export function archiveValue(kind,row,key,sort=false){
  if(key==='totalLabel')return sort?Number(row.totalCents):money(row.totalCents)
  if(key==='odometerKm')return row.odometerKm==null?'':sort?Number(row.odometerKm):text(row.odometerKm)
  if(key==='expenseTypeLabel')return row.expenseType==='admin'?'Admin Expense':'Employee Expense'
+ if(key==='customerReceipt')return text(row.billNumber)
  if(key==='receiptLabel')return row.hasProof?'Uploaded':'Missing'
  if(key==='proofLabel')return row.proofId?'Uploaded':row.paymentMethod==='Credit'?'Not required':'Missing'
  if(key==='statusLabel')return row.status==='voided'?'Voided':'Issued'
