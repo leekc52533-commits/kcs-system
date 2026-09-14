@@ -54,6 +54,7 @@ test('cash approval preserves documents and completed stop; retries reverse exac
   completeDriverStop(stops[0],context,db)
   const originalItems=db.prepare('SELECT * FROM purchase_bill_items WHERE purchase_bill_id=?').all(bill.id),proof=db.prepare('SELECT * FROM purchase_payment_proofs').get(),stop=db.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(stops[0])
   const request=requestBillVoid(bill.id,{reason:'Wrong quantity'},context,db)
+  assert.match(request.documentNumber,/^V\d{6}-001$/);assert.equal(listBillVoids({search:request.documentNumber},manager,db).items[0].id,bill.id)
   assert.equal(requestBillVoid(bill.id,{reason:'Retry'},context,db).id,request.id)
   assert.equal(mobileCashFloat(1,db).balanceCents,48000)
   decideBillVoid(request.id,'approved',{},manager,db)

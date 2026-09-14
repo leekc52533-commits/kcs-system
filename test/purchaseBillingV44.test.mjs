@@ -72,7 +72,7 @@ test('v44 migration is additive, preserves dispatch counts and is idempotent',()
 test('Cash requires electronic Bill and payment proof before next Stop',()=>{
   const{db,stops,productId}=fixture();configureCashFloat(1,{targetFloat:500,lowBalanceThreshold:200,currentBalance:500,serviceDate:date},{employeeId:1,employeeName:'Supervisor',now},db);arrive(db,stops[0]);assert.throws(()=>completeDriverStop(stops[0],context,db),/electronic Purchase Bill/)
   const billing=getPurchaseBilling(stops[0],context,db);assert.equal(billing.stop.paymentMethod,'Cash');assert.equal(billing.products[0].productCode,'OCC');assert.equal(billing.products[0].currentPrice,0.2)
-  const created=createPurchaseBill(stops[0],{weightMethod:'on_site',printChoice:'print',items:[{productId,quantity:61.6}]},context,db);assert.equal(created.totalCents,1232);assert.match(created.billNumber,/^P20260907-/);assert.equal(created.printChoice,'print')
+  const created=createPurchaseBill(stops[0],{weightMethod:'on_site',printChoice:'print',items:[{productId,quantity:61.6}]},context,db);assert.equal(created.totalCents,1232);assert.match(created.billNumber,/^P260907-001$/);assert.equal(created.printChoice,'print')
   assert.equal(mobileCashFloat(1,db).balanceCents,50000-created.totalCents)
   assert.throws(()=>completeDriverStop(stops[0],context,db),/payment proof/)
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'kcs-pay-'));const proof=uploadPurchasePaymentProof(stops[0],{photo:{name:'bank.png',dataUrl:png}},context,db,{uploadsRoot:root});assert.equal(proof.idempotent,false);assert.equal(uploadPurchasePaymentProof(stops[0],{photo:{name:'again.png',dataUrl:png}},context,db,{uploadsRoot:root}).idempotent,true)

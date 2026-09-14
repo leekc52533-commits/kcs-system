@@ -1,3 +1,4 @@
+import {allocateDocumentNumber,documentNumber,documentNumberMap} from './documentNumbers.mjs'
 import {canReadCompanyDocuments} from './documentReadAccess.mjs'
 import {db as defaultDb} from './database.mjs'
 import {withImmediateTransaction} from './branchServiceDateGuard.mjs'
@@ -15,8 +16,9 @@ export function voidEvent(db,id,action,actor,detail={}){
 }
 export function listBillVoids(query={},context={},db=defaultDb){
  const actor=voidActor(context,db),all=canReadCompanyDocuments(actor)&&query.scope!=='own',search=String(query.search||'').trim().toLowerCase()
- const items=db.prepare(`SELECT b.*,p.id proofId FROM purchase_bills b LEFT JOIN purchase_payment_proofs p ON p.purchase_bill_id=b.id WHERE (?=1 OR b.driver_employee_id=?) ORDER BY b.id DESC`).all(all?1:0,actor.employeeId).filter(b=>!search||[b.bill_number,b.customer_name_snapshot,b.branch_name_snapshot,b.branch_code_snapshot,b.driver_name_snapshot].some(x=>String(x||'').toLowerCase().includes(search))).map(b=>{
-  const requests=db.prepare('SELECT * FROM purchase_bill_void_requests WHERE purchase_bill_id=? ORDER BY id DESC').all(b.id)
+ const numbers=documentNumberMap(db),numberMatches=new Set(search?db.prepare('SELECT id,purchase_bill_id FROM purchase_bill_void_requests').all().filter(r=>(numbers.get('void-'+r.id)||'').toLowerCase().includes(search)).map(r=>r.purchase_bill_id):[])
+ const items=db.prepare(`SELECT b.*,p.id proofId FROM purchase_bills b LEFT JOIN purchase_payment_proofs p ON p.purchase_bill_id=b.id WHERE (?=1 OR b.driver_employee_id=?) ORDER BY b.id DESC`).all(all?1:0,actor.employeeId).filter(b=>!search||numberMatches.has(b.id)||[b.bill_number,b.customer_name_snapshot,b.branch_name_snapshot,b.branch_code_snapshot,b.driver_name_snapshot].some(x=>String(x||'').toLowerCase().includes(search))).map(b=>{
+  const requests=db.prepare('SELECT * FROM purchase_bill_void_requests WHERE purchase_bill_id=? ORDER BY id DESC').all(b.id).map(r=>({...r,documentNumber:documentNumber(db,'void-'+r.id)}))
   return {...b,canViewReplacement:(canReadCompanyDocuments(actor)||b.driver_employee_id===actor.employeeId)&&requests.some(r=>r.status==='approved'&&r.replacement_bill_id),items:db.prepare('SELECT product_name_snapshot,quantity,unit_snapshot,line_total_cents FROM purchase_bill_items WHERE purchase_bill_id=? ORDER BY id').all(b.id),requests,canRequest:b.status==='issued'&&b.driver_employee_id===actor.employeeId&&!requests.some(r=>r.status==='pending'),canReissue:b.driver_employee_id===actor.employeeId&&b.status==='voided'&&requests.some(r=>r.status==='approved'&&!r.replacement_bill_id)}
  })
  return {items,canReview:reviewers.includes(actor.role)}
@@ -30,10 +32,10 @@ export function requestBillVoid(billId,payload={},context={},db=defaultDb){
   const reason=String(payload.reason||'').trim()
   if(!reason||reason.length>2000)throw fail('VOID_REASON_REQUIRED',400)
   const existing=db.prepare("SELECT * FROM purchase_bill_void_requests WHERE purchase_bill_id=? AND status='pending'").get(b.id)
-  if(existing)return {...existing,idempotent:true}
+  if(existing)return {...existing,documentNumber:documentNumber(db,'void-'+existing.id),idempotent:true}
   const result=db.prepare('INSERT INTO purchase_bill_void_requests(purchase_bill_id,requested_by,requested_name,reason,requested_at) VALUES(?,?,?,?,?)').run(b.id,actor.employeeId,actor.employeeName,reason,new Date(actor.now||Date.now()).toISOString())
-  const id=Number(result.lastInsertRowid);voidEvent(db,id,'requested',actor,{billNumber:b.bill_number,reason})
-  return {id,status:'pending'}
+  const id=Number(result.lastInsertRowid),number=allocateDocumentNumber(db,'V','void-'+id,actor.now||new Date());voidEvent(db,id,'requested',actor,{billNumber:b.bill_number,reason})
+  return {id,status:'pending',documentNumber:number}
  })
 }
 export function decideBillVoid(requestId,decision,payload={},context={},db=defaultDb){

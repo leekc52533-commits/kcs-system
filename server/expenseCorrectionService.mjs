@@ -1,3 +1,4 @@
+import {documentNumberMap} from './documentNumbers.mjs'
 import {refreshAlert} from './cashFloatService.mjs'
 const fail=(message,statusCode)=>Object.assign(Error(message),{statusCode})
 export function canCorrectExpense(db,account){return Boolean(account?.id&&db.prepare("SELECT 1 FROM auth_accounts WHERE id=? AND is_active=1 AND COALESCE(system_role,role) IN ('office','supervisor','operations_admin','owner_admin')").get(Number(account.id)))}
@@ -56,11 +57,12 @@ export function decideExpenseCorrection(db,account,id,decision,payload={}){
 }
 export function expenseCorrectionCenter(db,account,q=''){
  requireOffice(db,account);q=String(q).trim();if(q.length>100)throw fail('Search is too long.',400)
+ const numberRows=documentNumberMap(db);const found=[...numberRows].find(([key,value])=>/^(employee|admin)-/.test(key)&&value.toLowerCase()===q.toLowerCase());if(found)q=found[0]
  const m=/^EXP-([EA])-(\d+)$/i.exec(q);if(m)q=(m[1].toUpperCase()==='E'?'employee':'admin')+'-'+Number(m[2])
  const items=q?db.prepare(`SELECT * FROM (
  SELECT 'employee-'||t.id recordKey,t.service_date serviceDate,e.name employeeName,t.description,ABS(t.amount_cents) amountCents,t.reference_number referenceNumber,t.created_at createdAt FROM cash_float_transactions t JOIN employees e ON e.id=t.employee_id WHERE t.transaction_type='expense' AND t.voided_at IS NULL
  UNION ALL SELECT 'admin-'||id,service_date,'Admin / Company',description,amount_cents,reference_number,created_at FROM admin_expense_records
  ) WHERE lower(recordKey)=lower(?) OR lower(referenceNumber)=lower(?) ORDER BY createdAt DESC LIMIT 51`).all(q,q):[]
  const requests=db.prepare(`SELECT r.*,COALESCE(t.service_date,a.service_date) service_date,COALESCE(e.name,'Admin / Company') employee_name,COALESCE(t.description,a.description) description FROM expense_correction_requests r LEFT JOIN cash_float_transactions t ON r.record_key='employee-'||t.id LEFT JOIN employees e ON e.id=t.employee_id LEFT JOIN admin_expense_records a ON r.record_key='admin-'||a.id ORDER BY CASE r.status WHEN 'pending' THEN 0 ELSE 1 END,r.id DESC LIMIT 100`).all()
- return {items:items.slice(0,50),tooMany:items.length>50,requests,canApprove:canApproveExpense(db,account)}
+ return {items:items.slice(0,50).map(item=>({...item,documentNumber:numberRows.get(item.recordKey)||null})),tooMany:items.length>50,requests:requests.map(r=>({...r,documentNumber:numberRows.get(r.record_key)||null})),canApprove:canApproveExpense(db,account)}
 }

@@ -1,3 +1,4 @@
+import {allocateDocumentNumber} from './documentNumbers.mjs'
 import {canReadCompanyDocuments} from './documentReadAccess.mjs'
 import {temporaryProducts,temporaryPrice,temporaryIntake,notifyIntakeBill,assertNoPendingTripApproval,isAdHocCollection} from './temporaryIntakeBilling.mjs'
 import {voidActor,voidEvent} from './purchaseBillVoidService.mjs'
@@ -85,7 +86,7 @@ export function createPurchaseBill(stopId,payload={},context={},database=default
       customer_name_snapshot,branch_code_snapshot,branch_name_snapshot,driver_name_snapshot,vehicle_code_snapshot,registration_number_snapshot,payment_method,weight_method,print_choice,subtotal_cents,total_cents,issued_at)
       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(temporary,stop.id,stop.tripId,stop.dayId,stop.branchId,stop.customerId,employeeId,stop.vehicleId,stop.serviceDate,
         stop.customerName||'Unknown Customer',stop.branchCode,stop.branchName||stop.branchCode,stop.driverName,stop.vehicleCode,stop.registrationNumber,stop.paymentMethod,weightMethod,printChoice,totalCents,totalCents,issuedAt)
-    const purchaseBillId=Number(result.lastInsertRowid),billNumber=`P${stop.serviceDate.replaceAll('-','')}-${String(purchaseBillId).padStart(6,'0')}`
+    const purchaseBillId=Number(result.lastInsertRowid),billNumber=allocateDocumentNumber(database,'P','purchase-'+purchaseBillId,now)
     database.prepare('UPDATE purchase_bills SET bill_number=? WHERE id=?').run(billNumber,purchaseBillId)
     const insert=database.prepare(`INSERT INTO purchase_bill_items(purchase_bill_id,product_id,material_id,product_code_snapshot,product_name_snapshot,short_form_snapshot,unit_snapshot,quantity,unit_price_cents,line_total_cents,price_type_snapshot,price_group_id_snapshot) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`)
     for(const item of items)insert.run(purchaseBillId,item.productId,item.materialId,item.productCode,item.fullName,item.shortForm,item.unit,item.quantity,item.unitPriceCents,item.lineTotalCents,item.priceType,item.priceGroupId)

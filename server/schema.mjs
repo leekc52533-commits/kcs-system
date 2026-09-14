@@ -1,3 +1,4 @@
+import {documentNumberSchema} from './migrationV69.mjs'
 import {driverGuideSchemaSql} from './migrationV66.mjs'
 import {noticeBoardSchemaSql} from './migrationV65.mjs'
 import {driverArrangementSchemaSql} from './migrationV64.mjs'
@@ -13,7 +14,7 @@ import {routeRequestSchemaSql} from './migrationV55.mjs'
 import {sundaySchemaSql} from './sundayPlanning.mjs'
 export const SCHEMA_VERSION = 66
 
-export const schemaSql = driverGuideSchemaSql + noticeBoardSchemaSql + driverArrangementSchemaSql + customerPickupSchemaSql + temporaryIntakeSchemaSql + menuSchemaSql + salesSchemaSql + noGoodsNoticeSchemaSql + dateReviewSchemaSql + billVoidSchemaSql + expenseDetailsSchemaSql + routeRequestSchemaSql + sundaySchemaSql + `
+export const schemaSql = documentNumberSchema + driverGuideSchemaSql + noticeBoardSchemaSql + driverArrangementSchemaSql + customerPickupSchemaSql + temporaryIntakeSchemaSql + menuSchemaSql + salesSchemaSql + noGoodsNoticeSchemaSql + dateReviewSchemaSql + billVoidSchemaSql + expenseDetailsSchemaSql + routeRequestSchemaSql + sundaySchemaSql + `
 CREATE TABLE IF NOT EXISTS schema_meta (
   version INTEGER PRIMARY KEY,
   applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP

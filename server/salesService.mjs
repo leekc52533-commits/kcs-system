@@ -1,3 +1,4 @@
+import {allocateDocumentNumber,documentNumber,documentNumberMap} from './documentNumbers.mjs'
 import {db as defaultDb} from './database.mjs'
 import {withImmediateTransaction} from './branchServiceDateGuard.mjs'
 import {image} from './driverExecutionService.mjs'
@@ -10,8 +11,8 @@ const fail=code=>Object.assign(new Error(code),{code,statusCode:400})
 export function assertSalesAccess(context){if(!['owner','owner_admin','operations_admin','supervisor','office','dispatcher'].includes(context.role))throw Object.assign(fail('SALES_ACCESS'),{statusCode:403})}
 export function salesMasters(db=defaultDb){return{buyers:db.prepare("SELECT id,buyer_name name FROM buyers WHERE status='active' ORDER BY buyer_name").all(),vehicles:db.prepare("SELECT id,registration_number plate,vehicle_code code FROM vehicles WHERE status IN ('active','available','assigned') ORDER BY vehicle_code").all()}}
 const decode=r=>({...r,buyerId:r.buyer_id,buyerName:r.buyer_name,vehicleId:r.vehicle_id,vehiclePlate:r.vehicle_plate,billNumber:r.bill_number,settlementDate:r.settlement_date,lines:JSON.parse(r.lines_json),total:(r.total_cents/100).toFixed(2),rounding:(r.rounding_cents/100).toFixed(2),createdBy:r.created_by,createdAt:r.created_at})
-export function salesRecord(id,context,db=defaultDb){assertSalesAccess(context);const r=db.prepare('SELECT * FROM sales_settlements WHERE id=?').get(Number(id));if(!r)throw fail('SALES_NOT_FOUND');const decoded=decode(r);delete decoded.storage_key;return decoded}
-export function listSales(query,context,db=defaultDb){assertSalesAccess(context);if(!validSalesDate(query.from)||!validSalesDate(query.to)||query.from>query.to)throw fail('SALES_DATE');const records=db.prepare('SELECT * FROM sales_settlements WHERE settlement_date BETWEEN ? AND ? ORDER BY settlement_date DESC,id DESC').all(query.from,query.to).map(decode);const rows=records.flatMap(r=>r.lines.map((l,i)=>({id:r.id,rowKey:r.id+'-'+i,settlementDate:r.settlementDate,billNumber:r.billNumber,buyerName:r.buyerName,vehiclePlate:r.vehiclePlate,...l,total:r.total,remarks:r.remarks,createdBy:r.createdBy})));return{...filterSales(rows,query),...salesMasters(db)}}
+export function salesRecord(id,context,db=defaultDb){assertSalesAccess(context);const r=db.prepare('SELECT * FROM sales_settlements WHERE id=?').get(Number(id));if(!r)throw fail('SALES_NOT_FOUND');const decoded={...decode(r),documentNumber:documentNumber(db,'sales-'+r.id)};delete decoded.storage_key;return decoded}
+export function listSales(query,context,db=defaultDb){assertSalesAccess(context);if(!validSalesDate(query.from)||!validSalesDate(query.to)||query.from>query.to)throw fail('SALES_DATE');const numbers=documentNumberMap(db);const records=db.prepare('SELECT * FROM sales_settlements WHERE settlement_date BETWEEN ? AND ? ORDER BY settlement_date DESC,id DESC').all(query.from,query.to).map(decode);const rows=records.flatMap(r=>r.lines.map((l,i)=>({id:r.id,rowKey:r.id+'-'+i,documentNumber:numbers.get('sales-'+r.id)||'',settlementDate:r.settlementDate,billNumber:r.billNumber,buyerName:r.buyerName,vehiclePlate:r.vehiclePlate,...l,total:r.total,remarks:r.remarks,createdBy:r.createdBy})));return{...filterSales(rows,query),...salesMasters(db)}}
 function validate(payload,db,old){
  if(payload.reviewed!==true)throw fail('SALES_REVIEW')
  const buyer=db.prepare('SELECT * FROM buyers WHERE id=?').get(Number(payload.buyerId)),vehicle=db.prepare('SELECT * FROM vehicles WHERE id=?').get(Number(payload.vehicleId))
@@ -45,6 +46,7 @@ export function saveSales(payload,context,db=defaultDb,{uploadsRoot}={}){
   let id=old?.id
   if(old)db.prepare('UPDATE sales_settlements SET buyer_id=?,buyer_name=?,vehicle_id=?,vehicle_plate=?,bill_number=?,bill_key=?,settlement_date=?,lines_json=?,total_cents=?,rounding_cents=?,storage_key=?,content_type=?,remarks=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(...values,id)
   else id=Number(db.prepare('INSERT INTO sales_settlements(buyer_id,buyer_name,vehicle_id,vehicle_plate,bill_number,bill_key,settlement_date,lines_json,total_cents,rounding_cents,storage_key,content_type,remarks,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(...values,actor).lastInsertRowid)
+  if(!old)allocateDocumentNumber(db,'S','sales-'+id,context.now||new Date())
   db.prepare('INSERT INTO sales_settlement_audit(settlement_id,actor,before_json,after_json) VALUES(?,?,?,?)').run(id,actor,old?JSON.stringify(old):null,JSON.stringify(db.prepare('SELECT * FROM sales_settlements WHERE id=?').get(id)))
   return salesRecord(id,context,db)
  })}catch(e){if(written&&fs.existsSync(written))fs.unlinkSync(written);throw e}
@@ -56,7 +58,7 @@ export async function exportSales(query,context,db=defaultDb,{uploadsRoot}={}){
  sheet.columns.forEach(c=>c.width=24);sheet.getRow(1).font={bold:true};sheet.views=[{state:'frozen',ySplit:1}]
  const proofs=book.addWorksheet('Bill Photos');proofs.getColumn(1).width=100
  let row=1
- for(const id of new Set(items.map(r=>r.id))){const record=salesRecord(id,context,db),p=salesPhoto(id,context,db),file=path.resolve(uploadsRoot,p.storage_key);proofs.getCell(row,1).value=record.billNumber+' — '+record.buyerName;row++
+ for(const id of new Set(items.map(r=>r.id))){const record=salesRecord(id,context,db),p=salesPhoto(id,context,db),file=path.resolve(uploadsRoot,p.storage_key);proofs.getCell(row,1).value=(record.documentNumber?record.documentNumber+' / ':'')+record.billNumber+' — '+record.buyerName;row++
   if(file.startsWith(path.resolve(uploadsRoot)+path.sep)&&fs.existsSync(file)&&['image/jpeg','image/png'].includes(p.content_type)){const imageId=book.addImage({buffer:fs.readFileSync(file),extension:p.content_type==='image/jpeg'?'jpeg':'png'});proofs.addImage(imageId,{tl:{col:0,row:row-1},ext:{width:720,height:540}});row+=29}else{proofs.getCell(row++,1).value='View original: /api/sales/'+id+'/photo'}
  }
  return Buffer.from(await book.xlsx.writeBuffer())

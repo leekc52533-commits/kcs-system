@@ -22,12 +22,14 @@ test('expense corrections require office submission and supervisor approval, rem
   }
   const call=(path,id=80001,method='GET',payload={})=>fetch(`http://127.0.0.1:${port}${path}`,{method,headers:{Cookie:'kcs_session=preview-token-'+id,'Content-Type':'application/json'},...(method==='GET'?{}:{body:JSON.stringify(payload)})});
   db.prepare('INSERT INTO company_menu(id,owner_account_id) VALUES(1,80006) ON CONFLICT(id) DO UPDATE SET owner_account_id=80006').run();
-  assert.equal(db.prepare('SELECT MAX(version) v FROM schema_meta').get().v,68);
+  assert.equal(db.prepare('SELECT MAX(version) v FROM schema_meta').get().v,69);
   db.exec("INSERT INTO cash_float_accounts(employee_id,target_float_cents,low_balance_threshold_cents) VALUES(80002,200000,10000); INSERT INTO cash_float_members(employee_id,is_selected) VALUES(80002,1)");
   const insert=db.prepare("INSERT INTO cash_float_transactions(employee_id,transaction_type,amount_cents,service_date,description,created_by_name_snapshot,created_at,proof_storage_key) VALUES(80002,?,?,'2026-09-12','Fuel','Test','2026-09-12T10:00:00+08:00',?)");
   insert.run('opening_balance',200000,null);
   const expense=Number(insert.run('expense',-150000,'original.png').lastInsertRowid);
   const other=Number(insert.run('expense',-15000,'other.png').lastInsertRowid);
+  db.prepare("INSERT INTO document_numbers(source_key,document_number,prefix,number_date,sequence,created_at) VALUES(?,?,'E','2026-09-14',1,'2026-09-14T00:00:00Z')").run('employee-'+expense,'E260914-001');
+  const newLookup=await (await call('/api/expense-corrections?q=E260914-001',80004)).json();assert.equal(newLookup.items[0].recordKey,'employee-'+expense);assert.equal(newLookup.items[0].documentNumber,'E260914-001');
   const endpoint='/api/expenses/employee-'+expense+'/corrections';
   const payload={amount:'150.00',reason:'Extra zero entered',expectedAmountCents:150000,revision:0};
   for(const id of [80002,80003])assert.equal((await call(endpoint,id,'POST',payload)).status,403);
@@ -63,6 +65,6 @@ test('expense corrections require office submission and supervisor approval, rem
   assert.equal((await call('/api/expense-corrections/'+retry.requestId+'/approve',80005,'POST',{reason:'Verified'})).status,200);
   assert.equal(db.prepare('SELECT SUM(amount_cents) v FROM cash_float_transactions WHERE employee_id=80002').get().v,170000);
   assert.equal(db.prepare('SELECT amount_cents v FROM admin_expense_records WHERE id=?').get(admin).v,15000);
-  const rows=await (await call('/api/expenses?from=2026-09-12&to=2026-09-12',80006)).json();assert.equal(rows.items.find(r=>r.recordKey==='employee-'+expense).amountCents,15000);assert.equal(rows.items.find(r=>r.recordKey==='employee-'+expense).correctionCount,1);assert.equal(rows.items.find(r=>r.recordKey==='employee-'+other).correctionCount,0);
+  const rows=await (await call('/api/expenses?from=2026-09-12&to=2026-09-12',80006)).json();assert.equal(rows.items.find(r=>r.recordKey==='employee-'+expense).amountCents,15000);assert.equal(rows.items.find(r=>r.recordKey==='employee-'+expense).correctionCount,1);assert.equal(rows.items.find(r=>r.recordKey==='employee-'+expense).documentNumber,'E260914-001');assert.equal(rows.items.find(r=>r.recordKey==='employee-'+other).correctionCount,0);
  }finally{db?.close();child.kill();await new Promise(r=>child.exitCode!==null?r():child.once('exit',r));rmSync(dir,{recursive:true,force:true})}
 })

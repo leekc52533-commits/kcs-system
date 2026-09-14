@@ -31,7 +31,7 @@ export default function ExpenseRecordsPage({onBack}){
   const load=useCallback(async()=>{const id=++requestId.current;setLoading(true);setError('');try{const result=await api(`/api/expenses?${query}`);if(id===requestId.current)setData(result)}catch(item){if(id===requestId.current)setError(item.message)}finally{if(id===requestId.current)setLoading(false)}},[query])
   useEffect(()=>{load();return()=>{requestId.current++}},[load])
 
-  const rows=useMemo(()=>(data?.items||[]).map(item=>({...item,serviceDateLabel:displayDate(item.serviceDate),expenseTypeLabel:item.expenseType==='admin'?'Admin Expense':'Employee Expense',amountLabel:money(item.amountCents),createdAtLabel:displayDateTime(item.createdAt),expenseNumber:expenseNumber(item.recordKey),correctionStatus:item.correctionCount?'Corrected':'Unchanged',receiptLabel:item.hasProof?'Uploaded':'Missing'})),[data])
+  const rows=useMemo(()=>(data?.items||[]).map(item=>({...item,serviceDateLabel:displayDate(item.serviceDate),expenseTypeLabel:item.expenseType==='admin'?'Admin Expense':'Employee Expense',amountLabel:money(item.amountCents),createdAtLabel:displayDateTime(item.createdAt),expenseNumber:item.documentNumber||expenseNumber(item.recordKey),correctionStatus:item.correctionCount?'Corrected':'Unchanged',receiptLabel:item.hasProof?'Uploaded':'Missing'})),[data])
   const orderedColumns=columnOrder.map(key=>columns.find(c=>c[0]===key)).filter(Boolean)
   const columnLabel=(key,label)=>key==='expenseNumber'?w.number:key==='correctionStatus'?w.history:ui(label)
   const displayed=rows

@@ -9,7 +9,7 @@ export const archiveKeys={
 }
 export function archiveValue(kind,row,key,sort=false){
  if(!archiveKeys[kind]?.includes(key))return ''
- if(key==='expenseNumber')return row.recordKey?`EXP-${row.expenseType==='employee'?'E':'A'}-${String(row.sourceId).padStart(6,'0')}`:''
+ if(key==='expenseNumber')return row.documentNumber||(row.recordKey?`EXP-${row.expenseType==='employee'?'E':'A'}-${String(row.sourceId).padStart(6,'0')}`:'')
  if(key==='correctionStatus')return sort?Number(row.correctionCount||0):row.correctionCount?'Corrected':'Unchanged'
  if(key==='serviceDateLabel')return sort?text(row.serviceDate):date(row.serviceDate)
  if(key==='createdAtLabel')return sort?text(row.createdAt):entered(row.createdAt)
