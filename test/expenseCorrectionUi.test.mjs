@@ -14,6 +14,7 @@ const click=async n=>act(async()=>n.dispatchEvent(new MouseEvent('click',{bubble
 const change=async(n,value)=>act(async()=>{Object.getOwnPropertyDescriptor(n.tagName==='TEXTAREA'?window.HTMLTextAreaElement.prototype:window.HTMLInputElement.prototype,'value').set.call(n,value);n.dispatchEvent(new Event('input',{bubbles:true}))})
 const{default:Center}=await vite.ssrLoadModule('/src/ExpenseCorrectionCenter.jsx')
 const{default:Records}=await vite.ssrLoadModule('/src/ExpenseRecordsPage.jsx')
+const{default:Order,expenseColumnWords}=await vite.ssrLoadModule('/src/ExpenseColumnOrder.jsx')
 test('correction requires a reason, previews refund and sends original version only after confirmation',async()=>{
  let posts=0,saved=0,body;const current={amountCents:150000,revision:0,employee:true,history:[]}
  globalThis.fetch=async(url,options={})=>{if(options.method==='POST'){posts++;body=JSON.parse(options.body);return{ok:true,json:async()=>({...current,amountCents:150000,revision:0,history:[],status:'pending'})}}return{ok:true,json:async()=>current}}
@@ -55,4 +56,23 @@ test('saved column order keeps headers and data aligned and correction marker op
  await click(document.querySelector('button[aria-label="调整栏目"]'));const chooser=document.querySelector('[role="dialog"]');await click(chooser.querySelector('button[aria-label^="下移"]'));await act(async()=>chooser.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})))
  assert.equal(JSON.parse(localStorage.getItem('kcs.expense-column-order.v1'))[0],'correctionStatus');assert.equal(document.querySelector('tbody td').textContent,'已更正 (1)')
  }finally{await act(async()=>root.unmount());localStorage.removeItem('kcs.expense-column-order.v1')}
+})
+
+test('pointer drag reorders immediately, scrolls at edge and cancellation restores draft',async()=>{
+ const oldRaf=globalThis.requestAnimationFrame,oldCancel=globalThis.cancelAnimationFrame;let nextFrame,seq=0,saved
+ globalThis.requestAnimationFrame=fn=>{nextFrame=fn;return ++seq};globalThis.cancelAnimationFrame=()=>{nextFrame=null}
+ const root=createRoot(document.getElementById('root'))
+ const pointer=async(node,type,y)=>act(async()=>{const e=new MouseEvent(type,{bubbles:true,cancelable:true,clientY:y,button:0});Object.defineProperty(e,'pointerId',{value:7});node.dispatchEvent(e)})
+ const tick=async()=>act(async()=>{const fn=nextFrame;nextFrame=null;fn?.()})
+ try{
+ await act(async()=>root.render(React.createElement(Order,{order:['a','b','c'],columns:[['a','A'],['b','B'],['c','C']],w:expenseColumnWords.en,onSave:v=>saved=v,onClose(){}})))
+ const list=document.querySelector('.expense-column-list');list.getBoundingClientRect=()=>({top:0,bottom:120,height:120});list.setPointerCapture=()=>{};list.hasPointerCapture=()=>false
+ for(const row of list.children)row.getBoundingClientRect=()=>{const i=[...list.children].indexOf(row);return{top:i*40-list.scrollTop,height:40}}
+ await pointer(list.children[0].querySelector('.expense-column-grip'),'pointerdown',20)
+ await pointer(list,'pointermove',115);await tick();assert.equal(list.lastElementChild.dataset.columnKey,'a');assert(list.scrollTop>0)
+ await pointer(list,'pointercancel',115);assert.equal(list.firstElementChild.dataset.columnKey,'a')
+ list.scrollTop=0;await pointer(list.children[0].querySelector('.expense-column-grip'),'pointerdown',20);await pointer(list,'pointermove',115);await tick();await pointer(list,'pointerup',115)
+ await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})))
+ assert.deepEqual(saved,['b','c','a'])
+ }finally{await act(async()=>root.unmount());globalThis.requestAnimationFrame=oldRaf;globalThis.cancelAnimationFrame=oldCancel;localStorage.removeItem('kcs.expense-column-order.v1')}
 })
