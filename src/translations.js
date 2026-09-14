@@ -4464,3 +4464,8 @@ Object.assign(messages.en,{"unloading.title": "Unloading Records", "unloading.do
 Object.assign(messages.ms,{"unloading.title": "Rekod Pemunggahan", "unloading.download": "Muat turun rekod pemunggahan", "unloading.photo": "Lihat gambar tiket timbang", "unloading.empty": "Tiada rekod pemunggahan ditemui.", "unloading.reset": "Kosongkan penapis"})
 
 Object.assign(messages.zh,{"unloading.title": "卸货记录", "unloading.download": "下载卸货记录", "unloading.photo": "查看磅单照片", "unloading.empty": "暂无卸货记录。", "unloading.reset": "清除筛选"})
+
+// Confirmed: first GPS is official immediately; subsequent changes require review.
+Object.assign(messages.en,{'gps.initialSaved':'First GPS saved as official.','gps.changePending':'GPS change submitted for supervisor approval.','gps.saveTemporary':'Confirm and save GPS','mobile.submitGps':'Confirm and save GPS'})
+Object.assign(messages.ms,{'gps.initialSaved':'GPS pertama disimpan sebagai GPS rasmi.','gps.changePending':'Perubahan GPS dihantar untuk kelulusan penyelia.','gps.saveTemporary':'Sahkan dan simpan GPS','mobile.submitGps':'Sahkan dan simpan GPS'})
+Object.assign(messages.zh,{'gps.initialSaved':'首次 GPS 已保存为正式 GPS。','gps.changePending':'GPS 修改已提交，等待主管批准。','gps.saveTemporary':'确认并保存 GPS','mobile.submitGps':'确认并保存 GPS'})

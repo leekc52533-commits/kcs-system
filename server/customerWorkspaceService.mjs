@@ -1,3 +1,4 @@
+import {activeLocationAreas,previewCustomerLocation,validateLocationCheck,saveLocationCheck,pendingLocationChecks,decideCustomerLocation} from './customerLocationCheck.mjs'
 import {createHash} from 'node:crypto'
 import {db as defaultDb} from './database.mjs'
 import {createCustomer,updateCustomer,getCustomer,createBranch,updateBranchWithLifecycle,getBranch,captureBranchGps,listGpsCollector} from './customerMasterService.mjs'
@@ -22,8 +23,8 @@ export function customerWorkspace({branchId,customerId}={},actor={},db=defaultDb
  const schedule=branch?getCollectionScheduleManagement(branch.branchId,db):null
  const pending=branch?listGpsCollector({branchId:branch.internalId},db):[]
  const routeOptions=db.prepare('SELECT d.route_number routeNumber,d.display_name name FROM weekly_route_definitions d JOIN weekly_route_plans p ON p.id=d.plan_id WHERE p.is_active=1 ORDER BY d.route_number').all()
- const areas=db.prepare('SELECT jodoo_area_id areaId,name FROM areas ORDER BY name').all()
- return {customer,branch,schedule,pending,routeOptions,areas,canConfirmSchedule:['owner_admin','operations_admin','supervisor'].includes(actor.role),canManagePricing:accountCan(actor,'price_manage',db),canCaptureGps:accountCan(actor,'gps_capture',db),canReviewGps:accountCan(actor,'gps_review',db),revision:hash({customer,branch,schedule,pending})}
+ const areas=activeLocationAreas(db),locationReviews=branch?pendingLocationChecks(branch.internalId,db):[]
+ return {customer,branch,schedule,pending,routeOptions,areas,locationReviews,canConfirmSchedule:['owner_admin','operations_admin','supervisor'].includes(actor.role),canManagePricing:accountCan(actor,'price_manage',db),canCaptureGps:accountCan(actor,'gps_capture',db),canReviewGps:accountCan(actor,'gps_review',db),revision:hash({customer,branch,schedule,pending,locationReviews})}
 }
 export function saveCustomerWorkspace(payload,actor={},db=defaultDb){
  assertActor(actor)
@@ -36,6 +37,7 @@ export function saveCustomerWorkspace(payload,actor={},db=defaultDb){
   if(previous){const saved=JSON.parse(previous.after_json);if(saved.signature!==signature)throw fail('Request ID already used with different data.',409);db.exec('COMMIT');return saved.result}
   const before=customerWorkspace(payload,actor,db)
   if((payload.branchId||payload.customerId)&&before.revision!==payload.revision)throw fail('Customer data changed. Reload before saving.',409)
+  const locationProof=validateLocationCheck(payload,before,actor)
   const changedBy=actor.employeeName||actor.username||`Account ${actor.id}`
   const c={...pick(payload.customer,customerFields),reason,changedBy}
   if((Object.hasOwn(c,'materialPricing')||Object.hasOwn(c,'removedMaterialIds'))&&!accountCan(actor,'price_manage',db))throw fail('Pricing permission required.',403)
@@ -52,6 +54,7 @@ export function saveCustomerWorkspace(payload,actor={},db=defaultDb){
    if(!accountCan(actor,'gps_capture',db))throw fail('GPS capture permission required.',403)
    captureBranchGps(branch.branchId,{...pick(payload.gps,['latitude','longitude','accuracyM','capturedLatitude','capturedLongitude','capturedAccuracyM','deviceCapturedAt','manuallyAdjusted','adjustmentReason','address','state','street','city','streetNumber','postalCode','reverseGeocodeProvider','locationSource']),remark:reason,capturedBy:changedBy,changedBy,employeeId:actor.employeeId},db)
   }
+  saveLocationCheck(payload,locationProof,getBranch(branch.branchId,db),actor,db)
   let review=[]
   if(payload.schedule){
    if(db.prepare('SELECT 1 FROM weekly_route_plans WHERE is_active=1').get())generateWeek({startDate:kuchingDate(),count:7,onlyMissing:true,generatedBy:changedBy},db)
@@ -70,4 +73,15 @@ export function confirmCustomerSchedule(payload,actor={},db=defaultDb){
  const b=findBranch(payload.branchId,db);if(!b)throw fail('Branch not found.',404)
  db.exec('BEGIN IMMEDIATE')
  try{const review=reconcileScheduleWindow({startDate:date,confirmedDate:date,expectedRevision:payload.expectedRevision,branchIds:[b.internalId],changedBy:actor.employeeName||actor.username},db);db.prepare("INSERT INTO audit_logs(action,entity_type,entity_id,after_json) VALUES('customer_schedule_confirmed','branch',?,?)").run(String(b.internalId),JSON.stringify({date,reason:payload.reason,accountId:actor.id,review}));db.exec('COMMIT');return{review}}catch(e){db.exec('ROLLBACK');throw e}
+}
+
+export async function checkCustomerLocation(payload,actor={},db=defaultDb,options={}){
+ assertActor(actor)
+ const before=customerWorkspace(payload,actor,db)
+ if((payload.branchId||payload.customerId)&&before.revision!==payload.revision)throw fail('Customer data changed. Reload before checking.',409)
+ return previewCustomerLocation(payload,before,actor,db,options)
+}
+export function reviewCustomerLocation(payload,actor={},db=defaultDb){
+ assertActor(actor);db.exec('BEGIN IMMEDIATE')
+ try{const before=customerWorkspace(payload,actor,db);if(!before.branch)throw fail('Branch not found.',404);decideCustomerLocation(payload,before.branch,actor,db);const result=customerWorkspace(payload,actor,db);db.exec('COMMIT');return result}catch(error){db.exec('ROLLBACK');throw error}
 }

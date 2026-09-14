@@ -25,3 +25,22 @@ test('combined editor sends one request and keeps failed draft for retry in all 
  }finally{await act(async()=>root.unmount())}
  }
 })
+
+test('address check stages suggestions without saving and clears stale results when inputs change',async()=>{
+ const {default:Check,locationWords}=await vite.ssrLoadModule('/src/CustomerLocationCheck.jsx')
+ for(const language of ['en','ms','zh']){
+  const w=locationWords[language],root=createRoot(document.getElementById('root')),calls=[],areas=[{areaId:'A1',name:'BDC',zone:'Kuching'}]
+  let staged=null,payload={branch:{branchName:'Shop',address:'Old address',areaId:'A1'},revision:'r1'}
+  const render=()=>React.createElement(I18nProvider,{language},React.createElement(Check,{payload,data:{areas,locationReviews:[]},value:staged,onChange:v=>{staged=v},onReview(){}}))
+  globalThis.fetch=async(url,options={})=>{calls.push(String(url));return{ok:true,json:async()=>({token:'preview-token',address:'New address',areaId:'A1',areas,gpsSource:'official',confidence:'low',conflict:true})}}
+  try{
+   await act(async()=>root.render(render()))
+   await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent===w.check).click())
+   assert.equal(document.querySelector('input').value,'New address');assert.equal(staged,null)
+   await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent===w.use).click())
+   assert.equal(staged.address,'New address');assert.deepEqual(calls,['/api/customer-workspace/check-location'])
+   payload={...payload,branch:{...payload.branch,address:'Changed address'}}
+   await act(async()=>root.render(render()));assert.equal(staged,null);assert.equal(document.querySelector('input'),null)
+  }finally{await act(async()=>root.unmount())}
+ }
+})

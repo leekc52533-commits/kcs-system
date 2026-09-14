@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs'
 import {DatabaseSync} from 'node:sqlite'
 import {schemaSql} from '../server/schema.mjs'
 import {adoptBranchGps,captureBranchGps} from '../server/customerMasterService.mjs'
-import {reviewTemporaryLocation} from '../server/specialRequestService.mjs'
+import {reviewTemporaryLocation,addTemporaryLocation} from '../server/specialRequestService.mjs'
 
 function fixture(){
   const db=new DatabaseSync(':memory:')
@@ -16,7 +16,7 @@ function fixture(){
   return{db,reviewerAccountId:Number(account.lastInsertRowid)}
 }
 
-function pending(db){return captureBranchGps('B1',{latitude:1.5685719,longitude:110.3024682,accuracyM:10,capturedBy:'Field Driver',gpsRemark:'Receiving entrance'},db)}
+function pending(db){return addTemporaryLocation({branchId:1,latitude:1.5685719,longitude:110.3024682,accuracyM:10,capturedBy:'Field Driver',gpsRemark:'Receiving entrance'},db)}
 
 test('Adopt stores one authenticated reviewer and one reason consistently across all four audit surfaces',()=>{
   const{db,reviewerAccountId}=fixture(),temporary=pending(db),reason='主管现场资料确认'
