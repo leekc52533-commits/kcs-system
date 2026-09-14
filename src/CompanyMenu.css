@@ -11,3 +11,5 @@ dialog.company-menu-overlay::backdrop{background:#14273770}
 .company-menu-row select{width:150px;flex:0 1 150px}
 .company-menu-row span{min-width:0;overflow-wrap:anywhere}
 @media(max-width:560px){.company-menu-row{flex-wrap:wrap}.company-menu-row span{flex-basis:calc(100% - 40px)}.company-menu-row select{flex:1}.company-menu-editor{padding:16px}.company-menu-actions{bottom:-16px}}
+
+.company-menu-row .menu-page-name{flex:1;min-width:100px;text-align:left;white-space:normal;overflow-wrap:anywhere}.company-menu-row button.menu-page-name{background:transparent;border:0;padding:6px 0;color:inherit;font:inherit}

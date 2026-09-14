@@ -6,6 +6,7 @@ export const menuGroups=layout=>[{id:'documents',name:layout.documentName||'',it
 const goodName=name=>typeof name==='string'&&name.trim().length>0&&name.length<=60
 export function validMenuLayout(value){
  if(!value||!Array.isArray(value.top)||!Array.isArray(value.documents))return false
+ if(value.pageNames!==undefined&&(!value.pageNames||typeof value.pageNames!=='object'||Array.isArray(value.pageNames)||Object.entries(value.pageNames).some(([id,name])=>!pageMenuIds.includes(id)||!goodName(name))))return false
  const folders=value.folders||[];if(!Array.isArray(folders)||folders.length>30)return false
  if(value.documentName!==undefined&&!goodName(value.documentName))return false
  if(folders.some(f=>!f||!/^folder-[a-z0-9-]{1,64}$/.test(f.id)||!goodName(f.name)||!Array.isArray(f.items)))return false
@@ -26,5 +27,6 @@ export function normalizeMenuLayout(layout){
  const documents=take(layout.documents),nextFolders=folders.map(f=>({id:f.id,name:f.name,items:take(f.items)}))
  for(const id of groupIds)if(!top.includes(id))top.push(id)
  for(const id of pageMenuIds)if(!seen.has(id)){if(id==='notices')top.splice(Math.max(0,top.indexOf('dashboard')+1),0,id);else if(billMenuIds.includes(id))documents.push(id);else top.push(id)}
- return {top,documents,...(goodName(layout.documentName)?{documentName:layout.documentName}:{}),...(nextFolders.length?{folders:nextFolders}:{})}
+ const pageNames=Object.fromEntries(Object.entries(layout.pageNames||{}).filter(([id,name])=>pageMenuIds.includes(id)&&goodName(name)).map(([id,name])=>[id,name.trim()]))
+ return {top,documents,...(Object.keys(pageNames).length?{pageNames}:{}),...(goodName(layout.documentName)?{documentName:layout.documentName}:{}),...(nextFolders.length?{folders:nextFolders}:{})}
 }

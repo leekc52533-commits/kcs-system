@@ -12,3 +12,17 @@ test('owner binding survives username changes and migration reruns',()=>{const d
 test('custom folders persist names and every page, retain auditing and reject stale saves',()=>{const db=fixture(),layout=defaultMenuLayout();layout.folders=[{id:'folder-office',name:'Office 工作',items:['dashboard','sales']}];layout.top=layout.top.filter(id=>id!=='dashboard');layout.documents=layout.documents.filter(id=>id!=='sales');layout.top.unshift('folder-office');layout.documentName='Bills';assert(validMenuLayout(layout));saveMenu(db,{id:9},{layout,revision:0});assert.deepEqual(readMenu(db,{id:10}).layout,layout);assert.deepEqual(JSON.parse(db.prepare('SELECT after_json FROM company_menu_audit').get().after_json),layout);assert.throws(()=>saveMenu(db,{id:10},{layout,revision:1}),e=>e.statusCode===403);assert.throws(()=>saveMenu(db,{id:9},{layout,revision:0}),e=>e.statusCode===409);db.close()})
 test('folder validation prevents lost/duplicate pages, cycles, unknown pages and invalid names',()=>{for(const alter of [l=>l.documents.pop(),l=>l.top.push('sales'),l=>l.top.push('unknown'),l=>{l.folders=[{id:'folder-a',name:'A',items:['folder-a']}];l.top.push('folder-a')},l=>{l.folders=[{id:'folder-a',name:' ',items:[]}];l.top.push('folder-a')},l=>{l.documentName='x'.repeat(61)}]){const layout=defaultMenuLayout();alter(layout);assert.equal(validMenuLayout(layout),false)}})
 test('legacy menu order is retained and missing notice inserted without writing on read',()=>{const db=fixture(),old=defaultMenuLayout();old.top.reverse();old.top=old.top.filter(id=>id!=='notices');db.prepare('UPDATE company_menu SET layout_json=?').run(JSON.stringify(old));const before=db.prepare('SELECT total_changes() n').get().n,r=readMenu(db,{id:9});assert.equal(r.layout.top.filter(id=>id==='notices').length,1);assert.deepEqual(r.layout.top.filter(id=>id!=='notices'),old.top);assert.equal(db.prepare('SELECT total_changes() n').get().n,before);assert(validMenuLayout(normalizeMenuLayout(r.layout)));db.close()})
+
+test('page aliases persist and audit under pinned ownership, validate keys and survive moving pages',()=>{
+ const db=fixture(),layout=defaultMenuLayout();layout.pageNames={'purchase-bills':'收购单','sales':'Factory settlements'}
+ try{
+  const saved=saveMenu(db,{id:9},{layout,revision:0});assert.deepEqual(saved.layout.pageNames,layout.pageNames)
+  assert.deepEqual(readMenu(db,{id:10}).layout.pageNames,layout.pageNames)
+  assert.equal(JSON.parse(db.prepare('SELECT after_json FROM company_menu_audit').get().after_json).pageNames.sales,'Factory settlements')
+  assert.throws(()=>saveMenu(db,{id:10},{layout,revision:1}),e=>e.statusCode===403)
+  for(const names of [{unknown:'Name'},{sales:''},{sales:'x'.repeat(61)},['Name'],null])assert.equal(validMenuLayout({...layout,pageNames:names}),false)
+  const moved=structuredClone(layout);moved.documents=moved.documents.filter(id=>id!=='sales');moved.top.push('sales');assert.equal(normalizeMenuLayout(moved).pageNames.sales,'Factory settlements')
+  delete moved.pageNames.sales;assert.equal(saveMenu(db,{id:9},{layout:moved,revision:1}).layout.pageNames.sales,undefined)
+  assert.equal(validMenuLayout(defaultMenuLayout()),true)
+ }finally{db.close()}
+})
