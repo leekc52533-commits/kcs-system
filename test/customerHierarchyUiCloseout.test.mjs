@@ -26,7 +26,9 @@ test('Customer Detail owns browser history but has no duplicate in-card Back but
 })
 
 test('Branch Directory remains internal and the empty Unlinked Branches tab is removed',()=>{
-  assert.match(workspace,/tabs=\[\['customers',[^\]]+\],\['branch-review',[^\]]+\]\]/)
+  const tabs=workspace.split('export function CustomerBranchHub')[1].split('validTabs=')[0]
+  for(const key of ['customers','schedules','locations','branch-review','settings'])assert.ok(tabs.includes("['"+key+"',"))
+  assert.ok(!tabs.includes("['branches',"))
   assert.match(workspace,/validTabs=\[\.\.\.tabs,\['branches',t\('master\.branch'\)\]\]/)
   assert.match(workspace,/tab==='branch-review'\?<BranchLifecycleReviewPage/)
   assert.doesNotMatch(workspace,/UnlinkedBranchesPage|\['unlinked'/)

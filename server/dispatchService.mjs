@@ -1039,7 +1039,7 @@ export function requestDedupeKey(payload){return createHash('sha256').update([pa
 export { iso, newCustomerMissing }
 
 // Incremental reconciliation never rebuilds an existing route, order, vehicle or driver.
-export function reconcileScheduleWindow({startDate=iso(),changedBy='System',confirmedDate=null,expectedRevision=null}={},database=defaultDb){
+export function reconcileScheduleWindow({startDate=iso(),changedBy='System',confirmedDate=null,expectedRevision=null,branchIds=null}={},database=defaultDb){
  return withImmediateTransaction(database,()=>{
   if(confirmedDate){const confirmed=dayByDate(database,confirmedDate);if(!confirmed||confirmed.revision!==Number(expectedRevision))throw new Error('安排已改变，请刷新后确认');if(confirmed.status==='completed')throw new Error('已完成日期不能补排')}
   const review=[],schedules=database.prepare("SELECT s.*,b.branch_name FROM branch_schedules s JOIN branches b ON b.id=s.branch_id LEFT JOIN customers c ON c.id=b.customer_id WHERE s.is_active=1 AND b.lifecycle_status='ACTIVE' AND b.is_active=1 AND LOWER(b.status)='active' AND COALESCE(c.is_active,1)=1").all()
@@ -1049,6 +1049,7 @@ export function reconcileScheduleWindow({startDate=iso(),changedBy='System',conf
    const exceptions=database.prepare('SELECT * FROM schedule_exceptions WHERE original_date=? OR target_date=?').all(date,date)
    const expected=new Map()
    for(const schedule of schedules){
+    if(branchIds&&!branchIds.includes(schedule.branch_id))continue
     const extra=exceptions.some(e=>e.schedule_id===schedule.id&&e.target_date===date&&['move_date','add_extra_collection','customer_request'].includes(e.exception_type))
     const removed=exceptions.some(e=>e.schedule_id===schedule.id&&e.original_date===date&&['move_date','cancel_date','pause_once'].includes(e.exception_type)&&(e.exception_type!=='move_date'||e.target_date!==date))
     if(!removed&&(extra||scheduleMatchesDate(schedule,date)))expected.set(schedule.branch_id,{schedule,extra})
@@ -1057,6 +1058,7 @@ export function reconcileScheduleWindow({startDate=iso(),changedBy='System',conf
    for(const {schedule,extra} of expected.values()){
     const existingStop=findBranchServiceDateStop(database,schedule.branch_id,date)
     if(existingStop){
+      if(branchIds&&plan){const desired=database.prepare('SELECT route_number n FROM weekly_route_plan_stops WHERE plan_id=? AND weekday=? AND branch_id=?').get(plan.id,weekdayForDate(date),schedule.branch_id);if(desired&&Number(existingStop.route_number)!==Number(desired.n))review.push({date,branchId:schedule.source_branch_id,branchName:schedule.branch_name,kind:'route_change',message:'Existing dispatch route differs from the updated schedule; supervisor review required.'})}
       if(isSunday(date)&&database.prepare('SELECT 1 FROM sunday_dispatch_setup WHERE dispatch_day_id=?').get(day.id)){
         const setting=sundaySettings(database,schedule.branch_id),desired=executionRoute(database,schedule.branch_id,date,existingStop.route_number)
         if(setting.sundayConfirmed&&(!setting.effectiveDate||date>=setting.effectiveDate)&&desired&&Number(desired)!==Number(existingStop.route_number)){
@@ -1100,6 +1102,7 @@ export function reconcileScheduleWindow({startDate=iso(),changedBy='System',conf
    }
    const existing=database.prepare("SELECT ds.*,b.jodoo_branch_id branchCode,b.branch_name FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id JOIN branches b ON b.id=ds.branch_id WHERE dt.dispatch_day_id=? AND ds.status<>'cancelled' AND ds.source_schedule_id IS NOT NULL").all(day.id)
    for(const stop of existing){
+    if(branchIds&&!branchIds.includes(stop.branch_id))continue
     if(expected.has(stop.branch_id))continue
     // Only a recorded permanent schedule edit may withdraw a previously generated occurrence.
     const edit=database.prepare("SELECT 1 FROM master_change_history WHERE entity_type='branch_schedule' AND entity_id=? LIMIT 1").get(String(stop.source_schedule_id));if(!edit)continue

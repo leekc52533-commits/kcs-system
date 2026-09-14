@@ -27,7 +27,7 @@ export async function apiRequest(url,options={}){
   const data=await response.json().catch(()=>({}))
   if(!response.ok){
     const requestId=data.requestId||response.headers.get('X-Request-ID')||''
-    const scheduleMessage=response.status===400&&/\/collection-schedule$/.test(url)&&data.details?.scheduleValidationMessage
+    const scheduleMessage=response.status===400&&/(?:\/collection-schedule|\/customer-workspace)$/.test(url)&&data.details?.scheduleValidationMessage
     const message=typeof scheduleMessage==='string'?translateUi(activeLanguage,scheduleMessage):apiErrorMessage(data)
     const error=new Error(requestId?`${message} (Reference: ${requestId})`:message)
     error.code=data.errorCode||data.code||'UNKNOWN_ERROR'
