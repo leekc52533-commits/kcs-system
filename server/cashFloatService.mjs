@@ -29,7 +29,7 @@ function serializeAccount(row,database,date=kuchingDate()){
   return{employeeId:Number(row.employeeId),employeeCode:row.employeeCode,employeeName:row.employeeName,targetFloatCents:target,lowBalanceThresholdCents:threshold,balanceCents:balance,suggestedTopUpCents:Math.max(0,target-balance),lowBalance:Boolean(row.isActive)&&balance<=threshold,isActive:Boolean(row.isActive),today:{topUpCents:Number(today.topUpCents),purchaseCents:Number(today.purchaseCents),expenseCents:Number(today.expenseCents)}}
 }
 
-function refreshAlert(database,employeeId,when=nowKuching()){
+export function refreshAlert(database,employeeId,when=nowKuching()){
   const row=accountRow(database,employeeId)
   if(!row)return null
   const low=Boolean(row.isActive)&&Number(row.balanceCents)<=Number(row.lowBalanceThresholdCents),active=database.prepare("SELECT id FROM cash_float_alerts WHERE employee_id=? AND status='active'").get(Number(employeeId))
