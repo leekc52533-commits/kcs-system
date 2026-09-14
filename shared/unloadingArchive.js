@@ -1,8 +1,8 @@
 export const unloadingColumns=['date','time','code','vehicle','driverName','crew','tripNumber','locationName','confirmedWeightKg','status','correctedCount']
 export const unloadingLabels={
- en:['Date','Time (Malaysia)','Unloading No.','Vehicle','Driver','Crew','Trip','Factory / Location','Weight (kg)','Status','Corrections'],
- ms:['Tarikh','Masa (Malaysia)','No. pemunggahan','Kenderaan','Pemandu','Kelindan','Perjalanan','Kilang / Lokasi','Berat (kg)','Status','Pembetulan'],
- zh:['卸货日期','时间（马来西亚）','卸货编号','车牌','司机','跟车员','趟次','工厂 / 地点','重量（kg）','状态','修改次数']
+ en:['Date','Time','Unloading No.','Vehicle','Driver','Crew','Trip','Factory / Location','Weight (kg)','Status','Corrections'],
+ ms:['Tarikh','Masa','No. pemunggahan','Kenderaan','Pemandu','Kelindan','Perjalanan','Kilang / Lokasi','Berat (kg)','Status','Pembetulan'],
+ zh:['卸货日期','时间','卸货编号','车牌','司机','跟车员','趟次','工厂 / 地点','重量（kg）','状态','修改次数']
 }
 export const unloadingStatus={en:{confirmed:'Confirmed',pending_confirmation:'Pending confirmation'},ms:{confirmed:'Disahkan',pending_confirmation:'Menunggu pengesahan'},zh:{confirmed:'已确认',pending_confirmation:'待确认'}}
 export function filterUnloading(rows,query={}){

@@ -1,1 +1,3 @@
 .unloading-archive .unloading-download{display:inline-flex;align-items:center;justify-content:center;width:42px;height:42px;padding:8px;background:#fff;border:1px solid #b8d9d2;border-radius:12px;color:#176e60}.unloading-archive .expense-toolbar h2{margin:0}.unloading-archive td a{font-weight:700;color:#176e60;text-decoration:underline}
+
+.topbar>div>strong.unloading-page-title{font-size:26px;line-height:1.2;font-weight:800}@media(max-width:600px){.topbar>div>strong.unloading-page-title{font-size:22px}}
