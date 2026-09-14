@@ -11,3 +11,12 @@
 /* Toolbar buttons must not inherit standalone BackButton page margins. */
 .expense-records .expense-toolbar>button{margin:0!important;align-self:center}
 .unloading-archive .expense-toolbar{justify-content:flex-start;gap:10px}
+
+/* Common document archive spacing and typography, including void requests. */
+.bill-void-desktop{max-width:none;width:auto;margin:0;gap:16px;padding:24px 20px 64px}
+.bill-void-desktop>p{margin:0}
+.bill-void-desktop>label{margin:0}
+.bill-void-desktop .archive-table>table>thead>tr>th,
+.purchase-archive .archive-table>table>thead>tr>th{font-size:16px;font-weight:800;line-height:1.4;padding:14px 10px;background:#f1f5f7;color:#536575;text-align:left;white-space:nowrap}
+.purchase-archive .archive-table>table>tbody>tr:not(.bill-detail)>td{font-size:14px;line-height:1.5;padding:14px 10px;vertical-align:middle}
+.bill-void-desktop .archive-table .bill-number{padding:0;border:0;border-radius:0;background:transparent;font:inherit;font-weight:700}
