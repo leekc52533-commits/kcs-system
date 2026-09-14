@@ -1,3 +1,4 @@
+import {canReadCompanyDocuments} from './documentReadAccess.mjs'
 import {previewEmployees,previewAccount,previewReadUrl} from './employeePreviewService.mjs'
 import {driverGuideStatus,acknowledgeDriverGuide} from './driverGuideService.mjs'
 import {noticeRecipients,publishNotice,employeeNotices,acknowledgeNotice,noticeManagement,noticeReadStatus} from './noticeBoardService.mjs'
@@ -89,7 +90,7 @@ const canManageOperationalLocations=session=>['owner_admin','operations_admin','
 const canManageBranches=session=>['owner_admin','operations_admin','supervisor','office'].includes(session.role)
 const canViewIdentity=session=>accountCan(session,'sensitive_data')||accountCan(session,'employee_identity_sensitive')
 const canViewPayroll=session=>accountCan(session,'sensitive_data')||accountCan(session,'employee_payroll_sensitive')
-const canViewPurchaseBills=session=>['owner','owner_admin','operations_admin','supervisor','office','dispatcher'].includes(String(session.role).toLowerCase())
+const canViewPurchaseBills=canReadCompanyDocuments
 const canManageCashFloat=session=>['owner','owner_admin','operations_admin','supervisor','office'].includes(String(session.role).toLowerCase())
 const canApproveDriverDefer=canManageDispatch
 

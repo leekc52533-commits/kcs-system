@@ -1,9 +1,9 @@
+import {canReadCompanyDocuments} from './documentReadAccess.mjs'
 import {db as defaultDb} from './database.mjs'
 import {withImmediateTransaction} from './branchServiceDateGuard.mjs'
 import {reverseVoidedPurchase} from './cashFloatService.mjs'
 
 const reviewers=['owner','owner_admin','operations_admin','supervisor']
-const viewers=[...reviewers,'office','dispatcher']
 const fail=(code,statusCode=409)=>Object.assign(new Error(code),{code,statusCode})
 export function voidActor(context,db){
  const person=db.prepare("SELECT id,name FROM employees WHERE id=? AND is_active=1 AND employment_status='active'").get(Number(context.employeeId))
@@ -14,10 +14,10 @@ export function voidEvent(db,id,action,actor,detail={}){
  db.prepare('INSERT INTO purchase_bill_void_events(request_id,action,actor_id,actor_name,created_at,detail_json) VALUES(?,?,?,?,?,?)').run(id,action,actor.employeeId,actor.employeeName,new Date(actor.now||Date.now()).toISOString(),JSON.stringify(detail))
 }
 export function listBillVoids(query={},context={},db=defaultDb){
- const actor=voidActor(context,db),all=viewers.includes(actor.role)&&query.scope!=='own',search=String(query.search||'').trim().toLowerCase()
+ const actor=voidActor(context,db),all=canReadCompanyDocuments(actor)&&query.scope!=='own',search=String(query.search||'').trim().toLowerCase()
  const items=db.prepare(`SELECT b.*,p.id proofId FROM purchase_bills b LEFT JOIN purchase_payment_proofs p ON p.purchase_bill_id=b.id WHERE (?=1 OR b.driver_employee_id=?) ORDER BY b.id DESC`).all(all?1:0,actor.employeeId).filter(b=>!search||[b.bill_number,b.customer_name_snapshot,b.branch_name_snapshot,b.branch_code_snapshot,b.driver_name_snapshot].some(x=>String(x||'').toLowerCase().includes(search))).map(b=>{
   const requests=db.prepare('SELECT * FROM purchase_bill_void_requests WHERE purchase_bill_id=? ORDER BY id DESC').all(b.id)
-  return {...b,canViewReplacement:b.driver_employee_id===actor.employeeId&&requests.some(r=>r.status==='approved'&&r.replacement_bill_id),items:db.prepare('SELECT product_name_snapshot,quantity,unit_snapshot,line_total_cents FROM purchase_bill_items WHERE purchase_bill_id=? ORDER BY id').all(b.id),requests,canRequest:b.status==='issued'&&b.driver_employee_id===actor.employeeId&&!requests.some(r=>r.status==='pending'),canReissue:b.driver_employee_id===actor.employeeId&&b.status==='voided'&&requests.some(r=>r.status==='approved'&&!r.replacement_bill_id)}
+  return {...b,canViewReplacement:(canReadCompanyDocuments(actor)||b.driver_employee_id===actor.employeeId)&&requests.some(r=>r.status==='approved'&&r.replacement_bill_id),items:db.prepare('SELECT product_name_snapshot,quantity,unit_snapshot,line_total_cents FROM purchase_bill_items WHERE purchase_bill_id=? ORDER BY id').all(b.id),requests,canRequest:b.status==='issued'&&b.driver_employee_id===actor.employeeId&&!requests.some(r=>r.status==='pending'),canReissue:b.driver_employee_id===actor.employeeId&&b.status==='voided'&&requests.some(r=>r.status==='approved'&&!r.replacement_bill_id)}
  })
  return {items,canReview:reviewers.includes(actor.role)}
 }

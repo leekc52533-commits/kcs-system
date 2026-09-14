@@ -42,3 +42,17 @@ test('desktop review confirms the bill and amount before posting approval',async
  assert.equal(calls.find(c=>c.options.method==='POST').url,'/api/bill-voids/3/approve')
  await act(async()=>root.unmount())
 })
+
+test('management replacement view never shows proof upload or reissue form even with missing cash proof',async()=>{
+ const previousFetch=fetch
+ fetch=async url=>({ok:true,json:async()=>url.endsWith('/replacement')?{readOnly:true,products:[],bill:{billNumber:'R-1',serviceDate:'2026-09-09',branchName:'Branch',items:[],totalCents:2000,paymentMethod:'Cash',paymentProofUploaded:false}}:{items:[{...original,status:'voided',canRequest:false,canViewReplacement:true,requests:[{id:3,status:'approved',replacement_bill_id:13}]}],canReview:false}})
+ const root=createRoot(document.getElementById('root'))
+ try{
+  await act(async()=>root.render(React.createElement(I18nProvider,{language:'en'},React.createElement(Page,{mobile:true}))))
+  await click([...document.querySelectorAll('button')].find(b=>b.textContent==='View replacement bill'))
+  assert.match(document.body.textContent,/R-1/)
+  assert.equal(document.querySelector('input[type="file"]'),null)
+  assert.equal(document.querySelector('form button:not([type="button"])'),null)
+  assert.equal(document.querySelector('form select'),null)
+ }finally{await act(async()=>root.unmount());fetch=previousFetch}
+})

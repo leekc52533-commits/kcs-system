@@ -134,3 +134,35 @@ test('v56 migration rebuild keeps IDs, foreign keys, items, photo and ledger; pa
  assert.match(unique,/WHERE status='issued'/)
  db.close();fs.rmSync(folder,{recursive:true,force:true})
 })
+
+test('office and management can read other issuers replacement bills without gaining write rights',()=>{
+ const {db,bill:original,payload,manager,other}=setup()
+ try{
+  const request=requestBillVoid(original.id,{reason:'Wrong quantity'},context,db)
+  decideBillVoid(request.id,'approved',{},manager,db)
+  const replacement=reissuePurchaseBill(original.id,payload,context,db)
+  for(const role of ['office','supervisor','operations_admin','owner_admin']){
+   const reader={...manager,role}
+   const archive=listBillVoids({},reader,db)
+   assert.equal(archive.items.length,2)
+   assert.equal(Boolean(archive.items.find(b=>b.id===original.id).canViewReplacement),true)
+   const result=getReplacementBilling(original.id,reader,db)
+   assert.equal(result.readOnly,true)
+   assert.equal(result.bill.id,replacement.id)
+   assert.equal(result.bill.driverName,'Driver')
+   assert.equal(result.bill.paymentProofUploaded,false)
+   assert.deepEqual(result.products,[])
+   assert.throws(()=>reissuePurchaseBill(original.id,payload,reader,db),{code:'PERMISSION_DENIED'})
+   assert.throws(()=>uploadReplacementProof(original.id,{},reader,db),{code:'PERMISSION_DENIED'})
+   assert.throws(()=>requestBillVoid(replacement.id,{reason:'x'},reader,db),{code:'PERMISSION_DENIED'})
+   if(role==='office')assert.equal(archive.canReview,false)
+  }
+  assert.equal(listBillVoids({},other,db).items.length,0)
+  assert.throws(()=>getReplacementBilling(original.id,other,db),{code:'PERMISSION_DENIED'})
+  assert.equal(getReplacementBilling(original.id,context,db).readOnly,false)
+  // Historical linkage remains readable after a second void.
+  const next=requestBillVoid(replacement.id,{reason:'Second correction'},context,db)
+  decideBillVoid(next.id,'approved',{},manager,db)
+  assert.equal(getReplacementBilling(original.id,{...manager,role:'office'},db).bill.id,replacement.id)
+ }finally{db.close()}
+})

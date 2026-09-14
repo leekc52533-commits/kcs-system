@@ -4454,3 +4454,7 @@ Object.assign(messages.en,{"menu.folderHelp": "Create or rename folders. Use Mov
 Object.assign(messages.ms,{"menu.folderHelp": "Cipta atau namakan semula folder. Gunakan Pindah ke, seret atau anak panah untuk menyusun halaman. Simpan untuk digunakan seluruh syarikat.", "menu.folderName": "Nama folder baharu", "menu.addFolder": "Cipta folder", "menu.renameFolder": "Nama folder", "menu.moveTo": "Pindah ke", "menu.emptyFolder": "Folder kosong. Pindahkan halaman ke sini melalui senarai pilihan.", "menu.discard": "Buang perubahan menu yang belum disimpan dan tutup?"})
 
 Object.assign(messages.zh,{"menu.folderHelp": "可新增或改名文件夹，用“移到”、拖动或上下箭头整理页面。保存后全公司使用这个菜单。", "menu.folderName": "新文件夹名称", "menu.addFolder": "新建文件夹", "menu.renameFolder": "文件夹名称", "menu.moveTo": "移到", "menu.emptyFolder": "文件夹内暂无页面。可用页面旁的下拉框移入。", "menu.discard": "菜单有未保存的修改，要放弃修改并关闭吗？"})
+
+Object.assign(messages.en,{'void.viewReplacement':'View replacement bill'})
+Object.assign(messages.ms,{'void.viewReplacement':'Lihat bil gantian'})
+Object.assign(messages.zh,{'void.viewReplacement':'查看重开单据'})

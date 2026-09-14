@@ -1,3 +1,4 @@
+import {canReadCompanyDocuments} from './documentReadAccess.mjs'
 import {temporaryProducts,temporaryPrice,temporaryIntake,notifyIntakeBill,assertNoPendingTripApproval,isAdHocCollection} from './temporaryIntakeBilling.mjs'
 import {voidActor,voidEvent} from './purchaseBillVoidService.mjs'
 import crypto from 'node:crypto'
@@ -38,9 +39,9 @@ function stopForDriver(database,stopId,{employeeId,role,today=kuchingDate()}={},
   return{...stop,paymentMethod:payment==='cash'?'Cash':'Credit'}
 }
 
-function bill(database,stopId){
+function bill(database,stopId,billId=null){
   const header=database.prepare(`SELECT pb.*,EXISTS(SELECT 1 FROM purchase_payment_proofs pp WHERE pp.purchase_bill_id=pb.id) paymentProofUploaded
-    FROM purchase_bills pb WHERE pb.dispatch_stop_id=? AND pb.status='issued'`).get(Number(stopId))
+    FROM purchase_bills pb WHERE pb.dispatch_stop_id=? AND ((? IS NULL AND pb.status='issued') OR pb.id=?)`).get(Number(stopId),billId,billId)
   if(!header)return null
   const items=database.prepare(`SELECT id,product_id productId,material_id materialId,product_code_snapshot productCode,product_name_snapshot productName,
     short_form_snapshot shortForm,unit_snapshot unit,quantity,unit_price_cents unitPriceCents,line_total_cents lineTotalCents,
@@ -130,8 +131,17 @@ function replacementStop(database,billId,context){
  return{id:b.dispatch_stop_id,tripId:b.dispatch_trip_id,dayId:b.dispatch_day_id,branchId:b.branch_id,customerId:b.customer_id,serviceDate:b.service_date,vehicleId:b.vehicle_id,driverId:b.driver_employee_id,branchCode:b.branch_code_snapshot,branchName:b.branch_name_snapshot,customerName:b.customer_name_snapshot,driverName:actor.employeeName,vehicleCode:b.vehicle_code_snapshot,registrationNumber:b.registration_number_snapshot,paymentMethod:b.payment_method,arrived:true}
 }
 export function getReplacementBilling(billId,context={},database=defaultDb){
+ const actor=voidActor(context,database)
+ const original=database.prepare('SELECT * FROM purchase_bills WHERE id=?').get(Number(billId))
+ if(canReadCompanyDocuments(actor)&&original?.driver_employee_id!==actor.employeeId){
+  const approved=database.prepare("SELECT replacement_bill_id FROM purchase_bill_void_requests WHERE purchase_bill_id=? AND status='approved'").get(Number(billId))
+  if(!original||!approved?.replacement_bill_id)throw fail('Replacement not found.','NOT_FOUND',404)
+  const replacement=bill(database,original.dispatch_stop_id,approved.replacement_bill_id)
+  if(!replacement)throw fail('Replacement not found.','NOT_FOUND',404)
+  return {readOnly:true,bill:replacement,products:[]}
+ }
  const stop=replacementStop(database,billId,context)
- return {stop,bill:bill(database,stop.id),products:(temporaryProducts(database,stop.id)||listBranchProducts(stop.branchId,database)).filter(p=>p.isSelectable&&p.currentPrice!=null)}
+ return {readOnly:false,stop,bill:bill(database,stop.id),products:(temporaryProducts(database,stop.id)||listBranchProducts(stop.branchId,database)).filter(p=>p.isSelectable&&p.currentPrice!=null)}
 }
 export function reissuePurchaseBill(billId,payload={},context={},database=defaultDb){
  return withImmediateTransaction(database,()=>{
