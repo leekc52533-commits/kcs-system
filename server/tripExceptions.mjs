@@ -46,3 +46,14 @@ export function completeExceptionTrip(id,payload,ctx={},db=defaultDb){access(ctx
  audit(db,t,ctx,'trip_exception_complete',t.id,{status:t.execution_status},{status:'completed',tripId:t.id,reason,actorName:ctx.employeeName||''})
  return{status:'completed',tripId:t.id}
  })}
+
+// Only call after verifying the requesting driver's trip ownership and service date.
+export function driverTripBlockers(db,tripId){
+ const rows=stopRows(db,tripId),current=rows.find(s=>s.override_note!=='driver_deferred')
+ return rows.map(s=>{
+ const driverIssue=['arrival','bill','proof','finish_stop'].includes(s.issue)
+ const next=driverIssue&&s.id!==current?.id&&s.override_note!=='driver_deferred'
+ return{stopId:s.id,stopSequence:s.stop_sequence,branchName:s.branch_name||'',issue:next?'order':s.issue,
+ canGo:driverIssue&&!next&&s.branch_status==='active',contactSupervisor:!driverIssue}
+ })
+}

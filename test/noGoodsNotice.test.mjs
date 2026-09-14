@@ -185,3 +185,31 @@ test('exception cancellation rolls back on audit failure and never closes other 
  assert.equal(db.prepare('SELECT status FROM dispatches WHERE id=?').get(original.dispatch_id).status,'completed')
  assert.equal(db.prepare('SELECT status FROM dispatch_days WHERE id=?').get(original.dispatch_day_id).status,'in_progress')
 })
+
+import {driverTripBlockers} from '../server/tripExceptions.mjs'
+test('driver completion returns safe actionable blockers after ownership validation without changing stops',t=>{
+ const{db,ids,trip}=setup(t),before=db.prepare('SELECT * FROM dispatch_stops WHERE dispatch_trip_id=?').all(trip)
+ assert.equal(driverToday(context,db).trips[0].canAttemptComplete,true)
+ assert.throws(()=>completeDriverTrip(trip,context,db),e=>{
+  assert.equal(e.code,'UNFINISHED_STOPS');const d=e.publicDetails.details;assert.equal(d.tripId,trip)
+  assert.equal(d.blockers[0].issue,'arrival');assert.equal(d.blockers[0].canGo,true)
+  assert.equal(d.blockers[1].issue,'order');assert.equal(d.blockers[1].canGo,false)
+  assert.deepEqual(Object.keys(d.blockers[0]).sort(),['branchName','canGo','contactSupervisor','issue','stopId','stopSequence'].sort());return true
+ })
+ assert.deepEqual(db.prepare('SELECT * FROM dispatch_stops WHERE dispatch_trip_id=?').all(trip),before)
+ assert.throws(()=>completeDriverTrip(trip,{...context,employeeId:2},db),e=>e.code==='PERMISSION_DENIED'&&!e.publicDetails.details)
+ db.exec('UPDATE dispatches SET assistant_id=4');assert.equal(driverToday({...context,employeeId:4,role:'crew'},db).trips[0].canAttemptComplete,false)
+ db.prepare("UPDATE branches SET status='closed' WHERE id=(SELECT branch_id FROM dispatch_stops WHERE id=?)").run(ids[0])
+ assert.throws(()=>completeDriverTrip(trip,context,db),e=>{const rows=e.publicDetails.details.blockers;assert.equal(rows[0].contactSupervisor,true);assert.equal(rows[0].canGo,false);assert.equal(rows[1].canGo,false);return true})
+})
+test('driver blockers identify billing, cash proof, finish and approvals',t=>{
+ const{db,ids,trip}=setup(t)
+ db.prepare("UPDATE dispatch_stops SET status='active',arrived_at='2026-09-10T10:00:00+08:00' WHERE id=?").run(ids[0])
+ assert.equal(driverTripBlockers(db,trip)[0].issue,'bill')
+ db.prepare(`INSERT INTO purchase_bills(bill_number,dispatch_stop_id,dispatch_trip_id,dispatch_day_id,branch_id,driver_employee_id,vehicle_id,service_date,customer_name_snapshot,branch_code_snapshot,branch_name_snapshot,driver_name_snapshot,vehicle_code_snapshot,payment_method,weight_method,print_choice,subtotal_cents,total_cents,issued_at)
+ SELECT 'P-test',s.id,t.id,t.dispatch_day_id,s.branch_id,1,1,?,'Customer','B1','Branch 1','Driver','V1','Cash','on_site','no_print',100,100,? FROM dispatch_stops s JOIN dispatch_trips t ON t.id=s.dispatch_trip_id WHERE s.id=?`).run(today,today,ids[0])
+ assert.equal(driverTripBlockers(db,trip)[0].issue,'proof')
+ db.exec("UPDATE purchase_bills SET payment_method='Credit'");assert.equal(driverTripBlockers(db,trip)[0].issue,'finish_stop')
+ db.prepare("INSERT INTO driver_date_requests(dispatch_stop_id,employee_id,source_date,target_date,reason) VALUES(?,1,?,'2026-09-17','Later')").run(ids[0],today)
+ const b=driverTripBlockers(db,trip)[0];assert.equal(b.issue,'approval');assert.equal(b.contactSupervisor,true);assert.equal(b.canGo,false)
+})
