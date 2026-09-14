@@ -1,3 +1,5 @@
+import ExpenseColumnOrder,{expenseColumnWords,readExpenseOrder} from './ExpenseColumnOrder.jsx'
+import ExpenseCorrection from './ExpenseCorrection.jsx'
 import ExpenseCorrectionCenter,{expenseNumber} from './ExpenseCorrectionCenter.jsx'
 import {createPortal} from 'react-dom'
 import BackButton from './BackButton.jsx'
@@ -7,7 +9,7 @@ import {useCallback,useEffect,useMemo,useRef,useState} from 'react'
 import {apiRequest as api} from './apiClient.js'
 import {proofData} from './paymentProofImage.js'
 import ProofPhotoPicker from './ProofPhotoPicker.jsx'
-import {useUi} from './i18n.jsx'
+import {useUi,useI18n} from './i18n.jsx'
 import './ExpenseRecordsPage.css'
 
 const categories=['Fuel','Services','Repair','Spare Parts','Road Tax','Puspakom','Insurance','Other']
@@ -16,9 +18,11 @@ const firstOfMonth=()=>`${today().slice(0,7)}-01`
 const money=cents=>`RM ${(Number(cents||0)/100).toFixed(2)}`
 const displayDate=value=>{const match=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(value||''));return match?`${match[3]}-${match[2]}-${match[1].slice(-2)}`:String(value||'')}
 const displayDateTime=value=>{const date=displayDate(value),time=String(value||'').match(/T(\d{2}:\d{2})/)?.[1];return time?`${date} ${time}`:date}
-const columns=[['serviceDateLabel','Date'],['expenseTypeLabel','Type'],['employeeName','Employee / Admin'],['category','Category'],['description','Description'],['amountLabel','Amount'],['paymentMethod','Payment Method'],['referenceNumber','Invoice / Reference Number'],['vehiclePlate','Vehicle'],['odometerKm','Odometer (km)'],['companyName','Company Name'],['tinNumber','TIN Number'],['remarks','Remarks'],['createdBy','Entered By'],['createdAtLabel','Entered Time'],['receiptLabel','Receipt']]
+const columns=[['expenseNumber','Expense No.'],['serviceDateLabel','Date'],['expenseTypeLabel','Type'],['employeeName','Employee / Admin'],['category','Category'],['description','Description'],['amountLabel','Amount'],['correctionStatus','Correction history'],['paymentMethod','Payment Method'],['referenceNumber','Invoice / Reference Number'],['vehiclePlate','Vehicle'],['odometerKm','Odometer (km)'],['companyName','Company Name'],['tinNumber','TIN Number'],['remarks','Remarks'],['createdBy','Entered By'],['createdAtLabel','Entered Time'],['receiptLabel','Receipt']]
 
 export default function ExpenseRecordsPage({onBack}){
+  const {language}=useI18n(),w=expenseColumnWords[language]||expenseColumnWords.en
+  const [columnOrder,setColumnOrder]=useState(()=>readExpenseOrder(columns.map(c=>c[0]))),[showColumns,setShowColumns]=useState(false),[historyItem,setHistoryItem]=useState(null)
   const [correction,setCorrection]=useState(false),[showExport,setShowExport]=useState(false)
   const ui=useUi(),tableRef=useRef(null),[openFilter,setOpenFilter]=useState(null)
   const[filters,setFilters]=useState({from:firstOfMonth(),to:today(),search:'',expenseType:'',category:'',employeeId:''}),[columnFilters,setColumnFilters]=useState({}),[sort,setSort]=useState({}),[data,setData]=useState(null),[error,setError]=useState(''),[message,setMessage]=useState(''),[loading,setLoading]=useState(false),[showForm,setShowForm]=useState(false),[busy,setBusy]=useState(false)
@@ -27,25 +31,30 @@ export default function ExpenseRecordsPage({onBack}){
   const load=useCallback(async()=>{const id=++requestId.current;setLoading(true);setError('');try{const result=await api(`/api/expenses?${query}`);if(id===requestId.current)setData(result)}catch(item){if(id===requestId.current)setError(item.message)}finally{if(id===requestId.current)setLoading(false)}},[query])
   useEffect(()=>{load();return()=>{requestId.current++}},[load])
 
-  const rows=useMemo(()=>(data?.items||[]).map(item=>({...item,serviceDateLabel:displayDate(item.serviceDate),expenseTypeLabel:item.expenseType==='admin'?'Admin Expense':'Employee Expense',amountLabel:money(item.amountCents),createdAtLabel:displayDateTime(item.createdAt),receiptLabel:item.hasProof?'Uploaded':'Missing'})),[data])
+  const rows=useMemo(()=>(data?.items||[]).map(item=>({...item,serviceDateLabel:displayDate(item.serviceDate),expenseTypeLabel:item.expenseType==='admin'?'Admin Expense':'Employee Expense',amountLabel:money(item.amountCents),createdAtLabel:displayDateTime(item.createdAt),expenseNumber:expenseNumber(item.recordKey),correctionStatus:item.correctionCount?'Corrected':'Unchanged',receiptLabel:item.hasProof?'Uploaded':'Missing'})),[data])
+  const orderedColumns=columnOrder.map(key=>columns.find(c=>c[0]===key)).filter(Boolean)
+  const columnLabel=(key,label)=>key==='expenseNumber'?w.number:key==='correctionStatus'?w.history:ui(label)
   const displayed=rows
   const save=async form=>{setBusy(true);setError('');setMessage('');try{const description=form.category==='Other'?form.otherDescription.trim():form.category;await api('/api/expenses',{method:'POST',body:JSON.stringify({...form,description:description||'Other',proof:await proofData(form.proof)})});setShowForm(false);setMessage('✓ Expense and receipt photo saved.');await load()}catch(item){setError(item.status===413?'The receipt upload is too large. Retake the photo.':item.message)}finally{setBusy(false)}}
   return <div className="page purchase-archive expense-records">
     <div className="expense-toolbar expense-icon-toolbar"><BackButton fallback={onBack} iconOnly className="secondary"/><button type="button" title={ui("＋ Record Expense")} aria-label={ui("＋ Record Expense")} className={showForm?'active':''} onClick={()=>{setOpenFilter(null);setShowForm(true)}}><ExpenseActionIcon kind="add"/></button>
       {data?.canCorrect&&<ExpenseCorrectionCenter.Entry iconOnly onClick={()=>setCorrection(true)}/>}
       <button type="button" title={ui("Download Excel with Receipts")} aria-label={ui("Download Excel with Receipts")} aria-haspopup="dialog" aria-expanded={showExport} onClick={()=>{setOpenFilter(null);setShowExport(true)}}><ExpenseActionIcon kind="download"/></button>
+      <button type="button" title={w.title} aria-label={w.title} onClick={()=>{setOpenFilter(null);setShowColumns(true)}}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 4v16M3 9h18"/></svg></button>
     </div>
+    {showColumns&&<ExpenseColumnOrder order={columnOrder} columns={columns.map(([k,l])=>[k,columnLabel(k,l)])} w={w} onSave={setColumnOrder} onClose={()=>setShowColumns(false)}/>}
+    {historyItem&&<ExpenseCorrection readOnly item={historyItem} onClose={()=>setHistoryItem(null)}/>}
     {showExport&&<div className="cash-modal expense-export-modal" role="dialog" aria-modal="true" aria-label={ui("Download Excel with Receipts")} onClick={e=>{if(e.target===e.currentTarget)setShowExport(false)}} onKeyDown={e=>{if(e.key==='Escape')setShowExport(false)}}><form onSubmit={e=>{e.preventDefault();window.location.href=`/api/expenses/export.xlsx?${query}`}}><header><h2>{ui("Download Excel with Receipts")}</h2><button type="button" title={ui("Close")} aria-label={ui("Close")} onClick={()=>setShowExport(false)}>×</button></header>
       <label>{ui("From Date")}<input autoFocus required aria-label={ui("From Date")} type="date" value={filters.from} max={filters.to} onChange={event=>setFilters({...filters,from:event.target.value})}/></label>
       <label>{ui("To Date")}<input required aria-label={ui("To Date")} type="date" value={filters.to} min={filters.from} onChange={event=>setFilters({...filters,to:event.target.value})}/></label>
       <footer><button type="submit" title={ui("Download Excel with Receipts")} aria-label={ui("Download Excel with Receipts")} disabled={!filters.from||!filters.to||filters.from>filters.to}><ExpenseActionIcon kind="download"/></button></footer>
     </form></div>}
     {message&&<div className="data-success">{message}</div>}{error&&<div className="data-error">{error}</div>}{loading&&!data&&<div className="data-loading">{ui("Loading Expense Records\u2026")}</div>}
-    <div className="archive-table" ref={tableRef}><table className="expense-table"><thead><tr><th>{ui("Expense No.")}</th>{columns.map(([key,label])=>{
+    <div className="archive-table" ref={tableRef}><table className="expense-table"><thead><tr>{orderedColumns.map(([key,label])=>{
  const translated=['expenseTypeLabel','category','paymentMethod','receiptLabel','proofLabel','statusLabel']
- const options=(data?.filterOptions?.[key]||['',...new Set(rows.map(row=>String(row[key]??'')).filter(Boolean))]).map(value=>({value,label:value===''?ui('Blank'):translated.includes(key)?ui(value):value}))
- return <FilterHeader key={key} label={ui(label)} open={openFilter===key} onOpen={()=>setOpenFilter(key)} onClose={()=>setOpenFilter(null)} value={columnFilters[key]??null} sortDirection={sort.key===key?sort.direction:null} onSort={direction=>setSort(direction?{key,direction}:{})} options={options} search={key==='description'?filters.search:undefined} onSearch={key==='description'?value=>setFilters(current=>({...current,search:value})):undefined} onChange={value=>setColumnFilters(current=>({...current,[key]:value}))}/>
- })}</tr></thead><tbody>{displayed.map(item=><tr key={item.recordKey}><td data-i18n-raw>{expenseNumber(item.recordKey)}</td><td>{item.serviceDateLabel}</td><td><span className={`expense-type ${item.expenseType}`}>{ui(item.expenseTypeLabel)}</span></td><td><b>{item.employeeName}</b><small>{item.employeeCode||''}</small></td><td><span className="expense-category">{ui(item.category)}</span></td><td>{item.description||'—'}</td><td><b>{item.amountLabel}</b></td><td>{ui(item.paymentMethod||'—')}</td><td data-i18n-raw>{item.referenceNumber||'—'}</td>{['vehiclePlate','odometerKm','companyName','tinNumber','remarks'].map(key=><td key={key} data-i18n-raw>{item[key]??'—'}</td>)}<td>{item.createdBy||'—'}</td><td>{item.createdAtLabel}</td><td>{item.hasProof?<a href={`/api/expenses/${item.recordKey}/receipt`} target="_blank" rel="noreferrer">{ui("View receipt")}</a>:'Missing'}</td></tr>)}</tbody></table>{!loading&&data&&!displayed.length&&<div className="archive-empty">{ui("No Expense Records found for this selection.")}</div>}</div>
+ const options=(data?.filterOptions?.[key]||['',...new Set(rows.map(row=>String(row[key]??'')).filter(Boolean))]).map(value=>({value,label:value===''?ui('Blank'):key==='correctionStatus'?(value==='Corrected'?w.corrected:w.unchanged):translated.includes(key)?ui(value):value}))
+ return <FilterHeader key={key} label={columnLabel(key,label)} open={openFilter===key} onOpen={()=>setOpenFilter(key)} onClose={()=>setOpenFilter(null)} value={columnFilters[key]??null} sortDirection={sort.key===key?sort.direction:null} onSort={direction=>setSort(direction?{key,direction}:{})} options={options} search={key==='description'?filters.search:undefined} onSearch={key==='description'?value=>setFilters(current=>({...current,search:value})):undefined} onChange={value=>setColumnFilters(current=>({...current,[key]:value}))}/>
+ })}</tr></thead><tbody>{displayed.map(item=><tr key={item.recordKey}>{orderedColumns.map(([key])=><td key={key}>{key==='correctionStatus'?(item.correctionCount?<button type="button" className="expense-corrected-tag" onClick={()=>setHistoryItem(item)}>{w.corrected} ({item.correctionCount})</button>:w.unchanged):key==='employeeName'?<><b data-i18n-raw>{item.employeeName}</b><small data-i18n-raw>{item.employeeCode||''}</small></>:key==='amountLabel'?<b>{item.amountLabel}</b>:key==='receiptLabel'?(item.hasProof?<a href={`/api/expenses/${item.recordKey}/receipt`} target="_blank" rel="noreferrer">{ui("View receipt")}</a>:ui('Missing')):['expenseTypeLabel','category','paymentMethod'].includes(key)?ui(item[key]||'—'):<span data-i18n-raw>{item[key]??'—'}</span>}</td>)}</tr>)}</tbody></table>{!loading&&data&&!displayed.length&&<div className="archive-empty">{ui("No Expense Records found for this selection.")}</div>}</div>
     {!showForm&&<TableBottomScroll scrollRef={tableRef}/>}
     {correction&&<ExpenseCorrectionCenter onClose={()=>setCorrection(false)} onSaved={load}/>}
     {showForm&&<ExpenseForm vehicles={data?.vehicles||[]} error={error} employees={data?.employees||[]} busy={busy} close={()=>setShowForm(false)} save={save}/>}

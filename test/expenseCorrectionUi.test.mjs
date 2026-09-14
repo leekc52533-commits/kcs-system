@@ -13,6 +13,7 @@ const{default:Page}=await vite.ssrLoadModule('/src/ExpenseCorrection.jsx'),{I18n
 const click=async n=>act(async()=>n.dispatchEvent(new MouseEvent('click',{bubbles:true})))
 const change=async(n,value)=>act(async()=>{Object.getOwnPropertyDescriptor(n.tagName==='TEXTAREA'?window.HTMLTextAreaElement.prototype:window.HTMLInputElement.prototype,'value').set.call(n,value);n.dispatchEvent(new Event('input',{bubbles:true}))})
 const{default:Center}=await vite.ssrLoadModule('/src/ExpenseCorrectionCenter.jsx')
+const{default:Records}=await vite.ssrLoadModule('/src/ExpenseRecordsPage.jsx')
 test('correction requires a reason, previews refund and sends original version only after confirmation',async()=>{
  let posts=0,saved=0,body;const current={amountCents:150000,revision:0,employee:true,history:[]}
  globalThis.fetch=async(url,options={})=>{if(options.method==='POST'){posts++;body=JSON.parse(options.body);return{ok:true,json:async()=>({...current,amountCents:150000,revision:0,history:[],status:'pending'})}}return{ok:true,json:async()=>current}}
@@ -40,4 +41,18 @@ test('central lookup uses full number and office sees pending requests without a
  if(canApprove)assert.equal([...document.querySelectorAll('button')].find(b=>b.textContent==='批准').disabled,true)
  }finally{await act(async()=>root.unmount())}
  }
+})
+
+test('saved column order keeps headers and data aligned and correction marker opens read-only history',async()=>{
+ localStorage.setItem('kcs.expense-column-order.v1',JSON.stringify(['amountLabel','correctionStatus','expenseNumber']))
+ globalThis.fetch=async(url)=>({ok:true,json:async()=>String(url).includes('/corrections')?{amountCents:15000,revision:1,history:[{id:1,oldAmountCents:150000,newAmountCents:15000,reason:'Extra zero',actorName:'Supervisor',createdAt:'2026-09-14T00:00:00Z'}]}:{items:[{recordKey:'employee-1',sourceId:1,expenseType:'employee',amountCents:15000,correctionCount:1,serviceDate:'2026-09-14',employeeName:'Driver',description:'Fuel'}],canCorrect:true}})
+ const root=createRoot(document.getElementById('root'))
+ try{
+ await act(async()=>root.render(React.createElement(I18nProvider,{language:'zh'},React.createElement(Records,{onBack(){}}))))
+ const cells=document.querySelectorAll('tbody tr:first-child td');assert.equal(cells[0].textContent,'RM 150.00');assert.equal(cells[1].textContent,'已更正 (1)');assert.equal(cells[2].textContent,'EXP-E-000001')
+ await click(cells[1].querySelector('button'));const dialog=document.querySelector('[role="dialog"]');assert.match(dialog.textContent,/1500.00/);assert.equal(dialog.querySelector('input'),null);assert.equal(dialog.querySelector('button[type="submit"]'),null)
+ await click(dialog.querySelector('button'))
+ await click(document.querySelector('button[aria-label="调整栏目"]'));const chooser=document.querySelector('[role="dialog"]');await click(chooser.querySelector('button[aria-label^="下移"]'));await act(async()=>chooser.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})))
+ assert.equal(JSON.parse(localStorage.getItem('kcs.expense-column-order.v1'))[0],'correctionStatus');assert.equal(document.querySelector('tbody td').textContent,'已更正 (1)')
+ }finally{await act(async()=>root.unmount());localStorage.removeItem('kcs.expense-column-order.v1')}
 })

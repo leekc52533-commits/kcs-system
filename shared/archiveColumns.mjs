@@ -4,11 +4,13 @@ const money=value=>`RM ${(Number(value||0)/100).toFixed(2)}`
 const entered=value=>{const time=text(value).match(/T(\d{2}:\d{2})/)?.[1];return time?`${date(value)} ${time}`:date(value)}
 export const archiveKeys={
  ledger:['serviceDateLabel','employeeName','transactionTypeLabel','amountLabel','paymentChannel','ledgerReference','description','createdBy','createdAtLabel','receiptLabel'],
- expense:['serviceDateLabel','expenseTypeLabel','employeeName','category','description','amountLabel','paymentMethod','referenceNumber','vehiclePlate','odometerKm','companyName','tinNumber','remarks','createdBy','createdAtLabel','receiptLabel'],
+ expense:['expenseNumber','correctionStatus','serviceDateLabel','expenseTypeLabel','employeeName','category','description','amountLabel','paymentMethod','referenceNumber','vehiclePlate','odometerKm','companyName','tinNumber','remarks','createdBy','createdAtLabel','receiptLabel'],
  purchase:['serviceDateLabel','billNumber','paymentMethod','customerName','branchName','issuedBy','crew','car','totalLabel','proofLabel','customerReceipt','statusLabel']
 }
 export function archiveValue(kind,row,key,sort=false){
  if(!archiveKeys[kind]?.includes(key))return ''
+ if(key==='expenseNumber')return row.recordKey?`EXP-${row.expenseType==='employee'?'E':'A'}-${String(row.sourceId).padStart(6,'0')}`:''
+ if(key==='correctionStatus')return sort?Number(row.correctionCount||0):row.correctionCount?'Corrected':'Unchanged'
  if(key==='serviceDateLabel')return sort?text(row.serviceDate):date(row.serviceDate)
  if(key==='createdAtLabel')return sort?text(row.createdAt):entered(row.createdAt)
  if(key==='transactionTypeLabel')return ({opening_balance:'Opening Balance',top_up:'Top Up',cash_purchase:'Cash Purchase',expense:'Expense',reversal:'Reversal',adjustment:'Adjustment'})[row.transactionType]||text(row.transactionType)

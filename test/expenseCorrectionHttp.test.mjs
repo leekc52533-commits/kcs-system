@@ -63,6 +63,6 @@ test('expense corrections require office submission and supervisor approval, rem
   assert.equal((await call('/api/expense-corrections/'+retry.requestId+'/approve',80005,'POST',{reason:'Verified'})).status,200);
   assert.equal(db.prepare('SELECT SUM(amount_cents) v FROM cash_float_transactions WHERE employee_id=80002').get().v,170000);
   assert.equal(db.prepare('SELECT amount_cents v FROM admin_expense_records WHERE id=?').get(admin).v,15000);
-  const rows=await (await call('/api/expenses?from=2026-09-12&to=2026-09-12',80006)).json();assert.equal(rows.items.find(r=>r.recordKey==='employee-'+expense).amountCents,15000);
+  const rows=await (await call('/api/expenses?from=2026-09-12&to=2026-09-12',80006)).json();assert.equal(rows.items.find(r=>r.recordKey==='employee-'+expense).amountCents,15000);assert.equal(rows.items.find(r=>r.recordKey==='employee-'+expense).correctionCount,1);assert.equal(rows.items.find(r=>r.recordKey==='employee-'+other).correctionCount,0);
  }finally{db?.close();child.kill();await new Promise(r=>child.exitCode!==null?r():child.once('exit',r));rmSync(dir,{recursive:true,force:true})}
 })

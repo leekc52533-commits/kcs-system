@@ -28,3 +28,5 @@
 .expense-filter-trigger>span[aria-hidden]{flex:none;white-space:nowrap}
 
 .expense-icon-toolbar{align-items:center;gap:8px}.expense-icon-toolbar>button,.expense-export-modal footer button{display:inline-flex;align-items:center;justify-content:center;flex:0 0 42px;width:42px;min-width:42px;height:42px;padding:9px}.expense-icon-toolbar>button svg{flex-shrink:0}.expense-export-modal header{gap:12px;align-items:flex-start}.expense-export-modal header>button{font-size:24px;min-width:36px}.expense-icon-toolbar>button:focus-visible{outline:2px solid #176b5b;outline-offset:3px}
+
+.expense-column-row{display:flex;gap:8px;align-items:center;border-bottom:1px solid #dce6e7;padding:8px 0}.expense-column-row>span{flex:1}.expense-column-row>button{min-width:34px;padding:5px}.expense-corrected-tag{border:1px solid #d19a41;border-radius:6px;background:#fff3d9;color:#80500b;padding:5px 8px;white-space:nowrap}.expense-column-modal header{gap:12px;align-items:flex-start}
