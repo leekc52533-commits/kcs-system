@@ -26,3 +26,5 @@
 
 .expense-filter-trigger:focus-visible{outline:2px solid #186e5c;outline-offset:4px}
 .expense-filter-trigger>span[aria-hidden]{flex:none;white-space:nowrap}
+
+.expense-icon-toolbar{align-items:center;gap:8px}.expense-icon-toolbar>button,.expense-export-modal footer button{display:inline-flex;align-items:center;justify-content:center;flex:0 0 42px;width:42px;min-width:42px;height:42px;padding:9px}.expense-icon-toolbar>button svg{flex-shrink:0}.expense-export-modal header{gap:12px;align-items:flex-start}.expense-export-modal header>button{font-size:24px;min-width:36px}.expense-icon-toolbar>button:focus-visible{outline:2px solid #176b5b;outline-offset:3px}

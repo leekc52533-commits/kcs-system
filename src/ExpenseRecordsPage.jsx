@@ -19,7 +19,7 @@ const displayDateTime=value=>{const date=displayDate(value),time=String(value||'
 const columns=[['serviceDateLabel','Date'],['expenseTypeLabel','Type'],['employeeName','Employee / Admin'],['category','Category'],['description','Description'],['amountLabel','Amount'],['paymentMethod','Payment Method'],['referenceNumber','Invoice / Reference Number'],['vehiclePlate','Vehicle'],['odometerKm','Odometer (km)'],['companyName','Company Name'],['tinNumber','TIN Number'],['remarks','Remarks'],['createdBy','Entered By'],['createdAtLabel','Entered Time'],['receiptLabel','Receipt']]
 
 export default function ExpenseRecordsPage({onBack}){
-  const [correction,setCorrection]=useState(false)
+  const [correction,setCorrection]=useState(false),[showExport,setShowExport]=useState(false)
   const ui=useUi(),tableRef=useRef(null),[openFilter,setOpenFilter]=useState(null)
   const[filters,setFilters]=useState({from:firstOfMonth(),to:today(),search:'',expenseType:'',category:'',employeeId:''}),[columnFilters,setColumnFilters]=useState({}),[sort,setSort]=useState({}),[data,setData]=useState(null),[error,setError]=useState(''),[message,setMessage]=useState(''),[loading,setLoading]=useState(false),[showForm,setShowForm]=useState(false),[busy,setBusy]=useState(false)
   const query=useMemo(()=>new URLSearchParams(Object.entries({...filters,columns:JSON.stringify(columnFilters),sortKey:sort.key,sortDirection:sort.direction}).filter(([,value])=>value)).toString(),[filters,columnFilters,sort])
@@ -31,11 +31,15 @@ export default function ExpenseRecordsPage({onBack}){
   const displayed=rows
   const save=async form=>{setBusy(true);setError('');setMessage('');try{const description=form.category==='Other'?form.otherDescription.trim():form.category;await api('/api/expenses',{method:'POST',body:JSON.stringify({...form,description:description||'Other',proof:await proofData(form.proof)})});setShowForm(false);setMessage('✓ Expense and receipt photo saved.');await load()}catch(item){setError(item.status===413?'The receipt upload is too large. Retake the photo.':item.message)}finally{setBusy(false)}}
   return <div className="page purchase-archive expense-records">
-    <div className="expense-toolbar"><BackButton fallback={onBack} iconOnly className="secondary"/><button type="button" className={showForm?'active':''} onClick={()=>{setOpenFilter(null);setShowForm(true)}}>{ui("＋ Record Expense")}</button>
-      <label>{ui("From Date")}<input aria-label={ui("From Date")} type="date" value={filters.from} max={filters.to} onChange={event=>setFilters({...filters,from:event.target.value})}/></label>
-      <label>{ui("To Date")}<input aria-label={ui("To Date")} type="date" value={filters.to} min={filters.from} onChange={event=>setFilters({...filters,to:event.target.value})}/></label>
-      <button type="button" onClick={()=>{window.location.href=`/api/expenses/export.xlsx?${query}`}}>{ui("Download Excel with Receipts")}</button></div>
-    {data?.canCorrect&&<ExpenseCorrectionCenter.Entry onClick={()=>setCorrection(true)}/>}
+    <div className="expense-toolbar expense-icon-toolbar"><BackButton fallback={onBack} iconOnly className="secondary"/><button type="button" title={ui("＋ Record Expense")} aria-label={ui("＋ Record Expense")} className={showForm?'active':''} onClick={()=>{setOpenFilter(null);setShowForm(true)}}><ExpenseActionIcon kind="add"/></button>
+      {data?.canCorrect&&<ExpenseCorrectionCenter.Entry iconOnly onClick={()=>setCorrection(true)}/>}
+      <button type="button" title={ui("Download Excel with Receipts")} aria-label={ui("Download Excel with Receipts")} aria-haspopup="dialog" aria-expanded={showExport} onClick={()=>{setOpenFilter(null);setShowExport(true)}}><ExpenseActionIcon kind="download"/></button>
+    </div>
+    {showExport&&<div className="cash-modal expense-export-modal" role="dialog" aria-modal="true" aria-label={ui("Download Excel with Receipts")} onClick={e=>{if(e.target===e.currentTarget)setShowExport(false)}} onKeyDown={e=>{if(e.key==='Escape')setShowExport(false)}}><form onSubmit={e=>{e.preventDefault();window.location.href=`/api/expenses/export.xlsx?${query}`}}><header><h2>{ui("Download Excel with Receipts")}</h2><button type="button" title={ui("Close")} aria-label={ui("Close")} onClick={()=>setShowExport(false)}>×</button></header>
+      <label>{ui("From Date")}<input autoFocus required aria-label={ui("From Date")} type="date" value={filters.from} max={filters.to} onChange={event=>setFilters({...filters,from:event.target.value})}/></label>
+      <label>{ui("To Date")}<input required aria-label={ui("To Date")} type="date" value={filters.to} min={filters.from} onChange={event=>setFilters({...filters,to:event.target.value})}/></label>
+      <footer><button type="submit" title={ui("Download Excel with Receipts")} aria-label={ui("Download Excel with Receipts")} disabled={!filters.from||!filters.to||filters.from>filters.to}><ExpenseActionIcon kind="download"/></button></footer>
+    </form></div>}
     {message&&<div className="data-success">{message}</div>}{error&&<div className="data-error">{error}</div>}{loading&&!data&&<div className="data-loading">{ui("Loading Expense Records\u2026")}</div>}
     <div className="archive-table" ref={tableRef}><table className="expense-table"><thead><tr><th>{ui("Expense No.")}</th>{columns.map(([key,label])=>{
  const translated=['expenseTypeLabel','category','paymentMethod','receiptLabel','proofLabel','statusLabel']
@@ -70,3 +74,5 @@ function ExpenseForm({employees,vehicles=[],initialEmployeeId='',error,busy,clos
 }
 
 export {ExpenseForm}
+
+function ExpenseActionIcon({kind}){return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{kind==='add'?<><path d="M14 2H5v20h14V7zM14 2v5h5M8 14h8M12 10v8"/></>:<path d="M12 3v12m-5-5 5 5 5-5M4 15v6h16v-6"/>}</svg>}
