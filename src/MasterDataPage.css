@@ -70,3 +70,22 @@
 .customer-branch-search-results{margin:18px 0 24px;padding:18px;border:1px solid #cddfd8;border-radius:16px;background:#f7fbf9}
 .customer-branch-search-results h3{margin:0 0 12px;color:#174f43;font-size:1.05rem}
 .customer-branch-search-results .customer-master-table{margin:0;background:#fff}
+
+/* Price controls need separate rows: translated labels must never compete with amounts. */
+.master-modal .customer-pricing .customer-price-columns{grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr));align-items:start}
+.master-modal .customer-pricing .customer-price-columns>section{min-width:0;align-content:start;gap:12px}
+.master-modal .customer-pricing .pricing-choice{grid-template-columns:minmax(0,1fr);align-items:start;gap:12px;min-width:0}
+.master-modal .customer-pricing .pricing-choice>select,
+.master-modal .customer-pricing .pricing-choice>input{width:100%;max-width:100%;box-sizing:border-box;font-size:16px;line-height:1.5}
+.master-modal .customer-pricing .pricing-choice>label,
+.master-modal .customer-pricing .outstation-switch{display:flex;flex-direction:row;align-items:center;justify-content:flex-start;gap:8px;min-width:0;font-size:16px;line-height:1.5;white-space:normal;word-break:normal}
+.master-modal .customer-pricing input[type=checkbox]{flex:0 0 18px;width:18px;height:18px;min-height:18px;padding:0;margin:0}
+.master-modal .customer-pricing .selected-price{grid-column:1/-1;min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere;font-size:16px;line-height:1.5}
+.master-modal .customer-pricing .customer-price-columns>section>label:not(.outstation-switch){display:grid;grid-template-columns:minmax(0,1fr);gap:8px;font-size:16px;line-height:1.5}
+.master-modal .customer-pricing .customer-price-columns>section>label>select{width:100%;min-width:0;box-sizing:border-box;padding:9px;border:1px solid #cad9d4;border-radius:8px;background:#fff;font:inherit}
+.master-modal .customer-pricing small{min-width:0;overflow-wrap:anywhere;line-height:1.5}
+.master-modal .customer-pricing>header{flex-wrap:wrap}
+.master-modal .customer-pricing>header>div{flex:1 1 240px;min-width:0}
+.master-modal .customer-pricing>header>button{flex-shrink:0}
+.master-modal .customer-pricing .customer-pricing-title>select{min-width:0}
+.master-modal .form-action-bar>button{max-width:100%;white-space:normal;overflow-wrap:anywhere;line-height:1.5;height:auto}
