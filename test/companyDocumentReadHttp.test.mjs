@@ -31,6 +31,9 @@ test('company document archives admit office and all management roles but reject
    }
   }
   for(const id of [80002,80003]){
+   assert.equal((await call('/api/mobile/my-bills?scope=all&employeeId=80001',id)).status,200);
+   assert.equal((await call('/api/mobile/my-bills',id,'POST')).status,405);
+   assert.equal((await call('/api/mobile/my-bills/999999/proof',id)).status,404);
    assert.equal((await call('/api/cash-floats/proofs/'+proofTransaction,id)).status,403);
    for(const path of ['/api/unloading-archive','/api/unloading-archive/export.xlsx?from=2026-09-01&to=2026-09-14','/api/purchase-bills','/api/expenses','/api/sales?from=2026-01-01&to=2026-12-31'])assert.equal((await call(path,id)).status,403,path);
   }

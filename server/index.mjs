@@ -1,3 +1,4 @@
+import {myBills,myBillProof} from './myBillsService.mjs'
 import {listUnloadingArchive,unloadingArchiveWorkbook} from './unloadingArchiveService.mjs'
 import {canReadCompanyDocuments} from './documentReadAccess.mjs'
 import {previewEmployees,previewAccount,previewReadUrl} from './employeePreviewService.mjs'
@@ -155,6 +156,15 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'GET' && url.pathname === '/api/system/network') return sendJson(response,200,{host,apiPort:port,lanUrls:networkUrls(),httpsRequiredForGps:true})
     if (request.method === 'GET' && url.pathname === '/api/mobile/today') return sendJson(response,200,{...driverToday({employeeId:session.employeeId,role:session.role}),arrivalTestMode:isArrivalTestMode()})
     if (request.method === 'GET' && url.pathname === '/api/mobile/tomorrow') return sendJson(response,200,driverTomorrow({employeeId:session.employeeId,role:session.role}))
+    if(url.pathname==='/api/mobile/my-bills'||/^\/api\/mobile\/my-bills\/\d+\/proof$/.test(url.pathname)){
+      if(request.method!=='GET')return sendJson(response,405,{error:'Read only'})
+      if(url.pathname==='/api/mobile/my-bills')return sendJson(response,200,myBills(Object.fromEntries(url.searchParams),session))
+      const proof=myBillProof(Number(url.pathname.split('/')[4]),session)
+      if(!proof)return sendJson(response,404,{error:'Proof not found'})
+      const file=path.resolve(uploadsDir,proof.storageKey)
+      if(!file.startsWith(path.resolve(uploadsDir)+path.sep)||!fs.existsSync(file))return sendJson(response,404,{error:'Proof not found'})
+      response.writeHead(200,{'Content-Type':proof.contentType,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'});return fs.createReadStream(file).pipe(response)
+    }
     if (request.method === 'GET' && url.pathname === '/api/mobile/unloading-weights/context') return sendJson(response,200,mobileWeightContext({employeeId:session.employeeId,role:session.role}))
     if (request.method === 'POST' && url.pathname === '/api/mobile/unloading-weights/recognize') return sendJson(response,201,await recognizeUnloadingWeight((await readJson(request)).payload,{employeeId:session.employeeId,role:session.role},db,{uploadsRoot:uploadsDir}))
     if (request.method === 'POST' && /^\/api\/mobile\/unloading-weights\/\d+\/confirm$/.test(url.pathname)) return sendJson(response,200,confirmUnloadingWeight(Number(url.pathname.split('/')[4]),(await readJson(request)).payload,{employeeId:session.employeeId,role:session.role}))

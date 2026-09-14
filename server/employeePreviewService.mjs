@@ -11,10 +11,10 @@ export function previewAccount(id,actor,db=defaultDb){
  const account=db.prepare(targetsSql+' AND e.id=?').get(Number(id));if(!account)throw fail('PREVIEW_EMPLOYEE')
  return {...account,isActive:true,mustChangePassword:Boolean(account.mustChangePassword),permissions:db.prepare('SELECT permission FROM auth_account_permissions WHERE account_id=?').all(account.id).map(r=>r.permission)}
 }
-const paths=new Set(['/api/mobile/today','/api/mobile/tomorrow','/api/mobile/unloading-weights/context','/api/mobile/cash-float','/api/mobile/customer-intakes','/api/mobile/customer-pickup-search','/api/mobile/customer-pickup-details','/api/mobile/guide','/api/mobile/notices','/api/gps-collection/branches','/api/bill-voids'])
+const paths=new Set(['/api/mobile/my-bills','/api/mobile/today','/api/mobile/tomorrow','/api/mobile/unloading-weights/context','/api/mobile/cash-float','/api/mobile/customer-intakes','/api/mobile/customer-pickup-search','/api/mobile/customer-pickup-details','/api/mobile/guide','/api/mobile/notices','/api/gps-collection/branches','/api/bill-voids'])
 export function previewReadUrl(method,path){
  if(method!=='GET'||typeof path!=='string'||!path.startsWith('/api/')||path.includes('\\'))throw fail('PREVIEW_READ_ONLY')
  const url=new URL(path,'http://kcs.local')
- if(!paths.has(url.pathname)&&!/^\/api\/mobile\/stops\/\d+\/billing$/.test(url.pathname)&&!/^\/api\/(no-goods-notices|driver-no-goods|purchase-payment-proofs|driver-arrangements)\/\d+\/photo$/.test(url.pathname)&&!/^\/api\/bill-voids\/\d+\/replacement$/.test(url.pathname))throw fail('PREVIEW_READ_ONLY')
+ if(!paths.has(url.pathname)&&!/^\/api\/mobile\/my-bills\/\d+\/proof$/.test(url.pathname)&&!/^\/api\/mobile\/stops\/\d+\/billing$/.test(url.pathname)&&!/^\/api\/(no-goods-notices|driver-no-goods|purchase-payment-proofs|driver-arrangements)\/\d+\/photo$/.test(url.pathname)&&!/^\/api\/bill-voids\/\d+\/replacement$/.test(url.pathname))throw fail('PREVIEW_READ_ONLY')
  return url
 }
