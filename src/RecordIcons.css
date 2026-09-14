@@ -7,3 +7,7 @@
 
 .kcs-back-button{display:inline-flex;align-items:center;justify-content:center;gap:6px}.kcs-back-button .kcs-back-arrow{font-size:32px;line-height:1;font-weight:700;display:inline-block;flex-shrink:0}
 .topbar>div>strong.record-page-title{font-size:26px;line-height:1.2;font-weight:800}@media(max-width:600px){.topbar>div>strong.record-page-title{font-size:22px}}
+
+/* Toolbar buttons must not inherit standalone BackButton page margins. */
+.expense-records .expense-toolbar>button{margin:0!important;align-self:center}
+.unloading-archive .expense-toolbar{justify-content:flex-start;gap:10px}
