@@ -22,7 +22,7 @@ test('expense corrections require office submission and supervisor approval, rem
   }
   const call=(path,id=80001,method='GET',payload={})=>fetch(`http://127.0.0.1:${port}${path}`,{method,headers:{Cookie:'kcs_session=preview-token-'+id,'Content-Type':'application/json'},...(method==='GET'?{}:{body:JSON.stringify(payload)})});
   db.prepare('INSERT INTO company_menu(id,owner_account_id) VALUES(1,80006) ON CONFLICT(id) DO UPDATE SET owner_account_id=80006').run();
-  assert.equal(db.prepare('SELECT MAX(version) v FROM schema_meta').get().v,69);
+  assert.equal(db.prepare('SELECT MAX(version) v FROM schema_meta').get().v,70);
   db.exec("INSERT INTO cash_float_accounts(employee_id,target_float_cents,low_balance_threshold_cents) VALUES(80002,200000,10000); INSERT INTO cash_float_members(employee_id,is_selected) VALUES(80002,1)");
   const insert=db.prepare("INSERT INTO cash_float_transactions(employee_id,transaction_type,amount_cents,service_date,description,created_by_name_snapshot,created_at,proof_storage_key) VALUES(80002,?,?,'2026-09-12','Fuel','Test','2026-09-12T10:00:00+08:00',?)");
   insert.run('opening_balance',200000,null);

@@ -1,8 +1,8 @@
-export const unloadingColumns=['date','time','code','vehicle','driverName','crew','tripNumber','locationName','confirmedWeightKg','status']
+export const unloadingColumns=['date','time','code','vehicle','driverName','crew','tripNumber','locationName','confirmedWeightKg','status','correctedCount']
 export const unloadingLabels={
- en:['Date','Time (Malaysia)','Unloading No.','Vehicle','Driver','Crew','Trip','Factory / Location','Weight (kg)','Status'],
- ms:['Tarikh','Masa (Malaysia)','No. pemunggahan','Kenderaan','Pemandu','Kelindan','Perjalanan','Kilang / Lokasi','Berat (kg)','Status'],
- zh:['卸货日期','时间（马来西亚）','卸货编号','车牌','司机','跟车员','趟次','工厂 / 地点','重量（kg）','状态']
+ en:['Date','Time (Malaysia)','Unloading No.','Vehicle','Driver','Crew','Trip','Factory / Location','Weight (kg)','Status','Corrections'],
+ ms:['Tarikh','Masa (Malaysia)','No. pemunggahan','Kenderaan','Pemandu','Kelindan','Perjalanan','Kilang / Lokasi','Berat (kg)','Status','Pembetulan'],
+ zh:['卸货日期','时间（马来西亚）','卸货编号','车牌','司机','跟车员','趟次','工厂 / 地点','重量（kg）','状态','修改次数']
 }
 export const unloadingStatus={en:{confirmed:'Confirmed',pending_confirmation:'Pending confirmation'},ms:{confirmed:'Disahkan',pending_confirmation:'Menunggu pengesahan'},zh:{confirmed:'已确认',pending_confirmation:'待确认'}}
 export function filterUnloading(rows,query={}){
@@ -12,7 +12,9 @@ export function filterUnloading(rows,query={}){
  const items=rows.filter(r=>unloadingColumns.every(k=>!Array.isArray(columns?.[k])||columns[k].includes(str(r[k]))))
  if(unloadingColumns.includes(query.sortKey)&&['asc','desc'].includes(query.sortDirection)){
   const k=query.sortKey,sign=query.sortDirection==='asc'?1:-1
-  items.sort((a,b)=>sign*(['tripNumber','confirmedWeightKg'].includes(k)&&a[k]!=null&&b[k]!=null?Number(a[k])-Number(b[k]):compare(str(a[k]),str(b[k]))))
+  items.sort((a,b)=>sign*(['tripNumber','confirmedWeightKg','correctedCount'].includes(k)&&a[k]!=null&&b[k]!=null?Number(a[k])-Number(b[k]):compare(str(a[k]),str(b[k]))))
  }
  return {items,filterOptions}
 }
+
+export function unloadingOrder(raw){let x=raw;try{if(typeof x==='string')x=JSON.parse(x)}catch{x=[]}return [...new Set([...(Array.isArray(x)?x.filter(k=>unloadingColumns.includes(k)):[]),...unloadingColumns])]}

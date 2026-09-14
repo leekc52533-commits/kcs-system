@@ -1,3 +1,4 @@
+import RecordDownloadIcon from './RecordDownloadIcon.jsx'
 import CustomerReceipt,{customerReceiptLabels} from './CustomerReceipt.jsx'
 import ProofViewer from './ProofViewer.jsx'
 import UnloadingArchivePage from './UnloadingArchivePage.jsx'
@@ -31,7 +32,7 @@ export default function PurchaseBillsPage({onBack}){
     <div className="expense-toolbar"><BackButton fallback={onBack} iconOnly className="secondary"/><button type="button" onClick={()=>{setOpenFilter(null);setShowWeights(true)}}>{ui('Unloading Weight Records')}</button>
       <label>{ui('From Date')}<input aria-label={ui('From Date')} type="date" value={filters.from} max={filters.to} onChange={event=>setFilters({...filters,from:event.target.value})}/></label>
       <label>{ui('To Date')}<input aria-label={ui('To Date')} type="date" value={filters.to} min={filters.from} onChange={event=>setFilters({...filters,to:event.target.value})}/></label>
-      <button type="button" onClick={()=>{window.location.href=`/api/purchase-bills/export.xlsx?${query}`}}>{ui('Download Excel with Payment Proofs')}</button></div>
+      <button type="button" className="record-icon-button" title={ui('Download Excel with Payment Proofs')} aria-label={ui('Download Excel with Payment Proofs')} onClick={()=>{window.location.href=`/api/purchase-bills/export.xlsx?${query}`}}><RecordDownloadIcon/></button></div>
     {error&&<div className="data-error">{error}</div>}{loading&&!data&&<div className="data-loading">{ui('Loading Purchase Bills…')}</div>}
     <div className="archive-table" ref={tableRef}><table><thead><tr>{columns.map(([key,label])=>{
  const translated=['expenseTypeLabel','category','paymentMethod','receiptLabel','proofLabel','statusLabel']

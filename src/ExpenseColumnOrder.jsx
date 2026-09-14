@@ -3,7 +3,7 @@ export const expenseColumnWords={zh:{title:'调整栏目',save:'保存',close:'�
 export const expenseOrderKey='kcs.expense-column-order.v1'
 export function normalizeExpenseOrder(saved,keys){return [...new Set([...(Array.isArray(saved)?saved.filter(k=>keys.includes(k)):[]),...keys])]}
 export function readExpenseOrder(keys){try{return normalizeExpenseOrder(JSON.parse(localStorage.getItem(expenseOrderKey)),keys)}catch{return keys}}
-export default function ExpenseColumnOrder({order,columns,w,onSave,onClose}){
+export default function ExpenseColumnOrder({order,columns,w,onSave,onClose,storageKey=expenseOrderKey}){
  const[draft,setDraft]=useState(order),[drag,setDrag]=useState(null),[error,setError]=useState(''),list=useRef(null),gesture=useRef(null)
  const move=(key,target)=>setDraft(current=>{const next=current.filter(k=>k!==key);next.splice(target,0,key);return next})
  const finish=(cancel=false)=>{const g=gesture.current;if(!g)return;gesture.current=null;if(cancel)setDraft(g.before);setDrag(null);if(list.current?.hasPointerCapture?.(g.id))list.current.releasePointerCapture(g.id)}
@@ -23,7 +23,7 @@ export default function ExpenseColumnOrder({order,columns,w,onSave,onClose}){
   const cancel=()=>finish(true);window.addEventListener('blur',cancel)
   return()=>{cancelAnimationFrame(frame);window.removeEventListener('blur',cancel)}
  },[drag])
- const save=()=>{if(gesture.current)return;try{localStorage.setItem(expenseOrderKey,JSON.stringify(draft));onSave(draft);onClose()}catch{setError(w.failed)}}
+ const save=()=>{if(gesture.current)return;try{localStorage.setItem(storageKey,JSON.stringify(draft));onSave(draft);onClose()}catch{setError(w.failed)}}
  return <div className="cash-modal expense-column-modal" role="dialog" aria-modal="true" aria-label={w.title} onClick={e=>{if(e.target===e.currentTarget&&!gesture.current)onClose()}} onKeyDown={e=>{if(e.key==='Escape'){if(gesture.current)finish(true);else onClose()}}}><form onSubmit={e=>{e.preventDefault();save()}}><header><h2>{w.title}</h2><button type="button" onClick={onClose} aria-label={w.close}>×</button></header><p className="expense-column-hint">{w.hint}</p><div className="expense-column-list" ref={list} onPointerDown={start} onPointerMove={e=>{if(gesture.current?.id===e.pointerId){gesture.current.y=e.clientY;e.preventDefault()}}} onPointerUp={e=>{if(gesture.current?.id===e.pointerId)finish()}} onPointerCancel={()=>finish(true)} onLostPointerCapture={()=>finish(true)}>
  {draft.map((key,i)=><div className={'expense-column-row'+(drag===key?' is-dragging':'')} key={key} data-column-key={key}><span className="expense-column-grip"><span className="expense-column-handle" aria-hidden="true">⋮⋮</span><span>{columns.find(c=>c[0]===key)?.[1]}</span></span><span className="expense-column-position" aria-hidden="true">{i+1}</span><button type="button" disabled={!i||Boolean(drag)} aria-label={w.up+': '+columns.find(c=>c[0]===key)?.[1]} onClick={()=>move(key,i-1)}>↑</button><button type="button" disabled={i===draft.length-1||Boolean(drag)} aria-label={w.down+': '+columns.find(c=>c[0]===key)?.[1]} onClick={()=>move(key,i+1)}>↓</button></div>)}
  </div>{error&&<p role="alert">{error}</p>}<footer><span aria-live="polite">{drag?`${columns.find(c=>c[0]===drag)?.[1]} · ${draft.indexOf(drag)+1} / ${draft.length}`:''}</span><button type="button" disabled={Boolean(drag)} onClick={()=>setDraft(columns.map(c=>c[0]))}>{w.reset}</button><button disabled={Boolean(drag)}>{w.save}</button></footer></form></div>

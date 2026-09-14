@@ -20,7 +20,7 @@ test('archive renders three languages, icon-only back, photo link and separate d
    await act(async()=>root.render(React.createElement(I18nProvider,{language},React.createElement(Page))))
    assert.equal(document.querySelector('.global-back').textContent,'←')
    assert.ok(document.querySelector('.global-back').getAttribute('aria-label'))
-   assert.equal(document.querySelectorAll('thead th').length,10)
+   assert.equal(document.querySelectorAll('thead th').length,11)
    assert.match(document.body.textContent,/Official Name/)
    assert.match(document.body.textContent,/09:30:00/)
    assert.equal(document.querySelector('tbody a').getAttribute('href'),'/api/unloading-weights/1/photo')
