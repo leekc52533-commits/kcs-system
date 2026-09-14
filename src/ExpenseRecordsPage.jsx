@@ -1,3 +1,4 @@
+import RecordActionIcon from './RecordActionIcon.jsx'
 import ExpenseColumnOrder,{expenseColumnWords,readExpenseOrder} from './ExpenseColumnOrder.jsx'
 import ExpenseCorrection from './ExpenseCorrection.jsx'
 import ExpenseCorrectionCenter,{expenseNumber} from './ExpenseCorrectionCenter.jsx'
@@ -37,17 +38,17 @@ export default function ExpenseRecordsPage({onBack}){
   const displayed=rows
   const save=async form=>{setBusy(true);setError('');setMessage('');try{const description=form.category==='Other'?form.otherDescription.trim():form.category;await api('/api/expenses',{method:'POST',body:JSON.stringify({...form,description:description||'Other',proof:await proofData(form.proof)})});setShowForm(false);setMessage('✓ Expense and receipt photo saved.');await load()}catch(item){setError(item.status===413?'The receipt upload is too large. Retake the photo.':item.message)}finally{setBusy(false)}}
   return <div className="page purchase-archive expense-records">
-    <div className="expense-toolbar expense-icon-toolbar"><BackButton fallback={onBack} iconOnly className="secondary"/><button type="button" title={ui("＋ Record Expense")} aria-label={ui("＋ Record Expense")} className={showForm?'active':''} onClick={()=>{setOpenFilter(null);setShowForm(true)}}><ExpenseActionIcon kind="add"/></button>
+    <div className="expense-toolbar expense-icon-toolbar"><BackButton fallback={onBack} iconOnly className="secondary"/><button type="button" title={ui("＋ Record Expense")} aria-label={ui("＋ Record Expense")} className={showForm?'active':''} onClick={()=>{setOpenFilter(null);setShowForm(true)}}><RecordActionIcon kind="add"/></button>
       {data?.canCorrect&&<ExpenseCorrectionCenter.Entry iconOnly onClick={()=>setCorrection(true)}/>}
-      <button type="button" title={ui("Download Excel with Receipts")} aria-label={ui("Download Excel with Receipts")} aria-haspopup="dialog" aria-expanded={showExport} onClick={()=>{setOpenFilter(null);setShowExport(true)}}><ExpenseActionIcon kind="download"/></button>
-      <button type="button" title={w.title} aria-label={w.title} onClick={()=>{setOpenFilter(null);setShowColumns(true)}}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 4v16M3 9h18"/></svg></button>
+      <button type="button" title={ui("Download Excel with Receipts")} aria-label={ui("Download Excel with Receipts")} aria-haspopup="dialog" aria-expanded={showExport} onClick={()=>{setOpenFilter(null);setShowExport(true)}}><RecordActionIcon kind="download"/></button>
+      <button type="button" title={w.title} aria-label={w.title} onClick={()=>{setOpenFilter(null);setShowColumns(true)}}><RecordActionIcon kind="columns"/></button>
     </div>
     {showColumns&&<ExpenseColumnOrder order={columnOrder} columns={columns.map(([k,l])=>[k,columnLabel(k,l)])} w={w} onSave={setColumnOrder} onClose={()=>setShowColumns(false)}/>}
     {historyItem&&<ExpenseCorrection readOnly item={historyItem} onClose={()=>setHistoryItem(null)}/>}
     {showExport&&<div className="cash-modal expense-export-modal" role="dialog" aria-modal="true" aria-label={ui("Download Excel with Receipts")} onClick={e=>{if(e.target===e.currentTarget)setShowExport(false)}} onKeyDown={e=>{if(e.key==='Escape')setShowExport(false)}}><form onSubmit={e=>{e.preventDefault();window.location.href=`/api/expenses/export.xlsx?${query}`}}><header><h2>{ui("Download Excel with Receipts")}</h2><button type="button" title={ui("Close")} aria-label={ui("Close")} onClick={()=>setShowExport(false)}>×</button></header>
       <label>{ui("From Date")}<input autoFocus required aria-label={ui("From Date")} type="date" value={filters.from} max={filters.to} onChange={event=>setFilters({...filters,from:event.target.value})}/></label>
       <label>{ui("To Date")}<input required aria-label={ui("To Date")} type="date" value={filters.to} min={filters.from} onChange={event=>setFilters({...filters,to:event.target.value})}/></label>
-      <footer><button type="submit" title={ui("Download Excel with Receipts")} aria-label={ui("Download Excel with Receipts")} disabled={!filters.from||!filters.to||filters.from>filters.to}><ExpenseActionIcon kind="download"/></button></footer>
+      <footer><button type="submit" title={ui("Download Excel with Receipts")} aria-label={ui("Download Excel with Receipts")} disabled={!filters.from||!filters.to||filters.from>filters.to}><RecordActionIcon kind="download"/></button></footer>
     </form></div>}
     {message&&<div className="data-success">{message}</div>}{error&&<div className="data-error">{error}</div>}{loading&&!data&&<div className="data-loading">{ui("Loading Expense Records\u2026")}</div>}
     <div className="archive-table" ref={tableRef}><table className="expense-table"><thead><tr>{orderedColumns.map(([key,label])=>{
@@ -84,4 +85,3 @@ function ExpenseForm({employees,vehicles=[],initialEmployeeId='',error,busy,clos
 
 export {ExpenseForm}
 
-function ExpenseActionIcon({kind}){return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{kind==='add'?<><path d="M14 2H5v20h14V7zM14 2v5h5M8 14h8M12 10v8"/></>:<path d="M12 3v12m-5-5 5 5 5-5M4 15v6h16v-6"/>}</svg>}
