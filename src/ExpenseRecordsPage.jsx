@@ -1,4 +1,4 @@
-import ExpenseCorrection,{ExpenseCorrectionButton} from './ExpenseCorrection.jsx'
+import ExpenseCorrectionCenter,{expenseNumber} from './ExpenseCorrectionCenter.jsx'
 import {createPortal} from 'react-dom'
 import BackButton from './BackButton.jsx'
 import TableBottomScroll from './TableBottomScroll.jsx'
@@ -19,7 +19,7 @@ const displayDateTime=value=>{const date=displayDate(value),time=String(value||'
 const columns=[['serviceDateLabel','Date'],['expenseTypeLabel','Type'],['employeeName','Employee / Admin'],['category','Category'],['description','Description'],['amountLabel','Amount'],['paymentMethod','Payment Method'],['referenceNumber','Invoice / Reference Number'],['vehiclePlate','Vehicle'],['odometerKm','Odometer (km)'],['companyName','Company Name'],['tinNumber','TIN Number'],['remarks','Remarks'],['createdBy','Entered By'],['createdAtLabel','Entered Time'],['receiptLabel','Receipt']]
 
 export default function ExpenseRecordsPage({onBack}){
-  const [correction,setCorrection]=useState(null)
+  const [correction,setCorrection]=useState(false)
   const ui=useUi(),tableRef=useRef(null),[openFilter,setOpenFilter]=useState(null)
   const[filters,setFilters]=useState({from:firstOfMonth(),to:today(),search:'',expenseType:'',category:'',employeeId:''}),[columnFilters,setColumnFilters]=useState({}),[sort,setSort]=useState({}),[data,setData]=useState(null),[error,setError]=useState(''),[message,setMessage]=useState(''),[loading,setLoading]=useState(false),[showForm,setShowForm]=useState(false),[busy,setBusy]=useState(false)
   const query=useMemo(()=>new URLSearchParams(Object.entries({...filters,columns:JSON.stringify(columnFilters),sortKey:sort.key,sortDirection:sort.direction}).filter(([,value])=>value)).toString(),[filters,columnFilters,sort])
@@ -35,14 +35,15 @@ export default function ExpenseRecordsPage({onBack}){
       <label>{ui("From Date")}<input aria-label={ui("From Date")} type="date" value={filters.from} max={filters.to} onChange={event=>setFilters({...filters,from:event.target.value})}/></label>
       <label>{ui("To Date")}<input aria-label={ui("To Date")} type="date" value={filters.to} min={filters.from} onChange={event=>setFilters({...filters,to:event.target.value})}/></label>
       <button type="button" onClick={()=>{window.location.href=`/api/expenses/export.xlsx?${query}`}}>{ui("Download Excel with Receipts")}</button></div>
+    {data?.canCorrect&&<ExpenseCorrectionCenter.Entry onClick={()=>setCorrection(true)}/>}
     {message&&<div className="data-success">{message}</div>}{error&&<div className="data-error">{error}</div>}{loading&&!data&&<div className="data-loading">{ui("Loading Expense Records\u2026")}</div>}
-    <div className="archive-table" ref={tableRef}><table className="expense-table"><thead><tr>{columns.map(([key,label])=>{
+    <div className="archive-table" ref={tableRef}><table className="expense-table"><thead><tr><th>{ui("Expense No.")}</th>{columns.map(([key,label])=>{
  const translated=['expenseTypeLabel','category','paymentMethod','receiptLabel','proofLabel','statusLabel']
  const options=(data?.filterOptions?.[key]||['',...new Set(rows.map(row=>String(row[key]??'')).filter(Boolean))]).map(value=>({value,label:value===''?ui('Blank'):translated.includes(key)?ui(value):value}))
  return <FilterHeader key={key} label={ui(label)} open={openFilter===key} onOpen={()=>setOpenFilter(key)} onClose={()=>setOpenFilter(null)} value={columnFilters[key]??null} sortDirection={sort.key===key?sort.direction:null} onSort={direction=>setSort(direction?{key,direction}:{})} options={options} search={key==='description'?filters.search:undefined} onSearch={key==='description'?value=>setFilters(current=>({...current,search:value})):undefined} onChange={value=>setColumnFilters(current=>({...current,[key]:value}))}/>
- })}</tr></thead><tbody>{displayed.map(item=><tr key={item.recordKey}><td>{item.serviceDateLabel}</td><td><span className={`expense-type ${item.expenseType}`}>{ui(item.expenseTypeLabel)}</span></td><td><b>{item.employeeName}</b><small>{item.employeeCode||''}</small></td><td><span className="expense-category">{ui(item.category)}</span></td><td>{item.description||'—'}</td><td><b>{item.amountLabel}</b>{data?.canCorrect&&<ExpenseCorrectionButton onClick={()=>setCorrection(item)}/>}</td><td>{ui(item.paymentMethod||'—')}</td><td data-i18n-raw>{item.referenceNumber||'—'}</td>{['vehiclePlate','odometerKm','companyName','tinNumber','remarks'].map(key=><td key={key} data-i18n-raw>{item[key]??'—'}</td>)}<td>{item.createdBy||'—'}</td><td>{item.createdAtLabel}</td><td>{item.hasProof?<a href={`/api/expenses/${item.recordKey}/receipt`} target="_blank" rel="noreferrer">{ui("View receipt")}</a>:'Missing'}</td></tr>)}</tbody></table>{!loading&&data&&!displayed.length&&<div className="archive-empty">{ui("No Expense Records found for this selection.")}</div>}</div>
+ })}</tr></thead><tbody>{displayed.map(item=><tr key={item.recordKey}><td data-i18n-raw>{expenseNumber(item.recordKey)}</td><td>{item.serviceDateLabel}</td><td><span className={`expense-type ${item.expenseType}`}>{ui(item.expenseTypeLabel)}</span></td><td><b>{item.employeeName}</b><small>{item.employeeCode||''}</small></td><td><span className="expense-category">{ui(item.category)}</span></td><td>{item.description||'—'}</td><td><b>{item.amountLabel}</b></td><td>{ui(item.paymentMethod||'—')}</td><td data-i18n-raw>{item.referenceNumber||'—'}</td>{['vehiclePlate','odometerKm','companyName','tinNumber','remarks'].map(key=><td key={key} data-i18n-raw>{item[key]??'—'}</td>)}<td>{item.createdBy||'—'}</td><td>{item.createdAtLabel}</td><td>{item.hasProof?<a href={`/api/expenses/${item.recordKey}/receipt`} target="_blank" rel="noreferrer">{ui("View receipt")}</a>:'Missing'}</td></tr>)}</tbody></table>{!loading&&data&&!displayed.length&&<div className="archive-empty">{ui("No Expense Records found for this selection.")}</div>}</div>
     {!showForm&&<TableBottomScroll scrollRef={tableRef}/>}
-    {correction&&<ExpenseCorrection item={correction} onClose={()=>setCorrection(null)} onSaved={load}/>}
+    {correction&&<ExpenseCorrectionCenter onClose={()=>setCorrection(false)} onSaved={load}/>}
     {showForm&&<ExpenseForm vehicles={data?.vehicles||[]} error={error} employees={data?.employees||[]} busy={busy} close={()=>setShowForm(false)} save={save}/>}
   </div>
 }
