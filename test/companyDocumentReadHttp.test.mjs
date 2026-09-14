@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {mkdtempSync,rmSync} from 'node:fs'
+import {mkdtempSync,rmSync,mkdirSync,writeFileSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {spawn} from 'node:child_process'
@@ -21,12 +21,17 @@ test('company document archives admit office and all management roles but reject
    db.prepare("INSERT INTO auth_sessions(account_id,token_hash,expires_at,last_seen_at) VALUES(?,?,datetime('now','+1 day'),'2026-01-01')").run(id,createHash('sha256').update('preview-token-'+id).digest('hex'));
   }
   const call=(path,id=80001,method='GET')=>fetch(`http://127.0.0.1:${port}${path}`,{method,headers:{Cookie:'kcs_session=preview-token-'+id,'Content-Type':'application/json'},...(method==='GET'?{}:{body:'{}'})});
+  mkdirSync(join(dir,'uploads'),{recursive:true});writeFileSync(join(dir,'uploads','test-proof.png'),Buffer.from([137,80,78,71,13,10,26,10]));
+  const proofTransaction=db.prepare("INSERT INTO cash_float_transactions(employee_id,transaction_type,amount_cents,service_date,proof_storage_key,proof_content_type,created_by_name_snapshot,created_at) VALUES(80002,'top_up',100,'2026-09-14','test-proof.png','image/png','Test','2026-09-14T10:00:00+08:00')").run().lastInsertRowid;
   for(const id of [80001,80004,80005,80006]){
+   const proof=await call('/api/cash-floats/proofs/'+proofTransaction,id);assert.equal(proof.status,200);assert.equal(proof.headers.get('content-type'),'image/png');assert.equal((await proof.arrayBuffer()).byteLength,8);
+
    for(const path of ['/api/unloading-archive','/api/unloading-archive/export.xlsx?from=2026-09-01&to=2026-09-14','/api/purchase-bills','/api/expenses','/api/bill-voids','/api/sales?from=2026-01-01&to=2026-12-31']){
     const response=await call(path,id);assert.equal(response.status,200,path+' role '+id+' '+await response.text());
    }
   }
   for(const id of [80002,80003]){
+   assert.equal((await call('/api/cash-floats/proofs/'+proofTransaction,id)).status,403);
    for(const path of ['/api/unloading-archive','/api/unloading-archive/export.xlsx?from=2026-09-01&to=2026-09-14','/api/purchase-bills','/api/expenses','/api/sales?from=2026-01-01&to=2026-12-31'])assert.equal((await call(path,id)).status,403,path);
   }
  }finally{db?.close();child.kill();await new Promise(r=>child.exitCode!==null?r():child.once('exit',r));rmSync(dir,{recursive:true,force:true})}
