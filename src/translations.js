@@ -4458,3 +4458,9 @@ Object.assign(messages.zh,{"menu.folderHelp": "可新增或改名文件夹，用
 Object.assign(messages.en,{'void.viewReplacement':'View replacement bill'})
 Object.assign(messages.ms,{'void.viewReplacement':'Lihat bil gantian'})
 Object.assign(messages.zh,{'void.viewReplacement':'查看重开单据'})
+
+Object.assign(messages.en,{"unloading.title": "Unloading Records", "unloading.download": "Download unloading records", "unloading.photo": "View weighbridge photo", "unloading.empty": "No unloading records found.", "unloading.reset": "Clear filters"})
+
+Object.assign(messages.ms,{"unloading.title": "Rekod Pemunggahan", "unloading.download": "Muat turun rekod pemunggahan", "unloading.photo": "Lihat gambar tiket timbang", "unloading.empty": "Tiada rekod pemunggahan ditemui.", "unloading.reset": "Kosongkan penapis"})
+
+Object.assign(messages.zh,{"unloading.title": "卸货记录", "unloading.download": "下载卸货记录", "unloading.photo": "查看磅单照片", "unloading.empty": "暂无卸货记录。", "unloading.reset": "清除筛选"})

@@ -1,4 +1,4 @@
-export const billMenuIds=['purchase-bills','sales','expense-records','bill-voids']
+export const billMenuIds=['purchase-bills','sales','expense-records','bill-voids','unloading-records']
 export const topMenuIds=['dashboard','notices','operations','acting-collector','documents','cash-float','customers','buyers','location-zone','vehicles','materials','staff']
 export const pageMenuIds=[...topMenuIds.filter(id=>id!=='documents'),...billMenuIds]
 export const defaultMenuLayout=()=>({top:[...topMenuIds],documents:[...billMenuIds]})

@@ -22,12 +22,12 @@ test('company document archives admit office and all management roles but reject
   }
   const call=(path,id=80001,method='GET')=>fetch(`http://127.0.0.1:${port}${path}`,{method,headers:{Cookie:'kcs_session=preview-token-'+id,'Content-Type':'application/json'},...(method==='GET'?{}:{body:'{}'})});
   for(const id of [80001,80004,80005,80006]){
-   for(const path of ['/api/purchase-bills','/api/expenses','/api/bill-voids','/api/sales?from=2026-01-01&to=2026-12-31']){
+   for(const path of ['/api/unloading-archive','/api/unloading-archive/export.xlsx?from=2026-09-01&to=2026-09-14','/api/purchase-bills','/api/expenses','/api/bill-voids','/api/sales?from=2026-01-01&to=2026-12-31']){
     const response=await call(path,id);assert.equal(response.status,200,path+' role '+id+' '+await response.text());
    }
   }
   for(const id of [80002,80003]){
-   for(const path of ['/api/purchase-bills','/api/expenses','/api/sales?from=2026-01-01&to=2026-12-31'])assert.equal((await call(path,id)).status,403,path);
+   for(const path of ['/api/unloading-archive','/api/unloading-archive/export.xlsx?from=2026-09-01&to=2026-09-14','/api/purchase-bills','/api/expenses','/api/sales?from=2026-01-01&to=2026-12-31'])assert.equal((await call(path,id)).status,403,path);
   }
  }finally{db?.close();child.kill();await new Promise(r=>child.exitCode!==null?r():child.once('exit',r));rmSync(dir,{recursive:true,force:true})}
 })
