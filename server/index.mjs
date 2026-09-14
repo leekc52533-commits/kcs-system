@@ -1,3 +1,4 @@
+import {listTripExceptions,cancelExceptionStop,completeExceptionTrip} from './tripExceptions.mjs'
 import {canCorrectExpense,expenseCorrectionHistory,requestExpenseCorrection,expenseCorrectionCenter,decideExpenseCorrection} from './expenseCorrectionService.mjs'
 import {myBills,myBillProof} from './myBillsService.mjs'
 import {listUnloadingArchive,unloadingArchiveWorkbook} from './unloadingArchiveService.mjs'
@@ -198,6 +199,13 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'GET' && /^\/api\/no-goods-notices\/\d+\/photo$/.test(url.pathname)) {const proof=noGoodsNoticePhoto(Number(url.pathname.split('/')[3]),{employeeId:session.employeeId,role:session.role}),file=path.resolve(uploadsDir,proof.storage_key);if(!file.startsWith(path.resolve(uploadsDir)+path.sep)||!fs.existsSync(file))return sendJson(response,404,{error:'Proof not found'});response.writeHead(200,{'Content-Type':proof.content_type,'Cache-Control':'private, no-store'});return fs.createReadStream(file).pipe(response)}
     if (request.method === 'POST' && /^\/api\/mobile\/stops\/\d+\/no-goods$/.test(url.pathname)) return sendJson(response,200,recordNoGoods(Number(url.pathname.split('/')[4]),(await readJson(request)).payload,{employeeId:session.employeeId,role:session.role},db,{uploadsRoot:uploadsDir}))
     if (request.method === 'POST' && /^\/api\/mobile\/trips\/\d+\/complete$/.test(url.pathname)) return sendJson(response,200,completeDriverTrip(Number(url.pathname.split('/')[4]),{employeeId:session.employeeId,role:session.role}))
+    if(request.method==='GET'&&url.pathname==='/api/dispatch/trip-exceptions')return sendJson(response,200,listTripExceptions(url.searchParams.get('date'),session))
+    if(request.method==='POST'&&/^\/api\/dispatch\/trip-exceptions\/(stops|trips)\/\d+\/(cancel|complete)$/.test(url.pathname)){
+      const parts=url.pathname.split('/'),payload=(await readJson(request)).payload
+      if(parts[4]==='stops'&&parts[6]==='cancel')return sendJson(response,200,cancelExceptionStop(Number(parts[5]),payload,session))
+      if(parts[4]==='trips'&&parts[6]==='complete')return sendJson(response,200,completeExceptionTrip(Number(parts[5]),payload,session))
+      return sendJson(response,404,{error:'Not found'})
+    }
     if (request.method === 'GET' && url.pathname === '/api/dispatch/defer-requests/pending') {if(!canApproveDriverDefer(session))return sendJson(response,403,{error:'Only a supervisor can view return-later requests.'});return sendJson(response,200,{items:listPendingDeferRequests()})}
     if (request.method === 'POST' && /^\/api\/dispatch\/defer-requests\/\d+\/(approve|reject)$/.test(url.pathname)) {if(!canApproveDriverDefer(session))return sendJson(response,403,{error:'Only a supervisor can decide a return-later request.'});const parts=url.pathname.split('/'),payload=(await readJson(request)).payload;return sendJson(response,200,decideDeferRequest(Number(parts[4]),parts[5]==='approve'?'approved':'rejected',{employeeId:session.employeeId,employeeName:session.employeeName,role:session.role,reason:payload.reason}))}
     if (request.method === 'GET' && /^\/api\/driver-no-goods\/\d+\/photo$/.test(url.pathname)) {const proof=noGoodsProofForViewer(db,Number(url.pathname.split('/')[3]),session);if(!proof)return sendJson(response,404,{error:'No Goods proof not found'});const file=path.resolve(uploadsDir,proof.storage_key),root=path.resolve(uploadsDir)+path.sep;if(!file.startsWith(root)||!fs.existsSync(file))return sendJson(response,404,{error:'No Goods proof not found'});response.writeHead(200,{'Content-Type':proof.content_type,'Cache-Control':'private, no-store'});return fs.createReadStream(file).pipe(response)}

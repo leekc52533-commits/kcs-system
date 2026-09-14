@@ -1,3 +1,4 @@
+import TripExceptions from './TripExceptions.jsx'
 import {canManageDispatch} from '../shared/dispatchAccess.js'
 import {useUi} from './i18n.jsx'
 import {DispatchPlanningReview,DispatchScheduleTools} from './DispatchScheduleTools.jsx'
@@ -60,6 +61,7 @@ export default function WeeklyDispatchPage({currentUser}){
   const visibleDays=displayMode==='route'?(data?.days||[]):(data?.days||[]).filter(day=>day.dispatch_date===activeWeekDate)
   const prepareReviewDay=async()=>{setBusy(true);setError('');try{await request('/api/dispatch/generate-day',{method:'POST',body:JSON.stringify({payload:{startDate:reviewDate,onlyMissing:true}})});await load()}catch(e){setError(e.message)}finally{setBusy(false)}}
   return <div className="page planner-page">
+    {canEditDispatch&&<TripExceptions onSaved={load}/>}
     <label className="planner-date-picker">{t('dateReview.date')}<input type="date" value={reviewDate||localDate()} onChange={e=>{if(e.target.value){setReviewDate(e.target.value);setSelectedWeekDate(e.target.value)}}}/></label>
     {reviewDate&&data&&!data.days.some(d=>d.dispatch_date===reviewDate)&&<section className="planner-message"><p>{reviewDate} · {t('dateReview.missingDay')}</p>{canEditDispatch&&<button disabled={busy} onClick={prepareReviewDay}>{t('dateReview.prepareDay')}</button>}</section>}
     <div className="planner-navigation"><div className="planner-toolbar planner-view-toolbar"><div><button className={displayMode==='dispatch'?'active':''} onClick={()=>setDisplayMode('dispatch')}>{ui("派车")}</button><button className={displayMode==='route'?'active':''} onClick={()=>setDisplayMode('route')}>{ui("Route")}</button></div></div>{data?.days?.length>0&&(displayMode==='dispatch'?<WeekDayTabs days={data.days} selectedDate={activeWeekDate} onSelect={setSelectedWeekDate}/>:<RouteWeekTabs days={data.days} selectedRouteNumber={selectedRouteNumber} onSelect={setSelectedRouteNumber}/>)}</div>
