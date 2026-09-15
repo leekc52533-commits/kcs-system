@@ -1,3 +1,4 @@
+import {dailyReport,reportAccess} from './dailyReport.mjs'
 import {dashboardDataTasks} from './dashboardDataTasks.mjs'
 import {customerWorkspace,saveCustomerWorkspace,canUseCustomerWorkspace,confirmCustomerSchedule,checkCustomerLocation,reviewCustomerLocation} from './customerWorkspaceService.mjs'
 import {unloadingCorrectionCenter,unloadingCorrectionDetail,requestUnloadingCorrection,decideUnloadingCorrection} from './unloadingCorrectionService.mjs'
@@ -379,6 +380,8 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'GET' && url.pathname === '/api/collection-schedule-management') return sendJson(response,200,{items:listCollectionScheduleManagement(Object.fromEntries(url.searchParams))})
     if (request.method === 'GET' && /^\/api\/branches\/[^/]+\/collection-schedule$/.test(url.pathname)) {const item=getCollectionScheduleManagement(decodeURIComponent(url.pathname.split('/')[3]));return item?sendJson(response,200,item):sendJson(response,404,{error:'Active Branch not found.'})}
     if (request.method === 'PATCH' && /^\/api\/branches\/[^/]+\/collection-schedule$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});const payload=(await readJson(request)).payload;return sendJson(response,200,saveCollectionScheduleManagement(decodeURIComponent(url.pathname.split('/')[3]),{...payload,sundayAuthorized:canManageDispatch(session),changedBy:session.employeeName}))}
+    if (request.method === 'GET' && url.pathname === '/api/daily-report/access') return sendJson(response,200,reportAccess(db,session))
+    if (request.method === 'GET' && url.pathname === '/api/daily-report') return sendJson(response,200,dailyReport(db,session,url.searchParams.get('date')))
     if (request.method === 'GET' && url.pathname === '/api/dashboard/data-tasks') {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});return sendJson(response,200,dashboardDataTasks())}
     if (request.method === 'GET' && url.pathname === '/api/data-quality/summary') return sendJson(response, 200, dataQualitySummary())
     if (request.method === 'GET' && url.pathname === '/api/dispatch/week') return sendJson(response, 200, getDispatchWeek(Object.fromEntries(url.searchParams)))

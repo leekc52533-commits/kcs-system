@@ -1,3 +1,4 @@
+import {assertReportGrantChange} from './dailyReport.mjs'
 import crypto from 'node:crypto'
 import { db as defaultDb } from './database.mjs'
 import { kuchingDate } from '../shared/kuchingTime.js'
@@ -128,6 +129,7 @@ export function updateAccount(id,payload,actor,meta={},database=defaultDb){
     if(Array.isArray(payload.permissions)){
       if(!isOwner(actor))throw new Error('只有Owner Admin可以修改额外权限')
       const previous=permissionsFor(id,database)
+      assertReportGrantChange(database,actor,previous,payload.permissions)
       database.prepare('DELETE FROM auth_account_permissions WHERE account_id=?').run(id)
       const insert=database.prepare('INSERT INTO auth_account_permissions(account_id,permission,granted_by) VALUES(?,?,?)')
       for(const permission of [...new Set(payload.permissions.map(text).filter(Boolean))])insert.run(id,permission,actor?.username||'Owner Admin')

@@ -1,0 +1,21 @@
+import test,{after} from 'node:test'
+import assert from 'node:assert/strict'
+import React,{act} from 'react'
+import {createServer} from 'vite'
+import {JSDOM} from 'jsdom'
+const dom=new JSDOM('<html><body><div id="root"></div></body></html>',{url:'https://localhost/'})
+for(const k of ['window','document','Node','NodeFilter','HTMLElement','MutationObserver','Event','MouseEvent','localStorage','sessionStorage'])globalThis[k]=dom.window[k]
+Object.defineProperty(globalThis,'navigator',{value:dom.window.navigator,configurable:true});globalThis.IS_REACT_ACT_ENVIRONMENT=true
+const{createRoot}=await import('react-dom/client'),vite=await createServer({logLevel:'silent',server:{middlewareMode:true},appType:'custom'});after(()=>vite.close())
+const{default:Report}=await vite.ssrLoadModule('/src/DailyReport.jsx'),{I18nProvider}=await vite.ssrLoadModule('/src/i18n.jsx')
+const{reportWord:w}=await import('../shared/dailyReportWords.js')
+const click=label=>{const button=[...document.querySelectorAll('button')].find(b=>b.textContent===label);assert.ok(button,'button: '+label);button.click()}
+const result=date=>({date,generatedAt:'2026-09-15T03:00:00Z',access:{full:true,finance:true},summary:{weightKg:2500},missingSources:[],sections:{vehicles:[{id:'1',name:'Q123',kind:'vehicle',status:'running',quantity:2500,amountCents:null,actor:'KC',time:'',detail:{trips:2}}]}})
+test('report loads in all languages; details and saved column order work; failures hide stale totals',async()=>{
+ for(const language of ['en','ms','zh']){localStorage.clear();const root=createRoot(document.getElementById('root'));let fail=false;const calls=[];globalThis.fetch=async url=>{calls.push(url);if(fail)throw Error('offline');return{ok:true,json:async()=>result(new URL(url,'https://localhost').searchParams.get('date'))}}
+ try{await act(async()=>root.render(React.createElement(I18nProvider,{language},React.createElement(Report,{account:{id:1}}))));assert.equal(calls.length,0);await act(async()=>click(w(language,'open')));assert.match(document.body.textContent,/Q123/);await act(async()=>document.querySelector('.daily-report-name').click());assert.match(document.body.textContent,/125.0%/)
+ const title=language==='zh'?'调整栏目':language==='ms'?'Susun lajur':'Arrange columns';await act(async()=>click(title));assert.ok(document.querySelectorAll('.expense-column-row').length>0);assert.match(document.querySelector('.expense-column-list').textContent,new RegExp(w(language,'name')));await act(async()=>document.querySelector('.expense-column-row button:last-child').click());await act(async()=>document.querySelector('.expense-column-modal form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));assert.equal(JSON.parse(localStorage.getItem('kcs.daily-report.columns.1.vehicles'))[0],'kind')
+ fail=true;await act(async()=>click(w(language,'refresh')));assert.ok(document.querySelector('[role="alert"]'));assert.equal(document.querySelector('.daily-report-summary'),null)
+ }finally{await act(async()=>root.unmount())}}
+})
+test('a superseded request cannot replace a newer report',async()=>{const root=createRoot(document.getElementById('root'));const pending=[];globalThis.fetch=url=>new Promise(resolve=>pending.push({url,resolve}));try{await act(async()=>root.render(React.createElement(I18nProvider,{language:'en'},React.createElement(Report,{account:{id:1}}))));await act(async()=>click('Open report'));await act(async()=>click('Refresh'));assert.equal(pending.length,2);const date=new URL(pending[1].url,'https://localhost').searchParams.get('date');await act(async()=>pending[1].resolve({ok:true,json:async()=>({...result(date),summary:{weightKg:777}})}));await act(async()=>pending[0].resolve({ok:true,json:async()=>({...result(date),summary:{weightKg:999}})}));assert.match(document.querySelector('.daily-report-summary').textContent,/777/);assert.doesNotMatch(document.querySelector('.daily-report-summary').textContent,/999/)}finally{await act(async()=>root.unmount())}})
