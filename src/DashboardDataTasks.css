@@ -1,0 +1,10 @@
+.dashboard-data-tasks{border:1px solid #c9dcd8;border-radius:16px;padding:20px;margin-bottom:24px;background:#fff}
+.dashboard-data-tasks>header,.dashboard-data-tasks>footer{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.dashboard-data-tasks h2{margin:0;line-height:1.4;overflow-wrap:anywhere}
+.dashboard-data-tasks>article{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 0;border-top:1px solid #e0e9e7}
+.dashboard-data-tasks>article>div{min-width:0;overflow-wrap:anywhere}
+.dashboard-data-tasks>article>button{flex-shrink:0}
+.data-task-issues{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.data-task-issues>span{background:#fff3dc;color:#724b11;border-radius:6px;padding:4px 8px;font-size:15px;line-height:1.5}
+.dashboard-data-tasks>p{line-height:1.6}
+@media(max-width:600px){.dashboard-data-tasks{padding:14px}.dashboard-data-tasks>article{align-items:flex-start;flex-direction:column}}
