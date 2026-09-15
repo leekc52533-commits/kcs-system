@@ -1,0 +1,24 @@
+/* Shared desktop page chrome. Scoped away from employee mobile and receipts. */
+.shell>main{--page-gutter:24px;--desktop-header-height:76px;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
+.shell>main>.topbar{height:auto;min-height:76px;padding:12px var(--page-gutter);gap:16px;flex-wrap:wrap}
+.shell>main>.topbar>div:first-of-type{flex:1 1 220px;min-width:0}
+.shell>main>.topbar>div:first-of-type>small{font-family:inherit;font-size:14px!important;line-height:1.4;letter-spacing:1.4px;font-weight:400;color:#8999a7;overflow-wrap:anywhere}
+.shell>main>.topbar>div:first-of-type>strong{font-family:inherit;font-size:26px;line-height:1.3;font-weight:800;color:#17212b;letter-spacing:0;margin-top:3px;overflow-wrap:anywhere}
+.shell>main>.topbar>span{margin-left:auto;white-space:nowrap}
+.shell>main>:is(.page,.resource-page,.master-data-page){width:100%;max-width:none;margin:0;padding:24px var(--page-gutter) 48px}
+.shell>main>.global-back{margin:24px var(--page-gutter) 0}
+.shell>main .kcs-back-button{display:inline-flex!important;align-items:center;justify-content:center;width:48px!important;min-width:48px!important;height:48px!important;min-height:48px!important;flex:0 0 48px!important;padding:8px!important;border:1px solid #b8d9d2!important;border-radius:12px!important;background:#fff!important;color:#176e60!important;box-shadow:none;cursor:pointer}
+.shell>main .kcs-back-button .kcs-back-arrow{font-family:inherit;font-size:32px;line-height:1;font-weight:700}
+.shell>main .kcs-back-button:hover{background:#edf6f3!important}
+.shell>main .kcs-back-button:focus-visible{outline:3px solid #16866f88;outline-offset:3px}
+.shell>main :is(.cash-toolbar,.employee-groups,.expense-toolbar,.workspace-tabs){align-items:center;gap:10px}
+.shell>main :is(.cash-toolbar,.employee-groups,.expense-toolbar,.workspace-tabs)>.kcs-back-button{margin:0!important}
+.shell>main :is(.workspace-tabs,.employee-groups)>button{font-family:inherit;font-weight:700;line-height:1.4}
+.shell>main .workspace-hub>.workspace-tabs:not(.workspace-tabs--sticky){margin-top:0;margin-bottom:20px}
+.shell>main .material-back-button,.shell>main .vehicle-back{margin:0 0 20px}
+.shell>main>.workspace-hub--pinned{padding-top:0}
+.shell>main .workspace-tabs--sticky{top:var(--desktop-header-height);margin:0 calc(-1 * var(--page-gutter)) 16px;padding:12px var(--page-gutter);min-height:73px}
+.shell>main .workspace-hub--pinned .planner-navigation{top:calc(var(--desktop-header-height) + 73px);margin-left:calc(-1 * var(--page-gutter));margin-right:calc(-1 * var(--page-gutter));padding-left:var(--page-gutter);padding-right:var(--page-gutter)}
+.shell>main .acting-collector-page .heading p{margin:0;font-family:inherit;font-size:16px;line-height:1.6}
+@media(max-width:820px){.shell>main{--page-gutter:16px}.shell>main>.topbar{gap:10px}.shell>main>.topbar>.menu{margin-right:0}.shell>main>.topbar>div:first-of-type{flex-basis:160px}}
+@media(max-width:600px){.shell>main>.topbar>div:first-of-type>strong{font-size:22px}.shell>main>.topbar>div:first-of-type>small{font-size:12px!important;letter-spacing:.8px}.shell>main>:is(.page,.resource-page,.master-data-page){padding-top:20px}.shell>main>.workspace-hub--pinned{padding-top:0}}

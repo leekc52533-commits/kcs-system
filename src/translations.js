@@ -156,7 +156,7 @@ export const messages = {
     'auth.systemRole':'系统权限角色','auth.preferredLanguage':'首选语言',
     'auth.newPassword':'新密码','auth.confirmPassword':'确认新密码','auth.passwordMismatch':'两次新密码不一致','auth.savePassword':'保存新密码',
     'app.loading':'KCS 载入中…','app.authUnavailable':'无法连接登录服务：{message}',
-    'nav.workspace':'工作台','nav.dashboard':'总览','nav.dispatch':'一周派车','nav.special':'临时收货请求','nav.buyers':'Buyer 管理','nav.companySettings':'公司设置',
+    'nav.workspace':'工作台','nav.dashboard':'总览','nav.dispatch':'一周派车','nav.special':'临时收货请求','nav.buyers':'买家管理','nav.companySettings':'公司设置',
     'nav.customers':'客户与营运地点','nav.schedule':'收货排程','nav.data':'GPS 与资料','nav.gpsZone':'GPS Zone 建议',
     'nav.resources':'员工、车辆、地点与区域','nav.dispatchSchedule':'派车与收货排程','nav.purchaseBills':'Purchase Bills','nav.expenseRecords':'Expense Records','nav.locationGpsZone':'地点、GPS与区域','nav.vehicles':'车辆管理','nav.materials':'货物与价格','nav.staffAccounts':'员工与账号','hub.weekly':'一周派车','hub.schedules':'收货排程','hub.employeeRecords':'员工档案','hub.systemAccounts':'系统账号','hub.locationsGps':'地点与GPS资料','hub.buyerMaster':'Buyer 管理','hub.areaZone':'Area／Zone归属','hub.gpsRecommendations':'GPS Zone建议','nav.gpsMigration':'旧 GPS 迁移','nav.sync':'Jodoo 资料同步','nav.accounts':'账号管理',
     'system.running':'系统运行中','system.waiting':'系统等待后台','system.connecting':'后台连接中…',
