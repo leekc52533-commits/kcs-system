@@ -1,0 +1,18 @@
+.branch-review .compact-data-table{table-layout:auto;min-width:100%;width:max-content}
+.branch-review .compact-data-table thead th{background:#f1f5f7;color:#536575;font-weight:800;line-height:1.4;padding:14px 12px;white-space:nowrap}
+.branch-review .compact-column-control>summary{display:flex;align-items:center;justify-content:flex-start;gap:8px;border:0;border-radius:0;box-shadow:none;background:transparent;padding:0;font:inherit;color:inherit}
+.branch-review .compact-data-table .compact-data-row>td{padding:14px 12px;line-height:1.5;vertical-align:middle;max-width:none;word-break:normal;overflow-wrap:normal}
+.branch-review .compact-data-table .branch-review-name{display:inline-flex;align-items:center;justify-content:space-between;gap:12px;min-width:220px;max-width:380px;width:100%;padding:0;border:0;border-radius:0;box-shadow:none;background:transparent;color:#176e60;text-align:left;font:inherit!important;font-weight:700!important;line-height:1.5;word-break:normal;overflow-wrap:normal;cursor:pointer}
+.branch-review-name>span:first-child{white-space:normal;word-break:normal;overflow-wrap:break-word}
+.branch-review-name>span:last-child{flex-shrink:0}
+.branch-review .compact-related-id{display:block;min-width:200px;max-width:320px;white-space:normal;line-height:1.5}
+.branch-review .lifecycle-badge{white-space:nowrap;font:inherit!important;font-weight:600!important;line-height:1.4}
+.branch-review .compact-detail-grid{margin:0 0 16px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}
+.branch-review .compact-detail-grid dd{margin:6px 0 0;overflow-wrap:anywhere}
+.branch-review .lifecycle-row-actions{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}
+.branch-review .lifecycle-summary{gap:12px}
+.branch-review .lifecycle-summary button{min-width:0;padding:12px;line-height:1.5;text-align:left}
+.branch-review .lifecycle-summary button span{display:block;white-space:normal;word-break:normal}
+.branch-review .master-filters{display:flex;gap:10px;flex-wrap:wrap}
+.branch-review .master-filters input{flex:1 1 260px;min-width:0}
+.branch-review .master-filters select{flex:1 1 180px;min-width:0}
