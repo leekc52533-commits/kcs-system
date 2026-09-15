@@ -1,3 +1,4 @@
+import {createArea} from './createArea.mjs'
 import {dailyReport,reportAccess} from './dailyReport.mjs'
 import {dashboardDataTasks} from './dashboardDataTasks.mjs'
 import {customerWorkspace,saveCustomerWorkspace,canUseCustomerWorkspace,confirmCustomerSchedule,checkCustomerLocation,reviewCustomerLocation} from './customerWorkspaceService.mjs'
@@ -465,6 +466,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'GET' && /^\/api\/area-refinements\/\d+$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Area management permission is required'});return sendJson(response,200,getAreaRefinement(Number(url.pathname.split('/')[3])))}
     if (request.method === 'PATCH' && /^\/api\/area-refinements\/\d+$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Area management permission is required'});const payload=(await readJson(request)).payload;return sendJson(response,200,updateAreaRefinement(Number(url.pathname.split('/')[3]),{...payload,changedBy:session.employeeName}))}
     if (request.method === 'POST' && /^\/api\/area-refinements\/\d+\/confirm$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Area management permission is required'});const payload=(await readJson(request)).payload;return sendJson(response,200,confirmAreaRefinement(Number(url.pathname.split('/')[3]),{...payload,changedBy:session.employeeName}))}
+    if (request.method === 'POST' && url.pathname === '/api/areas') return sendJson(response,201,createArea(db,session,(await readJson(request)).payload))
     if (request.method === 'POST' && url.pathname === '/api/areas/bulk-zone-group') {
       if(!canManageSchedules(session))return sendJson(response,403,{error:'You do not have permission to move Areas'})
       const payload=(await readJson(request)).payload
