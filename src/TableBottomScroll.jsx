@@ -6,16 +6,18 @@ import {useI18n} from './i18n.jsx'
 const tables=new Map()
 let preferred=null
 function publish(){
- const visible=[...tables.entries()].filter(([,r])=>r.view)
+ const candidates=[...tables.entries()].filter(([,r])=>r.view)
+ const docked=candidates.filter(([,r])=>r.docked)
+ const visible=docked.length?docked:candidates
  const winner=visible.find(([id])=>id===preferred)||visible.sort((a,b)=>b[1].view.visibleHeight-a[1].view.visibleHeight)[0]
  for(const [id,row] of tables)row.update(winner?.[0]===id?row.view:null)
 }
-export default function TableBottomScroll({scrollRef}){
+export default function TableBottomScroll({scrollRef,dockRef}){
  const{t}=useI18n(),[view,setView]=useState(null)
  useEffect(()=>{
   const element=scrollRef.current;if(!element)return
   const id=Symbol(),update=next=>setView(current=>JSON.stringify(current)===JSON.stringify(next)?current:next)
-  tables.set(id,{view:null,update});element.classList.add('single-horizontal-scroll')
+  tables.set(id,{view:null,update,docked:Boolean(dockRef)});element.classList.add('single-horizontal-scroll')
   const measure=()=>{
    const rect=element.getBoundingClientRect(),max=Math.max(0,element.scrollWidth-element.clientWidth),left=Math.max(8,rect.left),right=Math.min(window.innerWidth-8,rect.right)
    element.style.setProperty('--compact-viewport-width',`${element.clientWidth}px`)
@@ -30,7 +32,7 @@ export default function TableBottomScroll({scrollRef}){
   element.addEventListener('scroll',measure,{passive:true});element.addEventListener('pointerenter',select);element.addEventListener('focusin',select)
   window.addEventListener('scroll',measure,{capture:true,passive:true});window.addEventListener('resize',measure)
   return()=>{resize?.disconnect();mutation.disconnect();element.removeEventListener('scroll',measure);element.removeEventListener('pointerenter',select);element.removeEventListener('focusin',select);window.removeEventListener('scroll',measure,true);window.removeEventListener('resize',measure);element.classList.remove('single-horizontal-scroll');tables.delete(id);if(preferred===id)preferred=null;publish()}
- },[scrollRef])
+ },[scrollRef,dockRef])
  if(!view)return null
- return createPortal(<div className="table-bottom-scroll" style={{left:view.left,width:view.width,'--scroll-thumb-width':`${view.thumb}px`}}><input type="range" min="0" max={view.max} step="1" value={Math.min(view.max,Math.max(0,view.value))} aria-label={t('list.horizontalScroll')} title={t('list.horizontalScroll')} onChange={event=>{const value=Number(event.target.value);scrollRef.current.scrollLeft=value;setView(current=>current?{...current,value}:null)}}/></div>,document.body)
+ return createPortal(<div className={'table-bottom-scroll'+(dockRef?' table-bottom-scroll--docked':'')} style={{left:dockRef?undefined:view.left,width:dockRef?'100%':view.width,'--scroll-thumb-width':`${view.thumb}px`}}><input type="range" min="0" max={view.max} step="1" value={Math.min(view.max,Math.max(0,view.value))} aria-label={t('list.horizontalScroll')} title={t('list.horizontalScroll')} onChange={event=>{const value=Number(event.target.value);scrollRef.current.scrollLeft=value;setView(current=>current?{...current,value}:null)}}/></div>,dockRef?.current||document.body)
 }
