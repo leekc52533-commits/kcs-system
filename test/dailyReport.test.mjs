@@ -44,3 +44,11 @@ test('cancelled date-change stops show original request and actual approval with
  assert.equal(detail.reason,'Sebab hari hujan');assert.equal(detail.reviewReason,'Ok');assert.equal(detail.approvedDate,'2026-09-17');assert.equal(detail.targetDate,'2026-09-16');
  assert.equal(report.sections.stops.find(r=>r.id==='2').detail.reason,'Manual cancellation');assert.equal(db.prepare('SELECT total_changes() n').get().n,before);db.close();
 })
+
+test('vehicle matrix includes unstarted assignments and attributes branch counts and kg without multiplying bills',()=>{
+ const db=fixture();db.exec(`INSERT INTO vehicles(id,vehicle_code,registration_number) VALUES(3,'V3','Q789');INSERT INTO dispatches(id,dispatch_date,vehicle_id,driver_id) VALUES(3,'2026-09-15',3,1);`);
+ const r=dailyReport(db,owner,'2026-09-15');assert.equal(r.sections.vehicles.length,3);
+ const first=r.sections.vehicles.find(v=>v.id==='1'),idle=r.sections.vehicles.find(v=>v.id==='3');
+ assert.equal(first.quantity,150);assert.equal(first.detail.plannedBranches,2);assert.equal(first.detail.collectedBranches,1);assert.equal(first.detail.noGoodsBranches,1);assert.equal(first.detail.cancelledBranches,0);assert.equal(first.detail.trips,1);
+ assert.equal(idle.status,'not_started');assert.equal(idle.quantity,0);assert.equal(idle.detail.plannedBranches,0);assert.equal(r.summary.vehicles,1);assert.equal(r.sections.stops[0].detail.vehicleId,1);db.close();
+})

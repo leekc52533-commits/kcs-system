@@ -13,3 +13,5 @@
 .daily-report-unified dd{margin:0}
 .daily-report .daily-report-unified button{min-height:44px;padding:8px 12px;border:0;border-radius:0;justify-content:flex-end;background:transparent;text-decoration:underline;text-underline-offset:3px}
 .daily-report .daily-report-unified button:hover,.daily-report .daily-report-unified button:focus-visible{background:#eaf5f1}
+
+.daily-report-matrix{min-width:0;margin-top:16px}.daily-report-matrix table{white-space:nowrap}.daily-report-matrix thead th{background:#edf2f6;color:#536575}.daily-report-matrix tbody th{background:#fff;font-weight:500}.daily-report-matrix td{text-align:right}.daily-report-matrix td button{border:0;border-radius:0;background:transparent;text-decoration:underline;min-height:44px}.daily-report-matrix .daily-report-total{background:#f0f7f5;font-weight:700}.daily-report-matrix .expense-filter-trigger{border:0;background:transparent;padding:0}.daily-report-matrix .archive-table{max-height:65vh}
