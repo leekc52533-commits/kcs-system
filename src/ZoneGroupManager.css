@@ -32,3 +32,8 @@
 .zone-manager .zone-area-list>article>button:last-child{flex:0 0 auto;min-width:max-content;white-space:nowrap;min-height:40px;padding:8px 12px}
 .zone-manager .area-detail{position:static;min-width:0;max-height:none}
 @media(max-width:600px){.zone-manager .zone-area-list>article>.area-open{flex-basis:calc(100% - 44px)}.zone-manager .zone-area-list>article>select{max-width:none}}
+.area-detail-popup{width:min(860px,calc(100vw - 32px));max-height:85vh;padding:0;border:1px solid #b9d5ce;border-radius:16px;background:#fff;color:var(--ink);overflow:auto;box-sizing:border-box}
+.area-detail-popup::backdrop{background:#14262e66}
+.zone-manager .area-detail-popup .area-detail{margin:0;border:0;box-shadow:none;overflow:visible;overflow-wrap:anywhere}
+.area-detail-popup .area-detail>header{position:sticky;top:-17px;z-index:1;background:#fff;padding-top:12px}
+.area-detail-popup .branch-area-editor{min-width:0;max-width:100%;box-sizing:border-box}
