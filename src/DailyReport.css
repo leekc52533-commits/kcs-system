@@ -30,3 +30,5 @@
 .daily-report .daily-report-matrix tbody th[scope="row"]{position:sticky;left:0;z-index:2;box-shadow:1px 0 0 #dbe7e4}
 .daily-report .daily-report-matrix thead th:first-child{z-index:3;background:#edf2f6}
 .daily-report .daily-report-matrix tbody th[scope="row"]{background:#fff}
+
+.daily-report .daily-report-refresh{align-self:flex-end}

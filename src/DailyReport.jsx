@@ -41,7 +41,7 @@ export default function DailyReport({account}){
  const metricTargets=new Set(Object.keys(data?.summary||{}).map(k=>metricSections[k]||k))
  return <section className="daily-report">
   <header><h2>{w('title')}</h2><button onClick={()=>setOpen(v=>!v)} aria-expanded={open}>{w(open?'close':'open')}</button></header>
-  {open&&<><div className="daily-report-controls"><span className="daily-report-column-slot" ref={setColumnToolbar}/><label>{w('date')}<input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><button onClick={()=>setRefresh(v=>v+1)}>{w('refresh')}</button><label>{w('target')}<input type="number" min="1" step="100" value={target} onChange={e=>setTarget(e.target.value)}/></label></div>
+  {open&&<><div className="daily-report-controls"><span className="daily-report-column-slot" ref={setColumnToolbar}/><button type="button" className="record-icon-button daily-report-refresh" title={w('refresh')} aria-label={w('refresh')} onClick={()=>setRefresh(v=>v+1)}><RecordActionIcon kind="refresh-single"/></button><label>{w('date')}<input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><label>{w('target')}<input type="number" min="1" step="100" value={target} onChange={e=>setTarget(e.target.value)}/></label></div>
    {error?<p role="alert">{error}</p>:!data||data.date!==date?<p role="status">{w('loading')}</p>:<>
     <p>{w(data.access.full?'full':data.access.finance?'finance':'operations')} · {w('saved')}: {reportTime(data.generatedAt)}</p>
     <VehicleMatrix toolbarTarget={columnToolbar} data={data} w={w} language={language} account={account} onSelect={setSelection}/>
