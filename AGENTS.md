@@ -103,3 +103,5 @@ These requirements were confirmed by KC on 2026-09-09. Carry them forward for la
 - KC confirmed on 2026-09-17: all column-arrangement entry buttons use the shared columns icon without visible button text, with translated title/accessible name and the existing column editor behavior.
 
 - KC confirmed on 2026-09-17: Overview hides empty action cards and continues polling so new requests appear automatically. Show processed requests and actual customer/branch/schedule changes for 24 elapsed hours from durable review/change timestamps, then hide them without deleting history. Keep reviewed temporary-customer history independently accessible with an accurate history title; pending and reviewed records must never be mislabeled or mixed.
+
+- KC clarified on 2026-09-17: Overview is for pending work and its 24-hour processed activity only; do not place Change records or Reviewed temporary customers history shortcuts there. Historical lookup, including reviewed temporary customers, belongs under Dispatch & Collection Scheduling → Change records. This supersedes the separate Overview history entry.
