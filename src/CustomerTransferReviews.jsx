@@ -11,5 +11,6 @@ export default function CustomerTransferReviews(){
  const{t}=useI18n(),[items,setItems]=useState([]),[error,setError]=useState('')
  const load=useCallback(async()=>{setItems((await api('/api/customer-transfers')).items);setError('')},[])
  useEffect(()=>{const refresh=()=>load().catch(e=>setError(e.message));void refresh();const timer=setInterval(refresh,10000);return()=>clearInterval(timer)},[load])
+ if(!error&&!items.length)return null
  return <section className="temporary-intakes intake-review"><h2>{t('pickup.reviewTitle')} ({items.length})</h2><p>{t('pickup.reviewHelp')}</p>{error&&<p role="alert">{error}</p>}{!items.length&&<p>{t('intake.empty')}</p>}{items.map(item=><TransferRow key={item.id} item={item} onChanged={load}/>)}</section>
 }

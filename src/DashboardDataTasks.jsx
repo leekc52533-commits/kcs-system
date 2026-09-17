@@ -18,6 +18,7 @@ export default function DashboardDataTasks({onOpenCustomers}){
  const load=useCallback(async()=>{if(inFlight.current)return;inFlight.current=true;try{const result=await api('/api/dashboard/data-tasks');if(mounted.current){setData(result);setError(false)}}catch{if(mounted.current)setError(true)}finally{inFlight.current=false}},[])
  useEffect(()=>{mounted.current=true;void load();const timer=setInterval(()=>{if(document.visibilityState!=='hidden')void load()},30000);const focus=()=>void load();window.addEventListener('focus',focus);document.addEventListener('visibilitychange',focus);return()=>{mounted.current=false;clearInterval(timer);window.removeEventListener('focus',focus);document.removeEventListener('visibilitychange',focus)}},[load])
  const items=data?.items||[],pages=Math.max(1,Math.ceil(items.length/15)),current=Math.min(page,pages-1)
+ if(!error&&!items.length&&!editing&&!detail)return null
  return <section className="dashboard-data-tasks" aria-label={w.title}>
   <header><h2>{w.title}{data&&<> · {items.length} {w.count}</>}</h2><button type="button" onClick={()=>void load()}>{w.refresh}</button></header><p>{w.help}</p>
   {error&&<p className="data-error" role="alert">{w.error}</p>}{!data&&!error&&<p>{w.loading}</p>}{data&&!items.length&&!error&&<p>{w.empty}</p>}

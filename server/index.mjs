@@ -1,3 +1,4 @@
+import {dashboardRecentActivity} from './dashboardRecentActivity.mjs'
 import {collectionHistory} from './collectionHistoryService.mjs'
 import {createArea} from './createArea.mjs'
 import {dailyReport,reportAccess} from './dailyReport.mjs'
@@ -385,6 +386,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'PATCH' && /^\/api\/branches\/[^/]+\/collection-schedule$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});const payload=(await readJson(request)).payload;return sendJson(response,200,saveCollectionScheduleManagement(decodeURIComponent(url.pathname.split('/')[3]),{...payload,sundayAuthorized:canManageDispatch(session),changedBy:session.employeeName}))}
     if (request.method === 'GET' && url.pathname === '/api/daily-report/access') return sendJson(response,200,reportAccess(db,session))
     if (request.method === 'GET' && url.pathname === '/api/daily-report') return sendJson(response,200,dailyReport(db,session,url.searchParams.get('date')))
+    if (request.method === 'GET' && url.pathname === '/api/dashboard/recent-activity') {return sendJson(response,200,dashboardRecentActivity(session))}
     if (request.method === 'GET' && url.pathname === '/api/dashboard/data-tasks') {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});return sendJson(response,200,dashboardDataTasks())}
     if (request.method === 'GET' && url.pathname === '/api/data-quality/summary') return sendJson(response, 200, dataQualitySummary())
     if (request.method === 'GET' && url.pathname === '/api/dispatch/week') return sendJson(response, 200, getDispatchWeek(Object.fromEntries(url.searchParams)))

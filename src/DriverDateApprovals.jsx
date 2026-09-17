@@ -36,8 +36,9 @@ export function DateRequestReview({item,onSaved,onPlanner,submitUrl}){
 }
 export default function DriverDateApprovals({onPlanner}){
  const{t}=useI18n(),[items,setItems]=useState([]),[error,setError]=useState(''),[open,setOpen]=useState(null),[message,setMessage]=useState('')
- const load=useCallback(async()=>{try{setItems((await apiRequest('/api/dispatch/date-requests/pending')).items||[])}catch(e){setError(e.message)}},[])
+ const load=useCallback(async()=>{try{setItems((await apiRequest('/api/dispatch/date-requests/pending')).items||[]);setError('')}catch(e){setError(e.message)}},[])
  useEffect(()=>{void load();const timer=setInterval(load,10000);return()=>clearInterval(timer)},[load])
  const saved=(result,decision)=>{setOpen(null);setError('');setMessage(t(decision==='approve'?'routeTrial.approvedHelp':'routeTrial.rejected')+(result.preservedDates?.length?` ${t('dateReview.preserved')} ${result.preservedDates.join(', ')}`:''));void load()}
+ if(!error&&!items.length)return null
  return <section className="dashboard-approvals date-request-approvals"><h3>{t('routeTrial.approvals')} ({items.length})</h3>{error&&<p role="alert">{error}</p>}{message&&<p role="status">{message}</p>}{items.map(item=><article key={item.id}><button type="button" className="date-request-summary" aria-expanded={open===item.id} onClick={()=>setOpen(open===item.id?null:item.id)}><b data-i18n-raw>{item.branchId} — {item.branchName}</b><span data-i18n-raw>{item.employeeName} · {item.plate}</span><span>{item.sourceDate} → {item.targetDate}</span><span data-i18n-raw>{item.reason}</span><strong>{t('dateReview.open')} {open===item.id?'▴':'▾'}</strong></button>{open===item.id&&<DateRequestReview item={item} onSaved={saved} onPlanner={onPlanner}/>}</article>)}</section>
 }
