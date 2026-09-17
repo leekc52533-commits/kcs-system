@@ -26,3 +26,17 @@ test('all languages paginate every task, retain tasks on errors, and clear only 
   }finally{await act(async()=>root.unmount())}
  }
 })
+
+
+test('orphan schedule opens Customers through in-app navigation without changing records',async()=>{
+ for(const language of ['en','ms','zh']){
+  const calls=[];let opened=0;const item={key:'schedule-10334',kind:'schedule',scheduleId:'10334',sourceBranchId:'10345',frequency:'Weekly',weekdays:'Wednesday,Saturday,Monday',issues:['unmatchedSchedule']};
+  globalThis.fetch=async(url,options={})=>{calls.push({url,method:options.method||'GET'});return{ok:true,json:async()=>({items:[item]})}};
+  const root=createRoot(document.getElementById('root'));try{
+   await act(async()=>root.render(React.createElement(I18nProvider,{language},React.createElement(Tasks,{onOpenCustomers:()=>{opened++}}))));
+   await act(async()=>document.querySelector('article button').click());
+   const dialog=document.querySelector('[role="dialog"]');assert.match(dialog.textContent,/10334/);assert.match(dialog.textContent,/10345/);assert.equal(dialog.querySelector('a'),null);
+   await act(async()=>dialog.querySelector('button').click());assert.equal(opened,1);assert.ok(calls.every(c=>c.method==='GET'));assert.equal(document.querySelectorAll('article').length,1);
+  }finally{await act(async()=>root.unmount())}
+ }
+})
