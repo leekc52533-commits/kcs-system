@@ -83,3 +83,11 @@
 
 .dashboard-needs-action:empty{display:none}
 .dashboard-activity-records{margin-bottom:24px}.dashboard-activity-records>.expense-toolbar{display:flex;flex-wrap:wrap;gap:12px;margin:12px 0}.dashboard-activity-records>.expense-toolbar>button{padding:10px 16px;border:1px solid #bdd7d0;border-radius:12px;background:white;color:#196c5e;font:inherit;cursor:pointer}
+
+.dashboard-activity-trigger{padding:14px 18px;border:1px solid #b9d5ce;border-radius:14px;background:#fff;color:#176b59;font:inherit;font-weight:700;cursor:pointer;text-align:left}
+.dashboard-activity-dialog{width:min(760px,calc(100vw - 32px));max-height:80vh;padding:0;border:1px solid #b9d5ce;border-radius:18px;color:#19242e;background:#fff;overflow:auto;overflow-wrap:anywhere}
+.dashboard-activity-dialog::backdrop{background:#132b2780}
+.dashboard-activity-dialog .dashboard-data-tasks{margin:0;border:0;padding:20px}
+.dashboard-activity-dialog header{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.dashboard-activity-dialog header h2{margin:0;font-size:1.25rem}
+.dashboard-activity-dialog header button{flex-shrink:0;width:44px;height:44px;border:1px solid #b9d5ce;border-radius:12px;background:white;color:#176b59;font-size:24px;cursor:pointer}
