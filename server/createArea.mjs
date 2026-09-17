@@ -19,3 +19,22 @@ export function createArea(db,account,payload){
   db.exec('COMMIT');return result
  }catch(error){db.exec('ROLLBACK');throw error}
 }
+
+export function renameArea(db,account,id,payload){
+ if(!canManageDispatch(account))fail('Area management permission required.',403)
+ const name=String(payload.name||'').trim().replace(/\s+/g,' '),reason=String(payload.reason||'').trim()
+ if(!name||name.length>120||!reason)fail('Name and reason are required.')
+ db.exec('BEGIN IMMEDIATE')
+ try{
+  const before=db.prepare('SELECT * FROM areas WHERE id=?').get(id)
+  if(!before)fail('Area not found.',404)
+  if(before.name!==payload.expectedName)fail('Area name changed. Reload before saving.',409)
+  if(before.name===name){db.exec('COMMIT');return before}
+  if(db.prepare('SELECT id,name FROM areas WHERE id<>?').all(id).some(a=>a.name.trim().replace(/\s+/g,' ').toLowerCase()===name.toLowerCase()))fail('Area name already exists.',409)
+  db.prepare('UPDATE areas SET name=? WHERE id=?').run(name,id)
+  const after=db.prepare('SELECT * FROM areas WHERE id=?').get(id),actor=account.employeeName||account.name||account.username||String(account.id)
+  db.prepare("INSERT INTO master_change_history(entity_type,entity_id,change_type,field_name,old_value,new_value,before_json,after_json,reason,changed_by) VALUES('area',?,'renamed','name',?,?,?,?,?,?)").run(String(before.jodoo_area_id||id),before.name,name,JSON.stringify(before),JSON.stringify(after),reason,actor)
+  db.prepare("INSERT INTO audit_logs(action,entity_type,entity_id,before_json,after_json) VALUES('area_renamed','area',?,?,?)").run(String(id),JSON.stringify({name:before.name}),JSON.stringify({name,reason,actor,accountId:account.id}))
+  db.exec('COMMIT');return after
+ }catch(error){db.exec('ROLLBACK');throw error}
+}
