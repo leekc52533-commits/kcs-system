@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {randomUUID} from 'node:crypto'
 import {DatabaseSync} from 'node:sqlite'
 import {schemaSql} from '../server/schema.mjs'
-import {customerWorkspace,saveCustomerWorkspace,confirmCustomerSchedule} from '../server/customerWorkspaceService.mjs'
+import {changeBranchArea,customerWorkspace,saveCustomerWorkspace,confirmCustomerSchedule} from '../server/customerWorkspaceService.mjs'
 import {kuchingDate} from '../shared/kuchingTime.js'
 const owner={id:1,role:'owner_admin',employeeName:'KC'},office={id:2,role:'office',employeeName:'Office'}
 function fixture(){const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON;'+schemaSql);return db}
@@ -31,4 +31,20 @@ test('pausing or closing a customer does not require or rewrite its existing col
  for(const status of ['paused','closed']){const db=fixture(),r=saveCustomerWorkspace(payload(),owner,db);db.exec("UPDATE branch_schedules SET effective_date=NULL");const before=JSON.stringify(db.prepare('SELECT * FROM branch_schedules').all()),fresh=customerWorkspace({branchId:r.branch.branchId},owner,db);
  const result=saveCustomerWorkspace({requestId:randomUUID(),reason:'Duplicate customer',branchId:r.branch.branchId,revision:fresh.revision,customer:{status},branch:{branchName:r.branch.branchName},schedule:{frequency:'Once a week',weekdays:[],effectiveDate:''}},owner,db);
  assert.equal(result.customer.status,status);assert.equal(JSON.stringify(db.prepare('SELECT * FROM branch_schedules').all()),before);assert.deepEqual(result.review,[]);db.close()}
+})
+
+test('branch area edit is scoped, audited and rejects stale data or inactive areas',()=>{
+ const db=fixture(),seed=saveCustomerWorkspace(payload(),owner,db)
+ db.exec("INSERT INTO areas(jodoo_area_id,name,is_active) VALUES('A1','Area One',1),('A2','Inactive',0)")
+ const before=customerWorkspace({branchId:seed.branch.branchId},office,db),schedules=JSON.stringify(db.prepare('SELECT * FROM branch_schedules').all())
+ const p={branchId:before.branch.branchId,revision:before.revision,areaId:'A1',zoneId:before.areas.find(a=>a.areaId==='A1').zoneId,reason:'Correct area'}
+ assert.throws(()=>changeBranchArea(p,{role:'driver'},db),/permission/)
+ assert.throws(()=>changeBranchArea({...p,areaId:'A2'},office,db),/Area/)
+ const result=changeBranchArea(p,office,db)
+ assert.equal(result.branch.areaId,'A1');assert.equal(result.branch.branchName,before.branch.branchName)
+ assert.equal(result.branch.officialLatitude,before.branch.officialLatitude)
+ assert.equal(JSON.stringify(db.prepare('SELECT * FROM branch_schedules').all()),schedules)
+ assert.ok(db.prepare("SELECT 1 FROM master_change_history WHERE reason='Correct area' AND changed_by='Office'").get())
+ assert.throws(()=>changeBranchArea(p,office,db),/Reload/)
+ db.close()
 })

@@ -85,3 +85,20 @@ export function reviewCustomerLocation(payload,actor={},db=defaultDb){
  assertActor(actor);db.exec('BEGIN IMMEDIATE')
  try{const before=customerWorkspace(payload,actor,db);if(!before.branch)throw fail('Branch not found.',404);decideCustomerLocation(payload,before.branch,actor,db);const result=customerWorkspace(payload,actor,db);db.exec('COMMIT');return result}catch(error){db.exec('ROLLBACK');throw error}
 }
+
+export function changeBranchArea(payload,actor={},db=defaultDb){
+ assertActor(actor)
+ const reason=String(payload.reason||'').trim();if(!reason)throw fail('Reason is required.')
+ db.exec('BEGIN IMMEDIATE')
+ try{
+  const before=customerWorkspace({branchId:payload.branchId},actor,db)
+  if(!before.branch)throw fail('Branch not found.',404)
+  if(before.revision!==payload.revision)throw fail('Customer data changed. Reload before saving.',409)
+  const area=activeLocationAreas(db).find(a=>String(a.areaId)===String(payload.areaId))
+  if(!area||area.zoneId!==payload.zoneId)throw fail('Area or parent Zone changed. Check again.',409)
+  const changedBy=actor.employeeName||actor.username||`Account ${actor.id}`
+  if(String(before.branch.areaId)!==String(area.areaId))updateBranchWithLifecycle(before.branch.branchId,{areaId:area.areaId,reason},{changedBy,accountId:actor.id},db)
+  const result=customerWorkspace({branchId:before.branch.branchId},actor,db)
+  db.exec('COMMIT');return result
+ }catch(error){db.exec('ROLLBACK');throw error}
+}

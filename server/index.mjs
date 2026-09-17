@@ -3,7 +3,7 @@ import {collectionHistory} from './collectionHistoryService.mjs'
 import {createArea} from './createArea.mjs'
 import {dailyReport,reportAccess} from './dailyReport.mjs'
 import {dashboardDataTasks} from './dashboardDataTasks.mjs'
-import {customerWorkspace,saveCustomerWorkspace,canUseCustomerWorkspace,confirmCustomerSchedule,checkCustomerLocation,reviewCustomerLocation} from './customerWorkspaceService.mjs'
+import {changeBranchArea,customerWorkspace,saveCustomerWorkspace,canUseCustomerWorkspace,confirmCustomerSchedule,checkCustomerLocation,reviewCustomerLocation} from './customerWorkspaceService.mjs'
 import {unloadingCorrectionCenter,unloadingCorrectionDetail,requestUnloadingCorrection,decideUnloadingCorrection} from './unloadingCorrectionService.mjs'
 import {canCorrectExpense as canCorrectUnloading} from './expenseCorrectionService.mjs'
 import {listTripExceptions,cancelExceptionStop,completeExceptionTrip} from './tripExceptions.mjs'
@@ -330,6 +330,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && /^\/api\/address-analysis\/[^/]+\/reverse-geocode-preview$/.test(url.pathname)) {if(!accountCan(session,'gps_review'))return sendJson(response,403,{error:'GPS review permission is required'});return sendJson(response,200,await previewAddress(decodeURIComponent(url.pathname.split('/')[3]))) }
     if (request.method === 'POST' && /^\/api\/address-analysis\/[^/]+\/use-suggested-address$/.test(url.pathname)) {if(!accountCan(session,'gps_review'))return sendJson(response,403,{error:'GPS review permission is required'});const payload=(await readJson(request)).payload;return sendJson(response,200,useSuggestedAddress(decodeURIComponent(url.pathname.split('/')[3]),{...payload,changedBy:session.employeeName||session.username})) }
     if (request.method === 'GET' && url.pathname === '/api/master/audit') return sendJson(response,200,{items:listMasterAudit(Object.fromEntries(url.searchParams))})
+    if(request.method==='POST'&&url.pathname==='/api/customer-workspace/change-area')return sendJson(response,200,changeBranchArea((await readJson(request)).payload,session))
     if(request.method==='POST'&&url.pathname==='/api/customer-workspace/check-location')return sendJson(response,200,await checkCustomerLocation((await readJson(request)).payload,session))
     if(request.method==='POST'&&url.pathname==='/api/customer-workspace/review-location')return sendJson(response,200,reviewCustomerLocation((await readJson(request)).payload,session))
     if(request.method==='POST'&&url.pathname==='/api/customer-workspace/confirm-schedule')return sendJson(response,200,confirmCustomerSchedule((await readJson(request)).payload,session))
