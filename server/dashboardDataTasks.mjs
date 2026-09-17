@@ -8,6 +8,7 @@ export function dashboardDataTasks(database=db){
  EXISTS(SELECT 1 FROM temporary_locations t WHERE t.branch_id=b.id AND t.verification_status='pending_supervisor') pendingGps
  FROM branches b LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas a ON a.id=b.area_id
  WHERE COALESCE(b.lifecycle_status,'ACTIVE')='ACTIVE' AND b.is_active=1 AND b.status='active'
+ AND (c.id IS NULL OR (c.status='active' AND c.is_active=1))
  ORDER BY b.branch_name,b.jodoo_branch_id`).all()
  const items=[]
  for(const row of rows){
