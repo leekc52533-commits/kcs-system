@@ -34,18 +34,17 @@ export function reportSelection(data,key,metric=true){
 }
 const vehicleMetrics=['vehicles','plannedBranches','collectedBranches','noGoodsBranches','pendingBranches','cancelledBranches','weightKg','trips']
 export default function DailyReport({account}){
- const {language}=useI18n(),w=k=>reportWord(language,k),[open,setOpen]=useState(false),[date,setDate]=useState(kuchingDate),[data,setData]=useState(null),[error,setError]=useState(''),[refresh,setRefresh]=useState(0),[selection,setSelection]=useState(null),[target,setTarget]=useState(2000)
+ const {language}=useI18n(),w=k=>reportWord(language,k),[open,setOpen]=useState(false),[date,setDate]=useState(kuchingDate),[data,setData]=useState(null),[error,setError]=useState(''),[refresh,setRefresh]=useState(0),[selection,setSelection]=useState(null),[target,setTarget]=useState(2000),[columnToolbar,setColumnToolbar]=useState(null)
  useEffect(()=>{setSelection(null);if(!open)return;let active=true;setData(null);setError('');apiRequest('/api/daily-report?date='+encodeURIComponent(date)).then(r=>{if(active)setData(r)}).catch(()=>{if(active)setError(w('failed'))});return()=>{active=false}},[open,date,refresh,language])
  let chosen=data&&selection?reportSelection(data,selection.key,selection.metric):null
  if(chosen&&selection.vehicleId!=null){const id=String(selection.vehicleId);chosen=['vehicles','weightKg','trips'].includes(selection.key)?{section:'vehicles',rows:data.sections.vehicles.filter(r=>r.id===id)}:{...chosen,rows:chosen.rows.filter(r=>String(r.detail?.vehicleId)===id)}}
  const metricTargets=new Set(Object.keys(data?.summary||{}).map(k=>metricSections[k]||k))
  return <section className="daily-report">
   <header><h2>{w('title')}</h2><button onClick={()=>setOpen(v=>!v)} aria-expanded={open}>{w(open?'close':'open')}</button></header>
-  {open&&<><div className="daily-report-controls"><label>{w('date')}<input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><button onClick={()=>setRefresh(v=>v+1)}>{w('refresh')}</button><label>{w('target')}<input type="number" min="1" step="100" value={target} onChange={e=>setTarget(e.target.value)}/></label></div>
-   <p>{w('targetHint')}</p><p>{w('hint')}</p>
+  {open&&<><div className="daily-report-controls"><span className="daily-report-column-slot" ref={setColumnToolbar}/><label>{w('date')}<input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><button onClick={()=>setRefresh(v=>v+1)}>{w('refresh')}</button><label>{w('target')}<input type="number" min="1" step="100" value={target} onChange={e=>setTarget(e.target.value)}/></label></div>
    {error?<p role="alert">{error}</p>:!data||data.date!==date?<p role="status">{w('loading')}</p>:<>
     <p>{w(data.access.full?'full':data.access.finance?'finance':'operations')} · {w('saved')}: {reportTime(data.generatedAt)}</p>
-    <VehicleMatrix data={data} w={w} language={language} account={account} onSelect={setSelection}/>
+    <VehicleMatrix toolbarTarget={columnToolbar} data={data} w={w} language={language} account={account} onSelect={setSelection}/>
     <dl className="daily-report-summary daily-report-unified" aria-label={w('title')}>
      {Object.entries(data.summary).filter(([k])=>!vehicleMetrics.includes(k)).map(([k,v])=><div key={k}><dt>{w(k)}</dt><dd><button aria-label={w(k)+' · '+w('details')} aria-haspopup="dialog" onClick={()=>setSelection({key:k,metric:true})}><strong>{k.endsWith('Cents')?'RM '+(v/100).toFixed(2):Number(v).toLocaleString(undefined,{maximumFractionDigits:3})}</strong></button></dd></div>)}
      {Object.keys(data.sections).filter(k=>!metricTargets.has(k)&&k!=='vehicles').map(k=><div key={'section-'+k}><dt>{w(k)}</dt><dd><button aria-label={w(k)+' · '+w('details')} aria-haspopup="dialog" onClick={()=>setSelection({key:k,metric:false})}><strong>{data.sections[k].length}</strong></button></dd></div>)}
@@ -57,7 +56,7 @@ export default function DailyReport({account}){
   </>}
  </section>
 }
-function VehicleMatrix({data,w,language,account,onSelect}){
+function VehicleMatrix({data,w,language,account,onSelect,toolbarTarget}){
  const vehicles=data.sections.vehicles||[],ids=vehicles.map(r=>r.id),storage=`kcs.daily-report.vehicle-columns.${account?.id}`
  const [saved,setSaved]=useState(()=>{try{return JSON.parse(localStorage.getItem(storage))}catch{return []}}),[arrange,setArrange]=useState(false),[menu,setMenu]=useState(null),[filters,setFilters]=useState({}),[sort,setSort]=useState({}),ref=useRef(null)
  const order=normalizeExpenseOrder(saved,ids),columns=['metric',...order,'total'],format=v=>v==null?'—':Number(v).toLocaleString(undefined,{maximumFractionDigits:3})
@@ -66,7 +65,7 @@ function VehicleMatrix({data,w,language,account,onSelect}){
  if(sort.key)rows.sort((a,b)=>value(a,sort.key).localeCompare(value(b,sort.key),undefined,{numeric:true})*(sort.direction==='desc'?-1:1))
  const heading=c=>c==='metric'?w('metric'):c==='total'?w('total'):vehicles.find(v=>v.id===c)?.name
  return <div className="daily-report-matrix">
-  <button type="button" className="record-icon-button" title={expenseColumnWords[language]?.title||expenseColumnWords.en.title} aria-label={expenseColumnWords[language]?.title||expenseColumnWords.en.title} onClick={()=>setArrange(true)}><RecordActionIcon kind="columns"/></button>
+  {toolbarTarget&&createPortal(<button type="button" className="record-icon-button" title={expenseColumnWords[language]?.title||expenseColumnWords.en.title} aria-label={expenseColumnWords[language]?.title||expenseColumnWords.en.title} onClick={()=>setArrange(true)}><RecordActionIcon kind="columns"/></button>,toolbarTarget)}
   {arrange&&<ExpenseColumnOrder order={order} columns={ids.map(id=>[id,heading(id)])} w={expenseColumnWords[language]||expenseColumnWords.en} storageKey={storage} onSave={setSaved} onClose={()=>setArrange(false)}/>}
   <div className="archive-table" ref={ref}><table aria-label={w('title')}><thead><tr>{columns.map(c=><FilterHeader key={c} label={heading(c)} open={menu===c} onOpen={()=>setMenu(c)} onClose={()=>setMenu(null)} value={filters[c]??null} options={[...new Set(vehicleMetrics.map(k=>value(k,c)))].map(v=>({value:v,label:v}))} onChange={v=>setFilters(f=>({...f,[c]:v}))} sortDirection={sort.key===c?sort.direction:null} onSort={direction=>setSort(direction?{key:c,direction}:{})}/>)}</tr></thead><tbody>{rows.map(key=><tr key={key} data-metric={key}><th scope="row">{value(key,'metric')}</th>{[...order,'total'].map(c=><td key={c} className={c==='total'?'daily-report-total':undefined}><button aria-label={`${heading(c)} · ${w(key)} · ${w('details')}`} aria-haspopup="dialog" onClick={()=>onSelect({key,metric:true,...(c==='total'?{}:{vehicleId:c})})}>{value(key,c)}</button></td>)}</tr>)}</tbody></table></div><TableBottomScroll scrollRef={ref}/><p>{w('vehicleTotalHint')}</p>
  </div>

@@ -21,3 +21,6 @@
 .daily-report .daily-report-matrix thead th:not(:first-child) .expense-filter-trigger{position:relative;display:inline-flex;justify-content:center;text-align:center}
 .daily-report .daily-report-matrix thead th:not(:first-child) .expense-filter-trigger>span[aria-hidden]{position:absolute;left:100%;margin-left:8px}
 .daily-report .daily-report-matrix td button{display:inline-flex;justify-content:center;text-align:center}
+
+.daily-report-column-slot{display:inline-flex;flex:none;align-self:flex-end}
+.daily-report .daily-report-controls .record-icon-button{padding:0;width:48px;height:48px;flex:none}

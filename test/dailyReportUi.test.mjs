@@ -9,7 +9,7 @@ Object.defineProperty(globalThis,'navigator',{value:dom.window.navigator,configu
 const{createRoot}=await import('react-dom/client'),vite=await createServer({logLevel:'silent',server:{middlewareMode:true},appType:'custom'});after(()=>vite.close())
 const{default:Report}=await vite.ssrLoadModule('/src/DailyReport.jsx'),{I18nProvider}=await vite.ssrLoadModule('/src/i18n.jsx')
 const{reportWord:w}=await import('../shared/dailyReportWords.js')
-const click=label=>{const button=[...(document.querySelector('.daily-report-dialog')||document).querySelectorAll('button')].find(b=>b.textContent===label);assert.ok(button,'button: '+label);button.click()}
+const click=label=>{const button=[...(document.querySelector('.daily-report-dialog')||document).querySelectorAll('button')].find(b=>(b.getAttribute('aria-label')||b.textContent)===label);assert.ok(button,'button: '+label);button.click()}
 const result=date=>({date,generatedAt:'2026-09-15T03:00:00Z',access:{full:true,finance:true},summary:{weightKg:2500},missingSources:[],sections:{vehicles:[{id:'1',name:'Q123',kind:'vehicle',status:'running',quantity:2500,amountCents:null,actor:'KC',time:'',detail:{trips:2,reason:"Sebab hari hujan"}}]}})
 test('report loads in all languages; details and saved column order work; failures hide stale totals',async()=>{
  for(const language of ['en','ms','zh']){localStorage.clear();const root=createRoot(document.getElementById('root'));let fail=false;const calls=[];globalThis.fetch=async url=>{calls.push(url);if(fail)throw Error('offline');return{ok:true,json:async()=>result(new URL(url,'https://localhost').searchParams.get('date'))}}
