@@ -16,7 +16,7 @@ test('company search needs no date, opens branch history, keeps requested and ap
  const root=createRoot(document.getElementById('root'));try{
  await act(async()=>root.render(React.createElement(I18nProvider,{language},React.createElement(Page))));assert.equal(document.querySelectorAll('input[type=date]').length,0);
  await change(document.querySelector('form input'),'Company');await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
- assert.match(calls[0],/search=Company/);await act(async()=>document.querySelector('.history-link').click());assert.ok(calls.some(c=>c.endsWith('branchId=B10001&from=&to=')));
+ assert.ok(calls.some(c=>c.includes('search=&page=1')));assert.ok(calls.some(c=>c.includes('search=Company')));await act(async()=>document.querySelector('.history-link').click());assert.ok(calls.some(c=>c.endsWith('branchId=B10001&from=&to=')));
  for(const value of ['2026-01-03','2026-01-04','2026-01-05','2026-01-02','Holiday','KC'])assert.ok(document.body.textContent.includes(value),value);
  assert.equal(document.querySelectorAll('.archive-table table').length,2);assert.equal(document.querySelectorAll('input[type=date]').length,2)
  }finally{await act(async()=>root.unmount())}
