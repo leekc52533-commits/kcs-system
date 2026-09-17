@@ -44,3 +44,19 @@ test('address check stages suggestions without saving and clears stale results w
   }finally{await act(async()=>root.unmount())}
  }
 })
+
+test('selecting paused bypasses schedule date validation and submits no schedule; active restores validation',async()=>{
+ for(const language of ['en','ms','zh']){
+ const posts=[],data={customer:{customerId:'C1',customerName:'Existing',status:'active',materialPricing:[]},branch:{branchId:'B1',branchName:'Branch'},schedule:{scheduleId:'S1',frequency:'Once a week',weekdays:['Monday'],effectiveDate:'',routeNumber:''},pending:[],routeOptions:[],areas:[],canManagePricing:false,canCaptureGps:false,canReviewGps:false,revision:'r1'};
+ globalThis.fetch=async(url,options={})=>{if(options.method==='POST'){posts.push(JSON.parse(options.body));return{ok:false,status:409,headers:new Map(),json:async()=>({errorCode:'CONFLICT'})}}return{ok:true,json:async()=>String(url).startsWith('/api/materials')?{items:[]}:data}};
+ const root=createRoot(document.getElementById('root'));try{
+ await act(async()=>root.render(React.createElement(I18nProvider,{language},React.createElement(Editor,{branchId:'B1',onClose(){}}))));
+ const date=document.querySelector('input[type=date]'),status=[...document.querySelectorAll('select')].find(s=>[...s.options].some(o=>o.value==='paused'));
+ assert.equal(date.willValidate,true);assert.equal(date.checkValidity(),false);
+ await act(async()=>{status.value='paused';status.dispatchEvent(new Event('change',{bubbles:true}))});assert.equal(date.willValidate,false);
+ await change(document.querySelector('.customer-workspace-fields textarea'),'Duplicate');await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ assert.equal(posts[0].customer.status,'paused');assert.equal(posts[0].schedule,null);
+ await act(async()=>{status.value='active';status.dispatchEvent(new Event('change',{bubbles:true}))});assert.equal(date.willValidate,true);assert.equal(date.checkValidity(),false);
+ }finally{await act(async()=>root.unmount())}
+ }
+})

@@ -45,7 +45,7 @@ export function saveCustomerWorkspace(payload,actor={},db=defaultDb){
   const customer=before.customer?updateCustomer(before.customer.customerId,c,db):createCustomer(c,db)
   const bp={...pick(payload.branch,branchFields),customerId:customer.customerId,reason,changedBy}
   const branch=before.branch?updateBranchWithLifecycle(before.branch.branchId,bp,{changedBy,accountId:actor.id},db):createBranch(bp,db)
-  if(payload.schedule){
+  if(payload.schedule&&!['paused','closed'].includes(customer.status)){
    const current=getCollectionScheduleManagement(branch.branchId,db)
    if(!current)throw fail('Only active branches can change collection schedules.',409)
    saveCollectionScheduleManagement(branch.branchId,{...pick(payload.schedule,['frequency','weekdays','anchorDate','effectiveDate','monthlyOccurrence','routeNumber','sundayRouteNumber']),routeNumber:payload.schedule.routeNumber||undefined,reason,changedBy,sundayAuthorized:true,expectedUpdatedAt:current.updatedAt},db)
@@ -56,7 +56,7 @@ export function saveCustomerWorkspace(payload,actor={},db=defaultDb){
   }
   saveLocationCheck(payload,locationProof,getBranch(branch.branchId,db),actor,db)
   let review=[]
-  if(payload.schedule){
+  if(payload.schedule&&!['paused','closed'].includes(customer.status)){
    if(db.prepare('SELECT 1 FROM weekly_route_plans WHERE is_active=1').get())generateWeek({startDate:kuchingDate(),count:7,onlyMissing:true,generatedBy:changedBy},db)
    review=reconcileScheduleWindow({branchIds:[branch.internalId],changedBy},db).map(r=>({...r,expectedRevision:db.prepare('SELECT revision FROM dispatch_days WHERE dispatch_date=?').get(r.date)?.revision}))
   }

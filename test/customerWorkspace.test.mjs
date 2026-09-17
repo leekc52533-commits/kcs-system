@@ -26,3 +26,9 @@ test('approved day defers a new branch until supervisor confirmation and leaves 
  assert.equal(JSON.stringify(db.prepare('SELECT * FROM dispatch_stops WHERE branch_id=?').all(first.branch.internalId)),before)
  db.close()
 })
+
+test('pausing or closing a customer does not require or rewrite its existing collection schedule',()=>{
+ for(const status of ['paused','closed']){const db=fixture(),r=saveCustomerWorkspace(payload(),owner,db);db.exec("UPDATE branch_schedules SET effective_date=NULL");const before=JSON.stringify(db.prepare('SELECT * FROM branch_schedules').all()),fresh=customerWorkspace({branchId:r.branch.branchId},owner,db);
+ const result=saveCustomerWorkspace({requestId:randomUUID(),reason:'Duplicate customer',branchId:r.branch.branchId,revision:fresh.revision,customer:{status},branch:{branchName:r.branch.branchName},schedule:{frequency:'Once a week',weekdays:[],effectiveDate:''}},owner,db);
+ assert.equal(result.customer.status,status);assert.equal(JSON.stringify(db.prepare('SELECT * FROM branch_schedules').all()),before);assert.deepEqual(result.review,[]);db.close()}
+})
