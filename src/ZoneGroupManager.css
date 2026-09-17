@@ -19,3 +19,16 @@
 .zone-manager .zone-create-actions>button{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:10px 18px;border:1px solid #176b5b;border-radius:12px;background:#176b5b;color:#fff;font:inherit;font-weight:700;white-space:nowrap;cursor:pointer}
 .zone-manager .master-actions>small{flex:1 1 320px;line-height:1.5}
 .branch-area-entry{border:0;background:transparent;color:#176b59;text-decoration:underline;cursor:pointer;font:inherit;padding:8px 0;text-align:left}.branch-area-editor{display:grid;gap:10px;min-width:240px;max-width:360px;padding:14px;background:#f3f8f6;border:1px solid #b9d5ce;border-radius:12px}.branch-area-editor label{display:grid;gap:6px}.branch-area-editor select,.branch-area-editor input{width:100%;box-sizing:border-box;font:inherit;padding:8px}.branch-area-editor>div{display:flex;gap:8px}.branch-area-editor [role=alert]{white-space:normal;color:#a33}
+
+/* Area rows must not inherit the legacy two-column list or full-width inputs. */
+.zone-manager .zone-confirmation-layout{grid-template-columns:minmax(0,1fr)}
+.zone-manager .zone-area-list{display:block;min-width:0;width:100%;box-sizing:border-box}
+.zone-manager .zone-area-list>article{display:flex;flex-wrap:wrap;gap:12px;min-width:0;padding:14px;box-sizing:border-box}
+.zone-manager .zone-area-list>article>input[type=checkbox]{flex:0 0 20px;width:20px;min-width:20px;max-width:20px;height:20px;margin:0;padding:0}
+.zone-manager .zone-area-list>article>.area-open{flex:1 1 220px;min-width:0;max-width:none;white-space:normal;overflow-wrap:anywhere}
+.zone-manager .zone-area-list>article>.area-open small{line-height:1.6;white-space:normal}
+.zone-manager .zone-area-list>article>.area-confirmed,.zone-manager .zone-area-list>article>.area-pending{flex:0 0 auto;white-space:nowrap}
+.zone-manager .zone-area-list>article>select{flex:1 1 180px;width:auto;min-width:0;max-width:300px;box-sizing:border-box}
+.zone-manager .zone-area-list>article>button:last-child{flex:0 0 auto;min-width:max-content;white-space:nowrap;min-height:40px;padding:8px 12px}
+.zone-manager .area-detail{position:static;min-width:0;max-height:none}
+@media(max-width:600px){.zone-manager .zone-area-list>article>.area-open{flex-basis:calc(100% - 44px)}.zone-manager .zone-area-list>article>select{max-width:none}}
