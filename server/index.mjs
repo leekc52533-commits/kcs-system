@@ -1,3 +1,4 @@
+import {collectionHistory} from './collectionHistoryService.mjs'
 import {createArea} from './createArea.mjs'
 import {dailyReport,reportAccess} from './dailyReport.mjs'
 import {dashboardDataTasks} from './dashboardDataTasks.mjs'
@@ -378,6 +379,7 @@ const server = http.createServer(async (request, response) => {
       return item ? sendJson(response, 200, item) : sendJson(response, 404, { error: 'Branch not found' })
     }
     if (request.method === 'GET' && url.pathname === '/api/schedules') return sendJson(response, 200, schedules(Object.fromEntries(url.searchParams)))
+    if (request.method === 'GET' && url.pathname === '/api/collection-history') return sendJson(response,200,collectionHistory(Object.fromEntries(url.searchParams),session))
     if (request.method === 'GET' && url.pathname === '/api/collection-schedule-management') return sendJson(response,200,{items:listCollectionScheduleManagement(Object.fromEntries(url.searchParams))})
     if (request.method === 'GET' && /^\/api\/branches\/[^/]+\/collection-schedule$/.test(url.pathname)) {const item=getCollectionScheduleManagement(decodeURIComponent(url.pathname.split('/')[3]));return item?sendJson(response,200,item):sendJson(response,404,{error:'Active Branch not found.'})}
     if (request.method === 'PATCH' && /^\/api\/branches\/[^/]+\/collection-schedule$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});const payload=(await readJson(request)).payload;return sendJson(response,200,saveCollectionScheduleManagement(decodeURIComponent(url.pathname.split('/')[3]),{...payload,sundayAuthorized:canManageDispatch(session),changedBy:session.employeeName}))}
