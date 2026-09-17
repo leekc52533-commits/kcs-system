@@ -37,3 +37,19 @@
 .zone-manager .area-detail-popup .area-detail{margin:0;border:0;box-shadow:none;overflow:visible;overflow-wrap:anywhere}
 .area-detail-popup .area-detail>header{position:sticky;top:-17px;z-index:1;background:#fff;padding-top:12px}
 .area-detail-popup .branch-area-editor{min-width:0;max-width:100%;box-sizing:border-box}
+
+.area-detail-popup .area-detail{font-size:16px;line-height:1.6}
+.area-detail-popup .area-detail>header small{font-size:14px}
+.area-detail-popup .area-detail h3{font-family:inherit;font-size:24px;line-height:1.4}
+.area-detail-popup .area-detail h4{font-size:19px;line-height:1.5}
+.area-detail-popup .area-detail-summary>span{font-size:16px;padding:14px;min-width:0}
+.area-detail-popup .area-detail-summary b{font-size:20px;line-height:1.5;height:auto;max-height:none;overflow:visible}
+.area-detail-popup .area-detail-summary b>span{font-size:inherit;padding:0;background:none;color:inherit;line-height:inherit}
+.area-detail-popup .area-branches strong{font-size:18px;line-height:1.5}
+.area-detail-popup .area-branches small,.area-detail-popup .area-branches p,.area-detail-popup .area-branches article div span{font-size:16px;line-height:1.6}
+.area-detail-popup .adjacent-areas{gap:10px}
+.area-detail-popup .adjacent-areas>span{display:block;padding:14px;font-size:16px;line-height:1.6;height:auto;max-height:none;overflow:visible}
+.area-detail-popup .adjacent-areas b{display:block;font-size:18px;line-height:1.6;height:auto;max-height:none;overflow:visible;white-space:normal}
+.area-detail-popup .adjacent-areas span[data-i18n-raw]{padding:0;border:0;background:none;font-size:inherit;color:inherit;line-height:inherit;height:auto;max-height:none;overflow:visible}
+.area-detail-popup .area-detail button,.area-detail-popup .area-detail input{font-size:16px;line-height:1.5}
+@media(max-width:480px){.area-detail-popup .area-detail-summary{grid-template-columns:minmax(0,1fr)}}
