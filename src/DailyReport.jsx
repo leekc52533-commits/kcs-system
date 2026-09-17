@@ -41,10 +41,10 @@ export default function DailyReport({account}){
    <p>{w('targetHint')}</p><p>{w('hint')}</p>
    {error?<p role="alert">{error}</p>:!data||data.date!==date?<p role="status">{w('loading')}</p>:<>
     <p>{w(data.access.full?'full':data.access.finance?'finance':'operations')} · {w('saved')}: {reportTime(data.generatedAt)}</p>
-    <nav className="daily-report-summary" aria-label={w('details')}>
-     {Object.entries(data.summary).map(([k,v])=><button key={k} aria-haspopup="dialog" onClick={()=>setSelection({key:k,metric:true})}><span>{w(k)}</span> <strong>({k.endsWith('Cents')?'RM '+(v/100).toFixed(2):Number(v).toLocaleString(undefined,{maximumFractionDigits:3})})</strong></button>)}
-     {Object.keys(data.sections).filter(k=>!metricTargets.has(k)).map(k=><button key={'section-'+k} aria-haspopup="dialog" onClick={()=>setSelection({key:k,metric:false})}>{w(k)} <strong>({data.sections[k].length})</strong></button>)}
-    </nav>
+    <dl className="daily-report-summary daily-report-unified" aria-label={w('title')}>
+     {Object.entries(data.summary).map(([k,v])=><div key={k}><dt>{w(k)}</dt><dd><button aria-label={w(k)+' · '+w('details')} aria-haspopup="dialog" onClick={()=>setSelection({key:k,metric:true})}><strong>{k.endsWith('Cents')?'RM '+(v/100).toFixed(2):Number(v).toLocaleString(undefined,{maximumFractionDigits:3})}</strong></button></dd></div>)}
+     {Object.keys(data.sections).filter(k=>!metricTargets.has(k)).map(k=><div key={'section-'+k}><dt>{w(k)}</dt><dd><button aria-label={w(k)+' · '+w('details')} aria-haspopup="dialog" onClick={()=>setSelection({key:k,metric:false})}><strong>{data.sections[k].length}</strong></button></dd></div>)}
+    </dl>
     <p>{w('pendingHint')}</p>{data.access.finance&&<p>{w('salesHint')}</p>}
     <p>{w('coverage')}</p>{data.missingSources.length>0&&<p role="status">{w('missing')}: {data.missingSources.join(', ')}</p>}
     {chosen&&<ReportDialog title={w(selection.key)} date={date} w={w} onClose={()=>setSelection(null)}>{dockRef=><ReportTable dockRef={dockRef} key={`${date}-${selection.key}`} rows={chosen.rows} section={chosen.section} finance={data.access.finance} w={w} language={language} target={Number(target)} account={account}/>}</ReportDialog>}

@@ -5,3 +5,11 @@
 .daily-report-scroll-dock{flex:none;min-height:28px;margin-top:8px}.daily-report-scroll-dock .table-bottom-scroll--docked{position:relative;bottom:auto;left:auto;z-index:auto}.daily-report-scroll-dock input[type=range]{max-width:none;padding:0;border:0;border-radius:0}
 
 .daily-report-row-reason{margin-top:8px;max-width:330px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5;font-size:15px}
+
+/* One continuous summary; individual metrics are no longer cards. */
+.daily-report .daily-report-unified{display:block;margin:18px 0;border-top:1px solid #dbe7e4}
+.daily-report-unified>div{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:16px;border-bottom:1px solid #dbe7e4}
+.daily-report-unified dt{padding:10px 0;font-size:16px;overflow-wrap:anywhere}
+.daily-report-unified dd{margin:0}
+.daily-report .daily-report-unified button{min-height:44px;padding:8px 12px;border:0;border-radius:0;justify-content:flex-end;background:transparent;text-decoration:underline;text-underline-offset:3px}
+.daily-report .daily-report-unified button:hover,.daily-report .daily-report-unified button:focus-visible{background:#eaf5f1}
