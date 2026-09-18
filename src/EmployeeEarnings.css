@@ -3,3 +3,30 @@
 .earnings-personal p{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;border-bottom:1px solid #e1ebea;padding:8px 0}.earnings-personal b{font-size:19px;color:#176e60}
 
 .income-badge{display:inline-flex;align-items:center;justify-content:center;min-width:20px;margin-left:5px;padding:1px 5px;border-radius:12px;background:#a84432;color:#fff;font-size:12px}.income-updates{margin:12px;background:#fff;border:1px solid #bad8d2;border-radius:14px;font-size:16px}.income-updates article{padding:12px 0;border-bottom:1px solid #dce8e5}.income-updates button{min-height:44px}.income-updates h2{font-size:20px}.mobile-app>nav button{min-height:52px}
+
+/* Shared KCS controls: white, teal outline, readable text and comfortable targets. */
+.earnings-page{font-family:inherit}
+.earnings-page button:not(.expense-filter-trigger),.earnings-detail-dialog button{appearance:none;border:1px solid #bad8d2;border-radius:12px;background:#fff;color:#176e60;font-weight:600;font-family:inherit;font-size:16px;line-height:1.4;padding:10px 18px;min-height:48px;cursor:pointer;box-sizing:border-box}
+.earnings-page button:not(.expense-filter-trigger):hover,.earnings-detail-dialog button:hover{background:#edf7f4}
+.earnings-page button:disabled{opacity:.55;cursor:not-allowed}
+.earnings-page button:focus-visible,.earnings-detail-dialog button:focus-visible,.earnings-page input:focus-visible{outline:3px solid #85bfb4;outline-offset:3px}
+.earnings-page input{width:100%;min-height:48px;border:1px solid #bad8d2;border-radius:12px;background:#fff;color:#18242d;font-family:inherit;line-height:1.5;padding:10px 14px}
+.earnings-page input:disabled{background:#f3f6f7;color:#73818a}
+.earnings-toolbar>label{min-width:210px;max-width:290px}.earnings-toolbar{margin:20px 0;gap:12px}
+.earnings-page .earnings-icon{display:inline-flex;align-items:center;justify-content:center;flex:0 0 48px;width:48px;height:48px;padding:9px}
+.earnings-page .earnings-name{display:inline;text-align:left;border:0;border-radius:0;background:transparent;padding:4px 0;box-shadow:none;color:#176e60;font-weight:650;min-height:44px;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+.earnings-page .earnings-name:hover{background:transparent;text-decoration:underline;text-underline-offset:4px}
+.earnings-page .earnings-scroll th{white-space:nowrap;min-width:170px;vertical-align:middle}
+.earnings-page .earnings-scroll th:first-child,.earnings-page .earnings-scroll td:first-child{min-width:250px;max-width:320px}
+.earnings-page .expense-filter-trigger{display:inline-flex;align-items:center;gap:8px;border:0;border-radius:0;background:transparent;color:inherit;font:inherit;font-weight:700;padding:0;white-space:nowrap;min-height:44px;box-shadow:none}
+.earnings-page .archive-filter-label{white-space:nowrap;overflow-wrap:normal;word-break:normal}
+.earnings-settings{padding:24px}.earnings-settings>h2{margin-top:0}.earnings-settings>button{margin-bottom:20px}
+.earnings-settings fieldset{display:grid;gap:18px;min-width:0}
+.earnings-settings fieldset>label{max-width:420px}.earnings-settings fieldset>button{justify-self:start}
+.earnings-tier{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:16px;align-items:end;margin:0;max-width:850px}.earnings-tier label{min-width:0}
+.earnings-page .earnings-save{background:#176e60;color:white;border-color:#176e60}.earnings-page .earnings-save:hover{background:#10584d}
+.earnings-settings details{border-top:1px solid #dce8e5;padding-top:16px}.earnings-settings summary{cursor:pointer;color:#176e60;font-weight:600}
+.earnings-detail-dialog{box-sizing:border-box;width:min(820px,calc(100vw - 32px));max-height:85vh;max-height:85dvh;margin:auto;padding:0;border:1px solid #bad8d2;border-radius:18px;background:#fff;color:#18242d;box-shadow:0 20px 70px #132b3530;font-size:16px;font-family:inherit;line-height:1.6;overflow:auto}
+.earnings-detail-dialog::backdrop{background:#142b3a70}
+.earnings-detail-content{padding:24px;overflow-wrap:anywhere}.earnings-detail-content>header{display:flex;align-items:start;justify-content:space-between;gap:20px}.earnings-detail-content>header>div{min-width:0}.earnings-detail-content>header button{flex-shrink:0}.earnings-detail-content h2{font-size:24px;line-height:1.4;margin:0}.earnings-detail-content h3{font-size:20px}.earnings-detail-content article{padding:16px 0;border-top:1px solid #dce8e5}.earnings-detail-content p{margin:8px 0}
+@media(max-width:600px){.earnings-tier{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}.earnings-tier>button{grid-column:1/-1;justify-self:end}.earnings-detail-content{padding:16px}.earnings-detail-content h2{font-size:21px}.earnings-settings{padding:16px}}
