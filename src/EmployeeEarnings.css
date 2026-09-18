@@ -30,3 +30,5 @@
 .earnings-detail-dialog::backdrop{background:#142b3a70}
 .earnings-detail-content{padding:24px;overflow-wrap:anywhere}.earnings-detail-content>header{display:flex;align-items:start;justify-content:space-between;gap:20px}.earnings-detail-content>header>div{min-width:0}.earnings-detail-content>header button{flex-shrink:0}.earnings-detail-content h2{font-size:24px;line-height:1.4;margin:0}.earnings-detail-content h3{font-size:20px}.earnings-detail-content article{padding:16px 0;border-top:1px solid #dce8e5}.earnings-detail-content p{margin:8px 0}
 @media(max-width:600px){.earnings-tier{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}.earnings-tier>button{grid-column:1/-1;justify-self:end}.earnings-detail-content{padding:16px}.earnings-detail-content h2{font-size:21px}.earnings-settings{padding:16px}}
+
+.earnings-navigation{display:flex;align-items:center;gap:16px;flex-wrap:nowrap;margin-bottom:24px}.earnings-navigation .earnings-back{flex:0 0 48px;width:48px;padding:0;font-size:28px}.earnings-navigation h2{margin:0}.earnings-settings-page .earnings-settings{margin-top:0}
