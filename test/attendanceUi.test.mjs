@@ -33,13 +33,13 @@ test('read-only preview never requests or performs attendance',async()=>{
 })
 test('employee setup saves explicit company site/radius then home without changing historical records',async()=>{
  const{AttendanceSettings}=await vite.ssrLoadModule('/src/Attendance.jsx'),root=createRoot(document.getElementById('root'));let saved=null
- globalThis.fetch=async(url,options={})=>{assert.equal(url,'/api/attendance/employees/2');if(options.method==='PATCH')saved=JSON.parse(options.body);return{ok:true,json:async()=>({employeeId:2,mode:saved?.mode||'',locationId:saved?.locationId||null,radiusM:saved?.radiusM||200,revision:saved?1:0,locations:[{id:1,name:'Company A'}],records:[]})}}
+ globalThis.fetch=async(url,options={})=>{assert.equal(url,'/api/attendance/employees/2');if(options.method==='PATCH')saved=JSON.parse(options.body);return{ok:true,json:async()=>({employeeId:2,mode:saved?.mode||'company',locationId:saved?.locationId||null,radiusM:saved?.radiusM||200,revision:saved?1:0,locations:[{id:1,name:'Company A'}],records:[]})}}
  try{
  await act(async()=>root.render(React.createElement(I18nProvider,{language:'zh'},React.createElement(AttendanceSettings,{employeeId:2}))))
  const change=async(el,value)=>act(async()=>{el.value=value;el.dispatchEvent(new Event('change',{bubbles:true}))})
  await change(document.querySelector('select'),'company')
  assert.equal(document.querySelector('input[type=number]').value,'200')
- await change(document.querySelectorAll('select')[1],'1')
+ assert.equal(document.querySelectorAll('select').length,1);assert.ok(document.body.textContent.includes('Company A'))
  await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='保存打卡设置').click())
  assert.deepEqual(saved,{mode:'company',locationId:1,radiusM:200,revision:0})
  await change(document.querySelector('select'),'home');assert.equal(document.querySelectorAll('select').length,1)

@@ -9,7 +9,7 @@ const gps={latitude:1.5,longitude:110.3,accuracyM:10,deviceCapturedAt:now.toISOS
 function fixture(){const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON;'+schemaSql);db.exec(`INSERT INTO employees(id,name,employment_status,is_active) VALUES(1,'KC','active',1),(2,'A','active',1),(3,'B','active',1);INSERT INTO operational_locations(id,name,location_type,operational_type,latitude,longitude) VALUES(1,'Company','depot','Company Yard',1.5,110.3),(2,'Factory','factory','Buyer',1.5,110.3);`);return db}
 const company={mode:'company',locationId:1,radiusM:200,revision:0},home={mode:'home',radiusM:200,revision:0}
 test('company geofence validates fresh GPS and saves immutable server time with location snapshot',()=>{const db=fixture();try{
- assert.equal(attendanceStatus(db,a,now).configured,false)
+ assert.equal(attendanceStatus(db,a,now).configured,true)
  saveAttendanceSetup(db,manager,2,company,now)
  for(const change of [{latitude:1.51},{longitude:null},{accuracyM:250},{deviceCapturedAt:'2026-09-17T23:00:00Z'},{deviceCapturedAt:'2026-09-18T01:00:00Z'}])assert.throws(()=>clockIn(db,a,{...gps,...change},now))
  assert.equal(db.prepare('SELECT COUNT(*) n FROM attendance_records').get().n,0)
@@ -42,11 +42,24 @@ test('settings permissions, revision, company GPS, inactive employees and audit 
  assert.equal(db.prepare('SELECT COUNT(*) n FROM attendance_settings_history').get().n,1)
  db.exec("UPDATE employees SET employment_status='inactive',is_active=0 WHERE id=2")
  assert.throws(()=>clockIn(db,a,gps,now),{code:'ATTENDANCE_DENIED'})
- assert.throws(()=>clockIn(db,b,gps,now),{code:'ATTENDANCE_SETUP'})
+ assert.equal(clockIn(db,b,gps,now).record.mode,'company')
  }finally{db.close()}})
 test('schema 75 migration repeats safely and keeps attendance and employee data',()=>{const db=fixture();try{
  db.exec('INSERT INTO schema_meta(version) VALUES(74)');applyV75Migration(db);applyV75Migration(db)
  assert.equal(db.prepare('SELECT MAX(version) v FROM schema_meta').get().v,75)
  assert.equal(db.prepare('PRAGMA integrity_check').get().integrity_check,'ok')
  assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(),[])
+ }finally{db.close()}})
+
+test('unconfigured staff default to the sole company, home overrides survive, multiple yards require selection',()=>{const db=fixture();try{
+ const setup=attendanceSetup(db,manager,2);assert.equal(setup.mode,'company');assert.equal(setup.locationId,1);assert.equal(setup.radiusM,200)
+ assert.equal(attendanceDaily(db,manager,'2026-09-18').items.length,3)
+ assert.throws(()=>clockIn(db,a,{...gps,latitude:2},now),{code:'ATTENDANCE_OUTSIDE'})
+ assert.equal(clockIn(db,a,gps,now).record.mode,'company')
+ saveAttendanceSetup(db,manager,3,home)
+ db.exec("INSERT INTO operational_locations(id,name,location_type,operational_type,latitude,longitude) VALUES(3,'Second Company','depot','Company Yard',2,110)")
+ assert.equal(attendanceSetup(db,manager,2).locationId,null)
+ assert.equal(clockIn(db,b,{...gps,latitude:3},now).record.mode,'home')
+ const next=new Date('2026-09-19T00:00:00Z');assert.throws(()=>clockIn(db,a,{...gps,deviceCapturedAt:next.toISOString()},next),{code:'ATTENDANCE_LOCATION'})
+ saveAttendanceSetup(db,manager,2,company);assert.equal(attendanceSetup(db,manager,2).locationId,1)
  }finally{db.close()}})
