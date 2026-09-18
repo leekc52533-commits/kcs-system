@@ -29,3 +29,21 @@ test('merged weight and rate preserve earnings and migrate saved columns without
   assert.deepEqual(values.map(row=>row.slice(1,5)),[['28000','0','0.043','1204.00'],['28000','0','0.03','840.00'],['29000','0','0.043 / 0.03','1234.00']])
  }finally{await act(async()=>root.unmount());localStorage.removeItem('earnings-columns')}
 })
+
+test('personal driver and attendant screens show only own weight and applicable rate without role headings',async()=>{
+ for(const role of ['driver','crew']){
+  const root=createRoot(document.getElementById('root'))
+  const employee={...report.items[0],name:'My Name',driverKg:role==='driver'?28000:0,crewKg:role==='crew'?28000:0,rate:.043,crewRate:.03,amount:role==='driver'?1204:840,details:report.items[0].details.map(d=>({...d,role}))}
+  globalThis.fetch=async url=>({ok:true,json:async()=>({...report,period:periodFor(url),items:[employee]})})
+  try{
+   await act(async()=>root.render(React.createElement(I18nProvider,{language:'en'},React.createElement(Page,{personal:true}))))
+   const card=document.querySelector('.earnings-personal article')
+   assert.ok(card.textContent.includes('28000'))
+   assert.ok(card.textContent.includes(role==='driver'?'0.043':'0.03'))
+   assert.ok(!card.textContent.includes(role==='driver'?'0.03':'0.043'))
+   await act(async()=>card.querySelector('.earnings-name').click())
+   assert.match(document.querySelector('dialog').textContent,/TN-1/)
+   assert.doesNotMatch(document.body.textContent,/Driver|Attendant/)
+  }finally{await act(async()=>root.unmount())}
+ }
+})
