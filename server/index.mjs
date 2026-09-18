@@ -1,3 +1,4 @@
+import {startIncomeScheduler,incomeNotifications,readIncomeNotification} from './incomeNotifications.mjs'
 import {earningsReport,earningsSettings,saveEarningsSettings,recordEarningsPayment} from './earningsService.mjs'
 import {cargoContext,startCargoBatch,lookupCargoBatch,joinCargoBatch,acknowledgeCargo} from './cargoBatchService.mjs'
 import {dashboardRecentActivity} from './dashboardRecentActivity.mjs'
@@ -177,6 +178,8 @@ const server = http.createServer(async (request, response) => {
       if(!file.startsWith(path.resolve(uploadsDir)+path.sep)||!fs.existsSync(file))return sendJson(response,404,{error:'Proof not found'})
       response.writeHead(200,{'Content-Type':proof.contentType,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'});return fs.createReadStream(file).pipe(response)
     }
+    if(url.pathname==='/api/mobile/income-notifications'&&request.method==='GET'){response.setHeader('Cache-Control','private, no-store');return sendJson(response,200,incomeNotifications(db,session))}
+    if(url.pathname==='/api/mobile/income-notifications/read'&&request.method==='POST')return sendJson(response,200,readIncomeNotification(db,session,(await readJson(request)).payload.id))
     if(url.pathname==='/api/mobile/earnings'&&request.method==='GET'){response.setHeader('Cache-Control','private, no-store');return sendJson(response,200,earningsReport(db,session,url.searchParams.get('date'),{personal:true}))}
     if(url.pathname==='/api/earnings'&&request.method==='GET'){response.setHeader('Cache-Control','private, no-store');return sendJson(response,200,earningsReport(db,session,url.searchParams.get('date')))}
     if(url.pathname==='/api/earnings/settings'&&request.method==='GET')return sendJson(response,200,earningsSettings(db,session))
@@ -560,6 +563,7 @@ const server = http.createServer(async (request, response) => {
 })
 
 ensureRecommendations()
+const stopIncomeScheduler=startIncomeScheduler(db)
 server.listen(port, host, () => {
   console.log(`[KCS API] ready on http://${host}:${port}`)
   for(const url of networkUrls())console.log(`[KCS Mobile] ${url}`)
@@ -567,6 +571,6 @@ server.listen(port, host, () => {
   console.log(`[KCS API] uploads: ${uploadsDir}`)
 })
 
-function shutdown() { server.close(() => process.exit(0)) }
+function shutdown() { stopIncomeScheduler();server.close(() => process.exit(0)) }
 process.on('SIGINT', shutdown)
 process.on('SIGTERM', shutdown)

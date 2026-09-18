@@ -1,0 +1,27 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import {DatabaseSync} from 'node:sqlite'
+import {earningsSchema} from '../server/migrationV72.mjs'
+import {incomeNoticeSchema,applyV73Migration} from '../server/migrationV73.mjs'
+import {generateDailyIncomeNotifications,incomeNotifications,readIncomeNotification,startIncomeScheduler} from '../server/incomeNotifications.mjs'
+function fixture(){const db=new DatabaseSync(':memory:');db.exec(`
+CREATE TABLE employees(id INTEGER PRIMARY KEY,name,job_role,is_active,employment_status);
+CREATE TABLE employee_job_roles(employee_id,role);
+CREATE TABLE sales_settlements(id INTEGER PRIMARY KEY,vehicle_id,lines_json,revision);
+CREATE TABLE cargo_batches(id INTEGER PRIMARY KEY,code,collection_date,vehicle_id,plate_snapshot);
+CREATE TABLE cargo_batch_members(batch_id,employee_id,name_snapshot,role);
+CREATE TABLE cargo_batch_unloads(record_id,batch_id,ticket_number);
+CREATE TABLE unloading_weight_records(id INTEGER PRIMARY KEY,vehicle_id,service_date,confirmed_weight_kg,status);
+CREATE TABLE schema_meta(version);
+INSERT INTO schema_meta VALUES(71);
+INSERT INTO employees VALUES(1,'Driver A','driver',1,'active'),(2,'Crew B','crew',1,'active'),(3,'Crew C','crew',1,'active'),(4,'Delivery driver','driver',1,'active');
+INSERT INTO cargo_batches VALUES(1,'H001','2026-09-15',10,'AAA');
+INSERT INTO cargo_batch_members VALUES(1,1,'Driver A','driver'),(1,2,'Crew B','crew'),(1,3,'Crew C','crew');
+INSERT INTO cargo_batch_unloads VALUES(1,1,'TN-1');
+INSERT INTO unloading_weight_records VALUES(1,10,'2026-09-17',28010,'confirmed');
+`+earningsSchema);db.prepare('INSERT INTO sales_settlements VALUES(1,10,?,1)').run(JSON.stringify([{slipNumber:'TN-1',deliveryDate:'2026-09-17',weightKg:28000}]));return db}
+const setup=()=>{const db=fixture();db.exec(incomeNoticeSchema);return db}
+test('Kuching midnight rolls day, retries and restarts do not duplicate, month boundary reports prior half',()=>{const db=setup();try{let now=new Date('2026-09-15T15:59:59Z'),tick,cancelled=false;const stop=startIncomeScheduler(db,{now:()=>now,schedule:fn=>{tick=fn;return 1},cancel:()=>{cancelled=true},onError:e=>{throw e}});assert.equal(db.prepare('SELECT COUNT(*) n FROM income_notifications').get().n,4);tick();assert.equal(db.prepare('SELECT COUNT(*) n FROM income_notifications').get().n,4);now=new Date('2026-09-15T16:00:00Z');tick();let notes=incomeNotifications(db,{employeeId:2});assert.equal(notes.unread,2);assert.equal(notes.items[0].updateDate,'2026-09-16');assert.equal(notes.items[0].summary.period.start,'2026-09-01');assert.equal(notes.items[0].summary.amount,840);assert.equal(generateDailyIncomeNotifications(db,now).inserted,0);stop();assert.equal(cancelled,true);generateDailyIncomeNotifications(db,new Date('2026-09-30T16:00:01Z'));notes=incomeNotifications(db,{employeeId:2});assert.equal(notes.items[0].updateDate,'2026-10-01');assert.equal(notes.items[0].summary.period.start,'2026-09-16');assert.equal(notes.items[0].summary.period.due,'2026-10-05')}finally{db.close()}})
+test('own notices only, cross-employee acknowledgement denied and snapshots retained after source changes',()=>{const db=setup();try{generateDailyIncomeNotifications(db,new Date('2026-09-15T16:00:00Z'));const a=incomeNotifications(db,{employeeId:1}),b=incomeNotifications(db,{employeeId:2});assert.equal(a.items[0].summary.amount,1204);assert.equal(b.items[0].summary.amount,840);assert.throws(()=>readIncomeNotification(db,{employeeId:2},a.items[0].id),{code:'EARN_ACCESS'});readIncomeNotification(db,{employeeId:2},b.items[0].id);readIncomeNotification(db,{employeeId:2},b.items[0].id);assert.equal(incomeNotifications(db,{employeeId:2}).unread,0);assert.equal(incomeNotifications(db,{employeeId:1}).unread,1);db.exec('DELETE FROM sales_settlements');assert.equal(generateDailyIncomeNotifications(db,new Date('2026-09-16T00:00:00Z')).inserted,0);assert.equal(incomeNotifications(db,{employeeId:2}).items[0].summary.amount,840);assert.throws(()=>db.exec("UPDATE income_notifications SET summary_json='{}'"));db.exec("UPDATE employees SET is_active=0 WHERE id=3");generateDailyIncomeNotifications(db,new Date('2026-09-16T16:00:00Z'));assert.equal(db.prepare("SELECT COUNT(*) n FROM income_notifications WHERE employee_id=3").get().n,1);assert.throws(()=>incomeNotifications(db,{employeeId:3}),{code:'EARN_ACCESS'})}finally{db.close()}})
+test('failed daily generation rolls back all recipients and scheduler retries',()=>{const db=setup();try{db.exec("CREATE TRIGGER reject_notice BEFORE INSERT ON income_notifications WHEN NEW.employee_id=2 BEGIN SELECT RAISE(ABORT,'retry'); END");let tick,errors=0;const stop=startIncomeScheduler(db,{now:()=>new Date('2026-09-15T16:00:00Z'),schedule:fn=>{tick=fn;return 1},cancel:()=>{},onError:()=>errors++});assert.equal(errors,1);assert.equal(db.prepare('SELECT COUNT(*) n FROM income_notifications').get().n,0);db.exec('DROP TRIGGER reject_notice');tick();assert.equal(db.prepare('SELECT COUNT(*) n FROM income_notifications').get().n,4);stop()}finally{db.close()}})
+test('migration 73 is idempotent and preserves existing data',()=>{const db=fixture();try{db.exec('INSERT INTO schema_meta VALUES(72)');applyV73Migration(db);applyV73Migration(db);assert.equal(db.prepare('SELECT MAX(version) v FROM schema_meta').get().v,73);assert.equal(db.prepare('SELECT COUNT(*) n FROM employees').get().n,4)}finally{db.close()}})
