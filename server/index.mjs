@@ -1,3 +1,4 @@
+import {attendanceSetup,saveAttendanceSetup,attendanceStatus,clockIn,attendanceDaily} from './attendanceService.mjs'
 import {collectionAccess,setCollectionAccess,collectionDispatchOptions,dispatchOpenCollection} from './flexibleCollectionService.mjs'
 import {startIncomeScheduler,incomeNotifications,readIncomeNotification} from './incomeNotifications.mjs'
 import {earningsReport,earningsSettings,saveEarningsSettings,recordEarningsPayment} from './earningsService.mjs'
@@ -186,6 +187,15 @@ const server = http.createServer(async (request, response) => {
     if(url.pathname==='/api/earnings/settings'&&request.method==='GET')return sendJson(response,200,earningsSettings(db,session))
     if(url.pathname==='/api/earnings/settings'&&request.method==='POST')return sendJson(response,200,saveEarningsSettings(db,session,(await readJson(request)).payload))
     if(url.pathname==='/api/earnings/paid'&&request.method==='POST')return sendJson(response,200,recordEarningsPayment(db,session,(await readJson(request)).payload))
+    if(url.pathname.startsWith('/api/attendance')||url.pathname==='/api/mobile/attendance')response.setHeader('Cache-Control','private, no-store')
+    if(url.pathname==='/api/mobile/attendance'&&request.method==='GET')return sendJson(response,200,attendanceStatus(db,session))
+    if(url.pathname==='/api/mobile/attendance'&&request.method==='POST')return sendJson(response,200,clockIn(db,session,(await readJson(request)).payload))
+    if(url.pathname==='/api/attendance'&&request.method==='GET')return sendJson(response,200,attendanceDaily(db,session,url.searchParams.get('date')||undefined))
+    if(/^\/api\/attendance\/employees\/\d+$/.test(url.pathname)){
+      const id=Number(url.pathname.split('/').at(-1))
+      if(request.method==='GET')return sendJson(response,200,attendanceSetup(db,session,id))
+      if(request.method==='PATCH')return sendJson(response,200,saveAttendanceSetup(db,session,id,(await readJson(request)).payload))
+    }
     if(url.pathname==='/api/mobile/cargo-batches'&&request.method==='GET')return sendJson(response,200,cargoContext(db,session))
     if(url.pathname==='/api/mobile/cargo-batches/lookup'&&request.method==='GET')return sendJson(response,200,lookupCargoBatch(db,session,url.searchParams.get('code')))
     if(url.pathname==='/api/mobile/cargo-batches/start'&&request.method==='POST')return sendJson(response,200,startCargoBatch(db,session,(await readJson(request)).payload.tripId))

@@ -1,3 +1,4 @@
+import {AttendanceGate} from './Attendance.jsx'
 import IncomeUpdates,{useIncomeUpdates} from './IncomeUpdates.jsx'
 import EmployeeEarnings from './EmployeeEarnings.jsx'
 import {earningsWords} from '../shared/earningsWords.js'
@@ -61,7 +62,7 @@ function useLocation(){
 
 function MapPreview(props){return <GoogleMapPreview {...props}/>}
 
-export function MobileApp(props){return <NoticeMobileProvider key={props.account.employeeId}><CargoNotification/><MobileAppContent {...props}/></NoticeMobileProvider>}
+export function MobileApp(props){return <AttendanceGate key={props.account.employeeId} account={props.account} onLogout={props.onLogout}><NoticeMobileProvider key={props.account.employeeId}><CargoNotification/><MobileAppContent {...props}/></NoticeMobileProvider></AttendanceGate>}
 function MobileAppContent({account,onLogout,onChangePassword,actingDriver=false}){
   const income=useIncomeUpdates()
   const ui=useUi()
