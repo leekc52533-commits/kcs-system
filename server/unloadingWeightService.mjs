@@ -1,3 +1,4 @@
+import {linkCargoUnload} from './cargoBatchService.mjs'
 import {captureUnloadingRoute,unloadingCode} from './routeUnloadingService.mjs'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
@@ -70,9 +71,22 @@ export async function recognizeUnloadingWeight(payload={},context={},database=de
 export function confirmUnloadingWeight(recordId,payload={},context={},database=defaultDb){
   driver(database,context.employeeId,context.role);const weight=Number(payload.weightKg)
   if(!Number.isFinite(weight)||weight<=0||weight>200000)throw fail('Enter a valid confirmed weight in kg.','INVALID_WEIGHT')
-  const row=database.prepare("SELECT id,status FROM unloading_weight_records WHERE id=? AND driver_employee_id=?").get(Number(recordId),Number(context.employeeId));if(!row)throw fail('Weight record not found.','NOT_FOUND',404);if(row.status==='confirmed')return{id:Number(row.id),confirmed:true,idempotent:true}
-  database.prepare("UPDATE unloading_weight_records SET confirmed_weight_kg=?,status='confirmed',confirmed_at=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(Number(weight.toFixed(2)),nowKuching(),row.id)
-  return{id:Number(row.id),confirmed:true,confirmedWeightKg:Number(weight.toFixed(2)),idempotent:false}
+  database.exec('BEGIN IMMEDIATE')
+  try{
+   const row=database.prepare('SELECT * FROM unloading_weight_records WHERE id=? AND driver_employee_id=?').get(Number(recordId),Number(context.employeeId))
+   if(!row)throw fail('Weight record not found.','NOT_FOUND',404)
+   if(row.status==='confirmed'){
+    const linked=database.prepare('SELECT 1 FROM cargo_batch_unloads WHERE record_id=?').get(row.id)
+    const cargo=linked?linkCargoUnload(database,context,row,payload):null
+    database.exec('COMMIT');return{id:row.id,confirmed:true,idempotent:true,cargo}
+   }
+   // Records from old clients remain confirmable only before this vehicle adopts batches.
+   const hasBatch=database.prepare('SELECT 1 FROM cargo_batches WHERE vehicle_id=? LIMIT 1').get(row.vehicle_id)
+   if(hasBatch&&!payload.batchId)throw fail('Select a cargo batch.','CARGO_STATE',409)
+   const cargo=payload.batchId?linkCargoUnload(database,context,row,payload):null
+   database.prepare("UPDATE unloading_weight_records SET confirmed_weight_kg=?,status='confirmed',confirmed_at=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(Number(weight.toFixed(2)),nowKuching(),row.id)
+   database.exec('COMMIT');return{id:row.id,confirmed:true,confirmedWeightKg:Number(weight.toFixed(2)),idempotent:false,cargo}
+  }catch(e){database.exec('ROLLBACK');throw e}
 }
 
 export function listUnloadingWeights(filters={},database=defaultDb){const where=["w.status='confirmed'"],params=[];if(filters.from){where.push('w.service_date>=?');params.push(filters.from)}if(filters.to){where.push('w.service_date<=?');params.push(filters.to)}return{items:database.prepare(`SELECT w.id,w.service_date serviceDate,w.trip_number tripNumber,w.vehicle_code_snapshot vehicleCode,w.registration_number_snapshot registrationNumber,w.driver_name_snapshot driverName,w.crew_names_snapshot crew,w.unloading_location_name_snapshot locationName,w.estimated_weight_kg estimatedWeightKg,w.recognized_weight_kg recognizedWeightKg,w.confirmed_weight_kg confirmedWeightKg,w.latitude,w.longitude,w.accuracy_m accuracyM,w.weighed_at weighedAt FROM unloading_weight_records w WHERE ${where.join(' AND ')} ORDER BY w.weighed_at DESC,w.id DESC`).all(...params)}}

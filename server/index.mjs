@@ -1,3 +1,4 @@
+import {cargoContext,startCargoBatch,lookupCargoBatch,joinCargoBatch,acknowledgeCargo} from './cargoBatchService.mjs'
 import {dashboardRecentActivity} from './dashboardRecentActivity.mjs'
 import {collectionHistory} from './collectionHistoryService.mjs'
 import {createArea,renameArea} from './createArea.mjs'
@@ -175,6 +176,11 @@ const server = http.createServer(async (request, response) => {
       if(!file.startsWith(path.resolve(uploadsDir)+path.sep)||!fs.existsSync(file))return sendJson(response,404,{error:'Proof not found'})
       response.writeHead(200,{'Content-Type':proof.contentType,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'});return fs.createReadStream(file).pipe(response)
     }
+    if(url.pathname==='/api/mobile/cargo-batches'&&request.method==='GET')return sendJson(response,200,cargoContext(db,session))
+    if(url.pathname==='/api/mobile/cargo-batches/lookup'&&request.method==='GET')return sendJson(response,200,lookupCargoBatch(db,session,url.searchParams.get('code')))
+    if(url.pathname==='/api/mobile/cargo-batches/start'&&request.method==='POST')return sendJson(response,200,startCargoBatch(db,session,(await readJson(request)).payload.tripId))
+    if(url.pathname==='/api/mobile/cargo-batches/join'&&request.method==='POST')return sendJson(response,200,joinCargoBatch(db,session,(await readJson(request)).payload.code))
+    if(url.pathname==='/api/mobile/cargo-batches/read'&&request.method==='POST')return sendJson(response,200,acknowledgeCargo(db,session,(await readJson(request)).payload.id))
     if (request.method === 'GET' && url.pathname === '/api/mobile/unloading-weights/context') return sendJson(response,200,mobileWeightContext({employeeId:session.employeeId,role:session.role}))
     if (request.method === 'POST' && url.pathname === '/api/mobile/unloading-weights/recognize') return sendJson(response,201,await recognizeUnloadingWeight((await readJson(request)).payload,{employeeId:session.employeeId,role:session.role},db,{uploadsRoot:uploadsDir}))
     if (request.method === 'POST' && /^\/api\/mobile\/unloading-weights\/\d+\/confirm$/.test(url.pathname)) return sendJson(response,200,confirmUnloadingWeight(Number(url.pathname.split('/')[4]),(await readJson(request)).payload,{employeeId:session.employeeId,role:session.role}))
