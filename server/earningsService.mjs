@@ -1,3 +1,4 @@
+import {legacySalesRows} from './legacySalesEarnings.mjs'
 import {createHash} from 'node:crypto'
 import {kuchingDate} from '../shared/kuchingTime.js'
 export const defaultEarningsRules={driver:[{from:0,rate:0.03},{from:25000,rate:0.04},{from:27500.001,rate:0.043},{from:30000,rate:0.045},{from:34500.001,rate:0.047},{from:40000,rate:0.05}],crewRate:0.03}
@@ -34,6 +35,13 @@ export function earningsReport(db,ctx,date,{personal=false}={}){
  const k=[r.vehicleId,key(r.ticket),r.deliveryDate].join('|'),candidates=sales.get(k)||[],matched=r.vehicleId===r.batchVehicle&&counts.get(k)===1&&candidates.length===1&&Number.isFinite(candidates[0].weight)&&candidates[0].weight>0,s=matched?candidates[0]:null;
  if(matched)companyKg+=s.weight;else pendingCompanyKg+=Number(r.weight||0)
  for(const m of byBatch.get(r.batchId)||[]){if(personal&&m.employeeId!==Number(ctx.employeeId))continue;const e=add(m.employeeId,m.name);if(matched)e[m.role==='driver'?'driverKg':'crewKg']+=s.weight;else{e.pendingKg+=Number(r.weight||0);e.pendingCount++}e.details.push({...r,role:m.role,matched,settledKg:s?.weight??null,settlementId:s?.id??null,settlementRevision:s?.revision??null})}
+ }
+ for(const a of legacySalesRows(db,all).filter(a=>a.date>=period.start&&a.date<=period.end)){
+ if(a.valid)companyKg+=a.weight;else pendingCompanyKg+=a.weight
+ if(personal&&a.employee_id!==Number(ctx.employeeId))continue
+ const e=add(a.employee_id,a.employee_name)
+ if(a.valid)e.driverKg+=a.weight;else{e.pendingKg+=a.weight;e.pendingCount++}
+ e.details.push({recordId:`legacy-sale-${a.settlement_id}-${a.line_index}`,collectionDate:a.date,deliveryDate:a.date,role:'driver',plate:a.plate,batch:'—',ticket:a.ticket,weight:a.weight,settledKg:a.valid?a.weight:null,matched:a.valid,settlementId:a.settlement_id})
  }
  let items=[...staff.values()].map(e=>{const base={...e,...earningsAmount(kg(e.driverKg),kg(e.crewKg),rules),pendingKg:kg(e.pendingKg)};const revision=createHash('sha256').update(JSON.stringify({period,rules,base})).digest('hex');const paid=db.prepare('SELECT snapshot_json,paid_at FROM earnings_payments WHERE period_start=? AND employee_id=?').get(period.start,e.employeeId);return paid?{...JSON.parse(paid.snapshot_json),paidAt:paid.paid_at,changed:JSON.parse(paid.snapshot_json).revision!==revision}:{...base,revision,paidAt:null,changed:false}})
  // Paid former employees remain visible even when no longer in the active directory.
