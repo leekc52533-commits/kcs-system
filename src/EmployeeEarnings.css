@@ -32,3 +32,5 @@
 @media(max-width:600px){.earnings-tier{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}.earnings-tier>button{grid-column:1/-1;justify-self:end}.earnings-detail-content{padding:16px}.earnings-detail-content h2{font-size:21px}.earnings-settings{padding:16px}}
 
 .earnings-navigation{display:flex;align-items:center;gap:16px;flex-wrap:nowrap;margin-bottom:24px}.earnings-navigation .earnings-back{flex:0 0 48px;width:48px;padding:0;font-size:28px}.earnings-navigation h2{margin:0}.earnings-settings-page .earnings-settings{margin-top:0}
+
+.earnings-previous-dialog{width:min(1180px,calc(100vw - 24px))}.earnings-previous-content{padding:16px;min-width:0}.earnings-previous-content>header{display:flex;justify-content:flex-end;position:sticky;top:0;background:#fff;z-index:4;padding-bottom:8px}.earnings-previous-content>.earnings-period{margin:0;border:0;padding:0}.earnings-previous-scroll-dock{position:sticky;bottom:0;background:#fff;min-height:24px;z-index:4}.earnings-page .earnings-previous-button{flex:0 1 auto}
