@@ -10,6 +10,11 @@ export const cargoWords={
 }
 export const cargoError=(w,e)=>w[e.code]||w.failed
 function BatchCard({b,w}){return <article className="cargo-card"><b><span className="cargo-code" data-i18n-raw>{b.code}</span> · <span data-i18n-raw>{b.plate}</span></b><p>{w[b.status]} · {w.date}: {b.collectionDate||'—'}</p><p>{w.driver}: <span data-i18n-raw>{b.driverName||'—'}</span></p><p>{w.members}: {b.members.map(m=><span data-i18n-raw key={m.employeeId}>{m.name} ({w[m.role]}) </span>)}</p>{b.unloads.map(u=><p key={u.recordId}>{w.ticket}: <span data-i18n-raw>{u.ticketNumber}</span></p>)}</article>}
+export function CargoBatchEntry({onOpen}){
+ const{language}=useI18n(),w=cargoWords[language]||cargoWords.en,[items,setItems]=useState(null),[error,setError]=useState(false)
+ useEffect(()=>{let alive=true;const load=()=>apiRequest('/api/mobile/cargo-batches').then(d=>{if(alive){setItems(d.items.filter(b=>b.status==='active'||b.status==='prepared'));setError(false)}}).catch(()=>{if(alive){setItems(null);setError(true)}});load();const timer=setInterval(load,10000);window.addEventListener('cargo-changed',load);return()=>{alive=false;clearInterval(timer);window.removeEventListener('cargo-changed',load)}},[])
+ return <button type="button" className="cargo-entry" onClick={onOpen}><b>{w.title}</b>{error?<span>{w.failed}</span>:items===null?<span>{w.loading}</span>:items.length?items.map(b=><span className="cargo-entry-row" key={b.id}><strong className="cargo-code" data-i18n-raw>{b.code}</strong><span><span data-i18n-raw>{b.plate}</span> · {w[b.status]}</span></span>):<span>{w.empty}</span>}<span>{w.help}</span></button>
+}
 export function CargoNotification(){const{language}=useI18n(),w=cargoWords[language]||cargoWords.en,[items,setItems]=useState([])
  useEffect(()=>{let alive=true;const load=()=>apiRequest('/api/mobile/cargo-batches').then(d=>alive&&setItems(d.notifications)).catch(()=>{});load();const timer=setInterval(load,10000);window.addEventListener('cargo-changed',load);return()=>{alive=false;clearInterval(timer);window.removeEventListener('cargo-changed',load)}},[])
  if(!items.length)return null

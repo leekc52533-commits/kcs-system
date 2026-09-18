@@ -121,3 +121,5 @@ These requirements were confirmed by KC on 2026-09-09. Carry them forward for la
 - KC confirmed on 2026-09-18: move the Cargo batches card from mobile More to Weight, keeping its code sharing, attendant lookup/participation and history. Weight remains accessible to crew for this entry; unloading photo/weight submission stays restricted to drivers/acting drivers. Highlight Weight while viewing cargo batches.
 
 - KC confirmed on 2026-09-18: new cargo codes use HYYMMDD-NNN with at least three serial digits, expanding naturally beyond 999 without truncation. Existing codes stay unchanged. Crew entry prefills the code date and leading zeros so entering 36 forms H260918-036; allow a different code date and full old-code entry. Show batch codes in contrasting blue, separately from plates. Preserve server generation, unique identifiers and participation checks.
+
+- KC confirmed on 2026-09-18: the mobile Weight Cargo batches entry directly displays accessible active/prepared batch codes in blue with plate/status; click the card to view details. Refresh on cargo changes and while open; keep closed history inside details and preserve employee scoping.

@@ -36,3 +36,23 @@ test('suffix entry assembles the selected date and padding; code is highlighted 
   }finally{await act(async()=>root.unmount())}
  }
 })
+
+test('Weight entry shows open codes without entering details and refreshes after unloading',async()=>{
+ const{CargoBatchEntry}=await vite.ssrLoadModule('/src/CargoBatches.jsx')
+ for(const language of ['zh','en','ms']){
+  const root=createRoot(document.getElementById('root'));let opened=0,items=[{...batch,code:'H260918-036'},{...batch,id:2,code:'OLD-CLOSED',status:'closed'}]
+  globalThis.fetch=async()=>({ok:true,json:async()=>({items})})
+  try{
+   await act(async()=>root.render(React.createElement(I18nProvider,{language},React.createElement(CargoBatchEntry,{onOpen:()=>opened++}))))
+   assert.equal(document.querySelector('.cargo-code').textContent,'H260918-036')
+   assert.ok(document.body.textContent.includes(batch.plate));assert.ok(!document.body.textContent.includes('OLD-CLOSED'));assert.equal(opened,0)
+   await act(async()=>document.querySelector('.cargo-entry').click());assert.equal(opened,1)
+   items=[{...batch,id:3,code:'H260918-037',status:'prepared'}]
+   await act(async()=>window.dispatchEvent(new Event('cargo-changed')))
+   assert.equal(document.querySelector('.cargo-code').textContent,'H260918-037');assert.ok(document.body.textContent.includes(words[language].prepared))
+   globalThis.fetch=async()=>{throw new Error('offline')}
+   await act(async()=>window.dispatchEvent(new Event('cargo-changed')))
+   assert.equal(document.querySelector('.cargo-code'),null);assert.ok(document.body.textContent.includes(words[language].failed))
+  }finally{await act(async()=>root.unmount())}
+ }
+})
