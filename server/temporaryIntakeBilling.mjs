@@ -1,3 +1,4 @@
+import {flexibleExecution} from './flexibleCollectionPolicy.mjs'
 // No database singleton: usable inside the existing billing transaction.
 export const temporaryIntake=(db,stopId)=>db.prepare('SELECT * FROM temporary_customer_intakes WHERE dispatch_stop_id=?').get(Number(stopId))
 export function intakeEvent(db,id,action,actor,details={}){
@@ -30,5 +31,10 @@ export function assertNoPendingTripApproval(db,tripId){
 }
 
 export function isAdHocCollection(db,stopId){
+ if(flexibleExecution(db,stopId)){
+  if(db.prepare("SELECT 1 FROM driver_arrangement_requests WHERE dispatch_stop_id=? AND status='pending'").get(Number(stopId))||db.prepare("SELECT 1 FROM driver_date_requests WHERE dispatch_stop_id=? AND status='pending'").get(Number(stopId))){const e=Error('PICKUP_PENDING');e.code='PICKUP_PENDING';e.statusCode=409;throw e}
+  return true
+ }
+ if(db.prepare('SELECT 1 FROM flexible_collection_claims WHERE stop_id=?').get(Number(stopId)))return false
  return Boolean(temporaryIntake(db,stopId)||db.prepare("SELECT 1 FROM existing_customer_pickups WHERE dispatch_stop_id=? AND kind IN ('added','transferred')").get(Number(stopId)))
 }

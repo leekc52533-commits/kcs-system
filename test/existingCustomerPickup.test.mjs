@@ -149,3 +149,83 @@ test('schema 62 upgrade is repeatable and preserves pending transfers and dispat
  assert.deepEqual(db.prepare('SELECT * FROM dispatch_stops').all(),before)
  assert.equal(db.prepare('PRAGMA integrity_check').get().integrity_check,'ok');db.close()
 })
+
+import {collectionAccess,setCollectionAccess,dispatchOpenCollection} from '../server/flexibleCollectionService.mjs'
+import {branchCollectionOpen} from '../server/flexibleCollectionPolicy.mjs'
+import {driverToday} from '../server/dispatchService.mjs'
+import {applyV74Migration} from '../server/migrationV74.mjs'
+const owner={...manager,id:900,role:'owner_admin'}
+function openZone(db){
+ db.exec("INSERT INTO auth_accounts(id,employee_id,username,password_hash,role,system_role) VALUES(900,1,'kcadmin','test','admin','owner_admin'); INSERT OR REPLACE INTO company_menu(id,owner_account_id) VALUES(1,900); UPDATE areas SET zone_group_id=1")
+ setCollectionAccess(db,owner,1,{isOpen:true,revision:0})
+}
+test('only pinned owner toggles each zone; revisions prevent stale writes; no expiry and audited closure',()=>{
+ const{db}=fixture();try{
+ openZone(db);assert.equal(branchCollectionOpen(db,1),true)
+ assert.equal(collectionAccess(db,owner).canEdit,true)
+ assert.equal(collectionAccess(db,{...owner,id:901}).canEdit,false)
+ assert.throws(()=>setCollectionAccess(db,{...owner,id:901},1,{isOpen:false,revision:1}),{code:'MENU_OWNER_ONLY'})
+ assert.throws(()=>setCollectionAccess(db,owner,1,{isOpen:false,revision:0}),{code:'MENU_STALE'})
+ db.exec("UPDATE zone_collection_access SET changed_at='2000-01-01'")
+ assert.equal(branchCollectionOpen(db,1),true)
+ setCollectionAccess(db,owner,1,{isOpen:false,revision:1});assert.equal(branchCollectionOpen(db,1),false)
+ assert.equal(db.prepare('SELECT COUNT(*) n FROM zone_collection_access_events').get().n,2)
+ assert.equal(collectionAccess(db,owner).items.find(z=>z.id===2).isOpen,0)
+ }finally{db.close()}
+})
+test('open own zone permits priority arrival, mobile enables it, closing restores order; arrived work keeps billing/proof guards',()=>{
+ const{db,tripId,stops}=fixture();try{
+ openZone(db)
+ assert.equal(driverToday(context,db).trips.find(t=>t.id===tripId).stops.find(s=>s.id===stops[1]).canArrive,true)
+ setCollectionAccess(db,owner,1,{isOpen:false,revision:1})
+ assert.throws(()=>arrive(db,stops[1]),{code:'STOP_SEQUENCE_REQUIRED'})
+ setCollectionAccess(db,owner,1,{isOpen:true,revision:2});arrive(db,stops[1])
+ setCollectionAccess(db,owner,1,{isOpen:false,revision:3})
+ assert.throws(()=>completeDriverStop(stops[1],context,db),{code:'BILL_REQUIRED'})
+ assert.equal(db.prepare('SELECT COUNT(*) n FROM flexible_collection_claims').get().n,1)
+ }finally{db.close()}
+})
+test('open zone claim transfers identity once, concurrent other driver is blocked, supervisor can reassign untouched work',()=>{
+ const{db,tripId,targetId,stops}=twoCars();try{
+ openZone(db);const before=db.prepare('SELECT COUNT(*) n FROM dispatch_stops').get().n
+ const r=collectExistingCustomer({branchId:1,tripId:targetId},other,db)
+ assert.equal(r.stopId,stops[0]);assert.equal(r.pending,undefined)
+ assert.equal(db.prepare('SELECT COUNT(*) n FROM dispatch_stops').get().n,before)
+ assert.throws(()=>collectExistingCustomer({branchId:1,tripId},context,db),{code:'FLEX_CLAIMED'})
+ assert.equal(collectExistingCustomer({branchId:1,tripId:targetId},other,db).reused,true)
+ dispatchOpenCollection(db,manager,{zoneId:1,branchId:1,tripId})
+ assert.equal(db.prepare('SELECT driver_id FROM dispatches WHERE id=(SELECT dispatch_id FROM dispatch_stops WHERE id=?)').get(stops[0]).driver_id,1)
+ assert.equal(db.prepare("SELECT actor FROM dispatch_change_logs WHERE change_type='open_zone_collection_assigned' ORDER BY id DESC LIMIT 1").get().actor,'Supervisor')
+ arrive(db,stops[0]);assert.throws(()=>request(db,targetId),{code:'PICKUP_PROTECTED'})
+ }finally{db.close()}
+})
+test('closing a claimed untouched stop removes its special order exemption and new transfers require approval',()=>{
+ const{db,tripId,targetId,stops}=twoCars();try{
+ openZone(db);const r=collectExistingCustomer({branchId:1,tripId:targetId},other,db)
+ setCollectionAccess(db,owner,1,{isOpen:false,revision:1})
+ assert.throws(()=>arriveAtStop(r.stopId,{latitude:3.1,longitude:101.6,accuracy:10,captured_at:now.toISOString()},other,db),{code:'STOP_SEQUENCE_REQUIRED'})
+ const pending=collectExistingCustomer({branchId:1,tripId,reason:'Normal transfer'},context,db);assert.equal(pending.pending,true)
+ assert.throws(()=>dispatchOpenCollection(db,manager,{zoneId:1,branchId:1,tripId}),{code:'FLEX_CLOSED'})
+ assert.equal(db.prepare('SELECT dispatch_trip_id FROM dispatch_stops WHERE id=?').get(stops[0]).dispatch_trip_id,targetId)
+ }finally{db.close()}
+})
+test('v74 upgrade retains records and settings across repeat startup',()=>{
+ const{db}=fixture();try{db.exec('INSERT INTO schema_meta(version) VALUES(73)');applyV74Migration(db);openZone(db);applyV74Migration(db);assert.equal(branchCollectionOpen(db,1),true);assert.equal(db.prepare('SELECT MAX(version) v FROM schema_meta').get().v,74);assert.equal(db.prepare('PRAGMA foreign_key_check').all().length,0)}finally{db.close()}
+})
+test('flexible mode retains pending-approval, crew and Cash payment guards',()=>{
+ const{db,targetId,stops,productId}=twoCars();try{
+ openZone(db)
+ assert.throws(()=>dispatchOpenCollection(db,other,{zoneId:1,branchId:1,tripId:targetId}),{code:'INTAKE_PERMISSION'})
+ assert.throws(()=>collectExistingCustomer({branchId:1,tripId:targetId},{...other,role:'crew'},db),{code:'INTAKE_PERMISSION'})
+ const source=db.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(stops[0])
+ db.prepare("INSERT INTO driver_arrangement_requests(dispatch_stop_id,service_date,employee_id,employee_role,trip_id,kind,reason,payload_json) VALUES(?,?,1,'driver',?,'order','test','{}')").run(source.id,date,source.dispatch_trip_id)
+ assert.throws(()=>collectExistingCustomer({branchId:1,tripId:targetId},other,db),{code:'PICKUP_PROTECTED'})
+ assert.throws(()=>arrive(db,source.id),{code:'PICKUP_PENDING'})
+ db.exec("UPDATE driver_arrangement_requests SET status='rejected'")
+ const r=collectExistingCustomer({branchId:1,tripId:targetId},other,db)
+ arriveAtStop(r.stopId,{latitude:3.1,longitude:101.6,accuracy:10,captured_at:now.toISOString()},other,db)
+ createPurchaseBill(r.stopId,{weightMethod:'on_site',printChoice:'no_print',items:[{productId,quantity:10}]},other,db)
+ assert.throws(()=>completeDriverStop(r.stopId,other,db),{code:'PAYMENT_PROOF_REQUIRED'})
+ assert.equal(db.prepare('SELECT driver_employee_id FROM purchase_bills WHERE dispatch_stop_id=?').get(r.stopId).driver_employee_id,2)
+ }finally{db.close()}
+})

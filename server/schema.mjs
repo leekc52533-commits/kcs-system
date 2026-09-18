@@ -1,3 +1,4 @@
+import {flexibleCollectionSchema} from './migrationV74.mjs'
 import {incomeNoticeSchema} from './migrationV73.mjs'
 import {earningsSchema} from './migrationV72.mjs'
 import {cargoBatchSchema} from './migrationV71.mjs'
@@ -17,7 +18,7 @@ import {routeRequestSchemaSql} from './migrationV55.mjs'
 import {sundaySchemaSql} from './sundayPlanning.mjs'
 export const SCHEMA_VERSION = 66
 
-export const schemaSql = incomeNoticeSchema + earningsSchema + cargoBatchSchema + documentNumberSchema + driverGuideSchemaSql + noticeBoardSchemaSql + driverArrangementSchemaSql + customerPickupSchemaSql + temporaryIntakeSchemaSql + menuSchemaSql + salesSchemaSql + noGoodsNoticeSchemaSql + dateReviewSchemaSql + billVoidSchemaSql + expenseDetailsSchemaSql + routeRequestSchemaSql + sundaySchemaSql + `
+export const schemaSql = flexibleCollectionSchema + incomeNoticeSchema + earningsSchema + cargoBatchSchema + documentNumberSchema + driverGuideSchemaSql + noticeBoardSchemaSql + driverArrangementSchemaSql + customerPickupSchemaSql + temporaryIntakeSchemaSql + menuSchemaSql + salesSchemaSql + noGoodsNoticeSchemaSql + dateReviewSchemaSql + billVoidSchemaSql + expenseDetailsSchemaSql + routeRequestSchemaSql + sundaySchemaSql + `
 CREATE TABLE IF NOT EXISTS schema_meta (
   version INTEGER PRIMARY KEY,
   applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP

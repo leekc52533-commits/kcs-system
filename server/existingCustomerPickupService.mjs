@@ -1,3 +1,4 @@
+import {branchCollectionOpen} from './flexibleCollectionPolicy.mjs'
 import {db as defaultDb} from './database.mjs'
 import {kuchingDate} from '../shared/kuchingTime.js'
 import {canManageDispatch} from '../shared/dispatchAccess.js'
@@ -17,8 +18,8 @@ const activeBranch=(db,id)=>{const b=db.prepare(branchSql+' AND b.id=?').get(Num
 const stop=(db,id)=>db.prepare(`SELECT s.*,t.dispatch_day_id dayId,t.execution_status tripStatus,t.completed_at tripCompletedAt,d.status dispatchStatus,dd.dispatch_date serviceDate,d.vehicle_id vehicleId,d.driver_id driverId,v.registration_number plate,v.vehicle_code vehicleCode
  FROM dispatch_stops s JOIN dispatch_trips t ON t.id=s.dispatch_trip_id JOIN dispatch_days dd ON dd.id=t.dispatch_day_id JOIN dispatches d ON d.id=s.dispatch_id LEFT JOIN vehicles v ON v.id=d.vehicle_id WHERE s.id=?`).get(id)
 function hasWork(db,s){
- if(!s||s.tripCompletedAt||['completed','cancelled'].includes(s.dispatchStatus)||!['locked','available'].includes(s.status)||s.arrived_at||s.completed_at||s.invoice_number||s.collected_weight_kg!=null||s.payment_status||s.override_note==='driver_deferred')return true
- return ['purchase_bills','stop_documents','stop_step_records','driver_no_goods_proofs','no_goods_notices'].some(table=>db.prepare(`SELECT 1 FROM ${table} WHERE dispatch_stop_id=?`).get(s.id))||db.prepare("SELECT 1 FROM driver_defer_requests WHERE dispatch_stop_id=? AND status='pending'").get(s.id)||db.prepare("SELECT 1 FROM driver_date_requests WHERE dispatch_stop_id=? AND status='pending'").get(s.id)
+ if(!s||s.tripCompletedAt||s.tripStatus==='completed'||['completed','cancelled'].includes(s.dispatchStatus)||!['locked','available'].includes(s.status)||s.arrived_at||s.completed_at||s.invoice_number||s.collected_weight_kg!=null||s.payment_status||s.override_note==='driver_deferred')return true
+ return ['purchase_bills','stop_documents','stop_step_records','driver_no_goods_proofs','no_goods_notices'].some(table=>db.prepare(`SELECT 1 FROM ${table} WHERE dispatch_stop_id=?`).get(s.id))||db.prepare("SELECT 1 FROM driver_defer_requests WHERE dispatch_stop_id=? AND status='pending'").get(s.id)||db.prepare("SELECT 1 FROM driver_arrangement_requests WHERE dispatch_stop_id=? AND status='pending'").get(s.id)||db.prepare("SELECT 1 FROM driver_date_requests WHERE dispatch_stop_id=? AND status='pending'").get(s.id)
 }
 function assignment(db,branchId,ctx){
  const found=findBranchServiceDateStop(db,branchId,today(ctx));if(!found)return null
@@ -32,7 +33,7 @@ export function searchPickupCustomers(search,ctx={},db=defaultDb){
 }
 export function pickupCustomerDetails(id,ctx={},db=defaultDb){
  searchActor(db,ctx);const b=activeBranch(db,id)
- return {...b,assignment:assignment(db,b.id,ctx),products:listBranchProducts(b.id,db).filter(p=>p.isSelectable&&Number(p.currentPrice)>0)}
+ return {...b,collectionOpen:branchCollectionOpen(db,b.id),assignment:assignment(db,b.id,ctx),products:listBranchProducts(b.id,db).filter(p=>p.isSelectable&&Number(p.currentPrice)>0)}
 }
 function targetTrip(db,id,ctx){
  if(!intakeTrips(ctx,db).some(t=>t.id===Number(id)))fail('INTAKE_TRIP')
@@ -46,17 +47,31 @@ function requireBilling(db,b){
 }
 function audit(db,dayId,stopId,actor,type,before,after){db.prepare("INSERT INTO dispatch_change_logs(dispatch_day_id,actor,change_type,entity_type,entity_id,before_json,after_json,requires_reapproval) VALUES(?,?,?,'dispatch_stop',?,?,?,0)").run(dayId,String(actor),type,String(stopId),JSON.stringify(before),JSON.stringify(after))}
 function position(db,t){return {sequence:db.prepare('SELECT COALESCE(MAX(stop_sequence),0)+1 n FROM dispatch_stops WHERE dispatch_id=?').get(t.dispatch_id).n,routeSequence:db.prepare('SELECT COALESCE(MAX(s.route_stop_sequence),0)+1 n FROM dispatch_stops s JOIN dispatch_trips dt ON dt.id=s.dispatch_trip_id WHERE dt.dispatch_day_id=? AND s.route_number=?').get(t.dispatch_day_id,t.routeNumber).n}}
-export function collectExistingCustomer(payload={},ctx={},db=defaultDb){
+export function collectExistingCustomer(payload={},ctx={},db=defaultDb,{actor=ctx.employeeId,supervisor=false}={}){
  return withImmediateTransaction(db,()=>{
   const t=targetTrip(db,payload.tripId,ctx),b=activeBranch(db,payload.branchId),existing=findBranchServiceDateStop(db,b.id,today(ctx))
   if(existing){
    const s=stop(db,existing.id)
-   if(Number(s.driverId)===Number(ctx.employeeId)){
-    if(s.dispatch_trip_id!==t.id)fail('PICKUP_OWN_TRIP')
+   if(Number(s.driverId)===Number(ctx.employeeId)&&s.dispatch_trip_id!==t.id&&!branchCollectionOpen(db,b.id))fail('PICKUP_OWN_TRIP')
+   if(Number(s.driverId)===Number(ctx.employeeId)&&s.dispatch_trip_id===t.id){
     db.prepare("INSERT OR IGNORE INTO existing_customer_pickups(dispatch_stop_id,employee_id,kind) VALUES(?,?,'existing')").run(s.id,ctx.employeeId)
     return {id:`existing-${s.id}`,stopId:s.id,reused:true,arrived:Boolean(s.arrived_at),completed:s.status==='completed'}
    }
    if(hasWork(db,s))fail('PICKUP_PROTECTED')
+   if(branchCollectionOpen(db,b.id)){
+    requireBilling(db,b)
+    if(db.prepare("SELECT 1 FROM customer_transfer_requests WHERE dispatch_stop_id=? AND status='pending'").get(s.id))fail('PICKUP_PENDING')
+    const claim=db.prepare('SELECT * FROM flexible_collection_claims WHERE stop_id=?').get(s.id)
+    if(claim&&claim.employee_id!==Number(ctx.employeeId)&&!supervisor)fail('FLEX_CLAIMED')
+    assertNoPendingTripApproval(db,s.dispatch_trip_id)
+    assertBranchServiceDateAvailable(db,b.id,today(ctx),{excludeStopId:s.id})
+    const pos=position(db,t)
+    db.prepare("UPDATE dispatch_stops SET dispatch_id=?,dispatch_trip_id=?,stop_sequence=?,route_number=?,route_stop_sequence=?,status='available' WHERE id=?").run(t.dispatch_id,t.id,pos.sequence,t.routeNumber,pos.routeSequence,s.id)
+    db.prepare("INSERT INTO existing_customer_pickups(dispatch_stop_id,employee_id,kind) VALUES(?,?,'transferred') ON CONFLICT(dispatch_stop_id) DO UPDATE SET employee_id=excluded.employee_id,kind='transferred'").run(s.id,ctx.employeeId)
+    db.prepare('INSERT INTO flexible_collection_claims(stop_id,employee_id,actor) VALUES(?,?,?) ON CONFLICT(stop_id) DO UPDATE SET employee_id=excluded.employee_id,actor=excluded.actor,created_at=CURRENT_TIMESTAMP').run(s.id,ctx.employeeId,String(actor))
+    audit(db,s.dayId,s.id,actor,'open_zone_collection_assigned',s,{tripId:t.id,vehicleId:t.vehicleId,driverId:ctx.employeeId,supervisor})
+    return {id:`existing-${s.id}`,stopId:s.id}
+   }
    const reason=String(payload.reason||'').trim();if(!reason||reason.length>1000)fail('PICKUP_REASON',400)
    requireBilling(db,b)
    const prior=db.prepare("SELECT * FROM customer_transfer_requests WHERE dispatch_stop_id=? AND status='pending'").get(s.id)
@@ -71,6 +86,7 @@ export function collectExistingCustomer(payload={},ctx={},db=defaultDb){
   assertBranchServiceDateAvailable(db,b.id,today(ctx));const pos=position(db,t)
   const id=Number(db.prepare("INSERT INTO dispatch_stops(dispatch_id,dispatch_trip_id,branch_id,stop_sequence,status,service_date,dedupe_enforced,route_number,route_stop_sequence,override_note) VALUES(?,?,?,?,'available',?,1,?,?,'existing_customer_pickup')").run(t.dispatch_id,t.id,b.id,pos.sequence,today(ctx),t.routeNumber,pos.routeSequence).lastInsertRowid)
   db.prepare("INSERT INTO existing_customer_pickups(dispatch_stop_id,employee_id,kind) VALUES(?,?,'added')").run(id,ctx.employeeId)
+  if(branchCollectionOpen(db,b.id))db.prepare('INSERT INTO flexible_collection_claims(stop_id,employee_id,actor) VALUES(?,?,?)').run(id,ctx.employeeId,String(actor))
   audit(db,t.dispatch_day_id,id,ctx.employeeId,'existing_customer_added_once',null,{branchId:b.id,tripId:t.id,vehicleId:t.vehicleId})
   return {id:`existing-${id}`,stopId:id}
  })
@@ -104,6 +120,7 @@ export function reviewCustomerTransfer(id,payload={},ctx={},db=defaultDb){
    const pos=position(db,t)
    db.prepare("UPDATE dispatch_stops SET dispatch_id=?,dispatch_trip_id=?,stop_sequence=?,route_number=?,route_stop_sequence=?,status='available' WHERE id=?").run(t.dispatch_id,t.id,pos.sequence,t.routeNumber,pos.routeSequence,s.id)
    db.prepare("INSERT INTO existing_customer_pickups(dispatch_stop_id,employee_id,kind) VALUES(?,?,'transferred') ON CONFLICT(dispatch_stop_id) DO UPDATE SET employee_id=excluded.employee_id,kind='transferred'").run(s.id,r.requester_employee_id)
+   db.prepare('DELETE FROM flexible_collection_claims WHERE stop_id=?').run(s.id)
    audit(db,s.dayId,s.id,ctx.employeeName||ctx.employeeId,'customer_transfer_approved',s,{requestId:r.id,tripId:t.id,vehicleId:t.vehicleId,driverId:r.requester_employee_id,reason})
   }else audit(db,s.dayId,s.id,ctx.employeeName||ctx.employeeId,'customer_transfer_rejected',{requestId:r.id},{reason})
   db.prepare('UPDATE customer_transfer_requests SET status=?,reviewed_at=CURRENT_TIMESTAMP,reviewed_by=?,review_reason=? WHERE id=?').run(decision,ctx.employeeName||String(ctx.employeeId),reason,r.id)
