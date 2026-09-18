@@ -1,3 +1,4 @@
+import {useEmployeeOutsideClose} from './useEmployeeOutsideClose.js'
 import {AttendanceSettings,AttendanceDaily} from './Attendance.jsx'
 import {FilterHeader} from './ExpenseRecordsPage.jsx'
 import BackButton from './BackButton.jsx'
@@ -54,6 +55,7 @@ export default function EmployeeMasterPage({resources,currentUser,account,reload
 
   const openEmployee=id=>{if(dirty&&!confirm(ui("The current employee has unsaved changes. Discard them and switch employee?")))return;loadEmployee(id)}
   const closeDetail=()=>{if(dirty&&!confirm(ui("The current employee has unsaved changes. Discard them and close?")))return;abortRef.current?.abort();guard.current.cancel();setSelectedId(null);setDetail(null);setDraft(null);setDirty(false);setLoadError('')}
+  const outsidePanelRef=useEmployeeOutsideClose({open:Boolean(selectedId),saving,dirty,onClose:closeDetail,confirmDiscard:()=>confirm(ui("The current employee has unsaved changes. Discard them and close?")),resetKey:detail})
   const changeDraft=changes=>{setDraft(value=>({...value,...changes}));setDirty(true)}
   const refreshCurrent=async id=>{await reload();await loadEmployee(id)}
   const saveDetail=async()=>{
@@ -93,7 +95,7 @@ export default function EmployeeMasterPage({resources,currentUser,account,reload
     {preview&&<div className="employee-preview"><b>Preview: Total {preview.summary.total} · New {preview.summary.new} · Update {preview.summary.update} · Unchanged {preview.summary.unchanged} · Error {preview.summary.error}</b><button disabled={preview.summary.error>0} onClick={commit}>{ui("Confirm import to SQLite")}</button></div>}
     {showCreate&&<div className="employee-detail-backdrop"><div className="employee-detail-drawer">{error&&<div className="data-error" role="alert">{error}</div>}<EmployeeCreateDetail form={form} setForm={setForm} roles={roles} types={employmentTypes} bases={bases} areas={resources.areas} dirty={dirty} setDirty={setDirty} account={account||currentUser} saving={saving} save={create} close={closeCreate}/></div></div>}
 
-    <EmployeeDirectory items={filtered} optionItems={directoryItems} group={group} selectedId={selectedId} openEmployee={openEmployee} filters={filters} setFilters={setFilters} sort={sort} setSort={setSort} renderDetail={()=> <div className="employee-inline-panel">{error&&<div className="data-error" role="alert">{error}</div>}{message&&<div role="status">{message}</div>}{detailLoading?<div className="data-loading">{ui("Loading employee details\u2026")}</div>:loadError?<><div className="data-error">{t('common.error')}: {loadError}</div><button onClick={closeDetail}>{ui("Close")}</button></>:detail&&draft?<EmployeeDetail key={detail.id} item={detail} draft={draft} roles={roles} types={employmentTypes} bases={bases} areas={resources.areas} currentUser={currentUser} account={account} dirty={dirty} saving={saving} changeDraft={changeDraft} saveDetail={saveDetail} closeDetail={closeDetail} refresh={()=>refreshCurrent(detail.id)} setError={setError} setMessage={setMessage}/>:null}</div>}/>
+    <EmployeeDirectory items={filtered} optionItems={directoryItems} group={group} selectedId={selectedId} openEmployee={openEmployee} filters={filters} setFilters={setFilters} sort={sort} setSort={setSort} renderDetail={()=> <div className="employee-inline-panel" ref={outsidePanelRef}>{error&&<div className="data-error" role="alert">{error}</div>}{message&&<div role="status">{message}</div>}{detailLoading?<div className="data-loading">{ui("Loading employee details\u2026")}</div>:loadError?<><div className="data-error">{t('common.error')}: {loadError}</div><button onClick={closeDetail}>{ui("Close")}</button></>:detail&&draft?<EmployeeDetail key={detail.id} item={detail} draft={draft} roles={roles} types={employmentTypes} bases={bases} areas={resources.areas} currentUser={currentUser} account={account} dirty={dirty} saving={saving} changeDraft={changeDraft} saveDetail={saveDetail} closeDetail={closeDetail} refresh={()=>refreshCurrent(detail.id)} setError={setError} setMessage={setMessage}/>:null}</div>}/>
 
   </section>
 }
