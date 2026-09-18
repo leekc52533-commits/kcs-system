@@ -1,3 +1,4 @@
+import {earningsReport,earningsSettings,saveEarningsSettings,recordEarningsPayment} from './earningsService.mjs'
 import {cargoContext,startCargoBatch,lookupCargoBatch,joinCargoBatch,acknowledgeCargo} from './cargoBatchService.mjs'
 import {dashboardRecentActivity} from './dashboardRecentActivity.mjs'
 import {collectionHistory} from './collectionHistoryService.mjs'
@@ -176,6 +177,11 @@ const server = http.createServer(async (request, response) => {
       if(!file.startsWith(path.resolve(uploadsDir)+path.sep)||!fs.existsSync(file))return sendJson(response,404,{error:'Proof not found'})
       response.writeHead(200,{'Content-Type':proof.contentType,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'});return fs.createReadStream(file).pipe(response)
     }
+    if(url.pathname==='/api/mobile/earnings'&&request.method==='GET'){response.setHeader('Cache-Control','private, no-store');return sendJson(response,200,earningsReport(db,session,url.searchParams.get('date'),{personal:true}))}
+    if(url.pathname==='/api/earnings'&&request.method==='GET'){response.setHeader('Cache-Control','private, no-store');return sendJson(response,200,earningsReport(db,session,url.searchParams.get('date')))}
+    if(url.pathname==='/api/earnings/settings'&&request.method==='GET')return sendJson(response,200,earningsSettings(db,session))
+    if(url.pathname==='/api/earnings/settings'&&request.method==='POST')return sendJson(response,200,saveEarningsSettings(db,session,(await readJson(request)).payload))
+    if(url.pathname==='/api/earnings/paid'&&request.method==='POST')return sendJson(response,200,recordEarningsPayment(db,session,(await readJson(request)).payload))
     if(url.pathname==='/api/mobile/cargo-batches'&&request.method==='GET')return sendJson(response,200,cargoContext(db,session))
     if(url.pathname==='/api/mobile/cargo-batches/lookup'&&request.method==='GET')return sendJson(response,200,lookupCargoBatch(db,session,url.searchParams.get('code')))
     if(url.pathname==='/api/mobile/cargo-batches/start'&&request.method==='POST')return sendJson(response,200,startCargoBatch(db,session,(await readJson(request)).payload.tripId))
