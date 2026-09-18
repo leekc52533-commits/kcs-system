@@ -20,7 +20,7 @@ export function importDrivers(db){
  const sales=db.prepare('SELECT * FROM sales_settlements').all(),allLines=sales.flatMap(s=>JSON.parse(s.lines_json).map(l=>({...l,vehicle:s.vehicle_id})))
  const cargo=db.prepare('SELECT b.vehicle_id,w.service_date,u.ticket_number FROM cargo_batch_unloads u JOIN cargo_batches b ON b.id=u.batch_id JOIN unloading_weight_records w ON w.id=u.record_id').all()
  for(const s of sales.filter(s=>s.id>=1&&s.id<=13)){
- if(!/\b(?:TRIPLE|MULTIPLE)\s*C\b/i.test(s.buyer_name)){result.skipped.push({sale:s.id,reason:'Factory name is not Triple C / Multiple C',factory:s.buyer_name});continue}
+ if(!/\b(?:TRIPLE|MULTIPLE)[\s\-–—]*C\b/i.test(s.buyer_name)){result.skipped.push({sale:s.id,reason:'Factory name is not Triple C / Multiple C',factory:s.buyer_name});continue}
  for(const [i,l] of JSON.parse(s.lines_json).entries()){
  const skip=reason=>result.skipped.push({sale:s.id,ticket:l.slipNumber,reason})
  if(db.prepare('SELECT 1 FROM legacy_sales_driver_allocations WHERE settlement_id=? AND line_index=?').get(s.id,i)){result.alreadyAdded++;continue}

@@ -20,7 +20,7 @@ INSERT INTO employees VALUES(1,'Driver A','driver',1,'active'),(2,'Crew B','crew
 INSERT INTO vehicles VALUES(10,'AAA');
 INSERT INTO dispatches VALUES(10,'2026-09-15',1);
 `+earningsSchema)
- db.prepare('INSERT INTO sales_settlements(id,buyer_name,vehicle_id,vehicle_plate,lines_json) VALUES(8,\'TRIPLE C SDN BHD\',10,\'AAA\',?)').run(JSON.stringify([{slipNumber:'TN-20808',deliveryDate:'2074-09-15',weightKg:1110}]))
+ db.prepare('INSERT INTO sales_settlements(id,buyer_name,vehicle_id,vehicle_plate,lines_json) VALUES(8,\'Triple-C Recycle Sdn Bhd\',10,\'AAA\',?)').run(JSON.stringify([{slipNumber:'TN-20808',deliveryDate:'2074-09-15',weightKg:1110}]))
  return db}
 test('authorized date repair and driver-only allocation flow into earnings, with no duplicate rerun',()=>{const db=fixture();try{
  const r=importDrivers(db);assert.equal(r.corrected.length,1);assert.equal(r.added.length,1)
