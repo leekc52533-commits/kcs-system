@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {DatabaseSync} from 'node:sqlite'
+import {ensureV28Schema} from '../server/migrationV28.mjs'
 import {schemaSql} from '../server/schema.mjs'
 import {installWeeklyRoutePlan} from '../server/weeklyRoutePlanService.mjs'
 import {generateDay,ensureRollingWeek,getDispatchDay,assignStopsToRoute,assignRouteVehicle,approveRoute,addTemporaryRouteCollection,recordCustomerReportedNoGoods,reconcileScheduleWindow} from '../server/dispatchService.mjs'
@@ -8,7 +9,7 @@ import {getCollectionScheduleManagement,saveCollectionScheduleManagement} from '
 import {routeScheduleProposals} from '../server/routeSchedulePlanning.mjs'
 import {synchronizeRouteScheduleBaseline} from '../server/routeScheduleBaselineService.mjs'
 import {scheduleMatchesDate} from '../shared/scheduleRecurrence.js'
-function fixture(){const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON;'+schemaSql);db.prepare("INSERT INTO customers(jodoo_customer_id,name) VALUES('C','Customer')").run();db.prepare("INSERT INTO branches(jodoo_branch_id,customer_id,branch_name,status,collection_frequency,assigned_weekdays,latitude,longitude) VALUES('B1',1,'One','active','Weekly','[\"Monday\"]',1,1),('B2',1,'Two','active','Weekly','[\"Monday\"]',1,1),('B3',1,'Three','active','Weekly','[\"Monday\"]',1,1)").run();db.prepare("INSERT INTO branch_schedules(jodoo_schedule_id,branch_id,source_branch_id,frequency,days_of_week) VALUES('S1',1,'B1','Weekly','Monday'),('S2',2,'B2','Weekly','Monday'),('S3',3,'B3','Weekly','Monday')").run();db.prepare("INSERT INTO vehicles(vehicle_code,registration_number,status,operational_status) VALUES('Lorry 2','QAA4293N','available','active'),('Lorry 3','QAB1225B','available','active')").run();db.prepare("INSERT INTO employees(employee_code,name,job_role,employment_status,is_active) VALUES('D1','Driver One','Driver','active',1),('D2','Driver Two','Driver','active',1)").run();installWeeklyRoutePlan({name:'Routes',sourceName:'test',entries:[[1,'QAA4293N',1,1,'B1','',''],[1,'QAA4293N',1,2,'B2','',''],[1,'QAB1225B',1,1,'B3','','']]},{},db);generateDay({startDate:'2026-09-07'},db);return db}
+function fixture(){const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON;'+schemaSql);ensureV28Schema(db);db.prepare("INSERT INTO customers(jodoo_customer_id,name) VALUES('C','Customer')").run();db.prepare("INSERT INTO branches(jodoo_branch_id,customer_id,branch_name,status,collection_frequency,assigned_weekdays,latitude,longitude) VALUES('B1',1,'One','active','Weekly','[\"Monday\"]',1,1),('B2',1,'Two','active','Weekly','[\"Monday\"]',1,1),('B3',1,'Three','active','Weekly','[\"Monday\"]',1,1)").run();db.prepare("INSERT INTO branch_schedules(jodoo_schedule_id,branch_id,source_branch_id,frequency,days_of_week) VALUES('S1',1,'B1','Weekly','Monday'),('S2',2,'B2','Weekly','Monday'),('S3',3,'B3','Weekly','Monday')").run();db.prepare("INSERT INTO vehicles(vehicle_code,registration_number,status,operational_status) VALUES('Lorry 2','QAA4293N','available','active'),('Lorry 3','QAB1225B','available','active')").run();db.prepare("INSERT INTO employees(employee_code,name,job_role,employment_status,is_active) VALUES('D1','Driver One','Driver','active',1),('D2','Driver Two','Driver','active',1)").run();installWeeklyRoutePlan({name:'Routes',sourceName:'test',entries:[[1,'QAA4293N',1,1,'B1','',''],[1,'QAA4293N',1,2,'B2','',''],[1,'QAB1225B',1,1,'B3','','']]},{},db);generateDay({startDate:'2026-09-07'},db);return db}
 const context={role:'supervisor',actor:'Manager',today:'2026-09-07'}
 const stop=(db,branch,date='2026-09-07')=>db.prepare('SELECT ds.* FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id JOIN dispatch_days dd ON dd.id=dt.dispatch_day_id WHERE ds.branch_id=? AND dd.dispatch_date=? AND ds.status<>\'cancelled\'').get(branch,date)
 const addBranch=db=>db.exec(`INSERT INTO branches(jodoo_branch_id,customer_id,branch_name,status,collection_frequency,assigned_weekdays,latitude,longitude) VALUES('B4',1,'New customer','active','Weekly','["Monday"]',1,1); INSERT INTO branch_schedules(jodoo_schedule_id,branch_id,source_branch_id,frequency,days_of_week) VALUES('S4',4,'B4','Weekly','Monday')`)
@@ -186,3 +187,52 @@ for(const scenario of ['cancelled slot','reversed row IDs'])test(`rolling reconc
  assert.equal(db.prepare("SELECT count(*) n FROM dispatch_stops WHERE branch_id=4 AND service_date='2026-09-07' AND status<>'cancelled'").get().n,1)
  assert.equal(db.prepare('PRAGMA foreign_key_check').all().length,0)
 }finally{db.close()}})
+
+import {syncSupervisorSavedSchedule,routeSignature} from '../server/dispatchService.mjs'
+const stillApproved=db=>{const day=db.prepare("SELECT id FROM dispatch_days WHERE dispatch_date='2026-09-07'").get().id;return db.prepare('SELECT route_signature s FROM daily_route_approvals WHERE dispatch_day_id=? AND route_number=1').get(day)?.s===routeSignature(db,day,1)}
+test('management save itself synchronizes approved dates without approving an unapproved target',t=>{
+ t.mock.timers.enable({apis:['Date'],now:new Date('2026-09-07T01:00:00Z')})
+ const db=fixture();try{
+ ensureRollingWeek({startDate:'2026-09-07'},db);assignRouteVehicle('2026-09-07',1,{vehicleId:1},db);approveRoute('2026-09-07',1,{approvedBy:'Manager'},db)
+ const original=stop(db,1),other=stop(db,2),item=getCollectionScheduleManagement('B1',db)
+ saveCollectionScheduleManagement('B1',{...item,frequency:'Once a week',weekdays:['Tuesday'],recurrenceType:undefined,routeNumber:1,reason:'Manager changed weekday',expectedUpdatedAt:item.updatedAt},db,{supervisorConfirmed:true})
+ assert.equal(stop(db,1),undefined);assert.equal(stop(db,1,'2026-09-08').route_number,1);assert.deepEqual(stop(db,2),other);assert.ok(stillApproved(db))
+ assert.equal(db.prepare('SELECT status FROM dispatch_stops WHERE id=?').get(original.id).status,'cancelled')
+ assert.equal(db.prepare("SELECT COUNT(*) n FROM daily_route_approvals a JOIN dispatch_days d ON d.id=a.dispatch_day_id WHERE d.dispatch_date='2026-09-08'").get().n,0)
+ assert.ok(!reconcileScheduleWindow({startDate:'2026-09-07',branchIds:[1]},db).some(r=>r.kind==='outdated'||r.kind==='missing'))
+ }finally{db.close()}
+})
+test('saved schedule repairs untouched stops on a running day but preserves arrived records and unrelated stale approval',()=>{
+ const db=fixture();try{
+ ensureRollingWeek({startDate:'2026-09-07'},db);assignRouteVehicle('2026-09-07',1,{vehicleId:1},db);approveRoute('2026-09-07',1,{approvedBy:'Manager'},db)
+ db.exec("UPDATE dispatch_days SET status='in_progress' WHERE dispatch_date='2026-09-07'")
+ const arrived=stop(db,2);db.prepare("UPDATE dispatch_stops SET status='active',arrived_at='2026-09-07 09:00:00' WHERE id=?").run(arrived.id)
+ const before=db.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(arrived.id)
+ save(db,'B1',{frequency:'Once a week',weekdays:['Tuesday'],routeNumber:1});save(db,'B2',{frequency:'Once a week',weekdays:['Tuesday'],routeNumber:1})
+ db.prepare('UPDATE dispatch_stops SET route_stop_sequence=99 WHERE id=?').run(stop(db,1).id)
+ syncSupervisorSavedSchedule({branchId:1,scheduleId:1,startDate:'2026-09-07',changedBy:'KC'},db)
+ syncSupervisorSavedSchedule({branchId:2,scheduleId:2,startDate:'2026-09-07',changedBy:'KC'},db)
+ assert.equal(stop(db,1),undefined);assert.deepEqual(db.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(arrived.id),before);assert.equal(stillApproved(db),false)
+ }finally{db.close()}
+})
+test('schedule sync failure rolls back stop changes and route approvals',()=>{
+ const db=fixture();try{
+ ensureRollingWeek({startDate:'2026-09-07'},db);assignRouteVehicle('2026-09-07',1,{vehicleId:1},db);approveRoute('2026-09-07',1,{approvedBy:'Manager'},db)
+ save(db,'B1',{frequency:'Once a week',weekdays:['Tuesday'],routeNumber:1})
+ const before=db.prepare('SELECT * FROM dispatch_stops').all(),approvals=db.prepare('SELECT * FROM daily_route_approvals').all()
+ db.exec("CREATE TRIGGER reject_schedule_sync BEFORE INSERT ON audit_logs WHEN NEW.action='supervisor_schedule_synced' BEGIN SELECT RAISE(ABORT,'test rollback'); END")
+ assert.throws(()=>syncSupervisorSavedSchedule({branchId:1,scheduleId:1,startDate:'2026-09-07',changedBy:'KC'},db),/test rollback/)
+ assert.deepEqual(db.prepare('SELECT * FROM dispatch_stops').all(),before);assert.deepEqual(db.prepare('SELECT * FROM daily_route_approvals').all(),approvals)
+ }finally{db.close()}
+})
+
+test('pending employee requests survive both supervisor sync and subsequent rolling reconciliation',()=>{
+ const db=fixture();try{
+ const source=stop(db,1)
+ db.prepare("INSERT INTO driver_date_requests(dispatch_stop_id,employee_id,source_date,target_date,reason) VALUES(?,1,'2026-09-07','2026-09-08','Driver request')").run(source.id)
+ save(db,'B1',{frequency:'Once a week',weekdays:['Tuesday'],routeNumber:1})
+ syncSupervisorSavedSchedule({branchId:1,scheduleId:1,startDate:'2026-09-07',changedBy:'KC'},db)
+ reconcileScheduleWindow({startDate:'2026-09-07'},db)
+ assert.deepEqual(stop(db,1),source);assert.equal(db.prepare('SELECT status FROM driver_date_requests').get().status,'pending')
+ }finally{db.close()}
+})

@@ -1,4 +1,4 @@
-import {routeSignature} from './routeApprovalState.mjs'
+import {routeSignature,captureApprovedRoutes,retainApprovedRoutes} from './routeApprovalState.mjs'
 export {routeSignature} from './routeApprovalState.mjs'
 import {flexibleExecution} from './flexibleCollectionPolicy.mjs'
 import {requiresDriverApproval} from '../shared/driverChangePolicy.js'
@@ -1148,7 +1148,7 @@ export function reconcileScheduleWindow({startDate=iso(),changedBy='System',conf
     if(expected.has(stop.branch_id))continue
     // Only a recorded permanent schedule edit may withdraw a previously generated occurrence.
     const edit=database.prepare("SELECT 1 FROM master_change_history WHERE entity_type='branch_schedule' AND entity_id=? LIMIT 1").get(String(stop.source_schedule_id));if(!edit)continue
-    if(stop.arrived_at||stop.completed_at||['active','completed'].includes(stop.status)||database.prepare('SELECT 1 FROM purchase_bills WHERE dispatch_stop_id=?').get(stop.id))continue
+    if(scheduleStopHasProtectedWork(database,stop))continue
     const manual=database.prepare("SELECT 1 FROM dispatch_change_logs WHERE dispatch_day_id=? AND (change_type='route_customer_adjusted' AND entity_id=? OR change_type='temporary_collection_added' AND json_extract(after_json,'$.stopId')=?) LIMIT 1").get(day.id,String(stop.id),stop.id)
     if(manual||stop.override_note==='customer_reported_no_goods')continue
     if(protectedReason){review.push({date,branchId:stop.branchCode,branchName:stop.branch_name,kind:'outdated',message:'固定排程已改变，原批准安排需要主管核对'});continue}
@@ -1200,21 +1200,23 @@ export function recordCustomerReportedNoGoods(stopId,payload={},context={},datab
 }
 
 // Reconcile only this customer's generated future plans. Never regenerate other customers
-// or alter a started trip. The caller commits this with the review and master schedule.
-export function syncReviewedBranchSchedule({branchId,scheduleId,startDate,excludeStopId,changedBy},database=defaultDb){
+// A direct management save may update untouched stops on a running trip.
+export function syncReviewedBranchSchedule({branchId,scheduleId,startDate,excludeStopId,changedBy,supervisorEdit=false},database=defaultDb){
  const schedule=database.prepare('SELECT * FROM branch_schedules WHERE id=?').get(scheduleId),preserved=[]
  for(const day of database.prepare('SELECT * FROM dispatch_days WHERE dispatch_date>=? ORDER BY dispatch_date').all(startDate)){
   const date=day.dispatch_date,existing=findBranchServiceDateStop(database,branchId,date)
-  if(existing?.id===excludeStopId)continue
+  if(excludeStopId!=null&&existing?.id===excludeStopId)continue
   const exceptions=database.prepare('SELECT * FROM schedule_exceptions WHERE schedule_id=? AND (original_date=? OR target_date=?)').all(scheduleId,date,date)
   const removed=exceptions.some(e=>e.original_date===date&&['move_date','cancel_date','pause_once'].includes(e.exception_type)&&(e.exception_type!=='move_date'||e.target_date!==date))
   const extra=exceptions.some(e=>e.target_date===date&&['move_date','add_extra_collection','customer_request'].includes(e.exception_type))
   const due=!removed&&(extra||scheduleMatchesDate(schedule,date))
   if(!existing&&!due)continue
-  const worked=existing&&(existing.arrived_at||existing.completed_at||['active','completed'].includes(existing.status)||existing.override_note||
-   database.prepare("SELECT 1 FROM purchase_bills WHERE dispatch_stop_id=? UNION ALL SELECT 1 FROM stop_documents WHERE dispatch_stop_id=? UNION ALL SELECT 1 FROM stop_step_records WHERE dispatch_stop_id=? UNION ALL SELECT 1 FROM driver_date_requests WHERE dispatch_stop_id=? AND status='pending' UNION ALL SELECT 1 FROM driver_defer_requests WHERE dispatch_stop_id=? AND status='pending'").get(existing.id,existing.id,existing.id,existing.id,existing.id))
+  const worked=existing&&scheduleStopHasProtectedWork(database,existing)
   const executing=['published','in_progress','completed'].includes(day.status)||database.prepare("SELECT 1 FROM dispatch_trips t JOIN dispatches d ON d.id=t.dispatch_id WHERE t.dispatch_day_id=? AND (t.execution_status<>'not_started' OR d.status IN ('released','in_progress','completed'))").get(day.id)
-  if(worked||executing){preserved.push(date);continue}
+  const extraProtected=supervisorEdit&&existing&&(existing.source_schedule_id!==scheduleId||existing.source_special_request_id||
+   database.prepare("SELECT 1 FROM dispatch_change_logs WHERE dispatch_day_id=? AND entity_id=? AND change_type='route_customer_adjusted'").get(day.id,String(existing.id)))
+  const closed=day.status==='completed'||(existing&&database.prepare("SELECT 1 FROM dispatch_trips t JOIN dispatches d ON d.id=t.dispatch_id WHERE t.id=? AND (t.execution_status='completed' OR d.status='completed')").get(existing.dispatch_trip_id))
+  if(worked||extraProtected||closed||(!supervisorEdit&&executing)){preserved.push(date);continue}
   if(existing&&!due){
    database.prepare("UPDATE dispatch_stops SET status='cancelled',superseded_reason='schedule_sync_removed',superseded_by=?,superseded_at=CURRENT_TIMESTAMP WHERE id=?").run(changedBy,existing.id)
    database.prepare("UPDATE schedule_occurrences SET status='cancelled',dispatch_stop_id=NULL,updated_at=CURRENT_TIMESTAMP WHERE dispatch_stop_id=?").run(existing.id)
@@ -1228,6 +1230,7 @@ export function syncReviewedBranchSchedule({branchId,scheduleId,startDate,exclud
   if(!existing&&database.prepare("SELECT 1 FROM dispatch_stops WHERE branch_id=? AND service_date=? AND status='cancelled' AND COALESCE(superseded_reason,'')<>'schedule_sync_removed'").get(branchId,date))continue
   const assigned=database.prepare("SELECT a.vehicle_id FROM daily_route_assignments a JOIN vehicles v ON v.id=a.vehicle_id WHERE a.dispatch_day_id=? AND a.route_number=? AND v.status IN ('active','available','assigned') AND v.operational_status IN ('active','available') AND (v.is_temporary=0 OR v.temporary_date=?)").get(day.id,route??null,date)
   const trip=assigned?ensureVehicleTrip(database,day,assigned.vehicle_id,1):ensureUnassignedTrip(database,day)
+  if(supervisorEdit&&(trip.execution_status==='completed'||database.prepare("SELECT 1 FROM dispatches WHERE id=? AND status='completed'").get(trip.dispatch_id))){preserved.push(date);continue}
   const added=existing?null:addScheduledStop(database,day,schedule,extra?'exception':'recurrence'),id=existing?.id||added?.stopId
   if(!id){preserved.push(date);continue}
   const sequence=database.prepare('SELECT COALESCE(MAX(stop_sequence),0)+1 n FROM dispatch_stops WHERE dispatch_id=?').get(trip.dispatch_id).n
@@ -1263,4 +1266,23 @@ export function placeReviewedScheduledStop({stopId,date,vehicleId,routeNumber,ch
  const routeSequence=database.prepare('SELECT COALESCE(MAX(s.route_stop_sequence),0)+1 n FROM dispatch_stops s JOIN dispatch_trips t ON t.id=s.dispatch_trip_id WHERE t.dispatch_day_id=? AND s.route_number=?').get(day.id,routeNumber).n
  database.prepare('UPDATE dispatch_stops SET dispatch_id=?,dispatch_trip_id=?,stop_sequence=?,route_number=?,route_stop_sequence=? WHERE id=?').run(target.dispatch_id,target.id,sequence,routeNumber,routeSequence,stopId)
  invalidateDispatchDay(database,date,'date_review_occurrence_reused','dispatch_stop',stopId,before,{routeNumber,vehicleId},changedBy)
+}
+
+// Trusted management entry point: saving the fixed schedule is the decision itself.
+export function syncSupervisorSavedSchedule({branchId,scheduleId,startDate=iso(),changedBy='Supervisor'},database=defaultDb){
+ return withImmediateTransaction(database,()=>{
+  const dates=database.prepare('SELECT dispatch_date date FROM dispatch_days WHERE dispatch_date>=?').all(startDate).map(r=>r.date)
+  const approvals=captureApprovedRoutes(database,dates)
+  const preservedDates=syncReviewedBranchSchedule({branchId,scheduleId,startDate,changedBy,supervisorEdit:true},database)
+  retainApprovedRoutes(database,approvals,changedBy,'Supervisor saved fixed collection schedule')
+  database.prepare("INSERT INTO audit_logs(action,entity_type,entity_id,after_json) VALUES('supervisor_schedule_synced','branch',?,?)").run(String(branchId),JSON.stringify({scheduleId,startDate,changedBy,preservedDates}))
+  return {preservedDates}
+ })
+}
+
+function scheduleStopHasProtectedWork(db,stop){
+ if(stop.arrived_at||stop.completed_at||['active','completed'].includes(stop.status)||stop.override_note||stop.invoice_number||stop.collected_weight_kg!=null||stop.payment_status)return true
+ if(['purchase_bills','stop_documents','stop_step_records'].some(table=>db.prepare(`SELECT 1 FROM ${table} WHERE dispatch_stop_id=?`).get(stop.id)))return true
+ if(['driver_date_requests','driver_defer_requests','driver_arrangement_requests','customer_transfer_requests'].some(table=>db.prepare(`SELECT 1 FROM ${table} WHERE dispatch_stop_id=? AND status='pending'`).get(stop.id)))return true
+ return Boolean(db.prepare("SELECT 1 FROM trip_work_close_requests WHERE trip_id=? AND status='pending'").get(stop.dispatch_trip_id))
 }

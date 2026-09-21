@@ -48,7 +48,7 @@ export function saveCustomerWorkspace(payload,actor={},db=defaultDb){
   if(payload.schedule&&!['paused','closed'].includes(customer.status)){
    const current=getCollectionScheduleManagement(branch.branchId,db)
    if(!current)throw fail('Only active branches can change collection schedules.',409)
-   saveCollectionScheduleManagement(branch.branchId,{...pick(payload.schedule,['frequency','weekdays','anchorDate','effectiveDate','monthlyOccurrence','routeNumber','sundayRouteNumber']),routeNumber:payload.schedule.routeNumber||undefined,reason,changedBy,sundayAuthorized:true,expectedUpdatedAt:current.updatedAt},db)
+   saveCollectionScheduleManagement(branch.branchId,{...pick(payload.schedule,['frequency','weekdays','anchorDate','effectiveDate','monthlyOccurrence','routeNumber','sundayRouteNumber']),routeNumber:payload.schedule.routeNumber||undefined,reason,changedBy,sundayAuthorized:true,expectedUpdatedAt:current.updatedAt},db,{supervisorConfirmed:true})
   }
   if(payload.gps){
    if(!accountCan(actor,'gps_capture',db))throw fail('GPS capture permission required.',403)
