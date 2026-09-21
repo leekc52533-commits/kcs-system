@@ -1,3 +1,4 @@
+import {captureApprovedRoutes,retainApprovedRoutes} from './routeApprovalState.mjs'
 import {branchCollectionOpen,branchCollectionRoutes} from './flexibleCollectionPolicy.mjs'
 import {db as defaultDb} from './database.mjs'
 import {kuchingDate} from '../shared/kuchingTime.js'
@@ -49,6 +50,7 @@ function audit(db,dayId,stopId,actor,type,before,after){db.prepare("INSERT INTO 
 function position(db,t){return {sequence:db.prepare('SELECT COALESCE(MAX(stop_sequence),0)+1 n FROM dispatch_stops WHERE dispatch_id=?').get(t.dispatch_id).n,routeSequence:db.prepare('SELECT COALESCE(MAX(s.route_stop_sequence),0)+1 n FROM dispatch_stops s JOIN dispatch_trips dt ON dt.id=s.dispatch_trip_id WHERE dt.dispatch_day_id=? AND s.route_number=?').get(t.dispatch_day_id,t.routeNumber).n}}
 export function collectExistingCustomer(payload={},ctx={},db=defaultDb,{actor=ctx.employeeId,supervisor=false}={}){
  return withImmediateTransaction(db,()=>{
+  const approvedBefore=supervisor?captureApprovedRoutes(db,[today(ctx)]):[]
   const t=targetTrip(db,payload.tripId,ctx),b=activeBranch(db,payload.branchId),existing=findBranchServiceDateStop(db,b.id,today(ctx))
   if(existing){
    const s=stop(db,existing.id)
@@ -70,6 +72,7 @@ export function collectExistingCustomer(payload={},ctx={},db=defaultDb,{actor=ct
     db.prepare("INSERT INTO existing_customer_pickups(dispatch_stop_id,employee_id,kind) VALUES(?,?,'transferred') ON CONFLICT(dispatch_stop_id) DO UPDATE SET employee_id=excluded.employee_id,kind='transferred'").run(s.id,ctx.employeeId)
     db.prepare('INSERT INTO flexible_collection_claims(stop_id,employee_id,actor,source_route_number) VALUES(?,?,?,?) ON CONFLICT(stop_id) DO UPDATE SET employee_id=excluded.employee_id,actor=excluded.actor,source_route_number=COALESCE(flexible_collection_claims.source_route_number,excluded.source_route_number),created_at=CURRENT_TIMESTAMP').run(s.id,ctx.employeeId,String(actor),claim?.source_route_number||s.route_number)
     audit(db,s.dayId,s.id,actor,'open_zone_collection_assigned',s,{tripId:t.id,vehicleId:t.vehicleId,driverId:ctx.employeeId,supervisor})
+    if(supervisor)retainApprovedRoutes(db,approvedBefore,actor,payload.reason)
     return {id:`existing-${s.id}`,stopId:s.id}
    }
    const reason=String(payload.reason||'').trim();if(!reason||reason.length>1000)fail('PICKUP_REASON',400)
@@ -111,7 +114,7 @@ export function reviewCustomerTransfer(id,payload={},ctx={},db=defaultDb){
  return withImmediateTransaction(db,()=>{
   const r=db.prepare('SELECT * FROM customer_transfer_requests WHERE id=?').get(Number(id));if(!r)fail('PICKUP_STALE')
   if(r.status===decision)return {ok:true,idempotent:true};if(r.status!=='pending')fail('PICKUP_STALE')
-  const s=stop(db,r.dispatch_stop_id)
+  const s=stop(db,r.dispatch_stop_id),approvedBefore=captureApprovedRoutes(db,[r.service_date])
   if(decision==='approved'){
    if(!s||s.serviceDate!==today(ctx)||r.service_date!==today(ctx)||s.dispatch_trip_id!==r.source_trip_id||s.dispatch_id!==r.source_dispatch_id||s.vehicleId!==r.source_vehicle_id||s.driverId!==r.source_driver_id)fail('PICKUP_STALE')
    if(hasWork(db,s))fail('PICKUP_PROTECTED')
@@ -124,6 +127,7 @@ export function reviewCustomerTransfer(id,payload={},ctx={},db=defaultDb){
    db.prepare('DELETE FROM flexible_collection_claims WHERE stop_id=?').run(s.id)
    audit(db,s.dayId,s.id,ctx.employeeName||ctx.employeeId,'customer_transfer_approved',s,{requestId:r.id,tripId:t.id,vehicleId:t.vehicleId,driverId:r.requester_employee_id,reason})
   }else audit(db,s.dayId,s.id,ctx.employeeName||ctx.employeeId,'customer_transfer_rejected',{requestId:r.id},{reason})
+  if(decision==='approved')retainApprovedRoutes(db,approvedBefore,ctx.employeeName||ctx.employeeId,reason)
   db.prepare('UPDATE customer_transfer_requests SET status=?,reviewed_at=CURRENT_TIMESTAMP,reviewed_by=?,review_reason=? WHERE id=?').run(decision,ctx.employeeName||String(ctx.employeeId),reason,r.id)
   return {ok:true,stopId:r.dispatch_stop_id}
  })

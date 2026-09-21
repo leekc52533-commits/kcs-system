@@ -1,3 +1,4 @@
+import {captureApprovedRoutes,retainApprovedRoutes} from './routeApprovalState.mjs'
 import {requiresDriverApproval} from '../shared/driverChangePolicy.js'
 import {saveArrangementRequest} from './arrangementRequestStore.mjs'
 import {canManageDispatch} from '../shared/dispatchAccess.js'
@@ -98,6 +99,7 @@ export function decideDriverDate(id,decision,payload,context={},db=defaultDb,{wo
    if(!s||s.dispatch_date!==r.source_date||hasWork(db,s)||pendingDefer(db,s))fail('routeTrial.protected')
    if(r.source_date<today&&!workClose)fail('routeTrial.stale')
    if(date===s.dispatch_date&&route===s.route_number)fail('routeTrial.noChange',400)
+   const approvedBefore=captureApprovedRoutes(db,[r.source_date,date])
    let options=driverDateReviewOptions(date,db)
    if(!options.routes.some(x=>x.routeNumber===route))fail('routeTrial.chooseRoute')
    if(payload.targetRevision!=null&&Number(payload.targetRevision)!==options.revision)fail('routeTrial.stale')
@@ -159,6 +161,7 @@ export function decideDriverDate(id,decision,payload,context={},db=defaultDb,{wo
     audit(db,s,actor,'empty_trip_closed_after_date_approval',{status:'in_progress'},{status:'completed',tripId:s.trip_id})
    }
    invalidateDispatchDay(db,r.source_date,'driver_date_approved','dispatch_stop',s.id,{status:s.status},{status:'cancelled',targetStopId:targetStop,targetDate:date,routeNumber:route,scope},actor)
+   retainApprovedRoutes(db,approvedBefore,actor,reason)
   }
   db.prepare('UPDATE driver_date_requests SET status=?,reviewed_by=?,review_reason=?,reviewed_at=CURRENT_TIMESTAMP,target_stop_id=? WHERE id=?').run(decision,actor,reason,targetStop,r.id)
   audit(db,s,actor,'driver_date_request_'+decision,{requestId:r.id,status:'pending'},{status:decision,targetStopId:targetStop,reason,preservedDates})

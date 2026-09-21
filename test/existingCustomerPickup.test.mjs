@@ -272,3 +272,15 @@ test('v76 carries fully open routes only, with partial routes closed and origina
  assert.equal(branchCollectionOpen(db,1,'2026-10-01'),true)
  }finally{db.close()}
 })
+
+import {routeSignature as approvalSignature} from '../server/routeApprovalState.mjs'
+test('approved vehicle transfer synchronizes both previously approved routes',()=>{
+ const{db,tripId,targetId,stops}=twoCars()
+ try{
+  db.prepare('UPDATE dispatch_stops SET route_number=1 WHERE id=?').run(stops[0])
+  const day=db.prepare('SELECT dispatch_day_id id FROM dispatch_trips WHERE id=?').get(tripId).id
+  for(const route of [1,2])db.prepare("INSERT OR REPLACE INTO daily_route_approvals(dispatch_day_id,route_number,route_signature,actor,reason) VALUES(?,?,?,'Supervisor','Ready')").run(day,route,approvalSignature(db,day,route))
+  const r=request(db,targetId);approve(db,r.requestId)
+  for(const route of [1,2])assert.equal(db.prepare('SELECT route_signature s FROM daily_route_approvals WHERE dispatch_day_id=? AND route_number=?').get(day,route).s,approvalSignature(db,day,route))
+ }finally{db.close()}
+})

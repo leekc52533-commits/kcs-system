@@ -1,3 +1,5 @@
+import {routeSignature} from './routeApprovalState.mjs'
+export {routeSignature} from './routeApprovalState.mjs'
 import {flexibleExecution} from './flexibleCollectionPolicy.mjs'
 import {requiresDriverApproval} from '../shared/driverChangePolicy.js'
 import {activeNoGoodsNotice} from './noGoodsNoticeService.mjs'
@@ -321,13 +323,6 @@ function stopRows(database, dayId) {
     WHERE dt.dispatch_day_id=? AND ds.status<>'cancelled' ORDER BY dt.trip_number,ds.stop_sequence`).all(dayId)
 }
 
-export function routeSignature(database,dayId,routeNumber){
-  const hasOutcome=database.prepare("PRAGMA table_info(dispatch_stops)").all().some(c=>c.name==='completion_outcome')
-  const rows=database.prepare(`SELECT ds.id,ds.branch_id branchId,ds.route_stop_sequence routeSequence,ds.stop_sequence stopSequence,${hasOutcome?"CASE WHEN ds.completion_outcome='no_goods_notice' THEN COALESCE((SELECT json_extract(n.before_json,'$.status') FROM no_goods_notices n WHERE n.dispatch_stop_id=ds.id AND n.restored_at IS NULL),ds.status) ELSE ds.status END":"ds.status"} status,dt.trip_number tripNumber,d.vehicle_id vehicleId
-    FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id JOIN dispatches d ON d.id=ds.dispatch_id
-    WHERE dt.dispatch_day_id=? AND ds.route_number=? AND ds.status<>'cancelled' ORDER BY ds.route_stop_sequence,ds.id`).all(dayId,routeNumber)
-  return createHash('sha256').update(JSON.stringify(rows)).digest('hex')
-}
 
 function dayView(database, day) {
   const stops=stopRows(database,day.id).map(stop=>({...stop,noGoodsNotice:activeNoGoodsNotice(database,stop.id)}))
