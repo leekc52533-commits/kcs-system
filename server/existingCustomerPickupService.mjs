@@ -1,4 +1,4 @@
-import {branchCollectionOpen} from './flexibleCollectionPolicy.mjs'
+import {branchCollectionOpen,branchCollectionRoutes} from './flexibleCollectionPolicy.mjs'
 import {db as defaultDb} from './database.mjs'
 import {kuchingDate} from '../shared/kuchingTime.js'
 import {canManageDispatch} from '../shared/dispatchAccess.js'
@@ -33,7 +33,7 @@ export function searchPickupCustomers(search,ctx={},db=defaultDb){
 }
 export function pickupCustomerDetails(id,ctx={},db=defaultDb){
  searchActor(db,ctx);const b=activeBranch(db,id)
- return {...b,collectionOpen:branchCollectionOpen(db,b.id),assignment:assignment(db,b.id,ctx),products:listBranchProducts(b.id,db).filter(p=>p.isSelectable&&Number(p.currentPrice)>0)}
+ return {...b,collectionOpen:branchCollectionOpen(db,b.id,today(ctx)),assignment:assignment(db,b.id,ctx),products:listBranchProducts(b.id,db).filter(p=>p.isSelectable&&Number(p.currentPrice)>0)}
 }
 function targetTrip(db,id,ctx){
  if(!intakeTrips(ctx,db).some(t=>t.id===Number(id)))fail('INTAKE_TRIP')
@@ -52,13 +52,13 @@ export function collectExistingCustomer(payload={},ctx={},db=defaultDb,{actor=ct
   const t=targetTrip(db,payload.tripId,ctx),b=activeBranch(db,payload.branchId),existing=findBranchServiceDateStop(db,b.id,today(ctx))
   if(existing){
    const s=stop(db,existing.id)
-   if(Number(s.driverId)===Number(ctx.employeeId)&&s.dispatch_trip_id!==t.id&&!branchCollectionOpen(db,b.id))fail('PICKUP_OWN_TRIP')
+   if(Number(s.driverId)===Number(ctx.employeeId)&&s.dispatch_trip_id!==t.id&&!branchCollectionOpen(db,b.id,today(ctx)))fail('PICKUP_OWN_TRIP')
    if(Number(s.driverId)===Number(ctx.employeeId)&&s.dispatch_trip_id===t.id){
     db.prepare("INSERT OR IGNORE INTO existing_customer_pickups(dispatch_stop_id,employee_id,kind) VALUES(?,?,'existing')").run(s.id,ctx.employeeId)
     return {id:`existing-${s.id}`,stopId:s.id,reused:true,arrived:Boolean(s.arrived_at),completed:s.status==='completed'}
    }
    if(hasWork(db,s))fail('PICKUP_PROTECTED')
-   if(branchCollectionOpen(db,b.id)){
+   if(branchCollectionOpen(db,b.id,today(ctx))){
     requireBilling(db,b)
     if(db.prepare("SELECT 1 FROM customer_transfer_requests WHERE dispatch_stop_id=? AND status='pending'").get(s.id))fail('PICKUP_PENDING')
     const claim=db.prepare('SELECT * FROM flexible_collection_claims WHERE stop_id=?').get(s.id)
@@ -68,7 +68,7 @@ export function collectExistingCustomer(payload={},ctx={},db=defaultDb,{actor=ct
     const pos=position(db,t)
     db.prepare("UPDATE dispatch_stops SET dispatch_id=?,dispatch_trip_id=?,stop_sequence=?,route_number=?,route_stop_sequence=?,status='available' WHERE id=?").run(t.dispatch_id,t.id,pos.sequence,t.routeNumber,pos.routeSequence,s.id)
     db.prepare("INSERT INTO existing_customer_pickups(dispatch_stop_id,employee_id,kind) VALUES(?,?,'transferred') ON CONFLICT(dispatch_stop_id) DO UPDATE SET employee_id=excluded.employee_id,kind='transferred'").run(s.id,ctx.employeeId)
-    db.prepare('INSERT INTO flexible_collection_claims(stop_id,employee_id,actor) VALUES(?,?,?) ON CONFLICT(stop_id) DO UPDATE SET employee_id=excluded.employee_id,actor=excluded.actor,created_at=CURRENT_TIMESTAMP').run(s.id,ctx.employeeId,String(actor))
+    db.prepare('INSERT INTO flexible_collection_claims(stop_id,employee_id,actor,source_route_number) VALUES(?,?,?,?) ON CONFLICT(stop_id) DO UPDATE SET employee_id=excluded.employee_id,actor=excluded.actor,source_route_number=COALESCE(flexible_collection_claims.source_route_number,excluded.source_route_number),created_at=CURRENT_TIMESTAMP').run(s.id,ctx.employeeId,String(actor),claim?.source_route_number||s.route_number)
     audit(db,s.dayId,s.id,actor,'open_zone_collection_assigned',s,{tripId:t.id,vehicleId:t.vehicleId,driverId:ctx.employeeId,supervisor})
     return {id:`existing-${s.id}`,stopId:s.id}
    }
@@ -80,13 +80,14 @@ export function collectExistingCustomer(payload={},ctx={},db=defaultDb,{actor=ct
    audit(db,s.dayId,s.id,ctx.employeeId,'customer_transfer_requested',{tripId:s.dispatch_trip_id,vehicleId:s.vehicleId},{requestId:id,targetTripId:t.id,targetVehicleId:t.vehicleId,reason})
    return {pending:true,requestId:id}
   }
+  const sourceOpen=branchCollectionOpen(db,b.id,today(ctx)),sourceRoute=branchCollectionRoutes(db,b.id,today(ctx))[0]||null
   requireBilling(db,b)
   // A cancelled record with documents is history, not a fresh collection opportunity.
   const documented=db.prepare(`SELECT s.id FROM dispatch_stops s JOIN dispatches d ON d.id=s.dispatch_id WHERE s.branch_id=? AND COALESCE(s.service_date,d.dispatch_date)=? AND (s.arrived_at IS NOT NULL OR EXISTS(SELECT 1 FROM purchase_bills pb WHERE pb.dispatch_stop_id=s.id))`).get(b.id,today(ctx));if(documented)fail('PICKUP_PROTECTED')
   assertBranchServiceDateAvailable(db,b.id,today(ctx));const pos=position(db,t)
   const id=Number(db.prepare("INSERT INTO dispatch_stops(dispatch_id,dispatch_trip_id,branch_id,stop_sequence,status,service_date,dedupe_enforced,route_number,route_stop_sequence,override_note) VALUES(?,?,?,?,'available',?,1,?,?,'existing_customer_pickup')").run(t.dispatch_id,t.id,b.id,pos.sequence,today(ctx),t.routeNumber,pos.routeSequence).lastInsertRowid)
   db.prepare("INSERT INTO existing_customer_pickups(dispatch_stop_id,employee_id,kind) VALUES(?,?,'added')").run(id,ctx.employeeId)
-  if(branchCollectionOpen(db,b.id))db.prepare('INSERT INTO flexible_collection_claims(stop_id,employee_id,actor) VALUES(?,?,?)').run(id,ctx.employeeId,String(actor))
+  if(sourceOpen)db.prepare('INSERT INTO flexible_collection_claims(stop_id,employee_id,actor,source_route_number) VALUES(?,?,?,?)').run(id,ctx.employeeId,String(actor),sourceRoute)
   audit(db,t.dispatch_day_id,id,ctx.employeeId,'existing_customer_added_once',null,{branchId:b.id,tripId:t.id,vehicleId:t.vehicleId})
   return {id:`existing-${id}`,stopId:id}
  })

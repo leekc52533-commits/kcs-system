@@ -156,24 +156,24 @@ import {driverToday} from '../server/dispatchService.mjs'
 import {applyV74Migration} from '../server/migrationV74.mjs'
 const owner={...manager,id:900,role:'owner_admin'}
 function openZone(db){
- db.exec("INSERT INTO auth_accounts(id,employee_id,username,password_hash,role,system_role) VALUES(900,1,'kcadmin','test','admin','owner_admin'); INSERT OR REPLACE INTO company_menu(id,owner_account_id) VALUES(1,900); UPDATE areas SET zone_group_id=1")
+ db.exec("INSERT INTO auth_accounts(id,employee_id,username,password_hash,role,system_role) VALUES(900,1,'kcadmin','test','admin','owner_admin'); INSERT OR REPLACE INTO company_menu(id,owner_account_id) VALUES(1,900); UPDATE dispatch_stops SET route_number=1; UPDATE areas SET zone_group_id=1")
  setCollectionAccess(db,owner,1,{isOpen:true,revision:0})
 }
-test('only pinned owner toggles each zone; revisions prevent stale writes; no expiry and audited closure',()=>{
+test('only pinned owner toggles each route; revisions prevent stale writes; no expiry and audited closure',()=>{
  const{db}=fixture();try{
- openZone(db);assert.equal(branchCollectionOpen(db,1),true)
+ openZone(db);assert.equal(branchCollectionOpen(db,1,date),true)
  assert.equal(collectionAccess(db,owner).canEdit,true)
  assert.equal(collectionAccess(db,{...owner,id:901}).canEdit,false)
  assert.throws(()=>setCollectionAccess(db,{...owner,id:901},1,{isOpen:false,revision:1}),{code:'MENU_OWNER_ONLY'})
  assert.throws(()=>setCollectionAccess(db,owner,1,{isOpen:false,revision:0}),{code:'MENU_STALE'})
- db.exec("UPDATE zone_collection_access SET changed_at='2000-01-01'")
- assert.equal(branchCollectionOpen(db,1),true)
- setCollectionAccess(db,owner,1,{isOpen:false,revision:1});assert.equal(branchCollectionOpen(db,1),false)
- assert.equal(db.prepare('SELECT COUNT(*) n FROM zone_collection_access_events').get().n,2)
+ db.exec("UPDATE route_collection_access SET changed_at='2000-01-01'")
+ assert.equal(branchCollectionOpen(db,1,date),true)
+ setCollectionAccess(db,owner,1,{isOpen:false,revision:1});assert.equal(branchCollectionOpen(db,1,date),false)
+ assert.equal(db.prepare('SELECT COUNT(*) n FROM route_collection_access_events').get().n,2)
  assert.equal(collectionAccess(db,owner).items.find(z=>z.id===2).isOpen,0)
  }finally{db.close()}
 })
-test('open own zone permits priority arrival, mobile enables it, closing restores order; arrived work keeps billing/proof guards',()=>{
+test('open own route permits priority arrival, mobile enables it, closing restores order; arrived work keeps billing/proof guards',()=>{
  const{db,tripId,stops}=fixture();try{
  openZone(db)
  assert.equal(driverToday(context,db).trips.find(t=>t.id===tripId).stops.find(s=>s.id===stops[1]).canArrive,true)
@@ -185,7 +185,7 @@ test('open own zone permits priority arrival, mobile enables it, closing restore
  assert.equal(db.prepare('SELECT COUNT(*) n FROM flexible_collection_claims').get().n,1)
  }finally{db.close()}
 })
-test('open zone claim transfers identity once, concurrent other driver is blocked, supervisor can reassign untouched work',()=>{
+test('open route claim transfers identity once, concurrent other driver is blocked, supervisor can reassign untouched work',()=>{
  const{db,tripId,targetId,stops}=twoCars();try{
  openZone(db);const before=db.prepare('SELECT COUNT(*) n FROM dispatch_stops').get().n
  const r=collectExistingCustomer({branchId:1,tripId:targetId},other,db)
@@ -193,7 +193,7 @@ test('open zone claim transfers identity once, concurrent other driver is blocke
  assert.equal(db.prepare('SELECT COUNT(*) n FROM dispatch_stops').get().n,before)
  assert.throws(()=>collectExistingCustomer({branchId:1,tripId},context,db),{code:'FLEX_CLAIMED'})
  assert.equal(collectExistingCustomer({branchId:1,tripId:targetId},other,db).reused,true)
- dispatchOpenCollection(db,manager,{zoneId:1,branchId:1,tripId})
+ dispatchOpenCollection(db,manager,{routeNumber:1,branchId:1,tripId})
  assert.equal(db.prepare('SELECT driver_id FROM dispatches WHERE id=(SELECT dispatch_id FROM dispatch_stops WHERE id=?)').get(stops[0]).driver_id,1)
  assert.equal(db.prepare("SELECT actor FROM dispatch_change_logs WHERE change_type='open_zone_collection_assigned' ORDER BY id DESC LIMIT 1").get().actor,'Supervisor')
  arrive(db,stops[0]);assert.throws(()=>request(db,targetId),{code:'PICKUP_PROTECTED'})
@@ -205,17 +205,17 @@ test('closing a claimed untouched stop removes its special order exemption and n
  setCollectionAccess(db,owner,1,{isOpen:false,revision:1})
  assert.throws(()=>arriveAtStop(r.stopId,{latitude:3.1,longitude:101.6,accuracy:10,captured_at:now.toISOString()},other,db),{code:'STOP_SEQUENCE_REQUIRED'})
  const pending=collectExistingCustomer({branchId:1,tripId,reason:'Normal transfer'},context,db);assert.equal(pending.pending,true)
- assert.throws(()=>dispatchOpenCollection(db,manager,{zoneId:1,branchId:1,tripId}),{code:'FLEX_CLOSED'})
+ assert.throws(()=>dispatchOpenCollection(db,manager,{routeNumber:1,branchId:1,tripId}),{code:'FLEX_CLOSED'})
  assert.equal(db.prepare('SELECT dispatch_trip_id FROM dispatch_stops WHERE id=?').get(stops[0]).dispatch_trip_id,targetId)
  }finally{db.close()}
 })
 test('v74 upgrade retains records and settings across repeat startup',()=>{
- const{db}=fixture();try{db.exec('INSERT INTO schema_meta(version) VALUES(73)');applyV74Migration(db);openZone(db);applyV74Migration(db);assert.equal(branchCollectionOpen(db,1),true);assert.equal(db.prepare('SELECT MAX(version) v FROM schema_meta').get().v,74);assert.equal(db.prepare('PRAGMA foreign_key_check').all().length,0)}finally{db.close()}
+ const{db}=fixture();try{db.exec('INSERT INTO schema_meta(version) VALUES(73)');applyV74Migration(db);openZone(db);applyV74Migration(db);assert.equal(branchCollectionOpen(db,1,date),true);assert.equal(db.prepare('SELECT MAX(version) v FROM schema_meta').get().v,74);assert.equal(db.prepare('PRAGMA foreign_key_check').all().length,0)}finally{db.close()}
 })
 test('flexible mode retains pending-approval, crew and Cash payment guards',()=>{
  const{db,targetId,stops,productId}=twoCars();try{
  openZone(db)
- assert.throws(()=>dispatchOpenCollection(db,other,{zoneId:1,branchId:1,tripId:targetId}),{code:'INTAKE_PERMISSION'})
+ assert.throws(()=>dispatchOpenCollection(db,other,{routeNumber:1,branchId:1,tripId:targetId}),{code:'INTAKE_PERMISSION'})
  assert.throws(()=>collectExistingCustomer({branchId:1,tripId:targetId},{...other,role:'crew'},db),{code:'INTAKE_PERMISSION'})
  const source=db.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(stops[0])
  db.prepare("INSERT INTO driver_arrangement_requests(dispatch_stop_id,service_date,employee_id,employee_role,trip_id,kind,reason,payload_json) VALUES(?,?,1,'driver',?,'order','test','{}')").run(source.id,date,source.dispatch_trip_id)
@@ -227,5 +227,48 @@ test('flexible mode retains pending-approval, crew and Cash payment guards',()=>
  createPurchaseBill(r.stopId,{weightMethod:'on_site',printChoice:'no_print',items:[{productId,quantity:10}]},other,db)
  assert.throws(()=>completeDriverStop(r.stopId,other,db),{code:'PAYMENT_PROOF_REQUIRED'})
  assert.equal(db.prepare('SELECT driver_employee_id FROM purchase_bills WHERE dispatch_stop_id=?').get(r.stopId).driver_employee_id,2)
+ }finally{db.close()}
+})
+
+import {flexibleExecution} from '../server/flexibleCollectionPolicy.mjs'
+import {applyV76Migration} from '../server/migrationV76.mjs'
+test('source route permission follows an untouched claim onto a closed destination route',()=>{
+ const{db,tripId,targetId,stops}=twoCars();try{
+ openZone(db);setCollectionAccess(db,owner,1,{isOpen:false,revision:1});setCollectionAccess(db,owner,2,{isOpen:true,revision:0})
+ db.prepare('UPDATE dispatch_stops SET route_number=2 WHERE id=?').run(stops[0])
+ collectExistingCustomer({branchId:1,tripId:targetId},other,db)
+ assert.equal(branchCollectionOpen(db,1,date),true);assert.equal(flexibleExecution(db,stops[0]),true)
+ assert.equal(flexibleExecution(db,stops[1]),false)
+ setCollectionAccess(db,owner,2,{isOpen:false,revision:1});assert.equal(flexibleExecution(db,stops[0]),false)
+ setCollectionAccess(db,owner,2,{isOpen:true,revision:2});dispatchOpenCollection(db,manager,{routeNumber:2,branchId:1,tripId})
+ assert.equal(db.prepare('SELECT dispatch_trip_id id FROM dispatch_stops WHERE id=?').get(stops[0]).id,tripId)
+ }finally{db.close()}
+})
+test('v76 retires old geographic grants, preserves history and migrates idempotently',()=>{
+ const{db}=fixture();try{
+ db.exec("INSERT INTO zone_collection_access(zone_id,is_open,revision,changed_by) VALUES(1,1,1,900); INSERT INTO schema_meta(version) VALUES(75)")
+ const before=db.prepare('SELECT * FROM dispatch_stops ORDER BY id').all()
+ applyV76Migration(db);assert.equal(db.prepare('SELECT MAX(version) v FROM schema_meta').get().v,76)
+ assert.equal(db.prepare('SELECT COUNT(*) n FROM route_collection_access').get().n,5)
+ assert.equal(branchCollectionOpen(db,1,date),false)
+ const history=db.prepare('SELECT * FROM route_collection_access_events').all();applyV76Migration(db)
+ assert.deepEqual(db.prepare('SELECT * FROM route_collection_access_events').all(),history)
+ assert.deepEqual(db.prepare('SELECT * FROM dispatch_stops ORDER BY id').all(),before)
+ assert.equal(db.prepare('SELECT is_open FROM zone_collection_access WHERE zone_id=1').get().is_open,1)
+ assert.equal(db.prepare('PRAGMA integrity_check').get().integrity_check,'ok')
+ }finally{db.close()}
+})
+
+test('v76 carries fully open routes only, with partial routes closed and original dispatch dates respected',()=>{
+ const{db,stops}=fixture();try{
+ db.exec("INSERT INTO schema_meta(version) VALUES(75); INSERT INTO zone_collection_access(zone_id,is_open,revision,changed_by) VALUES(1,1,1,900); UPDATE areas SET zone_group_id=1; INSERT INTO areas(jodoo_area_id,name,zone_group_id) VALUES('B','Closed',2); UPDATE branches SET area_id=2 WHERE id=2; INSERT INTO weekly_route_plans(name,source_name,created_by) VALUES('Test','Test','Test'); INSERT INTO weekly_route_plan_stops(plan_id,weekday,branch_id,vehicle_registration_number,trip_number,stop_sequence,route_number) VALUES(1,1,1,'A',1,1,1),(1,2,1,'B',1,1,2),(1,2,2,'B',1,2,2)")
+ applyV76Migration(db)
+ assert.equal(db.prepare('SELECT is_open FROM route_collection_access WHERE route_number=1').get().is_open,1)
+ assert.equal(db.prepare('SELECT is_open FROM route_collection_access WHERE route_number=2').get().is_open,0)
+ assert.equal(branchCollectionOpen(db,1,'2026-10-01'),false)
+ db.prepare('UPDATE dispatch_stops SET route_number=1 WHERE id=?').run(stops[0]);assert.equal(branchCollectionOpen(db,1,date),true)
+ db.prepare('UPDATE dispatch_stops SET route_number=2 WHERE id=?').run(stops[0]);assert.equal(branchCollectionOpen(db,1,date),false)
+ db.exec("UPDATE route_collection_access SET is_open=1 WHERE route_number=2")
+ assert.equal(branchCollectionOpen(db,1,'2026-10-01'),true)
  }finally{db.close()}
 })

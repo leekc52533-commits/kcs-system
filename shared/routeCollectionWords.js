@@ -1,0 +1,5 @@
+export const routeCollectionWords={
+ en:{open:'Route open',closed:'Route closed',enable:'Open whole route',close:'Close whole route',help:'Applies across dates and vehicles until you close it. Departure approval, GPS, bills and payments remain required.',dispatch:'Supervisor dispatch from an open route',route:'Route',migration:'Only fully open routes are carried over from old area settings. Check these five switches after updating.'},
+ ms:{open:'Laluan dibuka',closed:'Laluan ditutup',enable:'Buka seluruh laluan',close:'Tutup seluruh laluan',help:'Berkuat kuasa merentas tarikh dan kenderaan sehingga ditutup. Kelulusan pelepasan, GPS, bil dan pembayaran masih diperlukan.',dispatch:'Penghantaran penyelia dari laluan terbuka',route:'Laluan',migration:'Hanya laluan yang dibuka sepenuhnya dikekalkan daripada tetapan kawasan lama. Semak lima suis selepas kemas kini.'},
+ zh:{open:'路线已开放',closed:'路线已关闭',enable:'开放整条路线',close:'关闭整条路线',help:'跨日期、跨车辆持续有效，直到你手动关闭。出车批准、GPS、单据及付款要求保留。',dispatch:'主管推送开放路线客户',route:'路线',migration:'旧区域设置仅在整条路线全部开放时沿用。更新后请检查这五个开关。'}
+}

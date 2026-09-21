@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS zone_collection_access_events(
  account_id INTEGER NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS flexible_collection_claims(
- stop_id INTEGER PRIMARY KEY REFERENCES dispatch_stops(id),employee_id INTEGER NOT NULL REFERENCES employees(id),
+ stop_id INTEGER PRIMARY KEY REFERENCES dispatch_stops(id),source_route_number INTEGER,employee_id INTEGER NOT NULL REFERENCES employees(id),
  actor TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 `

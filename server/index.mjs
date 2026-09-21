@@ -478,10 +478,11 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'GET' && /^\/api\/zone-groups\/\d+\/route-template$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});return sendJson(response,200,getRouteTemplate(Number(url.pathname.split('/')[3])))}
     if (request.method === 'PUT' && /^\/api\/zone-groups\/\d+\/route-template$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});const zoneId=Number(url.pathname.split('/')[3]),payload=(await readJson(request)).payload;return sendJson(response,200,saveRouteTemplate(zoneId,{...payload,changedBy:session.employeeName}))}
     if (request.method === 'GET' && url.pathname === '/api/resources') return sendJson(response,200,listResources())
-    if(request.method==='GET'&&url.pathname==='/api/collection-access')return sendJson(response,200,collectionAccess(db,session))
-    if(request.method==='PATCH'&&/^\/api\/collection-access\/\d+$/.test(url.pathname))return sendJson(response,200,setCollectionAccess(db,session,Number(url.pathname.split('/').at(-1)),(await readJson(request)).payload))
-    if(request.method==='GET'&&/^\/api\/collection-access\/\d+\/dispatch$/.test(url.pathname))return sendJson(response,200,collectionDispatchOptions(db,session,Number(url.pathname.split('/')[3])))
-    if(request.method==='POST'&&url.pathname==='/api/collection-access/dispatch')return sendJson(response,200,dispatchOpenCollection(db,session,(await readJson(request)).payload))
+    if(request.method==='PATCH'&&/^\/api\/collection-access\/\d+$/.test(url.pathname))return sendJson(response,410,{errorCode:'MENU_STALE'})
+    if(request.method==='GET'&&url.pathname==='/api/route-collection-access')return sendJson(response,200,collectionAccess(db,session))
+    if(request.method==='PATCH'&&/^\/api\/route-collection-access\/\d+$/.test(url.pathname))return sendJson(response,200,setCollectionAccess(db,session,Number(url.pathname.split('/').at(-1)),(await readJson(request)).payload))
+    if(request.method==='GET'&&/^\/api\/route-collection-access\/\d+\/dispatch$/.test(url.pathname))return sendJson(response,200,collectionDispatchOptions(db,session,Number(url.pathname.split('/')[3])))
+    if(request.method==='POST'&&url.pathname==='/api/route-collection-access/dispatch')return sendJson(response,200,dispatchOpenCollection(db,session,(await readJson(request)).payload))
     if (request.method === 'GET' && url.pathname === '/api/zone-groups') return sendJson(response,200,listZoneGroups())
     if (request.method === 'GET' && /^\/api\/zone-groups\/\d+\/metric-details$/.test(url.pathname)) return sendJson(response,200,getZoneGroupMetricDetails(Number(url.pathname.split('/')[3]),Object.fromEntries(url.searchParams)))
     if (request.method === 'GET' && url.pathname === '/api/zone-boundaries') return sendJson(response,200,listZoneBoundaries({includeHistory:url.searchParams.get('history')==='true'}))
