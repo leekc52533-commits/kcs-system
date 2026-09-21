@@ -11,7 +11,10 @@ import {nextCollectionDate} from '../shared/scheduleRecurrence.js'
 import {kuchingDate} from '../shared/kuchingTime.js'
 import {customerWorkspaceWords,customerWorkspaceReviewWords} from './customerWorkspaceWords.js'
 import './CustomerWorkspaceEditor.css'
-export default function CustomerWorkspaceEditor({branchId,customerId,onClose,onSaved}){
+export default function CustomerWorkspaceEditor(props){
+ return <CustomerWorkspaceSession key={JSON.stringify([props.customerId??null,props.branchId??null])} {...props}/>
+}
+function CustomerWorkspaceSession({branchId,customerId,onClose,onSaved}){
  const {language,t}=useI18n(),ui=useUi(),w=customerWorkspaceWords[language]||customerWorkspaceWords.en
  const [data,setData]=useState(null),[branch,setBranch]=useState({}),[schedule,setSchedule]=useState(null),[gps,setGps]=useState(null),[reason,setReason]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false),[gpsBusy,setGpsBusy]=useState(false),[result,setResult]=useState(null)
  const [locationCheck,setLocationCheck]=useState(null),[changingGps,setChangingGps]=useState(false)

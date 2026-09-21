@@ -92,3 +92,25 @@ test('successful save retains supervisor follow-up outside the closed modal',asy
  assert.equal(saved,1);assert.equal(document.querySelector('.master-modal'),null);assert.ok([...document.querySelectorAll('button')].some(b=>b.textContent===words.zh.confirm));
  }finally{await act(async()=>root.unmount())}
 });
+
+test('switching branches after a saved review starts a fresh editor and request identity',async()=>{
+ const posts=[];const base={customer:{customerId:'C1',customerName:'Existing',status:'active',materialPricing:[]},schedule:null,pending:[],routeOptions:[],areas:[],canManagePricing:false,canCaptureGps:false,revision:'r1'};
+ globalThis.fetch=async(url,options={})=>{
+ if(options.method==='POST'){const body=JSON.parse(options.body);posts.push(body);return{ok:true,json:async()=>({...base,branch:body.branch,review:[{date:'2026-09-22',kind:'missing'}]})}}
+ const id=new URL(String(url),'https://localhost').searchParams.get('branchId');return{ok:true,json:async()=>String(url).startsWith('/api/materials')?{items:[]}:{...base,branch:{branchId:id,branchName:id==='B1'?'First branch':'Second branch'}}};
+ };
+ const root=createRoot(document.getElementById('root'));
+ const render=id=>React.createElement(I18nProvider,{language:'zh'},React.createElement(Editor,{branchId:id,customerId:'C1',onClose(){},onSaved(){}}));
+ try{
+ await act(async()=>root.render(render('B1')));
+ await change(document.querySelector('.customer-workspace-fields textarea'),'First change');
+ await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ assert.equal(document.querySelector('.master-modal'),null);assert.ok(document.querySelector('.customer-workspace-saved'));
+ await act(async()=>root.render(render('B2')));
+ assert.ok(document.querySelector('.master-modal form'));assert.equal(document.querySelector('.customer-workspace-saved'),null);
+ assert.equal(document.querySelector('.customer-workspace-fields input').value,'Second branch');assert.equal(document.querySelector('.customer-workspace-fields textarea').value,'');
+ await change(document.querySelector('.customer-workspace-fields textarea'),'Second change');
+ await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ assert.equal(posts[1].branchId,'B2');assert.equal(posts[1].branch.branchName,'Second branch');assert.notEqual(posts[0].requestId,posts[1].requestId);
+ }finally{await act(async()=>root.unmount())}
+});
