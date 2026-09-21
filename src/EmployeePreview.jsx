@@ -13,7 +13,7 @@ export function PreviewGuard({children}){
   if(el.closest('[data-preview-safe],.mobile-app > nav,.mobile-more,.route-day-switch')||el.matches('.stop-name-button,.user-menu'))return
   stop(e)
  }
- return <div onClickCapture={click} onAuxClickCapture={click} onSubmitCapture={stop}><div className="employee-preview-banner"><strong>{t('preview.title')}</strong><p>{t('preview.readOnly')}</p><small>{t('preview.limit')}</small>{blocked&&<p role="status">{t('preview.blocked')}</p>}</div>{children}</div>
+ return <div onClickCapture={click} onAuxClickCapture={click} onSubmitCapture={stop}>{blocked&&<p className="employee-preview-blocked" role="status">{t('preview.blocked')}</p>}{children}</div>
 }
 
 function PasswordRequired(){const{t}=useI18n();return <p role="status">{t('preview.password')}</p>}
