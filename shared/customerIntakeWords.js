@@ -1,0 +1,5 @@
+export const customerIntakeWords={
+ zh:{existing:'旧客户收货',new:'新客户收货',choose:'请搜索并选择已有客户／分店，包括今天没有排程的客户。',newHelp:'查无现有客户后，才能选择新客户收货。',confirm:'我已核对搜索结果，这是一家新客户',blocked:'请先选择已有分店，或搜索确认没有匹配后选择新客户。'},
+ en:{existing:'Existing customer collection',new:'New customer collection',choose:'Search and select an existing customer / branch, including customers not scheduled today.',newHelp:'Choose new customer only after the search finds no existing matches.',confirm:'I checked the search results: this is a new customer',blocked:'Select an existing branch, or search and confirm no match before choosing new customer.'},
+ ms:{existing:'Kutipan pelanggan sedia ada',new:'Kutipan pelanggan baharu',choose:'Cari dan pilih pelanggan / cawangan sedia ada, termasuk yang tidak dijadualkan hari ini.',newHelp:'Pilih pelanggan baharu hanya selepas carian tiada padanan.',confirm:'Saya sudah menyemak carian: ini pelanggan baharu',blocked:'Pilih cawangan sedia ada atau sahkan tiada padanan sebelum memilih pelanggan baharu.'}
+}

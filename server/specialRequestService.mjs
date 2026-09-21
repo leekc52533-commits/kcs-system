@@ -1,3 +1,4 @@
+import {assertNewIntake} from './intakeDuplicateGuard.mjs'
 import { db as defaultDb } from './database.mjs'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -59,6 +60,7 @@ export function createSpecialRequest(payload,database=defaultDb){
   const branch=payload.existingBranchId?database.prepare(`SELECT b.*,c.jodoo_customer_id customer_id,c.payment_type FROM branches b LEFT JOIN customers c ON c.id=b.customer_id WHERE b.id=? OR b.jodoo_branch_id=?`).get(payload.existingBranchId,payload.existingBranchId):null
   if(branch)branch.occ_price=resolveCustomerOccPrice(branch.customer_id,database)
   const type=branch?'existing':'potential_new'
+  if(type==='potential_new')assertNewIntake(database,payload.temporaryCustomerName)
   if(type==='potential_new'&&!clean(payload.temporaryCustomerName))throw new Error('Temporary Customer Name is required')
   const normalized={...payload,existingBranchId:branch?.id||'',temporaryCustomerName:payload.temporaryCustomerName||branch?.branch_name||''}
   const key=requestDedupeKey(normalized)

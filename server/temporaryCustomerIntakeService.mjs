@@ -1,3 +1,4 @@
+import {assertNewIntake} from './intakeDuplicateGuard.mjs'
 import {assertLocationFields} from '../shared/locationText.js'
 import {canManageDispatch} from '../shared/dispatchAccess.js'
 import {nextMasterId} from './customerMasterService.mjs'
@@ -31,6 +32,7 @@ export function createIntake(payload={},ctx={},db=defaultDb){
   const trip=intakeTrips(ctx,db).find(t=>t.id===Number(payload.tripId));if(!trip)fail('INTAKE_TRIP')
   const t=db.prepare('SELECT * FROM dispatch_trips WHERE id=?').get(trip.id)
   assertNoPendingTripApproval(db,t.id)
+  assertNewIntake(db,name)
   const route=db.prepare("SELECT route_number FROM dispatch_stops WHERE dispatch_trip_id=? AND status<>'cancelled' AND route_number IS NOT NULL ORDER BY stop_sequence LIMIT 1").get(t.id)
   const customerCode=nextMasterId(db,'customers','jodoo_customer_id','customer'),branchCode=nextMasterId(db,'branches','jodoo_branch_id','branch')
   const customerId=Number(db.prepare("INSERT INTO customers(jodoo_customer_id,name,phone,payment_type,default_payment_type,source_system,created_by) VALUES(?,?,?,'Cash','Cash','KCS Temporary',?)").run(customerCode,name,phone,String(ctx.employeeId)).lastInsertRowid)

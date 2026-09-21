@@ -12,7 +12,7 @@ function searchActor(db,ctx){
  if(!['driver','crew'].includes(ctx.role)&&!canManageDispatch(ctx))fail('INTAKE_PERMISSION',403)
  if(!db.prepare("SELECT 1 FROM employees WHERE id=? AND is_active=1 AND employment_status='active'").get(ctx.employeeId))fail('INTAKE_PERMISSION',403)
 }
-const branchSql=`SELECT b.id,b.jodoo_branch_id branchCode,b.branch_name name,c.name companyName,b.address,COALESCE(b.phone,c.phone) phone,b.contact_person contactPerson,c.whatsapp,b.latitude,b.longitude,COALESCE(b.payment_type,c.default_payment_type,c.payment_type) paymentMethod
+const branchSql=`SELECT b.id,b.jodoo_branch_id branchCode,c.jodoo_customer_id customerCode,b.branch_name name,c.name companyName,b.address,COALESCE(b.phone,c.phone) phone,b.contact_person contactPerson,c.whatsapp,b.latitude,b.longitude,COALESCE(b.payment_type,c.default_payment_type,c.payment_type) paymentMethod
  FROM branches b JOIN customers c ON c.id=b.customer_id WHERE b.is_active=1 AND b.status='active' AND b.lifecycle_status='ACTIVE' AND c.is_active=1`
 const activeBranch=(db,id)=>{const b=db.prepare(branchSql+' AND b.id=?').get(Number(id));if(!b)fail('PICKUP_BRANCH',404);return b}
 const stop=(db,id)=>db.prepare(`SELECT s.*,t.dispatch_day_id dayId,t.execution_status tripStatus,t.completed_at tripCompletedAt,d.status dispatchStatus,dd.dispatch_date serviceDate,d.vehicle_id vehicleId,d.driver_id driverId,v.registration_number plate,v.vehicle_code vehicleCode
@@ -29,7 +29,7 @@ function assignment(db,branchId,ctx){
 export function searchPickupCustomers(search,ctx={},db=defaultDb){
  searchActor(db,ctx);const term=String(search||'').trim().slice(0,100);if(!term)return []
  const escape=s=>s.replace(/[\\%_]/g,'\\$&'),q=`%${escape(term)}%`,code=`%${escape(term.replace(/^[bc](?=\d)/i,''))}%`
- return db.prepare(branchSql+` AND (b.branch_name LIKE ? ESCAPE '\\' OR c.name LIKE ? ESCAPE '\\' OR b.jodoo_branch_id LIKE ? ESCAPE '\\' OR c.jodoo_customer_id LIKE ? ESCAPE '\\' OR b.phone LIKE ? ESCAPE '\\' OR c.phone LIKE ? ESCAPE '\\') ORDER BY c.name COLLATE NOCASE,b.branch_name COLLATE NOCASE,b.id LIMIT 30`).all(q,q,code,code,q,q).map(b=>({...b,assignment:assignment(db,b.id,ctx)}))
+ return db.prepare(branchSql+` AND (b.branch_name LIKE ? ESCAPE '\\' OR c.name LIKE ? ESCAPE '\\' OR b.jodoo_branch_id LIKE ? ESCAPE '\\' OR c.jodoo_customer_id LIKE ? ESCAPE '\\' OR b.phone LIKE ? ESCAPE '\\' OR c.phone LIKE ? ESCAPE '\\' OR EXISTS(SELECT 1 FROM branches alias WHERE alias.replaced_by_branch_id=b.id AND (alias.branch_name LIKE ? ESCAPE '\\' OR alias.jodoo_branch_id LIKE ? ESCAPE '\\'))) ORDER BY c.name COLLATE NOCASE,b.branch_name COLLATE NOCASE,b.id LIMIT 30`).all(q,q,code,code,q,q,q,code).map(b=>({...b,assignment:assignment(db,b.id,ctx)}))
 }
 export function pickupCustomerDetails(id,ctx={},db=defaultDb){
  searchActor(db,ctx);const b=activeBranch(db,id)
