@@ -41,3 +41,18 @@ test('supervisor cannot approve protected records; reschedule and transfer choic
  assert.match(document.body.textContent,/缺现金付款凭证/)
  }finally{await act(async()=>root.unmount())}
 })
+
+test('failed initial read stops loading; preview retry reads records without a submission form',async()=>{
+ const {setPreviewEmployee}=await vite.ssrLoadModule('/src/apiClient.js');setPreviewEmployee(2)
+ const {PreviewGuard}=await vite.ssrLoadModule('/src/EmployeePreview.jsx')
+ let failed=true,reads=0
+ globalThis.fetch=async url=>{reads++;assert.match(url,/acting-collector\/preview\/2\/read/);return failed?{ok:false,status:403,headers:{get:()=>''},json:async()=>({code:'PREVIEW_READ_ONLY'})}:reply({tripId:1,tripStatus:'in_progress',version:'v1',request:null,stops:[{id:1,branchCode:'B1',name:'Pending customer',canArrange:true}]})}
+ const root=createRoot(document.getElementById('root'))
+ try{
+ await act(async()=>root.render(React.createElement(I18nProvider,{language:'zh'},React.createElement(PreviewGuard,null,React.createElement(WorkCloseRequest,{tripId:1})))));
+ const panel=document.querySelector('details');await act(async()=>{panel.open=true;panel.dispatchEvent(new Event('toggle'))})
+ assert.ok(document.querySelector('[role="alert"]'));assert.doesNotMatch(document.body.textContent,/正在读取/)
+ failed=false;await act(async()=>document.querySelector('button').click())
+ assert.equal(reads,2);assert.match(document.body.textContent,/Pending customer/);assert.equal(document.querySelector('form'),null);assert.equal(document.querySelector('[role="alert"]'),null)
+ }finally{await act(async()=>root.unmount());setPreviewEmployee(null)}
+})

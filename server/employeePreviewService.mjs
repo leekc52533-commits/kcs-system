@@ -15,6 +15,6 @@ const paths=new Set(['/api/mobile/cargo-batches','/api/mobile/cargo-batches/look
 export function previewReadUrl(method,path){
  if(method!=='GET'||typeof path!=='string'||!path.startsWith('/api/')||path.includes('\\'))throw fail('PREVIEW_READ_ONLY')
  const url=new URL(path,'http://kcs.local')
- if(!paths.has(url.pathname)&&!/^\/api\/mobile\/my-bills\/\d+\/proof$/.test(url.pathname)&&!/^\/api\/mobile\/stops\/\d+\/billing$/.test(url.pathname)&&!/^\/api\/(no-goods-notices|driver-no-goods|purchase-payment-proofs|driver-arrangements)\/\d+\/photo$/.test(url.pathname)&&!/^\/api\/bill-voids\/\d+\/replacement$/.test(url.pathname))throw fail('PREVIEW_READ_ONLY')
+ if(!paths.has(url.pathname)&&!/^\/api\/mobile\/trips\/\d+\/work-close$/.test(url.pathname)&&!/^\/api\/mobile\/my-bills\/\d+\/proof$/.test(url.pathname)&&!/^\/api\/mobile\/stops\/\d+\/billing$/.test(url.pathname)&&!/^\/api\/(no-goods-notices|driver-no-goods|purchase-payment-proofs|driver-arrangements)\/\d+\/photo$/.test(url.pathname)&&!/^\/api\/bill-voids\/\d+\/replacement$/.test(url.pathname))throw fail('PREVIEW_READ_ONLY')
  return url
 }
