@@ -765,6 +765,52 @@ export function assignRouteVehicle(date,routeNumber,payload={},database=defaultD
   }catch(error){database.exec('ROLLBACK');throw error}
 }
 
+/** Move whole, untouched daily routes into one vehicle's execution route. Masters stay separate. */
+export function combineDayRoutes(date,payload={},context={},database=defaultDb){
+  const fail=code=>{throw Object.assign(new Error(code),{code,statusCode:code==='MULTI_PERMISSION'?403:409})}
+  if(!canManageDispatch(context))fail('MULTI_PERMISSION')
+  const targetRoute=Number(payload.targetRouteNumber),sources=[...new Set((Array.isArray(payload.sourceRouteNumbers)?payload.sourceRouteNumbers:[]).map(Number))]
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date||'')||![targetRoute,...sources].every(n=>Number.isInteger(n)&&n>=1&&n<=5)||!sources.length||sources.includes(targetRoute)||!String(payload.reason||'').trim())fail('MULTI_SELECTION')
+  return withImmediateTransaction(database,()=>{
+    const day=dayByDate(database,date)
+    if(!day||Number(payload.expectedRevision)!==day.revision)fail('MULTI_STALE')
+    if(protectedDayReason(database,day)||!['draft','reapproval_required'].includes(day.status))fail('MULTI_PROTECTED')
+    const assignment=database.prepare('SELECT vehicle_id vehicleId FROM daily_route_assignments WHERE dispatch_day_id=? AND route_number=?').get(day.id,targetRoute)
+    if(!assignment?.vehicleId||!database.prepare("SELECT 1 FROM vehicles WHERE id=? AND operational_status IN ('available','active') AND status IN ('available','assigned') AND (is_temporary=0 OR temporary_date=?)").get(assignment.vehicleId,date)||database.prepare("SELECT 1 FROM route_vehicle_availability WHERE vehicle_id=? AND availability_date=? AND status<>'available'").get(assignment.vehicleId,date))fail('MULTI_VEHICLE')
+    const target=ensureVehicleTrip(database,day,assignment.vehicleId,1)
+    const selected=[targetRoute,...sources],placeholders=selected.map(()=>'?').join(',')
+    const rows=database.prepare(`SELECT s.*,t.execution_status,t.started_at,t.completed_at trip_completed_at,d.vehicle_id,d.status dispatch_status FROM dispatch_stops s JOIN dispatch_trips t ON t.id=s.dispatch_trip_id JOIN dispatches d ON d.id=s.dispatch_id WHERE t.dispatch_day_id=? AND s.route_number IN (${placeholders}) AND s.status<>'cancelled' ORDER BY s.route_number,s.route_stop_sequence,s.id`).all(day.id,...selected)
+    if(selected.some(n=>!rows.some(s=>s.route_number===n)))fail('MULTI_STALE')
+    for(const s of rows){
+      if(s.execution_status!=='not_started'||s.started_at||s.trip_completed_at||['released','in_progress','completed','cancelled'].includes(s.dispatch_status)||!['locked','available'].includes(s.status)||s.arrived_at||s.completed_at||s.invoice_number||s.collected_weight_kg!=null||s.payment_status||s.override_note==='driver_deferred')fail('MULTI_PROTECTED')
+      for(const table of ['purchase_bills','stop_documents','stop_step_records','driver_no_goods_proofs','no_goods_notices'])if(database.prepare(`SELECT 1 FROM ${table} WHERE dispatch_stop_id=?`).get(s.id))fail('MULTI_PROTECTED')
+      for(const table of ['driver_defer_requests','driver_arrangement_requests','driver_date_requests','customer_transfer_requests'])if(database.prepare(`SELECT 1 FROM ${table} WHERE dispatch_stop_id=? AND status='pending'`).get(s.id))fail('MULTI_PENDING')
+      if(database.prepare('SELECT 1 FROM unloading_weight_records WHERE dispatch_trip_id=?').get(s.dispatch_trip_id))fail('MULTI_PROTECTED')
+    }
+    const moved=rows.filter(s=>sources.includes(s.route_number))
+    const beforeAssignments=database.prepare(`SELECT d.id,d.vehicle_id,d.driver_id,d.assistant_id,d.driver_employment_period_id,d.assistant_employment_period_id FROM dispatches d JOIN dispatch_trips t ON t.dispatch_id=d.id WHERE t.dispatch_day_id=?`).all(day.id)
+    const beforeCrew=database.prepare('SELECT * FROM dispatch_vehicle_assistants WHERE dispatch_day_id=?').all(day.id)
+    let sequence=database.prepare('SELECT COALESCE(MAX(stop_sequence),0) n FROM dispatch_stops WHERE dispatch_id=?').get(target.dispatch_id).n
+    let routeSequence=database.prepare('SELECT COALESCE(MAX(s.route_stop_sequence),0) n FROM dispatch_stops s JOIN dispatch_trips t ON t.id=s.dispatch_trip_id WHERE t.dispatch_day_id=? AND s.route_number=?').get(day.id,targetRoute).n
+    for(const s of moved){
+      assertBranchServiceDateAvailable(database,s.branch_id,date,{excludeStopId:s.id,entryPoint:'combine_day_routes'})
+      database.prepare('UPDATE dispatch_stops SET dispatch_id=?,dispatch_trip_id=?,stop_sequence=?,route_number=?,route_stop_sequence=? WHERE id=?').run(target.dispatch_id,target.id,++sequence,targetRoute,++routeSequence,s.id)
+    }
+    for(const n of sources)database.prepare('DELETE FROM daily_route_assignments WHERE dispatch_day_id=? AND route_number=?').run(day.id,n)
+    for(const n of selected)database.prepare('DELETE FROM daily_route_approvals WHERE dispatch_day_id=? AND route_number=?').run(day.id,n)
+    // Release staff only from empty, untouched source vehicles; never rewrite historical work.
+    for(const vehicleId of new Set(moved.map(s=>s.vehicle_id).filter(id=>id&&id!==assignment.vehicleId))){
+      const protectedVehicle=database.prepare(`SELECT 1 FROM dispatch_trips t JOIN dispatches d ON d.id=t.dispatch_id WHERE t.dispatch_day_id=? AND d.vehicle_id=? AND (t.execution_status<>'not_started' OR EXISTS(SELECT 1 FROM dispatch_stops s WHERE s.dispatch_trip_id=t.id) OR EXISTS(SELECT 1 FROM unloading_weight_records u WHERE u.dispatch_trip_id=t.id))`).get(day.id,vehicleId)
+      if(!protectedVehicle){
+        database.prepare('DELETE FROM dispatch_vehicle_assistants WHERE dispatch_day_id=? AND vehicle_id=?').run(day.id,vehicleId)
+        database.prepare('UPDATE dispatches SET driver_id=NULL,assistant_id=NULL,driver_employment_period_id=NULL,assistant_employment_period_id=NULL WHERE id IN (SELECT t.dispatch_id FROM dispatch_trips t JOIN dispatches d ON d.id=t.dispatch_id WHERE t.dispatch_day_id=? AND d.vehicle_id=?)').run(day.id,vehicleId)
+      }
+    }
+    invalidateDispatchDay(database,date,'daily_routes_combined','route',targetRoute,{stops:moved,assignments:beforeAssignments,crew:beforeCrew,targetRouteNumber:targetRoute},{targetRouteNumber:targetRoute,vehicleId:assignment.vehicleId,sourceRouteNumbers:sources,stopIds:moved.map(s=>s.id),reason:payload.reason.trim()},context.employeeName)
+    return {updated:true,movedCount:moved.length,day:getDispatchDay(date,database)}
+  })
+}
+
 export function assignVehicleDay(date,vehicleId,payload,database=defaultDb){
   const day=dayByDate(database,iso(date));if(!day)throw new Error('Dispatch day not found')
   const before=database.prepare(`SELECT d.driver_id driverId,d.assistant_id assistantId,d.start_location_id startLocationId,d.end_location_id endLocationId FROM dispatch_trips dt JOIN dispatches d ON d.id=dt.dispatch_id WHERE dt.dispatch_day_id=? AND d.vehicle_id=? LIMIT 1`).get(day.id,vehicleId)||{}
@@ -999,7 +1045,7 @@ function driverRouteForDate({employeeId,role,date,preview=false},database){
     WHERE dt.dispatch_day_id=? AND ${assignment} AND v.operational_status IN ('available','active') AND v.status IN ('available','assigned')
       AND EXISTS(SELECT 1 FROM dispatch_stops ds JOIN branches bx ON bx.id=ds.branch_id WHERE ds.dispatch_trip_id=dt.id AND ds.status<>'cancelled' AND lower(COALESCE(bx.status,'active'))='active')
     ORDER BY v.vehicle_code,dt.trip_number,dt.id`).all(...params).map(trip=>({...trip,stops:database.prepare(`SELECT ds.id,ds.route_number routeNumber,ds.stop_sequence stopSequence,ds.status,CASE WHEN ds.override_note='driver_deferred' THEN 1 ELSE 0 END deferred,ds.override_reason deferReason${stopCompletion},b.jodoo_branch_id branchId,b.branch_name branchName,c.name customerName,b.address,b.latitude,b.longitude,
-      COALESCE(ds.area_name_snapshot,a.name) area,b.time_restriction timeRestriction,ds.estimated_weight_kg estimatedWeightKg,ds.arrived_at arrivedAt,ds.arrival_distance_m arrivalDistanceMeters,CASE WHEN ds.arrived_at IS NOT NULL AND ds.arrival_captured_at IS NOT NULL AND ds.arrived_by_employee_id IS NOT NULL AND ds.arrival_accuracy_m>0 AND ds.arrival_accuracy_m<=50 AND ds.arrival_distance_m IS NOT NULL AND ds.arrival_distance_m<=150 THEN 1 ELSE 0 END verifiedArrival,
+      COALESCE(ds.zone_group_name_snapshot,(SELECT name FROM zone_groups WHERE id=COALESCE(a.confirmed_zone_group_id,a.zone_group_id))) zoneGroup,COALESCE(ds.area_name_snapshot,a.name) area,b.time_restriction timeRestriction,ds.estimated_weight_kg estimatedWeightKg,ds.arrived_at arrivedAt,ds.arrival_distance_m arrivalDistanceMeters,CASE WHEN ds.arrived_at IS NOT NULL AND ds.arrival_captured_at IS NOT NULL AND ds.arrived_by_employee_id IS NOT NULL AND ds.arrival_accuracy_m>0 AND ds.arrival_accuracy_m<=50 AND ds.arrival_distance_m IS NOT NULL AND ds.arrival_distance_m<=150 THEN 1 ELSE 0 END verifiedArrival,
       dr.id deferRequestId,dr.status deferApprovalStatus,dr.reason deferRequestReason,dr.expected_return_time expectedReturnTime,dr.expected_return_at expectedReturnAt,dr.requested_at deferRequestedAt,dr.reviewed_by_name_snapshot deferReviewedBy,dr.review_reason deferReviewReason,dr.reviewed_at deferReviewedAt,
       CASE WHEN b.latitude IS NOT NULL AND b.longitude IS NOT NULL THEN 1 ELSE 0 END gpsAvailable
       FROM dispatch_stops ds JOIN branches b ON b.id=ds.branch_id LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN driver_defer_requests dr ON dr.id=(SELECT r.id FROM driver_defer_requests r WHERE r.dispatch_stop_id=ds.id ORDER BY r.id DESC LIMIT 1)

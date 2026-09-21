@@ -1,3 +1,4 @@
+import './CombineDayRoutes.css'
 import {AttendanceGate} from './Attendance.jsx'
 import IncomeUpdates,{useIncomeUpdates} from './IncomeUpdates.jsx'
 import EmployeeEarnings from './EmployeeEarnings.jsx'
@@ -207,18 +208,20 @@ function TodayView({data,preview=false}){
     {route.trips.map(trip=><article className="mobile-card driver-trip" key={trip.id}>
       <h2><span data-i18n-raw>{trip.registrationNumber||trip.vehicleCode}</span></h2>
       <p>{ui("Trip")}{trip.tripNumber} · {trip.completedCount||0}/{trip.totalCount||trip.stops.length} {t('mobile.completed')} · {t(trip.executionStatus==='in_progress'?'mobile.inProgress':trip.executionStatus==='completed'?'mobile.completed':'mobile.notStarted')}</p>
+      <div className="mobile-route-areas">{[...new Set(trip.stops.map(s=>s.zoneGroup||s.area).filter(Boolean))].map(name=><span data-i18n-raw key={name}>{name}</span>)}</div>
       <DriverNextStep trip={trip} preview={preview}/>{trip.approved===false&&<p className="route-preview-notice">{t('dateReview.draftVisible')}</p>}
       {!preview&&trip.canStart&&<button type="button" className="primary-mobile" disabled={Boolean(busy)} onClick={()=>start(trip)}>{busy==='trip-'+trip.id?t('common.processing'):t('mobile.startTrip')}</button>}
       {!preview&&trip.canAttemptComplete&&<button id={'trip-finish-'+trip.id} type="button" className="primary-mobile" disabled={Boolean(busy)} onClick={()=>completeTrip(trip)}>{busy==='complete-trip-'+trip.id?t('common.processing'):ui("Complete Trip")}</button>}
       {tripBlockers?.tripId===trip.id&&<DriverTripBlockers items={tripBlockers.blockers} busy={Boolean(busy)} onGo={goToBlockedStop}/>}
       {trip.stops.filter(stop=>!['no_goods','no_goods_notice'].includes(stop.completionOutcome)).map(stop=>{
-        const current=trip.currentStopId===stop.id,ended=stop.status==='completed',pendingApproval=stop.deferApprovalStatus==='pending',ready=stop.billCreated&&(stop.billPaymentMethod==='Credit'||stop.paymentProofUploaded),label=stop.stopSequence+'. '+stop.customerName+' — '+stop.branchName,canOpen=preview||trip.approved===false||current||stop.deferred||ended&&stop.billCreated,expanded=preview||(openStopId==null?current:openStopId===stop.id)&&canOpen
+        const current=trip.currentStopId===stop.id,ended=stop.status==='completed',pendingApproval=stop.deferApprovalStatus==='pending',ready=stop.billCreated&&(stop.billPaymentMethod==='Credit'||stop.paymentProofUploaded),label=stop.stopSequence+'. '+stop.customerName+' — '+stop.branchName,canOpen=preview||trip.approved===false||current||stop.canArrive||stop.canFinish||stop.deferred||ended&&stop.billCreated,expanded=preview||(openStopId==null?current:openStopId===stop.id)&&canOpen
         const adjustmentTools=!preview&&<><DriverRouteTools {...{stop,trip,route,run}} busy={Boolean(busy)}/><NoGoodsButton stop={stop} disabled={Boolean(busy)} onSaved={refresh}/></>
-        if(!expanded)return <div data-mobile-stop={stop.id} className={'driver-stop collapsed-stop'+(stop.deferred?' deferred-stop':pendingApproval?' defer-pending':'')} key={stop.id}>{canOpen?<button type="button" className="stop-name-button" onClick={()=>toggleStop(stop.id)}><b><span data-i18n-raw>{label}</span></b><span>{pendingApproval?t('mobile.waitingSupervisor')+' ▼':stop.deferred?ui("COME BACK LATER ▼"):current?ui("OPEN ▼"):'▼'}</span></button>:<b><span data-i18n-raw>{label}</span></b>}{adjustmentTools}</div>
+        if(!expanded)return <div data-mobile-stop={stop.id} className={'driver-stop collapsed-stop'+(stop.deferred?' deferred-stop':pendingApproval?' defer-pending':'')} key={stop.id}>{canOpen?<button type="button" className="stop-name-button" onClick={()=>toggleStop(stop.id)}><b><span data-i18n-raw>{label}</span></b><span>{pendingApproval?t('mobile.waitingSupervisor')+' ▼':stop.deferred?ui("COME BACK LATER ▼"):current?ui("OPEN ▼"):'▼'}</span></button>:<b><span data-i18n-raw>{label}</span></b>}{<small className="mobile-stop-area" data-i18n-raw>{[stop.zoneGroup,stop.area].filter(Boolean).join(" · ")}</small>}{adjustmentTools}</div>
         if(!preview&&ended)return <div className="driver-stop collapsed-stop" key={stop.id}><button type="button" className="stop-name-button" onClick={()=>toggleStop(stop.id)}><b><span data-i18n-raw>{label}</span></b><span>▲</span></button><PurchaseBillPanel stop={stop} onChanged={refresh} readOnly/></div>
         const mapUrl=stopMapUrl(stop),status=stop.arrivedAt?'Arrived':'Pending'
         return <div data-mobile-stop={stop.id} className={'driver-stop '+(stop.deferred?'deferred-stop':'current-stop')} key={stop.id}>
           {!preview&&stop.deferred?<button type="button" className="stop-name-button" onClick={()=>toggleStop(stop.id)}><b><span data-i18n-raw>{label}</span></b><span>{ui("COME BACK LATER ▲")}</span></button>:<b><span data-i18n-raw>{label}</span></b>}
+          <small className="mobile-stop-area" data-i18n-raw>{[stop.zoneGroup,stop.area].filter(Boolean).join(" · ")}</small>
           {adjustmentTools}
           {mapUrl?<a className="stop-map-link" href={mapUrl} target="_blank" rel="noreferrer"><span data-i18n-raw>{stop.address||ui("Open in Google Maps")}</span>{ui("· Open Map")}</a>:<span><span data-i18n-raw>{stop.address||t('mobile.notSet')}</span></span>}
           <span><span data-i18n-raw>{t('mobile.area')}</span>: <span data-i18n-raw>{stop.area||t('mobile.notSet')}</span></span>
