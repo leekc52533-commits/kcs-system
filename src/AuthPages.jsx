@@ -204,12 +204,13 @@ function TodayView({data,preview=false}){
     {!preview&&route.arrivalTestMode&&<div className="test-mode-warning">{ui("REMOTE ARRIVAL TEST MODE")}</div>}
     {message&&<div className="mobile-message" role="status">{ui(message)}</div>}
     {error&&<div className="auth-error" role="alert">{ui(error)}</div>}
-    {!preview&&route.driverApprovalRequired&&<p className="mobile-message">{t('arrange.policy')}</p>}{!preview&&route.trialOrderEnabled&&<p className="mobile-message">{t('routeTrial.banner')}</p>}
-    <div className="driver-route-summary"><strong>{route.date} · {ui(route.weekday)}</strong><span>{t('mobile.routeStatus')}: {t(!route.approved?'dateReview.awaitDeparture':route.status==='in_progress'?'mobile.inProgress':'mobile.approved')}</span><span>{t('mobile.totalStops')}: {route.totalStops} · {t('mobile.completed')}: {route.completedStops} · {t('mobile.pending')}: {route.pendingStops} · {t('ng.title')}: {route.noGoodsCount||0}</span></div>
     {route.trips.map(trip=><article className="mobile-card driver-trip" key={trip.id}>
-      <h2><span data-i18n-raw>{trip.registrationNumber||trip.vehicleCode}</span></h2>
-      <p>{ui("Trip")}{trip.tripNumber} · {trip.completedCount||0}/{trip.totalCount||trip.stops.length} {t('mobile.completed')} · {t(trip.executionStatus==='in_progress'?'mobile.inProgress':trip.executionStatus==='completed'?'mobile.completed':'mobile.notStarted')}</p>
-      <div className="mobile-route-areas">{[...new Set(trip.stops.map(s=>s.zoneGroup||s.area).filter(Boolean))].map(name=><span data-i18n-raw key={name}>{name}</span>)}</div>
+      <div className="driver-route-summary">
+        <strong>{route.date} · {ui(route.weekday)}</strong>
+        <h2><span data-i18n-raw>{trip.registrationNumber||trip.vehicleCode}</span> · {ui("Trip")}{trip.tripNumber}</h2>
+        <span>{t('mobile.routeStatus')}: {t(trip.executionStatus==='completed'?'mobile.completed':trip.approved===false?'dateReview.awaitDeparture':trip.executionStatus==='in_progress'?'mobile.inProgress':'mobile.notStarted')}</span>
+        <span>{t('mobile.totalStops')}: {trip.totalCount??trip.stops.length} · {t('mobile.completed')}: {trip.completedCount||0} · {t('mobile.pending')}: {trip.stops.filter(stop=>stop.status!=='completed').length} · {t('ng.title')}: {trip.noGoodsCount||0}</span>
+      </div>
       <DriverNextStep trip={trip} preview={preview}/>{trip.approved===false&&<p className="route-preview-notice">{t('dateReview.draftVisible')}</p>}
       {!preview&&trip.canStart&&<button type="button" className="primary-mobile" disabled={Boolean(busy)} onClick={()=>start(trip)}>{busy==='trip-'+trip.id?t('common.processing'):t('mobile.startTrip')}</button>}
       {trip.stops.filter(stop=>!['no_goods','no_goods_notice'].includes(stop.completionOutcome)).map(stop=>{
