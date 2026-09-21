@@ -60,3 +60,35 @@ test('selecting paused bypasses schedule date validation and submits no schedule
  }finally{await act(async()=>root.unmount())}
  }
 })
+
+test('backdrop closes clean drafts, guards changed drafts and saving; successful save closes modal',async()=>{
+ for(const language of ['en','ms','zh']){
+ let closed=0,saved=0,resolveSave,prompts=0;
+ const data={customer:{customerId:'C1',customerName:'Existing',status:'active',materialPricing:[]},branch:{branchId:'B1',branchName:'Branch'},schedule:null,pending:[],routeOptions:[],areas:[],canManagePricing:false,canCaptureGps:false,revision:'r1'};
+ globalThis.fetch=async(url,options={})=>options.method==='POST'?new Promise(resolve=>{resolveSave=()=>resolve({ok:true,json:async()=>({customer:data.customer,branch:data.branch,review:[],pending:[]})})}):{ok:true,json:async()=>String(url).startsWith('/api/materials')?{items:[]}:data};
+ window.confirm=()=>{prompts++;return false};
+ const root=createRoot(document.getElementById('root'));
+ try{
+ await act(async()=>root.render(React.createElement(I18nProvider,{language},React.createElement(Editor,{branchId:'B1',onClose(){closed++},onSaved(){saved++}}))));
+ await act(async()=>document.querySelector('.master-modal form').click());assert.equal(closed,0);
+ await act(async()=>document.querySelector('.master-modal').click());assert.equal(closed,1);assert.equal(prompts,0);
+ await change(document.querySelector('.customer-workspace-fields textarea'),'Correction');
+ await act(async()=>document.querySelector('.master-modal').click());assert.equal(closed,1);assert.equal(prompts,1);
+ await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ await act(async()=>document.querySelector('.master-modal').click());assert.equal(closed,1);assert.equal(prompts,1);
+ await act(async()=>resolveSave());assert.equal(saved,1);assert.equal(closed,2);assert.equal(document.querySelector('.master-modal'),null);
+ }finally{await act(async()=>root.unmount())}
+ }
+});
+
+test('successful save retains supervisor follow-up outside the closed modal',async()=>{
+ const data={customer:{customerId:'C1',customerName:'Existing',status:'active',materialPricing:[]},branch:{branchId:'B1',branchName:'Branch'},schedule:null,pending:[],routeOptions:[],areas:[],canManagePricing:false,canCaptureGps:false,revision:'r1'};
+ globalThis.fetch=async(url,options={})=>({ok:true,json:async()=>options.method==='POST'?{...data,canConfirmSchedule:true,review:[{date:'2026-09-22',kind:'missing',expectedRevision:1}]}:String(url).startsWith('/api/materials')?{items:[]}:data});
+ let saved=0;const root=createRoot(document.getElementById('root'));
+ try{
+ await act(async()=>root.render(React.createElement(I18nProvider,{language:'zh'},React.createElement(Editor,{branchId:'B1',onClose(){},onSaved(){saved++}}))));
+ await change(document.querySelector('.customer-workspace-fields textarea'),'Correction');
+ await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ assert.equal(saved,1);assert.equal(document.querySelector('.master-modal'),null);assert.ok([...document.querySelectorAll('button')].some(b=>b.textContent===words.zh.confirm));
+ }finally{await act(async()=>root.unmount())}
+});
