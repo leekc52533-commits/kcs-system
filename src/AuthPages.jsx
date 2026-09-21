@@ -1,3 +1,4 @@
+import {WorkCloseRequest} from './WorkClose.jsx'
 import './CombineDayRoutes.css'
 import {AttendanceGate} from './Attendance.jsx'
 import IncomeUpdates,{useIncomeUpdates} from './IncomeUpdates.jsx'
@@ -212,6 +213,7 @@ function TodayView({data,preview=false}){
       <DriverNextStep trip={trip} preview={preview}/>{trip.approved===false&&<p className="route-preview-notice">{t('dateReview.draftVisible')}</p>}
       {!preview&&trip.canStart&&<button type="button" className="primary-mobile" disabled={Boolean(busy)} onClick={()=>start(trip)}>{busy==='trip-'+trip.id?t('common.processing'):t('mobile.startTrip')}</button>}
       {!preview&&trip.canAttemptComplete&&<button id={'trip-finish-'+trip.id} type="button" className="primary-mobile" disabled={Boolean(busy)} onClick={()=>completeTrip(trip)}>{busy==='complete-trip-'+trip.id?t('common.processing'):ui("Complete Trip")}</button>}
+      {!preview&&trip.canAttemptComplete&&<WorkCloseRequest tripId={trip.id} onSaved={refresh}/>}
       {tripBlockers?.tripId===trip.id&&<DriverTripBlockers items={tripBlockers.blockers} busy={Boolean(busy)} onGo={goToBlockedStop}/>}
       {trip.stops.filter(stop=>!['no_goods','no_goods_notice'].includes(stop.completionOutcome)).map(stop=>{
         const current=trip.currentStopId===stop.id,ended=stop.status==='completed',pendingApproval=stop.deferApprovalStatus==='pending',ready=stop.billCreated&&(stop.billPaymentMethod==='Credit'||stop.paymentProofUploaded),label=stop.stopSequence+'. '+stop.customerName+' — '+stop.branchName,canOpen=preview||trip.approved===false||current||stop.canArrive||stop.canFinish||stop.deferred||ended&&stop.billCreated,expanded=preview||(openStopId==null?current:openStopId===stop.id)&&canOpen

@@ -1,3 +1,4 @@
+import {getWorkClose,requestWorkClose,listWorkClose,workCloseTargets,reviewWorkClose} from './workCloseService.mjs'
 import {attendanceSetup,saveAttendanceSetup,attendanceStatus,clockIn,attendanceDaily} from './attendanceService.mjs'
 import {collectionAccess,setCollectionAccess,collectionDispatchOptions,dispatchOpenCollection} from './flexibleCollectionService.mjs'
 import {startIncomeScheduler,incomeNotifications,readIncomeNotification} from './incomeNotifications.mjs'
@@ -233,6 +234,13 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'GET' && /^\/api\/no-goods-notices\/\d+\/photo$/.test(url.pathname)) {const proof=noGoodsNoticePhoto(Number(url.pathname.split('/')[3]),{employeeId:session.employeeId,role:session.role}),file=path.resolve(uploadsDir,proof.storage_key);if(!file.startsWith(path.resolve(uploadsDir)+path.sep)||!fs.existsSync(file))return sendJson(response,404,{error:'Proof not found'});response.writeHead(200,{'Content-Type':proof.content_type,'Cache-Control':'private, no-store'});return fs.createReadStream(file).pipe(response)}
     if (request.method === 'POST' && /^\/api\/mobile\/stops\/\d+\/no-goods$/.test(url.pathname)) return sendJson(response,200,recordNoGoods(Number(url.pathname.split('/')[4]),(await readJson(request)).payload,{employeeId:session.employeeId,role:session.role},db,{uploadsRoot:uploadsDir}))
     if (request.method === 'POST' && /^\/api\/mobile\/trips\/\d+\/complete$/.test(url.pathname)) return sendJson(response,200,completeDriverTrip(Number(url.pathname.split('/')[4]),{employeeId:session.employeeId,role:session.role}))
+    if(/^\/api\/mobile\/trips\/\d+\/work-close$/.test(url.pathname)){
+      const id=Number(url.pathname.split('/')[4])
+      if(request.method==='GET')return sendJson(response,200,getWorkClose(id,session))
+      if(request.method==='POST')return sendJson(response,200,requestWorkClose(id,(await readJson(request)).payload,session))
+    }
+    if(request.method==='GET'&&url.pathname==='/api/dispatch/work-close')return sendJson(response,200,{items:listWorkClose(session),targets:workCloseTargets(session)})
+    if(request.method==='POST'&&/^\/api\/dispatch\/work-close\/\d+$/.test(url.pathname))return sendJson(response,200,reviewWorkClose(Number(url.pathname.split('/')[4]),(await readJson(request)).payload,session))
     if(request.method==='GET'&&url.pathname==='/api/dispatch/trip-exceptions')return sendJson(response,200,listTripExceptions(url.searchParams.get('date'),session))
     if(request.method==='POST'&&/^\/api\/dispatch\/trip-exceptions\/(stops|trips)\/\d+\/(cancel|complete)$/.test(url.pathname)){
       const parts=url.pathname.split('/'),payload=(await readJson(request)).payload

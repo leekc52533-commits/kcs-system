@@ -82,7 +82,7 @@ export function listDriverDateRequests(db=defaultDb){
  return db.prepare(`SELECT r.id,r.source_date sourceDate,r.target_date targetDate,r.reason,r.status,e.name employeeName,b.id internalBranchId,b.jodoo_branch_id branchId,b.branch_name branchName,s.route_number routeNumber,v.registration_number plate FROM driver_date_requests r JOIN dispatch_stops s ON s.id=r.dispatch_stop_id JOIN branches b ON b.id=s.branch_id JOIN employees e ON e.id=r.employee_id JOIN dispatches d ON d.id=s.dispatch_id LEFT JOIN vehicles v ON v.id=d.vehicle_id WHERE r.status='pending' ORDER BY r.requested_at,r.id`).all().map(r=>({...r,routes:driverDateReviewOptions(r.targetDate,db).routes,schedule:getCollectionScheduleManagement(r.internalBranchId,db)}))
 }
 
-export function decideDriverDate(id,decision,payload,context={},db=defaultDb){
+export function decideDriverDate(id,decision,payload,context={},db=defaultDb,{workClose=false}={}){
  if(!canManageDispatch(context))fail('routeTrial.supervisorOnly',403)
  if(!['approved','rejected'].includes(decision)||!String(payload.reason||'').trim()||String(payload.reason).length>1000)fail('routeTrial.reviewReason',400)
  return withImmediateTransaction(db,()=>{
@@ -96,7 +96,7 @@ export function decideDriverDate(id,decision,payload,context={},db=defaultDb){
    if(!planningDate(date)||planningDate(date)!==date||date<today)fail('routeTrial.invalidReviewDate',400)
    if(!['once','permanent'].includes(scope))fail('routeTrial.invalidScope',400)
    if(!s||s.dispatch_date!==r.source_date||hasWork(db,s)||pendingDefer(db,s))fail('routeTrial.protected')
-   if(r.source_date<today)fail('routeTrial.stale')
+   if(r.source_date<today&&!workClose)fail('routeTrial.stale')
    if(date===s.dispatch_date&&route===s.route_number)fail('routeTrial.noChange',400)
    let options=driverDateReviewOptions(date,db)
    if(!options.routes.some(x=>x.routeNumber===route))fail('routeTrial.chooseRoute')
@@ -152,7 +152,7 @@ export function decideDriverDate(id,decision,payload,context={},db=defaultDb){
     after.nextCollectionDate=db.prepare('SELECT next_collection_date date FROM branch_schedules WHERE id=?').get(s.source_schedule_id).date
     db.prepare('UPDATE driver_date_reviews SET preserved_dates_json=?,schedule_after_json=? WHERE request_id=?').run(JSON.stringify(preservedDates),JSON.stringify(after),r.id)
    }
-   if(!db.prepare("SELECT 1 FROM dispatch_stops WHERE dispatch_trip_id=? AND status<>'cancelled'").get(s.trip_id)&&s.execution_status==='in_progress'){
+   if(!workClose&&!db.prepare("SELECT 1 FROM dispatch_stops WHERE dispatch_trip_id=? AND status<>'cancelled'").get(s.trip_id)&&s.execution_status==='in_progress'){
     db.prepare("UPDATE dispatch_trips SET execution_status='completed',completed_at=CURRENT_TIMESTAMP,completed_by_employee_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(context.employeeId,s.trip_id)
     // Other trips on this dispatch must also be complete before closing the dispatch.
     if(!db.prepare("SELECT 1 FROM dispatch_trips WHERE dispatch_id=? AND execution_status<>'completed'").get(s.dispatch_id))db.prepare("UPDATE dispatches SET status='completed',updated_at=CURRENT_TIMESTAMP WHERE id=?").run(s.dispatch_id)
@@ -172,7 +172,7 @@ export function plannedCustomerReview(id,context={},db=defaultDb){
  if(!s)fail('routeTrial.notFound',404)
  return{id:s.id,sourceDate:s.dispatch_date,targetDate:s.dispatch_date,branchId:s.branch_code,branchName:s.branch_name,schedule:getCollectionScheduleManagement(s.branch_id,db)}
 }
-export function changePlannedCustomer(id,payload,context={},db=defaultDb){
+export function changePlannedCustomer(id,payload,context={},db=defaultDb,internalOptions={}){
  if(!canManageDispatch(context))fail('routeTrial.supervisorOnly',403)
  return withImmediateTransaction(db,()=>{
   const s=lookup(db,id)
@@ -183,6 +183,6 @@ export function changePlannedCustomer(id,payload,context={},db=defaultDb){
    r={id:Number(insert.lastInsertRowid)}
    audit(db,s,context.employeeName||context.employeeId,'office_schedule_change_requested',null,{requestId:r.id,targetDate:payload.targetDate,routeNumber:payload.routeNumber})
   }
-  return decideDriverDate(r.id,'approved',payload,context,db)
+  return decideDriverDate(r.id,'approved',payload,context,db,internalOptions)
  })
 }
