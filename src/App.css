@@ -91,3 +91,5 @@
 .dashboard-activity-dialog header{display:flex;align-items:center;justify-content:space-between;gap:16px}
 .dashboard-activity-dialog header h2{margin:0;font-size:1.25rem}
 .dashboard-activity-dialog header button{flex-shrink:0;width:44px;height:44px;border:1px solid #b9d5ce;border-radius:12px;background:white;color:#176b59;font-size:24px;cursor:pointer}
+
+.driver-route-tools select{width:100%;box-sizing:border-box;min-height:44px;border:1px solid #c3d8d2;border-radius:12px;background:#fff;color:#15594e;padding:12px;font:inherit}
