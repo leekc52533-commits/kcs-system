@@ -45,21 +45,6 @@ test('address check stages suggestions without saving and clears stale results w
  }
 })
 
-test('selecting paused bypasses schedule date validation and submits no schedule; active restores validation',async()=>{
- for(const language of ['en','ms','zh']){
- const posts=[],data={customer:{customerId:'C1',customerName:'Existing',status:'active',materialPricing:[]},branch:{branchId:'B1',branchName:'Branch'},schedule:{scheduleId:'S1',frequency:'Once a week',weekdays:['Monday'],effectiveDate:'',routeNumber:''},pending:[],routeOptions:[],areas:[],canManagePricing:false,canCaptureGps:false,canReviewGps:false,revision:'r1'};
- globalThis.fetch=async(url,options={})=>{if(options.method==='POST'){posts.push(JSON.parse(options.body));return{ok:false,status:409,headers:new Map(),json:async()=>({errorCode:'CONFLICT'})}}return{ok:true,json:async()=>String(url).startsWith('/api/materials')?{items:[]}:data}};
- const root=createRoot(document.getElementById('root'));try{
- await act(async()=>root.render(React.createElement(I18nProvider,{language},React.createElement(Editor,{branchId:'B1',onClose(){}}))));
- const date=document.querySelector('input[type=date]'),status=[...document.querySelectorAll('select')].find(s=>[...s.options].some(o=>o.value==='paused'));
- assert.equal(date.willValidate,true);assert.equal(date.checkValidity(),false);
- await act(async()=>{status.value='paused';status.dispatchEvent(new Event('change',{bubbles:true}))});assert.equal(date.willValidate,false);
- await change(document.querySelector('.customer-save-reason textarea'),'Duplicate');await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
- assert.equal(posts[0].customer.status,'paused');assert.equal(posts[0].schedule,null);
- await act(async()=>{status.value='active';status.dispatchEvent(new Event('change',{bubbles:true}))});assert.equal(date.willValidate,true);assert.equal(date.checkValidity(),false);
- }finally{await act(async()=>root.unmount())}
- }
-})
 
 test('backdrop closes clean drafts, guards changed drafts and saving; successful save closes modal',async()=>{
  for(const language of ['en','ms','zh']){
@@ -194,4 +179,20 @@ test('search result opens exact branch directly and closing preserves search; cu
   await act(async()=>[...document.querySelectorAll('.customer-master-table button')].find(b=>b.textContent==='JUMBO').click())
   assert.ok(document.querySelector('.customer-detail'));assert.ok(document.querySelector('.customer-branch-list'));assert.equal(document.querySelector('.master-modal'),null)
  }finally{await act(async()=>root.unmount());window.history.replaceState({},'','/')}
+})
+
+test('branch workspace groups sections into cards and parent identity is read-only in all languages',async()=>{
+ for(const language of ['en','ms','zh']){
+ const data={customer:{customerId:'10063',customerName:'JUMBO',status:'active',materialPricing:[]},branch:{branchId:'10452',branchName:'JUMBO BAU',lifecycleStatus:'ACTIVE'},schedule:{frequency:'On Call',weekdays:[]},pending:[],areas:[],routeOptions:[],revision:'r1'},posts=[]
+ globalThis.fetch=async(url,options={})=>{if(options.method==='POST'){posts.push(JSON.parse(options.body));return{ok:false,status:409,headers:new Map(),json:async()=>({errorCode:'CONFLICT'})}}return{ok:true,json:async()=>String(url).startsWith('/api/materials')?{items:[]}:data}}
+ const root=createRoot(document.getElementById('root'))
+ try{
+ await act(async()=>root.render(React.createElement(I18nProvider,{language},React.createElement(Editor,{branchId:'10452',onClose(){}}))))
+ const parent=document.querySelector('.customer-parent-card');assert.ok(parent.textContent.includes('JUMBO'));assert.equal(parent.querySelector('input,select,textarea'),null)
+ for(const c of ['customer-branch-card','customer-schedule-card','customer-gps-card','customer-location-check','customer-pricing'])assert.ok(document.querySelector('.'+c))
+ const name=document.querySelector('.customer-branch-card input');await change(name,'JUMBO BAU UPDATED');await change(document.querySelector('.customer-save-reason textarea'),'Correct branch')
+ await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})))
+ assert.equal(posts[0].customer.customerName,'JUMBO');assert.equal(posts[0].customer.status,'active');assert.equal(posts[0].branch.branchName,'JUMBO BAU UPDATED')
+ }finally{await act(async()=>root.unmount())}
+ }
 })
