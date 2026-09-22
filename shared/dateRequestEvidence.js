@@ -2,11 +2,10 @@ export const dateEvidenceMode=code=>['little','closed','full','bay'].includes(co
 export function evidenceProblem(code,e={}){
  const mode=dateEvidenceMode(code),text=v=>String(v||'').trim()
  if(!mode)return 'reason'
- if(['operations'].includes(mode)||code==='other')if(!text(e.details))return 'details'
+ if(code==='other')if(!text(e.details))return 'details'
  if(mode==='contact'){
   if(!['message','phone','onsite'].includes(e.contactMethod))return 'contact'
   if(!text(e.contactName)||!e.contactAt||!Number.isFinite(Date.parse(e.contactAt)))return 'contact'
-  if(!text(e.details))return 'details'
  }
  if(mode==='record'&&!text(e.billNumber))return 'record'
  const photo=mode==='onsite'||mode==='photo'||mode==='contact'&&e.contactMethod==='message'

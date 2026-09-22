@@ -232,9 +232,8 @@ test('contact evidence and original-bill references cannot be replaced by arbitr
  {reasonCode:'customer',evidence:{details:'Call',contactMethod:'phone'}},
  {reasonCode:'customer',evidence:{details:'Message',contactMethod:'message',contactName:'Manager',contactAt:new Date().toISOString()}},
  {reasonCode:'collected',evidence:{billNumber:'NOT-A-BILL'}},
- {reasonCode:'staff',evidence:{}},
  {reasonCode:'other',evidence:{details:'Unknown'}}])assert.throws(()=>requestDriverDate(ids[0],{targetDate:'2026-09-11',reason:'Request',...payload},context,db),/DATE_EVIDENCE_REQUIRED/)
- const r=requestDriverDate(ids[0],{targetDate:'2026-09-11',reason:'Customer called',reasonCode:'customer',evidence:{details:'Customer requested Friday',contactMethod:'phone',contactName:'Manager',contactAt:new Date().toISOString()}},context,db)
+ const r=requestDriverDate(ids[0],{targetDate:'2026-09-11',reason:'Customer called',reasonCode:'customer',evidence:{contactMethod:'phone',contactName:'Manager',contactAt:new Date().toISOString()}},context,db)
  assert.equal(r.status,'pending');assert.equal(listDriverDateRequests(db)[0].evidence.contactName,'Manager')
  }finally{db.close()}
 })
@@ -245,4 +244,25 @@ test('schema 78 migration preserves old requests and can run again',async()=>{
  db.prepare("INSERT INTO driver_date_requests(dispatch_stop_id,employee_id,source_date,target_date,reason) VALUES(?,1,'2026-09-10','2026-09-11','Old request')").run(ids[0])
  applyV78Migration(db);applyV78Migration(db);assert.equal(db.prepare('SELECT MAX(version) v FROM schema_meta').get().v,78);assert.equal(listDriverDateRequests(db)[0].evidence,null)
  }finally{db.close()}
+})
+
+test('next date suggestion follows recurrence, approved exceptions and actual future work',async()=>{
+ const {nextBranchCollectionDate}=await import('../server/nextBranchCollectionDate.mjs')
+ const {db,ids}=fixture()
+ assert.equal(nextBranchCollectionDate(db,ids[0],today),'2026-09-17')
+ assert.equal(driverToday(context,db).trips[0].stops[0].nextScheduledDate,'2026-09-17')
+ db.exec("INSERT INTO schedule_exceptions(branch_id,schedule_id,exception_type,original_date,target_date,reason,created_by) VALUES(1,1,'move_date','2026-09-17','2026-09-19','Approved','Supervisor')")
+ assert.equal(nextBranchCollectionDate(db,ids[0],today),'2026-09-19')
+ db.exec("UPDATE branch_schedules SET recurrence_type='on_call' WHERE branch_id=1;DELETE FROM schedule_exceptions WHERE branch_id=1")
+ assert.equal(nextBranchCollectionDate(db,ids[0],today),null)
+ db.exec("UPDATE branch_schedules SET recurrence_type='weekly' WHERE branch_id=1;UPDATE branches SET lifecycle_status='CLOSED' WHERE id=1")
+ assert.equal(nextBranchCollectionDate(db,ids[0],today),null)
+ db.close()
+})
+test('staff reason needs no notes but retains snapshot and supervisor approval',()=>{
+ const {db,ids}=fixture()
+ const r=requestDriverDate(ids[0],{targetDate:'2026-09-11',reason:'Tak cukup pekerja',reasonCode:'staff',evidence:{}},context,db)
+ assert.equal(r.status,'pending')
+ assert.ok(listDriverDateRequests(db)[0].evidence.operations)
+ db.close()
 })

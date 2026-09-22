@@ -34,17 +34,17 @@ for(const language of ['en','ms','zh'])test(`${language}: date reason selection,
  globalThis.fetch=async(url,options)=>{calls.push(JSON.parse(options.body));return {ok:!fail,status:fail?400:200,json:async()=>fail?{error:'Try again'}:{ok:true}}}
  const set=async(node,value)=>act(async()=>{const proto=node.tagName==='TEXTAREA'?window.HTMLTextAreaElement.prototype:node.tagName==='SELECT'?window.HTMLSelectElement.prototype:window.HTMLInputElement.prototype;Object.getOwnPropertyDescriptor(proto,'value').set.call(node,value);node.dispatchEvent(new Event(node.tagName==='SELECT'?'change':'input',{bubbles:true}))})
  try{
- await act(async()=>root.render(React.createElement(I18nProvider,{language},React.createElement(Tools,{stop:stops[1],trip:{stops},route:{date:'2026-09-22'},run:async(k,fn)=>{try{await fn()}catch{}}}))))
+ await act(async()=>root.render(React.createElement(I18nProvider,{language},React.createElement(Tools,{stop:{...stops[1],nextScheduledDate:'2026-09-24'},trip:{stops},route:{date:'2026-09-22'},run:async(k,fn)=>{try{await fn()}catch{}}}))))
  await act(async()=>document.querySelector('button').click())
  const submit=()=>[...document.querySelectorAll('button')].find(b=>b.textContent===translate(language,'routeTrial.submit'))
- await set(document.querySelector('input'),'2026-09-23');assert.equal(submit().disabled,true)
+ assert.equal(document.querySelector('input').value,'2026-09-24');await set(document.querySelector('input'),'2026-09-23');assert.equal(submit().disabled,true)
  assert.equal(document.querySelectorAll('select option').length,13)
- await set(document.querySelector('select'),'time');assert.equal(submit().disabled,true);await set(document.querySelector('textarea'),'Traffic delay');assert.equal(submit().disabled,false)
+ await set(document.querySelector('select'),'time');assert.equal(document.querySelector('textarea'),null);assert.equal(submit().disabled,false)
  await act(async()=>submit().click());assert.ok(document.querySelector('select'));assert.equal(document.querySelector('select').value,'time')
- assert.equal(calls[0].reason,{ms:'Tak sempat',en:'Not enough time',zh:'时间不足，来不及收货'}[language]+' — Traffic delay')
+ assert.equal(calls[0].reason,{ms:'Tak sempat',en:'Not enough time',zh:'时间不足，来不及收货'}[language])
  await set(document.querySelector('select'),'other');assert.equal(submit().disabled,true)
  await set(document.querySelector('textarea'),'  ');assert.equal(submit().disabled,true)
  await set(document.querySelector('textarea'),'Custom explanation');assert.equal(submit().disabled,true);await set(document.querySelector('select'),'staff');fail=false
- await act(async()=>submit().click());assert.equal(calls[1].evidence.details,'Custom explanation');assert.equal(calls[1].reasonCode,'staff');assert.equal(document.querySelector('select'),null)
+ await act(async()=>submit().click());assert.equal(calls[1].evidence.details,'');assert.equal(calls[1].targetDate,'2026-09-23');assert.equal(document.querySelector('textarea'),null);assert.equal(calls[1].reasonCode,'staff');assert.equal(document.querySelector('select'),null)
  }finally{await act(async()=>root.unmount())}
 })
