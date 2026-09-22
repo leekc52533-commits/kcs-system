@@ -147,3 +147,24 @@ test('independent branch status bypasses inactive schedule validation and is sen
   }finally{await act(async()=>root.unmount())}
  }
 })
+
+test('standalone customer editor closes outside only when clean or discard confirmed; saving and drag stay open',async()=>{
+ const {CustomerEditor}=await vite.ssrLoadModule('/src/MasterDataPage.jsx')
+ globalThis.fetch=async()=>({ok:true,json:async()=>({items:[]})})
+ const root=createRoot(document.getElementById('root')),initial={customerId:'C1',customerName:'Original',status:'active',materialPricing:[]};let closed=0,asked=0
+ const originalConfirm=window.confirm;window.confirm=()=>{asked++;return false}
+ const render=saving=>React.createElement(I18nProvider,{language:'zh'},React.createElement(CustomerEditor,{initial,lockId:true,onClose:()=>closed++,onSave(){},fail(){},saving}))
+ try{
+  await act(async()=>root.render(render(false)))
+  const backdrop=document.querySelector('.master-modal')
+  await act(async()=>document.querySelector('form').click());assert.equal(closed,0)
+  await act(async()=>backdrop.click());assert.equal(closed,1);assert.equal(asked,0)
+  await change(document.querySelector('input:not([disabled])'),'Changed')
+  await act(async()=>backdrop.click());assert.equal(closed,1);assert.equal(asked,1)
+  window.confirm=()=>true
+  await act(async()=>root.render(render(true)));await act(async()=>backdrop.click());assert.equal(closed,1)
+  await act(async()=>root.render(render(false)))
+  await act(async()=>{document.querySelector('form').dispatchEvent(new MouseEvent('pointerdown',{bubbles:true,clientX:5,clientY:5}));backdrop.click()});assert.equal(closed,1)
+  await act(async()=>backdrop.click());assert.equal(closed,2)
+ }finally{window.confirm=originalConfirm;await act(async()=>root.unmount())}
+})
