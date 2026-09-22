@@ -539,7 +539,7 @@ export function reopenRoute(date,routeNumber,{reopenedBy='Supervisor',reason=''}
     const approval=database.prepare('SELECT * FROM daily_route_approvals WHERE dispatch_day_id=? AND route_number=?').get(day.id,route)
     if(!approval)throw new Error('Route approval not found.')
     const protectedRoute=database.prepare(`SELECT 1 FROM dispatch_stops s JOIN dispatch_trips t ON t.id=s.dispatch_trip_id JOIN dispatches d ON d.id=s.dispatch_id WHERE t.dispatch_day_id=? AND s.route_number=? AND (d.status IN ('released','in_progress','completed') OR t.execution_status IN ('in_progress','completed') OR s.arrived_at IS NOT NULL OR s.completed_at IS NOT NULL OR EXISTS(SELECT 1 FROM purchase_bills b WHERE b.dispatch_stop_id=s.id)) LIMIT 1`).get(day.id,route)
-    if(protectedRoute||['published','in_progress','completed'].includes(day.status))throw new Error('This route has been released or started and cannot be withdrawn.')
+    if(protectedRoute||day.status==='completed')throw new Error('This route has been released or started and cannot be withdrawn.')
     database.prepare('DELETE FROM daily_route_approvals WHERE dispatch_day_id=? AND route_number=?').run(day.id,route)
     database.prepare("UPDATE dispatch_days SET status=CASE WHEN status='in_progress' THEN status ELSE 'reapproval_required' END,revision=revision+1,approved_revision=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(day.id)
     database.prepare(`INSERT INTO dispatch_change_logs(dispatch_day_id,actor,change_type,entity_type,entity_id,before_json,after_json,requires_reapproval) VALUES(?,?,'route_approval_withdrawn','daily_route',?,?,?,1)`).run(day.id,actor(reopenedBy),String(route),json(approval),json({routeNumber:route,reason:withdrawalReason}))
