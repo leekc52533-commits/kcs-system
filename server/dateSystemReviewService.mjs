@@ -11,7 +11,7 @@ const proposalToken=r=>createHash('sha256').update(r.proposal_json+':'+r.first_e
 const fail=(code,statusCode=409)=>{throw Object.assign(new Error(code),{code,statusCode})}
 export function dateSystemReview(db,id){
  const r=db.prepare('SELECT * FROM driver_date_system_reviews WHERE request_id=?').get(id)
- return r?{proposalToken:proposalToken(r),status:r.status,firstName:r.first_name,firstAt:r.first_at,secondName:r.second_name,secondAt:r.second_at,proposal:JSON.parse(r.proposal_json)}:null
+ return r?{executionReleased:JSON.parse(r.proposal_json).executionReleased===true,proposalToken:proposalToken(r),status:r.status,firstName:r.first_name,firstAt:r.first_at,secondName:r.second_name,secondAt:r.second_at,proposal:JSON.parse(r.proposal_json)}:null
 }
 function audit(db,id,actor,action,detail){
  db.prepare('INSERT INTO audit_logs(action,entity_type,entity_id,after_json) VALUES(?,?,?,?)').run(action,'driver_date_request',String(id),JSON.stringify({accountId:actor.id,employeeId:actor.employeeId,name:actor.employeeName,...detail}))
@@ -24,20 +24,39 @@ export function reviewDateWithSystemChange(id,decision,payload,actor,db=defaultD
   const code=dateEvidence(db,id)?.reasonCode
   const pending=db.prepare('SELECT * FROM driver_date_system_reviews WHERE request_id=?').get(id)
   const dual=dualReviewReasons.includes(code)&&Boolean(pending||payload.systemChange==='workspace')
+  const released=pending&&request.status==='approved'&&JSON.parse(pending.proposal_json).executionReleased===true
+  if(decision==='rejected'&&released){
+   if(pending.status==='rejected')return{id,status:'approved',systemStatus:'rejected',executionReleased:true,idempotent:true}
+   if(pending.status!=='pending')fail('SYSTEM_REVIEW_STALE')
+   if(!String(payload.reason||'').trim()||String(payload.reason).length>1000)fail('SYSTEM_REVIEW_EVIDENCE',400)
+   db.prepare("UPDATE driver_date_system_reviews SET status='rejected',second_account_id=?,second_employee_id=?,second_name=?,second_at=CURRENT_TIMESTAMP WHERE request_id=?").run(actor.id,actor.employeeId,actor.employeeName||actor.username||String(actor.id),id)
+   audit(db,id,actor,'date_system_review_rejected',{reason:payload.reason,executionReleased:true,targetStopId:request.target_stop_id})
+   return{id,status:'approved',systemStatus:'rejected',executionReleased:true,targetStopId:request.target_stop_id}
+  }
   if(decision==='rejected'){
    const result=decideDriverDate(id,decision,payload,actor,db)
    if(pending)db.prepare("UPDATE driver_date_system_reviews SET status='rejected' WHERE request_id=? AND status='pending'").run(id)
    audit(db,id,actor,'date_system_review_rejected',{reason:payload.reason})
    return result
   }
-  if(request.status!=='pending')return decideDriverDate(id,decision,payload,actor,db)
+  if(request.status!=='pending'&&!(released&&pending.status==='pending'))return decideDriverDate(id,decision,payload,actor,db)
   if(!systemReviewReasons.includes(code))return decideDriverDate(id,decision,payload,actor,db)
   if(!payload.evidenceChecked||!String(payload.reason||'').trim())fail('SYSTEM_REVIEW_EVIDENCE',400)
   if(dual&&(!['owner_admin','operations_admin','supervisor'].includes(actor.role)||!Number(actor.id)||!Number(actor.employeeId)))fail('SYSTEM_REVIEW_SUPERVISOR',403)
   let proposal=pending?JSON.parse(pending.proposal_json):payload
   if(dual&&pending){
    if(pending.status!=='pending')fail('SYSTEM_REVIEW_STALE')
-   if(pending.first_account_id===Number(actor.id)||pending.first_employee_id===Number(actor.employeeId))fail('SYSTEM_REVIEW_DIFFERENT')
+   if(pending.first_account_id===Number(actor.id)||pending.first_employee_id===Number(actor.employeeId)){
+    if(!released&&pending.first_account_id===Number(actor.id)&&pending.first_employee_id===Number(actor.employeeId)&&payload.proposalToken===proposalToken(pending)){
+     if(customerWorkspace({branchId:request.branch_code},actor,db).revision!==proposal.workspaceDraft?.revision)fail('SYSTEM_REVIEW_STALE')
+     const result=decideDriverDate(id,'approved',proposal,actor,db)
+     proposal={...proposal,executionReleased:true,workspaceDraft:{...proposal.workspaceDraft,revision:customerWorkspace({branchId:request.branch_code},actor,db).revision}}
+     db.prepare('UPDATE driver_date_system_reviews SET proposal_json=? WHERE request_id=?').run(JSON.stringify(proposal),id)
+     audit(db,id,actor,'date_system_execution_released',{targetStopId:result.targetStopId,legacy:true})
+     return{...result,status:'pending',awaitingSecond:true,executionReleased:true}
+    }
+    fail('SYSTEM_REVIEW_DIFFERENT')
+   }
    if(payload.proposalToken!==proposalToken(pending))fail('SYSTEM_REVIEW_STALE')
   }
   if(!['none','workspace','planner'].includes(proposal.systemChange)||proposal.scope&&proposal.scope!=='once')fail('SYSTEM_REVIEW_CHOOSE',400)
@@ -57,7 +76,7 @@ export function reviewDateWithSystemChange(id,decision,payload,actor,db=defaultD
   }
   const apply=()=>{
    // Decision and master changes are one transaction: any failure rolls both back.
-   const result=decideDriverDate(id,'approved',proposal,actor,db)
+   const result=released?{id,status:'approved',targetStopId:request.target_stop_id,executionReleased:true}:decideDriverDate(id,'approved',proposal,actor,db)
    if(proposal.systemChange==='workspace'){
     const draft={...proposal.workspaceDraft}
     // The date decision itself may change this branch's schedule/exception revision.
@@ -71,9 +90,11 @@ export function reviewDateWithSystemChange(id,decision,payload,actor,db=defaultD
    // Validate the exact proposed decision and edits without persisting either.
    db.exec('SAVEPOINT validate_system_review')
    try{apply()}finally{db.exec('ROLLBACK TO validate_system_review; RELEASE validate_system_review')}
+   const execution=decideDriverDate(id,'approved',proposal,actor,db)
+   proposal={...proposal,executionReleased:true,workspaceDraft:{...proposal.workspaceDraft,revision:customerWorkspace({branchId:request.branch_code},actor,db).revision}}
    db.prepare('INSERT INTO driver_date_system_reviews(request_id,branch_id,proposal_json,first_account_id,first_employee_id,first_name) VALUES(?,?,?,?,?,?)').run(id,request.branch_id,JSON.stringify(proposal),actor.id,actor.employeeId,actor.employeeName||actor.username||String(actor.id))
-   audit(db,id,actor,'date_system_first_approved',{reason:payload.reason,proposal})
-   return{id,status:'pending',awaitingSecond:true}
+   audit(db,id,actor,'date_system_first_approved',{reason:payload.reason,proposal,targetStopId:execution.targetStopId,executionReleased:true})
+   return{id,status:'pending',awaitingSecond:true,executionReleased:true,targetStopId:execution.targetStopId}
   }
   if(pending)db.prepare("UPDATE driver_date_system_reviews SET status='approved' WHERE request_id=?").run(id)
   const result=apply()

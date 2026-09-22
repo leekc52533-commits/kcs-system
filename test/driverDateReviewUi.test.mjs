@@ -108,3 +108,18 @@ test('second supervisor sees the first proposal locked and submits only review c
  assert.equal(document.querySelector('.master-modal'),null)
  }finally{await act(async()=>root.unmount())}
 })
+
+test('released customer notices distinguish pending and rejected master changes in all languages',async()=>{
+ const {default:Notices}=await vite.ssrLoadModule('/src/DateSystemReleaseNotices.jsx')
+ for(const language of ['en','ms','zh']){
+  const root=createRoot(document.getElementById('root'))
+  try{
+   await act(async()=>root.render(React.createElement(I18nProvider,{language},React.createElement(Notices,{items:[{id:1,branchId:'B1',branchName:'Raw Branch Name',systemStatus:'pending'},{id:2,branchId:'B2',branchName:'Other Branch',systemStatus:'rejected'}]}))))
+   assert.equal(document.querySelectorAll('.date-system-release-notices article').length,2)
+   assert.ok(document.body.textContent.includes('Raw Branch Name'))
+   assert.ok(document.body.textContent.includes({en:'not counted as collected',ms:'tidak dikira sudah dikutip',zh:'不计为已收货'}[language]))
+   assert.ok(document.body.textContent.includes({en:'Waiting for a second supervisor',ms:'Menunggu penyelia kedua',zh:'等待第二位主管批准'}[language]))
+   assert.ok(document.body.textContent.includes({en:'Do not return automatically',ms:'tidak perlu kembali',zh:'员工无需返回上一站'}[language]))
+  }finally{await act(async()=>root.unmount())}
+ }
+})

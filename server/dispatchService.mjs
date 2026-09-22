@@ -1,3 +1,4 @@
+import {dateSystemReleaseNotices} from './dateSystemReleaseNotices.mjs'
 import {nextBranchCollectionDate} from './nextBranchCollectionDate.mjs'
 import {routeSignature,captureApprovedRoutes,retainApprovedRoutes} from './routeApprovalState.mjs'
 export {routeSignature} from './routeApprovalState.mjs'
@@ -1054,7 +1055,7 @@ function driverRouteForDate({employeeId,role,date,preview=false},database){
 
 /** Backwards-compatible today endpoint service. The date is server-derived in production. */
 export function driverToday({employeeId,role,today=kuchingDate()}={},database=defaultDb){
-  return driverRouteForDate({employeeId,role,date:today,preview:false},database)
+  return {...driverRouteForDate({employeeId,role,date:today,preview:false},database),systemReviewNotices:dateSystemReleaseNotices(database,employeeId,today)}
 }
 
 /** Tomorrow is deliberately server-derived and cannot accept a client-selected date. */
