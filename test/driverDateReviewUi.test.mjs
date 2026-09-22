@@ -70,3 +70,41 @@ test('customer card opens direct date/route editor on an approved plan without a
  assert.ok(calls.some(c=>c.url==='/api/dispatch/stops/1/review-change'&&c.init.method==='POST'))
  await act(async()=>root.unmount())
 })
+
+test('listed reasons ask before approving; closing prompt leaves request untouched',async()=>{
+ const calls=[],root=createRoot(document.getElementById('root'))
+ globalThis.fetch=async(url,init={})=>{calls.push({url,init});return new Response(JSON.stringify(String(url).includes('/options')?{revision:3,routes:[{routeNumber:1,name:'Route 1',available:true}]}:{id:1,status:'approved'}),{status:200})}
+ try{
+ await act(async()=>root.render(React.createElement(I18nProvider,{language:'zh'},React.createElement(DateRequestReview,{item:{...item,branchId:'B1',evidence:{reasonCode:'customer'}},onSaved:()=>{}}))))
+ await change(document.querySelector('select'),'1')
+ await change(document.querySelector('textarea'),'Verified')
+ await click(document.querySelector('input[type=checkbox]'))
+ await click(document.querySelector('.primary'))
+ assert.ok(document.body.textContent.includes('是否同时修改系统资料'))
+ assert.equal(calls.filter(c=>c.init.method==='POST').length,0)
+ await click([...document.querySelectorAll('button')].find(b=>b.textContent==='返回审核'))
+ assert.equal(document.querySelector('.master-modal'),null)
+ await click(document.querySelector('.primary'))
+ await click([...document.querySelectorAll('button')].find(b=>b.textContent==='不需要，只处理本次申请'))
+ assert.equal(JSON.parse(calls.at(-1).init.body).systemChange,'none')
+ }finally{await act(async()=>root.unmount())}
+})
+test('second supervisor sees the first proposal locked and submits only review confirmation',async()=>{
+ const calls=[],root=createRoot(document.getElementById('root'))
+ globalThis.fetch=async(url,init={})=>{calls.push({url,init});return new Response(JSON.stringify(String(url).includes('/options')?{revision:3,routes:[{routeNumber:1,name:'Route 1',available:true}]}:{id:1,status:'approved'}),{status:200})}
+ try{
+ const review={proposalToken:'proposal-one',status:'pending',firstName:'First supervisor',firstAt:'2026-09-22',proposal:{targetDate:'2026-09-24',routeNumber:1,scope:'once',systemChange:'workspace',workspaceDraft:{branch:{lifecycleStatus:'CLOSED'},reason:'Closed permanently'}}}
+ await act(async()=>root.render(React.createElement(I18nProvider,{language:'zh'},React.createElement(DateRequestReview,{item:{...item,evidence:{reasonCode:'business_closed'},systemReview:review},onSaved:()=>{}}))))
+ assert.ok(document.body.textContent.includes('First supervisor'))
+ assert.ok(document.body.textContent.includes('停止营业'))
+ assert.equal(document.querySelector('fieldset').disabled,true)
+ await change(document.querySelector('textarea'),'Second checked')
+ await click(document.querySelector('input[type=checkbox]'))
+ await click(document.querySelector('.primary'))
+ const body=JSON.parse(calls.at(-1).init.body)
+ assert.equal(body.evidenceChecked,true)
+ assert.equal(body.workspaceDraft,undefined)
+ assert.equal(body.proposalToken,'proposal-one')
+ assert.equal(document.querySelector('.master-modal'),null)
+ }finally{await act(async()=>root.unmount())}
+})

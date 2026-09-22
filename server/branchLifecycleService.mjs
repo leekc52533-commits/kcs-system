@@ -25,6 +25,10 @@ export function applyBranchLifecycle(branchId,payload={},actor={},database=defau
   if(!BRANCH_LIFECYCLE_STATUSES.includes(status))throw Object.assign(new Error('Invalid Branch lifecycle status'),{statusCode:400})
   const before=database.prepare('SELECT * FROM branches WHERE jodoo_branch_id=?').get(String(branchId));if(!before)throw Object.assign(new Error('Branch not found'),{statusCode:404})
   const previousStatus=before.lifecycle_status||'ACTIVE',reason=text(payload.reason)
+  if(status!==previousStatus&&database.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='driver_date_system_reviews'").get()){
+   const pending=database.prepare("SELECT r.id,v.status review_status FROM driver_date_requests r JOIN dispatch_stops s ON s.id=r.dispatch_stop_id JOIN driver_date_evidence e ON e.request_id=r.id LEFT JOIN driver_date_system_reviews v ON v.request_id=r.id WHERE s.branch_id=? AND r.status='pending' AND e.reason_code IN ('business_closed','stopped')").all(before.id)
+   if(pending.some(r=>!(database.isTransaction&&actor.approvedDateRequestId===r.id&&(r.review_status==='approved'||actor.previewDateReview===true))))throw Object.assign(new Error('SYSTEM_REVIEW_DIFFERENT'),{code:'SYSTEM_REVIEW_DIFFERENT',statusCode:409})
+  }
   if(status!==previousStatus&&!reason)throw Object.assign(new Error(status==='ACTIVE'?'Restore reason is required':'Status change reason is required'),{statusCode:400})
   let replacement=null
   if(status==='DUPLICATE_REPLACED'){

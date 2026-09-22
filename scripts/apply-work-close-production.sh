@@ -12,7 +12,7 @@ runuser -u ubuntu -- git -C "$APP" cat-file -e "$PREVIOUS^{commit}"
 test -z "$(runuser -u ubuntu -- git -C "$APP" status --porcelain --untracked-files=no)"
 test "$(systemctl is-active kcs-api)" = active
 SCHEMA="$(sqlite3 "$DB" 'SELECT MAX(version) FROM schema_meta;')"
-[[ "$SCHEMA" = 70 || "$SCHEMA" = 71 || "$SCHEMA" = 72 || "$SCHEMA" = 73 || "$SCHEMA" = 74 || "$SCHEMA" = 75 || "$SCHEMA" = 76 || "$SCHEMA" = 77 || "$SCHEMA" = 78 ]]
+[[ "$SCHEMA" = 70 || "$SCHEMA" = 71 || "$SCHEMA" = 72 || "$SCHEMA" = 73 || "$SCHEMA" = 74 || "$SCHEMA" = 75 || "$SCHEMA" = 76 || "$SCHEMA" = 77 || "$SCHEMA" = 78 || "$SCHEMA" = 79 ]]
 STAGE="$(mktemp -d /tmp/kcs-work-close-build-XXXXXX)"
 chown ubuntu:ubuntu "$STAGE"
 RESTARTED=0
@@ -51,7 +51,7 @@ for _ in $(seq 1 25); do
  sleep 1
 done
 test -n "$INTERNAL"
-test "$(sqlite3 "$DB" 'SELECT MAX(version) FROM schema_meta;')" = 78
+test "$(sqlite3 "$DB" 'SELECT MAX(version) FROM schema_meta;')" = 79
 test "$(sqlite3 "$DB" 'PRAGMA integrity_check;')" = ok
 test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('expense_amount_corrections','expense_correction_requests');")" = 2
 test -z "$(sqlite3 "$DB" 'PRAGMA foreign_key_check;')"
@@ -67,7 +67,7 @@ test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND
 test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='driver_date_evidence';")" = 1
 echo SERVICE="$(systemctl is-active kcs-api)"
 echo HEAD="$TARGET"
-echo SCHEMA=78
+echo SCHEMA=79
 echo BACKUP="$BACKUP"
 echo FRONTEND_BACKUP="$FRONTEND_BACKUP"
 test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('earnings_rules','earnings_payments');")" = 2

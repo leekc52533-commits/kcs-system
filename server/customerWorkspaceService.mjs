@@ -32,10 +32,10 @@ export function saveCustomerWorkspace(payload,actor={},db=defaultDb){
  if(!/^[a-zA-Z0-9-]{16,80}$/.test(payload.requestId||''))throw fail('A valid request ID is required.')
  const reason=String(payload.reason||'').trim();if(!reason)throw fail('Reason is required.')
  const signature=hash(payload),actorId=String(actor.id),key=actorId+':'+payload.requestId
- db.exec('BEGIN IMMEDIATE')
+ const ownsTransaction=!db.isTransaction;if(ownsTransaction)db.exec('BEGIN IMMEDIATE')
  try{
   const previous=db.prepare("SELECT after_json FROM audit_logs WHERE action='customer_workspace_saved' AND entity_id=? ORDER BY id DESC LIMIT 1").get(key)
-  if(previous){const saved=JSON.parse(previous.after_json);if(saved.signature!==signature)throw fail('Request ID already used with different data.',409);db.exec('COMMIT');return saved.result}
+  if(previous){const saved=JSON.parse(previous.after_json);if(saved.signature!==signature)throw fail('Request ID already used with different data.',409);if(ownsTransaction)db.exec('COMMIT');return saved.result}
   const before=customerWorkspace(payload,actor,db)
   if((payload.branchId||payload.customerId)&&before.revision!==payload.revision)throw fail('Customer data changed. Reload before saving.',409)
   const locationProof=validateLocationCheck(payload,before,actor)
@@ -69,8 +69,8 @@ export function saveCustomerWorkspace(payload,actor={},db=defaultDb){
   }
   const result={...customerWorkspace({branchId:branch.branchId},actor,db),review}
   db.prepare("INSERT INTO audit_logs(action,entity_type,entity_id,before_json,after_json) VALUES('customer_workspace_saved','branch',?,?,?)").run(key,JSON.stringify({branchId:before.branch?.branchId,revision:before.revision}),JSON.stringify({signature,result}))
-  db.exec('COMMIT');return result
- }catch(error){db.exec('ROLLBACK');throw error}
+  if(ownsTransaction)db.exec('COMMIT');return result
+ }catch(error){if(ownsTransaction)db.exec('ROLLBACK');throw error}
 }
 
 export function confirmCustomerSchedule(payload,actor={},db=defaultDb){

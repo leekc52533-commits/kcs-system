@@ -1,3 +1,4 @@
+import {dateSystemReviewSchema} from './migrationV79.mjs'
 import {dateEvidenceSchema} from './migrationV78.mjs'
 import {workCloseSchema} from './migrationV77.mjs'
 import {routeCollectionSchema} from './migrationV76.mjs'
@@ -22,7 +23,7 @@ import {routeRequestSchemaSql} from './migrationV55.mjs'
 import {sundaySchemaSql} from './sundayPlanning.mjs'
 export const SCHEMA_VERSION = 66
 
-export const schemaSql = dateEvidenceSchema + workCloseSchema + routeCollectionSchema + attendanceSchema + flexibleCollectionSchema + incomeNoticeSchema + earningsSchema + cargoBatchSchema + documentNumberSchema + driverGuideSchemaSql + noticeBoardSchemaSql + driverArrangementSchemaSql + customerPickupSchemaSql + temporaryIntakeSchemaSql + menuSchemaSql + salesSchemaSql + noGoodsNoticeSchemaSql + dateReviewSchemaSql + billVoidSchemaSql + expenseDetailsSchemaSql + routeRequestSchemaSql + sundaySchemaSql + `
+export const schemaSql = dateSystemReviewSchema + dateEvidenceSchema + workCloseSchema + routeCollectionSchema + attendanceSchema + flexibleCollectionSchema + incomeNoticeSchema + earningsSchema + cargoBatchSchema + documentNumberSchema + driverGuideSchemaSql + noticeBoardSchemaSql + driverArrangementSchemaSql + customerPickupSchemaSql + temporaryIntakeSchemaSql + menuSchemaSql + salesSchemaSql + noGoodsNoticeSchemaSql + dateReviewSchemaSql + billVoidSchemaSql + expenseDetailsSchemaSql + routeRequestSchemaSql + sundaySchemaSql + `
 CREATE TABLE IF NOT EXISTS schema_meta (
   version INTEGER PRIMARY KEY,
   applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
