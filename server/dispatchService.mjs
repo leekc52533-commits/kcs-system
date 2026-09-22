@@ -1282,7 +1282,8 @@ export function syncSupervisorSavedSchedule({branchId,scheduleId,startDate=iso()
  })
 }
 
-// Lifecycle saves cancel only untouched generated work, never explicit reviewed visits.
+// Lifecycle saves supersede untouched generated and previously approved date-move visits.
+// Other explicit visits and all execution/pending-review protections remain intact.
 export function syncInactiveBranchStops({branchId,startDate=iso(),changedBy='Supervisor'},database=defaultDb){
  return withImmediateTransaction(database,()=>{
   const branch=database.prepare('SELECT lifecycle_status FROM branches WHERE id=?').get(branchId)
@@ -1295,8 +1296,7 @@ export function syncInactiveBranchStops({branchId,startDate=iso(),changedBy='Sup
   for(const stop of stops){
    const pendingSystem=database.prepare("SELECT 1 FROM driver_date_system_reviews WHERE branch_id=? AND status='pending'").get(branchId)
    const explicit=!stop.source_schedule_id||stop.source_special_request_id||
-    database.prepare('SELECT 1 FROM schedule_exceptions WHERE schedule_id=? AND (original_date=? OR target_date=?)').get(stop.source_schedule_id,stop.dispatch_date,stop.dispatch_date)||
-    database.prepare('SELECT 1 FROM driver_date_reviews WHERE branch_id=? AND approved_date=?').get(branchId,stop.dispatch_date)||
+    database.prepare("SELECT 1 FROM schedule_exceptions WHERE schedule_id=? AND (original_date=? OR target_date=?) AND exception_type<>'move_date'").get(stop.source_schedule_id,stop.dispatch_date,stop.dispatch_date)||
     database.prepare("SELECT 1 FROM dispatch_change_logs WHERE entity_type='dispatch_stop' AND entity_id=? AND change_type='route_customer_adjusted'").get(String(stop.id))
    if(pendingSystem||explicit||scheduleStopHasProtectedWork(database,stop)||[stop.day_status,stop.execution_status,stop.dispatch_status].includes('completed')){
     preserved.push({id:stop.id,date:stop.dispatch_date,reason:pendingSystem?'pending_system_review':explicit?'explicit_arrangement':'protected_work'});continue

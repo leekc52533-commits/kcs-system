@@ -275,3 +275,28 @@ test('lifecycle sync audit failure rolls back lifecycle, stops and approval sign
  assert.deepEqual(stop(db,1),original);assert.equal(db.prepare('SELECT lifecycle_status FROM branches WHERE id=1').get().lifecycle_status,'ACTIVE');assert.ok(stillApproved(db))
  }finally{db.close()}
 })
+
+for(const protection of [null,'arrived','pending'])test(`lifecycle supersedes approved date moves while preserving ${protection||'approval history'}`,t=>{
+ t.mock.timers.enable({apis:['Date'],now:new Date('2026-09-07T01:00:00Z')})
+ const db=fixture();try{
+ assignRouteVehicle('2026-09-07',1,{vehicleId:1},db);approveRoute('2026-09-07',1,{approvedBy:'Manager'},db)
+ const source=stop(db,1)
+ db.prepare("INSERT INTO schedule_exceptions(branch_id,schedule_id,exception_type,original_date,target_date,reason,created_by) VALUES(1,1,'move_date','2026-08-31','2026-09-07','Approved move','Manager')").run()
+ const requestId=db.prepare("INSERT INTO driver_date_requests(dispatch_stop_id,employee_id,source_date,target_date,reason,status,target_stop_id) VALUES(?,1,'2026-08-31','2026-09-07','Move','approved',?)").run(source.id,source.id).lastInsertRowid
+ db.prepare("INSERT INTO driver_date_reviews(request_id,branch_id,approved_date,route_number,scope) VALUES(?,1,'2026-09-07',1,'once')").run(requestId)
+ if(protection==='arrived')db.prepare("UPDATE dispatch_stops SET arrived_at='2026-09-07 08:00:00' WHERE id=?").run(source.id)
+ if(protection==='pending')db.prepare("INSERT INTO driver_date_requests(dispatch_stop_id,employee_id,source_date,target_date,reason) VALUES(?,1,'2026-09-07','2026-09-08','New pending request')").run(source.id)
+ const history=db.prepare('SELECT * FROM driver_date_reviews').all(),exceptions=db.prepare('SELECT * FROM schedule_exceptions').all(),before=db.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(source.id)
+ const result=changeBranchLifecycle('B1',{lifecycleStatus:'CLOSED',reason:'Business closed after date approval'},{changedBy:'KC'},db)
+ assert.equal(result.scheduleSync.cancelled.length,protection?0:1)
+ if(protection)assert.deepEqual(db.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(source.id),before)
+ else{
+  assert.equal(db.prepare('SELECT status FROM dispatch_stops WHERE id=?').get(source.id).status,'cancelled')
+  assert.ok(stillApproved(db));ensureRollingWeek({startDate:'2026-09-07'},db)
+  assert.equal(stop(db,1),undefined)
+  assert.ok(!reconcileScheduleWindow({startDate:'2026-09-07',branchIds:[1]},db).some(r=>r.kind==='outdated'))
+ }
+ assert.deepEqual(db.prepare('SELECT * FROM driver_date_reviews').all(),history);assert.deepEqual(db.prepare('SELECT * FROM schedule_exceptions').all(),exceptions)
+ assert.ok(stillApproved(db));assert.equal(db.prepare('PRAGMA foreign_key_check').all().length,0)
+ }finally{db.close()}
+})
