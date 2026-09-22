@@ -127,3 +127,23 @@ test('paused schedule needs no first date and reason stays beside save without a
  await change(reason,'暂停收货');assert.equal(document.querySelector('form').checkValidity(),true)
  }finally{await act(async()=>root.unmount())}
 })
+
+test('independent branch status bypasses inactive schedule validation and is sent without changing parent',async()=>{
+ for(const language of ['en','ms','zh']){
+  const posts=[],data={customer:{customerId:'C1',customerName:'Existing',status:'active',materialPricing:[]},branch:{branchId:'B1',branchName:'Branch',lifecycleStatus:'ACTIVE'},schedule:{frequency:'Once a week',weekdays:[],effectiveDate:''},pending:[],routeOptions:[],areas:[],revision:'r1'}
+  globalThis.fetch=async(url,options={})=>{if(options.method==='POST'){posts.push(JSON.parse(options.body));return{ok:false,status:409,headers:new Map(),json:async()=>({errorCode:'CONFLICT'})}}return{ok:true,json:async()=>String(url).startsWith('/api/materials')?{items:[]}:data}}
+  const root=createRoot(document.getElementById('root'))
+  try{
+   await act(async()=>root.render(React.createElement(I18nProvider,{language},React.createElement(Editor,{branchId:'B1',onClose(){}}))))
+   const status=[...document.querySelectorAll('select')].find(s=>[...s.options].some(o=>o.value==='TEMPORARILY_PAUSED'))
+   assert.deepEqual([...status.options].map(o=>o.value),['ACTIVE','TEMPORARILY_PAUSED','CLOSED'])
+   for(const value of ['TEMPORARILY_PAUSED','CLOSED']){
+    await act(async()=>{status.value=value;status.dispatchEvent(new Event('change',{bubbles:true}))})
+    await change(document.querySelector('.customer-save-reason textarea'),'Branch status')
+    assert.equal(document.querySelector('input[type=date]').willValidate,false)
+    await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})))
+    assert.equal(posts.at(-1).branch.lifecycleStatus,value);assert.equal(posts.at(-1).customer.status,'active');assert.equal(posts.at(-1).schedule,null)
+   }
+  }finally{await act(async()=>root.unmount())}
+ }
+})

@@ -1,3 +1,4 @@
+import {applyBranchLifecycle} from './branchLifecycleService.mjs'
 import {activeLocationAreas,previewCustomerLocation,validateLocationCheck,saveLocationCheck,pendingLocationChecks,decideCustomerLocation} from './customerLocationCheck.mjs'
 import {createHash} from 'node:crypto'
 import {db as defaultDb} from './database.mjs'
@@ -20,7 +21,7 @@ export function customerWorkspace({branchId,customerId}={},actor={},db=defaultDb
  if(branchId&&!branch)throw fail('Branch not found.',404)
  const customer=(branch?.customerId||customerId)?getCustomer(branch?.customerId||customerId,db):null
  if(customerId&&!customer)throw fail('Customer not found.',404)
- const schedule=branch?getCollectionScheduleManagement(branch.branchId,db):null
+ const schedule=branch?getCollectionScheduleManagement(branch.branchId,db,{includeInactive:true}):null
  const pending=branch?listGpsCollector({branchId:branch.internalId},db):[]
  const routeOptions=db.prepare('SELECT d.route_number routeNumber,d.display_name name FROM weekly_route_definitions d JOIN weekly_route_plans p ON p.id=d.plan_id WHERE p.is_active=1 ORDER BY d.route_number').all()
  const areas=activeLocationAreas(db),locationReviews=branch?pendingLocationChecks(branch.internalId,db):[]
@@ -41,11 +42,17 @@ export function saveCustomerWorkspace(payload,actor={},db=defaultDb){
   const changedBy=actor.employeeName||actor.username||`Account ${actor.id}`
   const c={...pick(payload.customer,customerFields),reason,changedBy}
   if((Object.hasOwn(c,'materialPricing')||Object.hasOwn(c,'removedMaterialIds'))&&!accountCan(actor,'price_manage',db))throw fail('Pricing permission required.',403)
-  // Keep official coordinates and lifecycle under their existing review workflows.
+  // Coordinates retain their review workflow; branch status is independently audited.
   const customer=before.customer?updateCustomer(before.customer.customerId,c,db):createCustomer(c,db)
   const bp={...pick(payload.branch,branchFields),customerId:customer.customerId,reason,changedBy}
-  const branch=before.branch?updateBranchWithLifecycle(before.branch.branchId,bp,{changedBy,accountId:actor.id},db):createBranch(bp,db)
-  if(payload.schedule&&!['paused','closed'].includes(customer.status)){
+  let branch=before.branch?updateBranchWithLifecycle(before.branch.branchId,bp,{changedBy,accountId:actor.id},db):createBranch(bp,db)
+  const requestedStatus=payload.branch?.lifecycleStatus
+  if(requestedStatus!==undefined&&requestedStatus!==(branch.lifecycleStatus||'ACTIVE')){
+   if(!['ACTIVE','TEMPORARILY_PAUSED','CLOSED'].includes(requestedStatus)||!['ACTIVE','TEMPORARILY_PAUSED','CLOSED'].includes(branch.lifecycleStatus||'ACTIVE'))throw fail('Invalid Branch lifecycle status')
+   applyBranchLifecycle(branch.branchId,{lifecycleStatus:requestedStatus,reason},{changedBy,accountId:actor.id},db)
+   branch=getBranch(branch.branchId,db)
+  }
+  if(payload.schedule&&branch.lifecycleStatus==='ACTIVE'&&!['paused','closed'].includes(customer.status)){
    const current=getCollectionScheduleManagement(branch.branchId,db)
    if(!current)throw fail('Only active branches can change collection schedules.',409)
    saveCollectionScheduleManagement(branch.branchId,{...pick(payload.schedule,['frequency','weekdays','anchorDate','effectiveDate','monthlyOccurrence','routeNumber','sundayRouteNumber']),routeNumber:payload.schedule.routeNumber||undefined,reason,changedBy,sundayAuthorized:true,expectedUpdatedAt:current.updatedAt},db,{supervisorConfirmed:true})
@@ -56,7 +63,7 @@ export function saveCustomerWorkspace(payload,actor={},db=defaultDb){
   }
   saveLocationCheck(payload,locationProof,getBranch(branch.branchId,db),actor,db)
   let review=[]
-  if(payload.schedule&&!['paused','closed'].includes(customer.status)){
+  if(payload.schedule&&branch.lifecycleStatus==='ACTIVE'&&!['paused','closed'].includes(customer.status)){
    if(db.prepare('SELECT 1 FROM weekly_route_plans WHERE is_active=1').get())generateWeek({startDate:kuchingDate(),count:7,onlyMissing:true,generatedBy:changedBy},db)
    review=reconcileScheduleWindow({branchIds:[branch.internalId],changedBy},db).map(r=>({...r,expectedRevision:db.prepare('SELECT revision FROM dispatch_days WHERE dispatch_date=?').get(r.date)?.revision}))
   }

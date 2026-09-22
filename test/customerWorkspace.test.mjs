@@ -46,3 +46,24 @@ test('branch area edit is scoped, audited and rejects stale data or inactive are
  assert.throws(()=>changeBranchArea(p,office,db),/Reload/)
  db.close()
 })
+
+test('branch pause/closure is independent, audited, preserves schedules and can be restored',()=>{
+ for(const lifecycleStatus of ['TEMPORARILY_PAUSED','CLOSED']){
+  const db=fixture(),seed=saveCustomerWorkspace(payload(),owner,db)
+  const sibling=saveCustomerWorkspace({...payload(),customerId:seed.customer.customerId,revision:customerWorkspace({customerId:seed.customer.customerId},owner,db).revision,gps:null},owner,db)
+  const fresh=customerWorkspace({branchId:seed.branch.branchId},owner,db),schedules=JSON.stringify(db.prepare('SELECT * FROM branch_schedules').all())
+  const p={requestId:randomUUID(),branchId:seed.branch.branchId,revision:fresh.revision,reason:'Branch only',customer:{status:'active'},branch:{lifecycleStatus},schedule:{frequency:'Once a week',weekdays:[],effectiveDate:''}}
+  const saved=saveCustomerWorkspace(p,office,db)
+  assert.equal(saved.branch.lifecycleStatus,lifecycleStatus);assert.equal(saved.customer.status,'active')
+  assert.equal(saved.schedule.frequency,'On Call')
+  assert.equal(customerWorkspace({branchId:sibling.branch.branchId},owner,db).branch.lifecycleStatus,'ACTIVE')
+  assert.equal(JSON.stringify(db.prepare('SELECT * FROM branch_schedules').all()),schedules)
+  assert.equal(db.prepare('SELECT is_active FROM branches WHERE id=?').get(seed.branch.internalId).is_active,0)
+  assert.ok(db.prepare("SELECT 1 FROM master_change_history WHERE entity_id=? AND change_type='lifecycle_status_changed' AND reason='Branch only'").get(seed.branch.branchId))
+  const restored=saveCustomerWorkspace({...p,requestId:randomUUID(),revision:saved.revision,branch:{lifecycleStatus:'ACTIVE'},schedule:null},office,db)
+  assert.equal(restored.branch.lifecycleStatus,'ACTIVE');assert.equal(restored.schedule.frequency,'On Call')
+  assert.equal(JSON.stringify(db.prepare('SELECT * FROM branch_schedules').all()),schedules)
+  assert.throws(()=>saveCustomerWorkspace({...p,requestId:randomUUID(),revision:restored.revision,branch:{lifecycleStatus:'DUPLICATE_REPLACED'}},office,db),/Invalid Branch/)
+  db.close()
+ }
+})
