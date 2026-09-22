@@ -17,9 +17,9 @@ test('combined editor sends one request and keeps failed draft for retry in all 
  const root=createRoot(document.getElementById('root'));try{
  await act(async()=>root.render(React.createElement(I18nProvider,{language},React.createElement(Editor,{customerId:'C1',onClose(){}}))))
  const label=[...document.querySelectorAll('label')].find(l=>l.textContent===w.name);assert.ok(label)
- await change(label.querySelector('input'),'Branch One');await change(document.querySelector('.customer-workspace-fields textarea'),'New branch')
+ await change(label.querySelector('input'),'Branch One');await change(document.querySelector('.customer-save-reason textarea'),'New branch')
  await act(async()=>document.querySelector('.master-modal form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})))
- assert.equal(posts.length,1);assert.equal(posts[0].branch.branchName,'Branch One');assert.equal(posts[0].customerId,'C1');assert.equal(posts[0].revision,'revision-1');assert.equal(posts[0].reason,'New branch');assert.equal(document.querySelector('.customer-workspace-fields textarea').value,'New branch')
+ assert.equal(posts.length,1);assert.equal(posts[0].branch.branchName,'Branch One');assert.equal(posts[0].customerId,'C1');assert.equal(posts[0].revision,'revision-1');assert.equal(posts[0].reason,'New branch');assert.equal(document.querySelector('.customer-save-reason textarea').value,'New branch')
  await act(async()=>document.querySelector('.master-modal form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})))
  assert.equal(posts[0].requestId,posts[1].requestId)
  }finally{await act(async()=>root.unmount())}
@@ -54,7 +54,7 @@ test('selecting paused bypasses schedule date validation and submits no schedule
  const date=document.querySelector('input[type=date]'),status=[...document.querySelectorAll('select')].find(s=>[...s.options].some(o=>o.value==='paused'));
  assert.equal(date.willValidate,true);assert.equal(date.checkValidity(),false);
  await act(async()=>{status.value='paused';status.dispatchEvent(new Event('change',{bubbles:true}))});assert.equal(date.willValidate,false);
- await change(document.querySelector('.customer-workspace-fields textarea'),'Duplicate');await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ await change(document.querySelector('.customer-save-reason textarea'),'Duplicate');await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
  assert.equal(posts[0].customer.status,'paused');assert.equal(posts[0].schedule,null);
  await act(async()=>{status.value='active';status.dispatchEvent(new Event('change',{bubbles:true}))});assert.equal(date.willValidate,true);assert.equal(date.checkValidity(),false);
  }finally{await act(async()=>root.unmount())}
@@ -72,7 +72,7 @@ test('backdrop closes clean drafts, guards changed drafts and saving; successful
  await act(async()=>root.render(React.createElement(I18nProvider,{language},React.createElement(Editor,{branchId:'B1',onClose(){closed++},onSaved(){saved++}}))));
  await act(async()=>document.querySelector('.master-modal form').click());assert.equal(closed,0);
  await act(async()=>document.querySelector('.master-modal').click());assert.equal(closed,1);assert.equal(prompts,0);
- await change(document.querySelector('.customer-workspace-fields textarea'),'Correction');
+ await change(document.querySelector('.customer-save-reason textarea'),'Correction');
  await act(async()=>document.querySelector('.master-modal').click());assert.equal(closed,1);assert.equal(prompts,1);
  await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
  await act(async()=>document.querySelector('.master-modal').click());assert.equal(closed,1);assert.equal(prompts,1);
@@ -87,7 +87,7 @@ test('successful save retains supervisor follow-up outside the closed modal',asy
  let saved=0;const root=createRoot(document.getElementById('root'));
  try{
  await act(async()=>root.render(React.createElement(I18nProvider,{language:'zh'},React.createElement(Editor,{branchId:'B1',onClose(){},onSaved(){saved++}}))));
- await change(document.querySelector('.customer-workspace-fields textarea'),'Correction');
+ await change(document.querySelector('.customer-save-reason textarea'),'Correction');
  await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
  assert.equal(saved,1);assert.equal(document.querySelector('.master-modal'),null);assert.ok([...document.querySelectorAll('button')].some(b=>b.textContent===words.zh.confirm));
  }finally{await act(async()=>root.unmount())}
@@ -103,14 +103,27 @@ test('switching branches after a saved review starts a fresh editor and request 
  const render=id=>React.createElement(I18nProvider,{language:'zh'},React.createElement(Editor,{branchId:id,customerId:'C1',onClose(){},onSaved(){}}));
  try{
  await act(async()=>root.render(render('B1')));
- await change(document.querySelector('.customer-workspace-fields textarea'),'First change');
+ await change(document.querySelector('.customer-save-reason textarea'),'First change');
  await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
  assert.equal(document.querySelector('.master-modal'),null);assert.ok(document.querySelector('.customer-workspace-saved'));
  await act(async()=>root.render(render('B2')));
  assert.ok(document.querySelector('.master-modal form'));assert.equal(document.querySelector('.customer-workspace-saved'),null);
- assert.equal(document.querySelector('.customer-workspace-fields input').value,'Second branch');assert.equal(document.querySelector('.customer-workspace-fields textarea').value,'');
- await change(document.querySelector('.customer-workspace-fields textarea'),'Second change');
+ assert.equal(document.querySelector('.customer-workspace-fields input').value,'Second branch');assert.equal(document.querySelector('.customer-save-reason textarea').value,'');
+ await change(document.querySelector('.customer-save-reason textarea'),'Second change');
  await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
  assert.equal(posts[1].branchId,'B2');assert.equal(posts[1].branch.branchName,'Second branch');assert.notEqual(posts[0].requestId,posts[1].requestId);
  }finally{await act(async()=>root.unmount())}
 });
+
+test('paused schedule needs no first date and reason stays beside save without a cancel button',async()=>{
+ const data={customer:{customerId:'C1',customerName:'Existing',status:'active',materialPricing:[]},branch:{branchId:'B1',branchName:'Branch'},schedule:{frequency:'Paused',weekdays:[],effectiveDate:'',anchorDate:''},pending:[],routeOptions:[],areas:[],canManagePricing:false,canCaptureGps:false,revision:'r1'}
+ globalThis.fetch=async url=>({ok:true,json:async()=>String(url).startsWith('/api/materials')?{items:[]}:data})
+ const root=createRoot(document.getElementById('root'))
+ try{
+ await act(async()=>root.render(React.createElement(I18nProvider,{language:'zh'},React.createElement(Editor,{branchId:'B1',onClose(){}}))))
+ const date=document.querySelector('input[type="date"]');assert.ok(date);assert.equal(date.required,false);assert.equal(date.disabled,true)
+ const reason=document.querySelector('.customer-save-reason textarea');assert.ok(reason.required)
+ const bar=reason.closest('.form-action-bar');assert.ok(bar);assert.ok([...bar.querySelectorAll('button')].some(b=>b.textContent===words.zh.save));assert.ok(![...bar.querySelectorAll('button')].some(b=>b.textContent==='取消'))
+ await change(reason,'暂停收货');assert.equal(document.querySelector('form').checkValidity(),true)
+ }finally{await act(async()=>root.unmount())}
+})

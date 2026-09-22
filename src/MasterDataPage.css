@@ -89,3 +89,5 @@
 .master-modal .customer-pricing>header>button{flex-shrink:0}
 .master-modal .customer-pricing .customer-pricing-title>select{min-width:0}
 .master-modal .form-action-bar>button{max-width:100%;white-space:normal;overflow-wrap:anywhere;line-height:1.5;height:auto}
+
+.customer-save-reason{display:flex;flex:1 1 240px;flex-direction:column;gap:5px;min-width:0;text-align:left;color:#576762}.customer-save-reason textarea{box-sizing:border-box;width:100%;min-height:56px;border:1px solid #cad9d4;border-radius:9px;padding:8px;font:inherit;resize:vertical}
