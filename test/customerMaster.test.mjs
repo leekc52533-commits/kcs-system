@@ -57,3 +57,29 @@ test('typed Customer and Branch searches preserve legacy exact IDs',()=>{const d
 test('Customer detail defaults to Branches and groups Product Prices by Material Category',()=>{const source=fs.readFileSync(new URL('../src/MasterDataPage.jsx',import.meta.url),'utf8'),css=fs.readFileSync(new URL('../src/MasterDataPage.css',import.meta.url),'utf8');assert.match(source,/\[detailTab,setDetailTab\]=useState\('branches'\)/);assert.match(source,/setDetailTab\('branches'\)/);assert.match(source,/className="customer-detail-tabs"/);assert.match(source,/detailTab==='branches'\?<CustomerBranchesPanel/);assert.match(source,/:<CustomerPricingPanel/);assert.match(source,/onAdd=\{\(\)=>setEditingBranch/);assert.match(source,/className="customer-pricing-filters"/);assert.match(source,/customer\.sortCategory/);assert.match(source,/className="customer-pricing-category"/);assert.match(source,/customer\.sortPriceDesc/);assert.doesNotMatch(source,/customer\.findProduct/);assert.match(css,/\.customer-detail-tabs/);assert.match(css,/\.customer-pricing-filters/);assert.match(css,/\.customer-pricing-category/);assert.match(css,/@media\(max-width:600px\)\{\.customer-detail-tabs/s)})
 
 test('Chinese Customer list uses the same Customer header as the Branch table',()=>{assert.equal(translate('zh','list.customerName'),'Customer');assert.equal(translate('zh','list.customer'),'Customer')})
+
+
+test('operating branch counts agree across customer, dashboard and zone details without removing history',async()=>{
+ const {dashboardSummary}=await import('../server/queryService.mjs')
+ const {getZoneGroupMetricDetails,getAreaConfirmationDetail}=await import('../server/resourceService.mjs')
+ const db=fixture();try{seed(db)
+ createBranch({branchId:'B2',customerId:'C1',branchName:'Paused Branch',areaId:'A1'},db)
+ createBranch({branchId:'B3',customerId:'C1',branchName:'Closed Branch',areaId:'A1'},db)
+ db.exec("UPDATE branches SET lifecycle_status='TEMPORARILY_PAUSED' WHERE jodoo_branch_id='B2'; UPDATE branches SET lifecycle_status='CLOSED' WHERE jodoo_branch_id='B3'")
+ const area=db.prepare("SELECT id FROM areas WHERE jodoo_area_id='A1'").get().id
+ const check=n=>{
+ assert.equal(listCustomers({},db).items[0].branchCount,n)
+ assert.equal(getCustomer('C1',db).branchCount,n)
+ assert.equal(getCustomer('C1',db).branches.length,3)
+ assert.equal(dashboardSummary(db).branchCount,n)
+ assert.equal(getAreaConfirmationDetail(area,db).branchCount,n)
+ assert.equal(getAreaConfirmationDetail(area,db).branches.length,n)
+ assert.equal(getZoneGroupMetricDetails(1,{metric:'branches'},db).total,n)
+ assert.equal(getZoneGroupMetricDetails(1,{metric:'areas'},db).items.find(a=>a.id===area).branchCount,n)
+ }
+ check(1)
+ db.exec("UPDATE branches SET lifecycle_status='CLOSED' WHERE jodoo_branch_id='B1'");check(0)
+ db.exec("UPDATE branches SET lifecycle_status='ACTIVE' WHERE jodoo_branch_id='B2'");check(1)
+ assert.equal(db.prepare('SELECT COUNT(*) n FROM branch_schedules').get().n,1)
+ }finally{db.close()}
+})

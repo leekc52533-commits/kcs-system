@@ -50,7 +50,7 @@ function invalidateBranches(database, branchIds, changeType, entityType, entityI
 
 const customerSelect = `SELECT c.jodoo_customer_id customerId,c.name customerName,c.legal_name legalName,c.registration_number registrationNumber,c.billing_address billingAddress,
   c.contact_person contactPerson,c.phone,c.whatsapp,c.email,COALESCE(c.default_payment_type,c.payment_type) defaultPaymentType,c.credit_terms creditTerms,c.status,c.notes,c.source_system sourceSystem,
-  c.created_by createdBy,c.created_at createdAt,c.updated_at updatedAt,COUNT(b.id) branchCount FROM customers c LEFT JOIN branches b ON b.customer_id=c.id`
+  c.created_by createdBy,c.created_at createdAt,c.updated_at updatedAt,COUNT(CASE WHEN b.lifecycle_status='ACTIVE' THEN b.id END) branchCount FROM customers c LEFT JOIN branches b ON b.customer_id=c.id`
 
 export function listCustomers(params={},database=defaultDb){
   const where=['1=1'],args=[];if(params.search){let search=text(params.search);if(/^c\d+$/i.test(search))search=parseTypedId(search,'customer');const q=`%${search}%`;where.push('(c.jodoo_customer_id LIKE ? OR c.name LIKE ? OR c.legal_name LIKE ? OR c.phone LIKE ? OR c.whatsapp LIKE ?)');args.push(q,q,q,q,q)}

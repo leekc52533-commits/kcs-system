@@ -152,7 +152,7 @@ export function getZoneGroupMetricDetails(id,options={},database=defaultDb){
       COUNT(DISTINCT b.id)-SUM(CASE WHEN ${officialGpsSql('b')} THEN 1 ELSE 0 END) missingGpsCount
       FROM areas a JOIN zone_groups current ON current.id=a.zone_group_id
       LEFT JOIN zone_groups formal ON formal.id=COALESCE(a.confirmed_zone_group_id,a.zone_group_id)
-      LEFT JOIN branches b ON b.area_id=a.id
+      LEFT JOIN branches b ON b.area_id=a.id AND b.lifecycle_status='ACTIVE'
       WHERE a.zone_group_id=? GROUP BY a.id ORDER BY a.name`).all(zone.id).map(item=>({...item,officialGpsCount:Number(item.officialGpsCount||0),missingGpsCount:Number(item.missingGpsCount||0)}))
     if(metric==='confirmed')items=items.filter(item=>item.zoneAssignmentStatus==='confirmed')
     if(metric==='pending')items=items.filter(item=>item.zoneAssignmentStatus!=='confirmed')
@@ -164,7 +164,7 @@ export function getZoneGroupMetricDetails(id,options={},database=defaultDb){
       s.jodoo_schedule_id scheduleId,s.frequency,s.days_of_week assignedWeekdays
       FROM branches b JOIN areas a ON a.id=b.area_id LEFT JOIN customers c ON c.id=b.customer_id
       LEFT JOIN branch_schedules s ON s.branch_id=b.id AND s.is_active=1
-      WHERE a.zone_group_id=? ORDER BY a.name,c.name,b.branch_name,s.jodoo_schedule_id`).all(zone.id)
+      WHERE a.zone_group_id=? AND b.lifecycle_status='ACTIVE' ORDER BY a.name,c.name,b.branch_name,s.jodoo_schedule_id`).all(zone.id)
     const grouped=new Map()
     for(const row of rows){
       if(!grouped.has(row.id))grouped.set(row.id,{id:row.id,branchId:row.branchId,branchName:row.branchName,customerId:row.customerId,customerName:row.customerName,areaId:row.areaId,areaName:row.areaName,latitude:row.latitude,longitude:row.longitude,gpsStatus:row.gpsStatus,hasOfficialGps:Boolean(Number.isFinite(row.latitude)&&Number.isFinite(row.longitude)&&row.latitude>=-90&&row.latitude<=90&&row.longitude>=-180&&row.longitude<=180&&!(row.latitude===0&&row.longitude===0)),hasTemporaryGps:Boolean(row.hasTemporaryGps),schedules:[]})
@@ -190,11 +190,11 @@ export function getAreaConfirmationDetail(id,database=defaultDb){
   const area=database.prepare(`SELECT a.id,a.jodoo_area_id areaId,a.name,a.zone_group_id zoneGroupId,z.name zoneGroup,a.confirmed_zone_group_id confirmedZoneGroupId,cz.name confirmedZoneGroup,a.zone_assignment_status zoneAssignmentStatus,
     COUNT(DISTINCT b.customer_id) customerCount,COUNT(DISTINCT b.id) branchCount,
     SUM(CASE WHEN b.latitude BETWEEN -90 AND 90 AND b.longitude BETWEEN -180 AND 180 AND NOT(b.latitude=0 AND b.longitude=0) THEN 1 ELSE 0 END) gpsBranchCount
-    FROM areas a JOIN zone_groups z ON z.id=a.zone_group_id LEFT JOIN zone_groups cz ON cz.id=a.confirmed_zone_group_id LEFT JOIN branches b ON b.area_id=a.id WHERE a.id=? GROUP BY a.id`).get(id)
+    FROM areas a JOIN zone_groups z ON z.id=a.zone_group_id LEFT JOIN zone_groups cz ON cz.id=a.confirmed_zone_group_id LEFT JOIN branches b ON b.area_id=a.id AND b.lifecycle_status='ACTIVE' WHERE a.id=? GROUP BY a.id`).get(id)
   if(!area)throw new Error('Area not found')
   const rows=database.prepare(`SELECT b.id,b.jodoo_branch_id branchId,b.branch_name branchName,b.address,b.latitude,b.longitude,c.jodoo_customer_id customerId,c.name customerName,
     s.jodoo_schedule_id scheduleId,s.frequency,s.days_of_week dayOfWeek,s.take_date takeDate,s.next_take_date nextTakeDate
-    FROM branches b LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN branch_schedules s ON s.branch_id=b.id AND s.is_active=1 WHERE b.area_id=? ORDER BY b.branch_name,s.jodoo_schedule_id`).all(id)
+    FROM branches b LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN branch_schedules s ON s.branch_id=b.id AND s.is_active=1 WHERE b.area_id=? AND b.lifecycle_status='ACTIVE' ORDER BY b.branch_name,s.jodoo_schedule_id`).all(id)
   const grouped=new Map()
   for(const row of rows){if(!grouped.has(row.id))grouped.set(row.id,{id:row.id,branchId:row.branchId,branchName:row.branchName,customerId:row.customerId,customerName:row.customerName,address:row.address,latitude:row.latitude,longitude:row.longitude,schedules:[]});if(row.scheduleId)grouped.get(row.id).schedules.push({scheduleId:row.scheduleId,frequency:row.frequency,dayOfWeek:row.dayOfWeek,takeDate:row.takeDate,nextTakeDate:row.nextTakeDate})}
   const history=database.prepare(`SELECT COUNT(ds.id) dispatchCount,COUNT(ds.collected_weight_kg) weightedDispatchCount,SUM(ds.collected_weight_kg) collectedWeightKg FROM dispatch_stops ds JOIN branches b ON b.id=ds.branch_id WHERE b.area_id=?`).get(id)
