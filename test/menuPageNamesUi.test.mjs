@@ -30,3 +30,19 @@ test('owner clicks page name, saves alias and sidebar renders it without changin
   const renamed=[...document.querySelectorAll('nav button')].find(n=>n.textContent==='My Overview');assert(renamed);await click(renamed);assert.equal(page,'dashboard')
  }finally{await act(async()=>root.unmount())}
 })
+
+test('workspace labels switch English/Malay and Chinese uses English without changing page language',async()=>{
+ const layout=defaultMenuLayout();layout.folders=[{id:'folder-test',name:'Customer',items:['customers']}];layout.top=layout.top.filter(id=>id!=='customers');layout.top.push('folder-test');layout.pageNames={dashboard:'总览'}
+ fetch=async()=>({ok:true,json:async()=>({layout,canEdit:false,revision:1})})
+ const {useI18n}=await vite.ssrLoadModule('/src/i18n.jsx'),{translate}=await vite.ssrLoadModule('/src/translations.js')
+ function Content(){const{t}=useI18n();return React.createElement('p',{id:'content'},t('nav.dashboard'))}
+ const root=createRoot(document.getElementById('root'))
+ try{
+ for(const language of ['zh','ms','en']){
+  await act(async()=>root.render(React.createElement(I18nProvider,{language},React.createElement(React.Fragment,null,React.createElement(Page,{items:[['dashboard','x','nav.dashboard'],['customers','x','nav.customers']],page:'customers',go(){}}),React.createElement(Content)))))
+  const nav=document.querySelector('nav'),expected=language==='ms'?'ms':'en'
+  assert.equal(nav.lang,expected);assert.ok(nav.textContent.includes(translate(expected,'nav.dashboard')));assert.ok(nav.textContent.includes(language==='ms'?'Pelanggan':'Customer'));assert.equal(/\p{Script=Han}/u.test(nav.textContent),false)
+  assert.equal(document.getElementById('content').textContent,translate(language,'nav.dashboard'))
+ }
+ }finally{await act(async()=>root.unmount())}
+})

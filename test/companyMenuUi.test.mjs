@@ -9,6 +9,7 @@ Object.defineProperty(globalThis,'navigator',{value:dom.window.navigator,configu
 const{createRoot}=await import('react-dom/client'),vite=await createServer({logLevel:'silent',server:{middlewareMode:true},appType:'custom'})
 after(()=>vite.close())
 
+window.HTMLDialogElement.prototype.showModal=function(){this.open=true};window.HTMLDialogElement.prototype.close=function(){this.open=false}
 const{default:CompanyMenu}=await vite.ssrLoadModule('/src/CompanyMenu.jsx'),{I18nProvider}=await vite.ssrLoadModule('/src/i18n.jsx')
 const{defaultMenuLayout}=await import('../shared/menuLayout.js')
 test('sidebar has one active leaf and only owner can edit and save reordered documents',async()=>{
@@ -20,7 +21,7 @@ test('sidebar has one active leaf and only owner can edit and save reordered doc
  const edit=[...document.querySelectorAll('nav button')].find(n=>n.textContent==='Arrange company menu')
  assert.equal(Boolean(edit),canEdit)
  if(canEdit){await act(async()=>edit.click());const groups=document.querySelectorAll('.company-menu-editor h3');assert.equal(groups.length,2)
- const down=document.querySelectorAll('.company-menu-editor > div')[1].querySelector('.company-menu-row button:last-child');await act(async()=>down.click())
+ const down=document.querySelectorAll('.company-menu-group')[1].querySelector('.company-menu-row button:last-child');await act(async()=>down.click())
  await act(async()=>[...document.querySelectorAll('.company-menu-actions button')].find(n=>n.textContent==='Save').click())
  assert.equal(writes.length,1);assert.equal(writes[0].layout.documents[0],'sales');assert.equal(document.querySelector('[role=dialog]'),null)
  }
