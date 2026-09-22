@@ -200,15 +200,16 @@ test('dispatch access is shared by office and management, never driver/crew even
  for(const role of ['driver','crew','unknown',''])assert.equal(canManageDispatch({role,permissions:['schedule_manage']}),false)
 })
 
-test('date requests enforce proof server-side, preserve route until review, restrict viewing and clean files on rollback',async()=>{
+for(const reasonCode of ['closed','business_closed'])test(reasonCode+': date requests enforce proof server-side, preserve route until review, restrict viewing and clean files on rollback',async()=>{
  const {mkdtempSync,rmSync,readdirSync}=await import('node:fs'),{tmpdir}=await import('node:os'),{join}=await import('node:path')
  const {dateEvidence,dateEvidenceForViewer}=await import('../server/dateRequestEvidenceService.mjs')
  const root=mkdtempSync(join(tmpdir(),'date-evidence-')),{db,ids}=fixture(),before=db.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(ids[0])
  const photo={name:'proof.png',dataUrl:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jZAAAAABJRU5ErkJggg=='}
- const now=new Date().toISOString(),ctx={...context,now},base={targetDate:'2026-09-11',reason:'Closed',reasonCode:'closed',evidence:{}}
+ const now=new Date().toISOString(),ctx={...context,now},base={targetDate:'2026-09-11',reason:'Closed',reasonCode,evidence:{}}
  try{
  assert.throws(()=>requestDriverDate(ids[0],base,ctx,db,{uploadsRoot:root}),/DATE_EVIDENCE_REQUIRED/)
  assert.throws(()=>requestDriverDate(ids[0],{...base,evidence:{photo,captureSource:'gallery',capturedAt:now,position:{latitude:3,longitude:101,accuracyM:5}}},ctx,db,{uploadsRoot:root}),/DATE_EVIDENCE_REQUIRED/)
+ assert.throws(()=>requestDriverDate(ids[0],{...base,evidence:{photo,captureSource:'camera',capturedAt:now}},ctx,db,{uploadsRoot:root}),/DATE_EVIDENCE_REQUIRED/)
  const payload={...base,evidence:{photo,captureSource:'camera',capturedAt:now,position:{latitude:3,longitude:101,accuracyM:5}}}
  db.exec("CREATE TRIGGER proof_fail BEFORE INSERT ON dispatch_change_logs WHEN NEW.change_type='driver_date_requested' BEGIN SELECT RAISE(ABORT,'audit failed'); END")
  assert.throws(()=>requestDriverDate(ids[0],payload,ctx,db,{uploadsRoot:root}),/audit failed/)
@@ -216,6 +217,8 @@ test('date requests enforce proof server-side, preserve route until review, rest
  db.exec('DROP TRIGGER proof_fail')
  const r=requestDriverDate(ids[0],payload,ctx,db,{uploadsRoot:root})
  assert.equal(r.status,'pending');assert.deepEqual(db.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(ids[0]),before)
+ assert.equal(db.prepare('SELECT lifecycle_status FROM branches WHERE id=1').get().lifecycle_status,'ACTIVE')
+ assert.equal(dateEvidence(db,r.id).reasonCode,reasonCode)
  assert.ok(dateEvidence(db,r.id).photoUrl);assert.ok(dateEvidenceForViewer(db,r.id,context).storage_key)
  assert.throws(()=>dateEvidenceForViewer(db,r.id,{employeeId:2,role:'driver'}),/DATE_EVIDENCE_REQUIRED/)
  assert.ok(dateEvidenceForViewer(db,r.id,supervisor).storage_key)

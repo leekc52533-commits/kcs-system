@@ -1,4 +1,4 @@
-export const dateEvidenceMode=code=>['little','closed','full','bay'].includes(code)?'onsite':['customer','call','stopped'].includes(code)?'contact':['bill','other'].includes(code)?'photo':code==='collected'?'record':['time','staff'].includes(code)?'operations':null
+export const dateEvidenceMode=code=>['little','closed','business_closed','full','bay'].includes(code)?'onsite':['customer','call','stopped'].includes(code)?'contact':['bill','other'].includes(code)?'photo':code==='collected'?'record':['time','staff'].includes(code)?'operations':null
 export function evidenceProblem(code,e={}){
  const mode=dateEvidenceMode(code),text=v=>String(v||'').trim()
  if(!mode)return 'reason'
