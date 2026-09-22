@@ -1,3 +1,4 @@
+import {dateEvidenceForViewer,dateEvidence} from './dateRequestEvidenceService.mjs'
 import {getWorkClose,requestWorkClose,listWorkClose,workCloseTargets,reviewWorkClose} from './workCloseService.mjs'
 import {attendanceSetup,saveAttendanceSetup,attendanceStatus,clockIn,attendanceDaily} from './attendanceService.mjs'
 import {collectionAccess,setCollectionAccess,collectionDispatchOptions,dispatchOpenCollection} from './flexibleCollectionService.mjs'
@@ -220,6 +221,14 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && /^\/api\/mobile\/stops\/\d+\/(trial-reorder|request-date)$/.test(url.pathname)) {const parts=url.pathname.split('/'),payload=(await readJson(request)).payload,context={employeeId:session.employeeId,role:session.role};return sendJson(response,200,parts[5]==='trial-reorder'?reorderDriverStop(Number(parts[4]),payload,context):requestDriverDate(Number(parts[4]),payload,context))}
     if (['GET','POST'].includes(request.method) && /^\/api\/dispatch\/stops\/\d+\/review-change$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});const id=Number(url.pathname.split('/')[4]),context={role:session.role,employeeId:session.employeeId,employeeName:session.employeeName};return sendJson(response,200,request.method==='GET'?plannedCustomerReview(id,context):changePlannedCustomer(id,(await readJson(request)).payload,context))}
     if (request.method === 'GET' && url.pathname === '/api/dispatch/date-requests/options') {if(!canApproveDriverDefer(session))return sendJson(response,403,{error:'Supervisor permission required'});return sendJson(response,200,driverDateReviewOptions(url.searchParams.get('date')))}
+    if(request.method==='GET'&&/^\/api\/dispatch\/date-requests\/\d+\/(proof|evidence)$/.test(url.pathname)){
+      const id=Number(url.pathname.split('/')[4]),proof=dateEvidenceForViewer(db,id,session)
+      if(url.pathname.endsWith('/evidence'))return sendJson(response,200,{evidence:dateEvidence(db,id)})
+      if(!proof.storage_key)return sendJson(response,404,{error:'Proof not found'})
+      const file=path.resolve(uploadsDir,proof.storage_key)
+      if(!file.startsWith(path.resolve(uploadsDir)+path.sep)||!fs.existsSync(file))return sendJson(response,404,{error:'Proof not found'})
+      response.writeHead(200,{'Content-Type':proof.content_type,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'});return fs.createReadStream(file).pipe(response)
+    }
     if (request.method === 'GET' && url.pathname === '/api/dispatch/date-requests/pending') {if(!canApproveDriverDefer(session))return sendJson(response,403,{error:'Supervisor permission required'});return sendJson(response,200,{items:listDriverDateRequests()})}
     if (request.method === 'POST' && /^\/api\/dispatch\/date-requests\/\d+\/(approve|reject)$/.test(url.pathname)) {if(!canApproveDriverDefer(session))return sendJson(response,403,{error:'Supervisor permission required'});const parts=url.pathname.split('/');return sendJson(response,200,decideDriverDate(Number(parts[4]),parts[5]==='approve'?'approved':'rejected',(await readJson(request)).payload,{employeeId:session.employeeId,employeeName:session.employeeName,role:session.role}))}
     if (request.method === 'POST' && /^\/api\/mobile\/trips\/\d+\/start$/.test(url.pathname)) return sendJson(response,200,startDriverTrip(Number(url.pathname.split('/')[4]),{employeeId:session.employeeId,role:session.role}))

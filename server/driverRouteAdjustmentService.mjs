@@ -1,3 +1,6 @@
+import fs from 'node:fs'
+import {prepareDateEvidence,writeDateEvidence,dateEvidence} from './dateRequestEvidenceService.mjs'
+import {uploadsDir} from './database.mjs'
 import {captureApprovedRoutes,retainApprovedRoutes} from './routeApprovalState.mjs'
 import {requiresDriverApproval} from '../shared/driverChangePolicy.js'
 import {saveArrangementRequest} from './arrangementRequestStore.mjs'
@@ -52,17 +55,20 @@ function reorderStop(id,payload,context,db,approved){
  })
 }
 
-export function requestDriverDate(id,payload,context={},db=defaultDb){
- return withImmediateTransaction(db,()=>{
+export function requestDriverDate(id,payload,context={},db=defaultDb,{uploadsRoot=uploadsDir}={}){
+ let written
+ try{return withImmediateTransaction(db,()=>{
   const{s,today}=owned(db,id,context),target=String(payload.targetDate||''),reason=String(payload.reason||'').trim()
   if(!/^\d{4}-\d{2}-\d{2}$/.test(target)||!Number.isFinite(Date.parse(target+'T00:00:00Z'))||new Date(target+'T00:00:00Z').toISOString().slice(0,10)!==target||target<=today||!reason||reason.length>1000)fail('routeTrial.dateReason',400)
   if(hasWork(db,s)||pendingDefer(db,s))fail('routeTrial.protected')
   const existing=db.prepare("SELECT * FROM driver_date_requests WHERE dispatch_stop_id=? AND status='pending'").get(s.id)
   if(existing){if(existing.target_date===target&&existing.reason===reason)return{id:existing.id,status:'pending'};fail('routeTrial.pending')}
+  const evidence=prepareDateEvidence(db,s,payload,context)
   const result=db.prepare('INSERT INTO driver_date_requests(dispatch_stop_id,employee_id,source_date,target_date,reason) VALUES(?,?,?,?,?)').run(s.id,context.employeeId,today,target,reason)
-  audit(db,s,context.employeeId,'driver_date_requested',null,{requestId:Number(result.lastInsertRowid),targetDate:target,reason})
+  written=writeDateEvidence(db,Number(result.lastInsertRowid),evidence,uploadsRoot)
+  audit(db,s,context.employeeId,'driver_date_requested',null,{requestId:Number(result.lastInsertRowid),targetDate:target,reason,evidence:dateEvidence(db,Number(result.lastInsertRowid))})
   return{id:Number(result.lastInsertRowid),status:'pending'}
- })
+ })}catch(e){if(written&&fs.existsSync(written))fs.unlinkSync(written);throw e}
 }
 
 // A route can be planned before its date, vehicle or driver has been prepared.
@@ -80,7 +86,7 @@ export function driverDateReviewOptions(date,db=defaultDb){
 }
 
 export function listDriverDateRequests(db=defaultDb){
- return db.prepare(`SELECT r.id,r.source_date sourceDate,r.target_date targetDate,r.reason,r.status,e.name employeeName,b.id internalBranchId,b.jodoo_branch_id branchId,b.branch_name branchName,s.route_number routeNumber,v.registration_number plate FROM driver_date_requests r JOIN dispatch_stops s ON s.id=r.dispatch_stop_id JOIN branches b ON b.id=s.branch_id JOIN employees e ON e.id=r.employee_id JOIN dispatches d ON d.id=s.dispatch_id LEFT JOIN vehicles v ON v.id=d.vehicle_id WHERE r.status='pending' ORDER BY r.requested_at,r.id`).all().map(r=>({...r,routes:driverDateReviewOptions(r.targetDate,db).routes,schedule:getCollectionScheduleManagement(r.internalBranchId,db)}))
+ return db.prepare(`SELECT r.id,r.source_date sourceDate,r.target_date targetDate,r.reason,r.status,e.name employeeName,b.id internalBranchId,b.jodoo_branch_id branchId,b.branch_name branchName,s.route_number routeNumber,v.registration_number plate FROM driver_date_requests r JOIN dispatch_stops s ON s.id=r.dispatch_stop_id JOIN branches b ON b.id=s.branch_id JOIN employees e ON e.id=r.employee_id JOIN dispatches d ON d.id=s.dispatch_id LEFT JOIN vehicles v ON v.id=d.vehicle_id WHERE r.status='pending' ORDER BY r.requested_at,r.id`).all().map(r=>({...r,evidence:dateEvidence(db,r.id),routes:driverDateReviewOptions(r.targetDate,db).routes,schedule:getCollectionScheduleManagement(r.internalBranchId,db)}))
 }
 
 export function decideDriverDate(id,decision,payload,context={},db=defaultDb,{workClose=false}={}){
@@ -90,6 +96,7 @@ export function decideDriverDate(id,decision,payload,context={},db=defaultDb,{wo
   const r=db.prepare('SELECT * FROM driver_date_requests WHERE id=?').get(Number(id))
   if(!r)fail('routeTrial.notFound',404)
   if(r.status!=='pending'){if(r.status===decision)return{id:r.id,status:r.status,idempotent:true};fail('routeTrial.stale')}
+  if(decision==='approved'&&dateEvidence(db,r.id)&&payload.evidenceChecked!==true)throw Object.assign(new Error('DATE_EVIDENCE_REQUIRED'),{code:'DATE_EVIDENCE_REQUIRED',statusCode:400})
   const s=lookup(db,r.dispatch_stop_id),actor=context.employeeName||String(context.employeeId),reason=String(payload.reason).trim()
   let targetStop=null,preservedDates=[]
   if(decision==='approved'){
@@ -164,7 +171,7 @@ export function decideDriverDate(id,decision,payload,context={},db=defaultDb,{wo
    retainApprovedRoutes(db,approvedBefore,actor,reason)
   }
   db.prepare('UPDATE driver_date_requests SET status=?,reviewed_by=?,review_reason=?,reviewed_at=CURRENT_TIMESTAMP,target_stop_id=? WHERE id=?').run(decision,actor,reason,targetStop,r.id)
-  audit(db,s,actor,'driver_date_request_'+decision,{requestId:r.id,status:'pending'},{status:decision,targetStopId:targetStop,reason,preservedDates})
+  audit(db,s,actor,'driver_date_request_'+decision,{requestId:r.id,status:'pending'},{status:decision,targetStopId:targetStop,reason,preservedDates,evidenceChecked:payload.evidenceChecked===true,evidence:dateEvidence(db,r.id)})
   return{id:r.id,status:decision,targetStopId:targetStop,preservedDates}
  })
 }

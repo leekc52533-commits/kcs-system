@@ -6,8 +6,9 @@ import {ensureV28Schema} from '../server/migrationV28.mjs'
 import {applyV55Migration} from '../server/migrationV55.mjs'
 import {generateWeek,saveDraftAdjustments,approveDay,driverToday} from '../server/dispatchService.mjs'
 import {startDriverTrip} from '../server/driverExecutionService.mjs'
-import {reorderDriverStop,requestDriverDate,decideDriverDate,listDriverDateRequests} from '../server/driverRouteAdjustmentService.mjs'
+import {reorderDriverStop,requestDriverDate,decideDriverDate as decideDriverDateRaw,listDriverDateRequests} from '../server/driverRouteAdjustmentService.mjs'
 import {isRouteTrialDate} from '../shared/routeTrial.js'
+const decideDriverDate=(id,decision,payload,...args)=>decideDriverDateRaw(id,decision,{evidenceChecked:true,...payload},...args)
 const today='2026-09-10',context={employeeId:1,role:'driver',today},supervisor={employeeId:3,role:'supervisor',employeeName:'Supervisor',today}
 function fixture(){
  const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON;'+schemaSql);ensureV28Schema(db)
@@ -24,7 +25,7 @@ function fixture(){
  return{db,ids:stops.map(s=>s.id),trip}
 }
 const order=(db,trip)=>db.prepare("SELECT id FROM dispatch_stops WHERE dispatch_trip_id=? AND status<>'cancelled' ORDER BY stop_sequence,id").all(trip).map(s=>s.id)
-const request=(db,id)=>requestDriverDate(id,{targetDate:'2026-09-11',reason:'Customer requests Friday'},context,db)
+const request=(db,id)=>requestDriverDate(id,{targetDate:'2026-09-11',reason:'Customer requests Friday',reasonCode:'time',evidence:{details:'Insufficient time on assigned route'}},context,db)
 const approve=(db,id)=>decideDriverDate(id,'approved',{routeNumber:1,reason:'Confirmed with customer'},supervisor,db)
 test('trial boundaries include 10 and 13 September, exclude 9 and 14',()=>{assert.equal(isRouteTrialDate('2026-09-09'),false);assert.equal(isRouteTrialDate(today),true);assert.equal(isRouteTrialDate('2026-09-13'),true);assert.equal(isRouteTrialDate('2026-09-14'),false)})
 test('own order swaps, current customer follows, fixed schedules unchanged and adjustment audited',()=>{const{db,ids,trip}=fixture(),before=db.prepare('SELECT * FROM branch_schedules').all();reorderDriverStop(ids[1],{direction:'up',expectedOrder:ids},context,db);assert.deepEqual(order(db,trip),[ids[1],ids[0],ids[2]]);assert.equal(driverToday(context,db).trips[0].currentStopId,ids[1]);assert.deepEqual(db.prepare('SELECT * FROM branch_schedules').all(),before);assert.equal(db.prepare("SELECT COUNT(*) n FROM dispatch_change_logs WHERE change_type='driver_trial_order_changed'").get().n,1);db.close()})
@@ -197,4 +198,51 @@ test('dispatch access is shared by office and management, never driver/crew even
  const{canManageDispatch}=await import('../shared/dispatchAccess.js')
  for(const role of ['owner_admin','operations_admin','supervisor','office'])assert.equal(canManageDispatch({role}),true)
  for(const role of ['driver','crew','unknown',''])assert.equal(canManageDispatch({role,permissions:['schedule_manage']}),false)
+})
+
+test('date requests enforce proof server-side, preserve route until review, restrict viewing and clean files on rollback',async()=>{
+ const {mkdtempSync,rmSync,readdirSync}=await import('node:fs'),{tmpdir}=await import('node:os'),{join}=await import('node:path')
+ const {dateEvidence,dateEvidenceForViewer}=await import('../server/dateRequestEvidenceService.mjs')
+ const root=mkdtempSync(join(tmpdir(),'date-evidence-')),{db,ids}=fixture(),before=db.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(ids[0])
+ const photo={name:'proof.png',dataUrl:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jZAAAAABJRU5ErkJggg=='}
+ const now=new Date().toISOString(),ctx={...context,now},base={targetDate:'2026-09-11',reason:'Closed',reasonCode:'closed',evidence:{}}
+ try{
+ assert.throws(()=>requestDriverDate(ids[0],base,ctx,db,{uploadsRoot:root}),/DATE_EVIDENCE_REQUIRED/)
+ assert.throws(()=>requestDriverDate(ids[0],{...base,evidence:{photo,captureSource:'gallery',capturedAt:now,position:{latitude:3,longitude:101,accuracyM:5}}},ctx,db,{uploadsRoot:root}),/DATE_EVIDENCE_REQUIRED/)
+ const payload={...base,evidence:{photo,captureSource:'camera',capturedAt:now,position:{latitude:3,longitude:101,accuracyM:5}}}
+ db.exec("CREATE TRIGGER proof_fail BEFORE INSERT ON dispatch_change_logs WHEN NEW.change_type='driver_date_requested' BEGIN SELECT RAISE(ABORT,'audit failed'); END")
+ assert.throws(()=>requestDriverDate(ids[0],payload,ctx,db,{uploadsRoot:root}),/audit failed/)
+ assert.equal(db.prepare('SELECT COUNT(*) n FROM driver_date_requests').get().n,0);assert.deepEqual(readdirSync(join(root,'date-requests')),[])
+ db.exec('DROP TRIGGER proof_fail')
+ const r=requestDriverDate(ids[0],payload,ctx,db,{uploadsRoot:root})
+ assert.equal(r.status,'pending');assert.deepEqual(db.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(ids[0]),before)
+ assert.ok(dateEvidence(db,r.id).photoUrl);assert.ok(dateEvidenceForViewer(db,r.id,context).storage_key)
+ assert.throws(()=>dateEvidenceForViewer(db,r.id,{employeeId:2,role:'driver'}),/DATE_EVIDENCE_REQUIRED/)
+ assert.ok(dateEvidenceForViewer(db,r.id,supervisor).storage_key)
+ assert.throws(()=>decideDriverDateRaw(r.id,'approved',{routeNumber:1,reason:'Approved'},supervisor,db),/DATE_EVIDENCE_REQUIRED/)
+ decideDriverDateRaw(r.id,'rejected',{reason:'Retake photo'},supervisor,db)
+ assert.ok(dateEvidence(db,r.id).photoUrl);assert.equal(db.prepare('SELECT status FROM dispatch_stops WHERE id=?').get(ids[0]).status,before.status)
+ }finally{db.close();rmSync(root,{recursive:true,force:true})}
+})
+
+test('contact evidence and original-bill references cannot be replaced by arbitrary free text',()=>{
+ const {db,ids}=fixture()
+ try{
+ for(const payload of [
+ {reasonCode:'customer',evidence:{details:'Call',contactMethod:'phone'}},
+ {reasonCode:'customer',evidence:{details:'Message',contactMethod:'message',contactName:'Manager',contactAt:new Date().toISOString()}},
+ {reasonCode:'collected',evidence:{billNumber:'NOT-A-BILL'}},
+ {reasonCode:'staff',evidence:{}},
+ {reasonCode:'other',evidence:{details:'Unknown'}}])assert.throws(()=>requestDriverDate(ids[0],{targetDate:'2026-09-11',reason:'Request',...payload},context,db),/DATE_EVIDENCE_REQUIRED/)
+ const r=requestDriverDate(ids[0],{targetDate:'2026-09-11',reason:'Customer called',reasonCode:'customer',evidence:{details:'Customer requested Friday',contactMethod:'phone',contactName:'Manager',contactAt:new Date().toISOString()}},context,db)
+ assert.equal(r.status,'pending');assert.equal(listDriverDateRequests(db)[0].evidence.contactName,'Manager')
+ }finally{db.close()}
+})
+
+test('schema 78 migration preserves old requests and can run again',async()=>{
+ const {applyV78Migration}=await import('../server/migrationV78.mjs'),{db,ids}=fixture()
+ try{db.exec('DROP TABLE driver_date_evidence;DELETE FROM schema_meta;INSERT INTO schema_meta(version) VALUES(77)')
+ db.prepare("INSERT INTO driver_date_requests(dispatch_stop_id,employee_id,source_date,target_date,reason) VALUES(?,1,'2026-09-10','2026-09-11','Old request')").run(ids[0])
+ applyV78Migration(db);applyV78Migration(db);assert.equal(db.prepare('SELECT MAX(version) v FROM schema_meta').get().v,78);assert.equal(listDriverDateRequests(db)[0].evidence,null)
+ }finally{db.close()}
 })

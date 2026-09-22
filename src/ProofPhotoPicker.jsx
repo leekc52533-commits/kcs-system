@@ -27,9 +27,9 @@ export default function ProofPhotoPicker({value,onChange,onBusyChange,disabled=f
       await video.current.play()
     }catch{if(request===generation.current){closeCamera();setFallback(true);setError('photo.cameraUnavailable')}}
   }
-  const prepare=async(file,request)=>{
+  const prepare=async(file,request,captureSource='gallery')=>{
     setProcessing(true);setError('');markBusy(true)
-    try{const photo=await processPaymentProof(file,{preserveJpeg});if(request===generation.current){onChange(photo);closeCamera()}}
+    try{const photo=await processPaymentProof(file,{preserveJpeg});if(request===generation.current){onChange({...photo,captureSource,capturedAt:new Date().toISOString()});closeCamera()}}
     catch(item){if(request===generation.current)setError(item.message||'purchase.proofProcessFailed')}
     finally{if(request===generation.current){setProcessing(false);markBusy(camera)}}
   }
@@ -37,7 +37,7 @@ export default function ProofPhotoPicker({value,onChange,onBusyChange,disabled=f
     const input=event.currentTarget,file=input.files?.[0];if(!file)return
     // Do not clear the native input until decoding has produced an owned Blob.
     const request=++generation.current
-    await prepare(file,request)
+    await prepare(file,request,input.capture?'system_camera':'gallery')
     input.value=''
   }
   const capture=async()=>{
@@ -49,7 +49,7 @@ export default function ProofPhotoPicker({value,onChange,onBusyChange,disabled=f
       const context=canvas.getContext('2d');if(!context)throw new Error('capture')
       context.drawImage(video.current,0,0,canvas.width,canvas.height)
       const blob=await new Promise((resolve,reject)=>canvas.toBlob(result=>result?resolve(result):reject(new Error('capture')),'image/jpeg',.9))
-      if(request===generation.current)await prepare(new File([blob],'camera.jpg',{type:'image/jpeg'}),request)
+      if(request===generation.current)await prepare(new File([blob],'camera.jpg',{type:'image/jpeg'}),request,'camera')
     }catch{if(request===generation.current){setError('photo.captureFailed');setProcessing(false)}}
   }
   return <div className="proof-photo-picker">

@@ -39,12 +39,12 @@ for(const language of ['en','ms','zh'])test(`${language}: date reason selection,
  const submit=()=>[...document.querySelectorAll('button')].find(b=>b.textContent===translate(language,'routeTrial.submit'))
  await set(document.querySelector('input'),'2026-09-23');assert.equal(submit().disabled,true)
  assert.equal(document.querySelectorAll('select option').length,13)
- await set(document.querySelector('select'),'closed');assert.equal(submit().disabled,false)
- await act(async()=>submit().click());assert.ok(document.querySelector('select'));assert.equal(document.querySelector('select').value,'closed')
- assert.equal(calls[0].reason,{ms:'Belum buka / tutup sementara',en:'Shop not open / temporarily closed',zh:'店铺未开／暂时关闭'}[language])
+ await set(document.querySelector('select'),'time');assert.equal(submit().disabled,true);await set(document.querySelector('textarea'),'Traffic delay');assert.equal(submit().disabled,false)
+ await act(async()=>submit().click());assert.ok(document.querySelector('select'));assert.equal(document.querySelector('select').value,'time')
+ assert.equal(calls[0].reason,{ms:'Tak sempat',en:'Not enough time',zh:'时间不足，来不及收货'}[language]+' — Traffic delay')
  await set(document.querySelector('select'),'other');assert.equal(submit().disabled,true)
  await set(document.querySelector('textarea'),'  ');assert.equal(submit().disabled,true)
- await set(document.querySelector('textarea'),'Custom explanation');fail=false
- await act(async()=>submit().click());assert.equal(calls[1].reason,'Custom explanation');assert.equal(document.querySelector('select'),null)
+ await set(document.querySelector('textarea'),'Custom explanation');assert.equal(submit().disabled,true);await set(document.querySelector('select'),'staff');fail=false
+ await act(async()=>submit().click());assert.equal(calls[1].evidence.details,'Custom explanation');assert.equal(calls[1].reasonCode,'staff');assert.equal(document.querySelector('select'),null)
  }finally{await act(async()=>root.unmount())}
 })
