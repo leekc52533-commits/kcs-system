@@ -236,3 +236,42 @@ test('pending employee requests survive both supervisor sync and subsequent roll
  assert.deepEqual(stop(db,1),source);assert.equal(db.prepare('SELECT status FROM driver_date_requests').get().status,'pending')
  }finally{db.close()}
 })
+
+import {changeBranchLifecycle} from '../server/branchLifecycleService.mjs'
+import {syncInactiveBranchStops} from '../server/dispatchService.mjs'
+for(const lifecycleStatus of ['TEMPORARILY_PAUSED','CLOSED'])test(`lifecycle ${lifecycleStatus} cancels generated work atomically and retains valid approval`,t=>{
+ t.mock.timers.enable({apis:['Date'],now:new Date('2026-09-07T01:00:00Z')})
+ const db=fixture();try{
+ assignRouteVehicle('2026-09-07',1,{vehicleId:1},db);approveRoute('2026-09-07',1,{approvedBy:'Manager'},db)
+ const source=stop(db,1),other=stop(db,2),schedule=db.prepare('SELECT * FROM branch_schedules WHERE id=1').get()
+ const result=changeBranchLifecycle('B1',{lifecycleStatus,reason:'Supervisor confirmed'},{changedBy:'KC'},db)
+ assert.equal(result.scheduleSync.cancelled.length,1);assert.equal(stop(db,1),undefined);assert.deepEqual(stop(db,2),other);assert.ok(stillApproved(db))
+ assert.equal(db.prepare('SELECT completed_at FROM dispatch_stops WHERE id=?').get(source.id).completed_at,null)
+ assert.deepEqual(db.prepare('SELECT * FROM branch_schedules WHERE id=1').get(),schedule)
+ assert.equal(syncInactiveBranchStops({branchId:1,startDate:'2026-09-07'},db).cancelled.length,0)
+ assert.ok(!reconcileScheduleWindow({startDate:'2026-09-07',branchIds:[1]},db).some(r=>r.kind==='outdated'))
+ assert.equal(db.prepare('PRAGMA foreign_key_check').all().length,0)
+ }finally{db.close()}
+})
+test('lifecycle sync preserves arrived and pending work, history and stale approvals',t=>{
+ t.mock.timers.enable({apis:['Date'],now:new Date('2026-09-07T01:00:00Z')})
+ const db=fixture();try{
+ assignRouteVehicle('2026-09-07',1,{vehicleId:1},db);approveRoute('2026-09-07',1,{approvedBy:'Manager'},db)
+ db.prepare('UPDATE dispatch_stops SET route_stop_sequence=99 WHERE id=?').run(stop(db,1).id)
+ db.prepare("UPDATE dispatch_stops SET arrived_at='2026-09-07 08:30:00' WHERE id=?").run(stop(db,2).id)
+ db.prepare("INSERT INTO driver_date_requests(dispatch_stop_id,employee_id,source_date,target_date,reason) VALUES(?,1,'2026-09-07','2026-09-08','Pending')").run(stop(db,3).id)
+ const second=stop(db,2),third=stop(db,3)
+ for(const id of ['B1','B2','B3'])changeBranchLifecycle(id,{lifecycleStatus:'CLOSED',reason:'Closed'},{changedBy:'KC'},db)
+ assert.equal(stillApproved(db),false);assert.deepEqual(stop(db,2),second);assert.deepEqual(stop(db,3),third)
+ }finally{db.close()}
+})
+test('lifecycle sync audit failure rolls back lifecycle, stops and approval signatures',t=>{
+ t.mock.timers.enable({apis:['Date'],now:new Date('2026-09-07T01:00:00Z')})
+ const db=fixture();try{
+ assignRouteVehicle('2026-09-07',1,{vehicleId:1},db);approveRoute('2026-09-07',1,{approvedBy:'Manager'},db)
+ const original=stop(db,1)
+ db.exec("CREATE TRIGGER reject_lifecycle_sync BEFORE INSERT ON audit_logs WHEN NEW.action='branch_lifecycle_stops_synced' BEGIN SELECT RAISE(ABORT,'sync failed'); END")
+ assert.throws(()=>changeBranchLifecycle('B1',{lifecycleStatus:'CLOSED',reason:'Closed'},{changedBy:'KC'},db),/sync failed/)
+ assert.deepEqual(stop(db,1),original);assert.equal(db.prepare('SELECT lifecycle_status FROM branches WHERE id=1').get().lifecycle_status,'ACTIVE');assert.ok(stillApproved(db))
+ }finally{db.close()}
+})

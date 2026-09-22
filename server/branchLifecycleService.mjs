@@ -1,4 +1,5 @@
 import {db as defaultDb} from './database.mjs'
+import {syncInactiveBranchStops} from './dispatchService.mjs'
 
 export const BRANCH_LIFECYCLE_STATUSES=['ACTIVE','TEMPORARILY_PAUSED','CLOSED','DUPLICATE_REPLACED','NOT_COLLECTING','TEST_INVALID']
 const text=value=>String(value??'').trim()
@@ -21,6 +22,7 @@ export function listBranchLifecycleReview(params={},database=defaultDb){
 export function listReplacementBranches(params={},database=defaultDb){const search=text(params.search),like=`%${search.replace(/^B/i,'')}%`;return database.prepare(`SELECT b.id internalId,b.jodoo_branch_id branchId,b.branch_name branchName,c.name customerName,a.name area FROM branches b LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas a ON a.id=b.area_id WHERE ${activeSql} AND (?='' OR b.jodoo_branch_id LIKE ? OR b.branch_name LIKE ? OR c.name LIKE ? OR a.name LIKE ?) ORDER BY c.name,b.branch_name LIMIT 100`).all(search,like,`%${search}%`,`%${search}%`,`%${search}%`)}
 
 export function applyBranchLifecycle(branchId,payload={},actor={},database=defaultDb){
+  if(!database.isTransaction)return changeBranchLifecycle(branchId,payload,actor,database)
   const status=text(payload.lifecycleStatus).toUpperCase(),changedBy=text(actor.changedBy||actor.employeeName)
   if(!BRANCH_LIFECYCLE_STATUSES.includes(status))throw Object.assign(new Error('Invalid Branch lifecycle status'),{statusCode:400})
   const before=database.prepare('SELECT * FROM branches WHERE jodoo_branch_id=?').get(String(branchId));if(!before)throw Object.assign(new Error('Branch not found'),{statusCode:404})
@@ -43,9 +45,10 @@ export function applyBranchLifecycle(branchId,payload={},actor={},database=defau
   const impact=status==='ACTIVE'?{stopCount:0,dispatchCount:0}:futureImpact(database,before.id),legacy=status==='ACTIVE'?{status:'active',isActive:1}:status==='CLOSED'?{status:'closed',isActive:0}:{status:'paused',isActive:0}
   const oldReplacement=before.replaced_by_branch_id?database.prepare('SELECT jodoo_branch_id,branch_name FROM branches WHERE id=?').get(before.replaced_by_branch_id):null
   database.prepare('UPDATE branches SET lifecycle_status=?,status_reason=?,status_changed_at=CURRENT_TIMESTAMP,status_changed_by=?,replaced_by_branch_id=?,status=?,is_active=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(status,reason||null,changedBy||'Authenticated User',replacement?.id||null,legacy.status,legacy.isActive,before.id)
+  const scheduleSync=['TEMPORARILY_PAUSED','CLOSED'].includes(status)?syncInactiveBranchStops({branchId:before.id,changedBy:changedBy||'Authenticated User'},database):null
   const after=database.prepare('SELECT * FROM branches WHERE id=?').get(before.id)
   database.prepare(`INSERT INTO master_change_history(entity_type,entity_id,change_type,field_name,old_value,new_value,before_json,after_json,reason,changed_by) VALUES('branch',?,'lifecycle_status_changed','lifecycle_status',?,?,?,?,?,?)`).run(before.jodoo_branch_id,previousStatus,status,json({lifecycleStatus:previousStatus,replacedByBranchId:oldReplacement?.jodoo_branch_id||null,replacedByBranchName:oldReplacement?.branch_name||null}),json({lifecycleStatus:status,replacedByBranchId:replacement?.jodoo_branch_id||null,replacedByBranchName:replacement?.branch_name||null}),reason||null,changedBy||'Authenticated User')
-  return{branchId:before.jodoo_branch_id,lifecycleStatus:status,statusReason:reason,statusChangedAt:after.status_changed_at,statusChangedBy:after.status_changed_by,replacedBy:replacement&&{internalId:replacement.id,branchId:replacement.jodoo_branch_id,branchName:replacement.branch_name},impact:{futureDispatches:Number(impact.dispatchCount||0),futureStops:Number(impact.stopCount||0)},warnings:Number(impact.stopCount||0)>0?[`${impact.stopCount} future or unfinished Stop(s) remain unchanged.`]:[]}
+  return{branchId:before.jodoo_branch_id,lifecycleStatus:status,statusReason:reason,statusChangedAt:after.status_changed_at,statusChangedBy:after.status_changed_by,replacedBy:replacement&&{internalId:replacement.id,branchId:replacement.jodoo_branch_id,branchName:replacement.branch_name},scheduleSync,impact:{futureDispatches:Number(futureImpact(database,before.id).dispatchCount||0),futureStops:Number(futureImpact(database,before.id).stopCount||0)},warnings:(scheduleSync?.preserved.length??Number(impact.stopCount||0))>0?[`${scheduleSync?.preserved.length??impact.stopCount} protected or explicit Stop(s) remain unchanged.`]:[]}
 }
 
 export function changeBranchLifecycle(branchId,payload={},actor={},database=defaultDb){

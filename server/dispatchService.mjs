@@ -1282,6 +1282,36 @@ export function syncSupervisorSavedSchedule({branchId,scheduleId,startDate=iso()
  })
 }
 
+// Lifecycle saves cancel only untouched generated work, never explicit reviewed visits.
+export function syncInactiveBranchStops({branchId,startDate=iso(),changedBy='Supervisor'},database=defaultDb){
+ return withImmediateTransaction(database,()=>{
+  const branch=database.prepare('SELECT lifecycle_status FROM branches WHERE id=?').get(branchId)
+  if(!['TEMPORARILY_PAUSED','CLOSED'].includes(branch?.lifecycle_status))throw new Error('Paused or closed Branch required')
+  const stops=database.prepare(`SELECT s.*,day.dispatch_date,day.status day_status,t.execution_status,d.status dispatch_status
+   FROM dispatch_stops s JOIN dispatch_trips t ON t.id=s.dispatch_trip_id
+   JOIN dispatch_days day ON day.id=t.dispatch_day_id JOIN dispatches d ON d.id=s.dispatch_id
+   WHERE s.branch_id=? AND day.dispatch_date>=? AND s.status NOT IN ('completed','cancelled')`).all(branchId,startDate)
+  const approvals=captureApprovedRoutes(database,stops.map(s=>s.dispatch_date)),cancelled=[],preserved=[]
+  for(const stop of stops){
+   const pendingSystem=database.prepare("SELECT 1 FROM driver_date_system_reviews WHERE branch_id=? AND status='pending'").get(branchId)
+   const explicit=!stop.source_schedule_id||stop.source_special_request_id||
+    database.prepare('SELECT 1 FROM schedule_exceptions WHERE schedule_id=? AND (original_date=? OR target_date=?)').get(stop.source_schedule_id,stop.dispatch_date,stop.dispatch_date)||
+    database.prepare('SELECT 1 FROM driver_date_reviews WHERE branch_id=? AND approved_date=?').get(branchId,stop.dispatch_date)||
+    database.prepare("SELECT 1 FROM dispatch_change_logs WHERE entity_type='dispatch_stop' AND entity_id=? AND change_type='route_customer_adjusted'").get(String(stop.id))
+   if(pendingSystem||explicit||scheduleStopHasProtectedWork(database,stop)||[stop.day_status,stop.execution_status,stop.dispatch_status].includes('completed')){
+    preserved.push({id:stop.id,date:stop.dispatch_date,reason:pendingSystem?'pending_system_review':explicit?'explicit_arrangement':'protected_work'});continue
+   }
+   database.prepare("UPDATE dispatch_stops SET status='cancelled',superseded_reason='branch_lifecycle_sync',superseded_by=?,superseded_at=CURRENT_TIMESTAMP WHERE id=?").run(changedBy,stop.id)
+   database.prepare("UPDATE schedule_occurrences SET status='cancelled',dispatch_stop_id=NULL,updated_at=CURRENT_TIMESTAMP WHERE dispatch_stop_id=?").run(stop.id)
+   invalidateDispatchDay(database,stop.dispatch_date,'branch_lifecycle_synced','dispatch_stop',stop.id,stop,{status:'cancelled',lifecycleStatus:branch.lifecycle_status},changedBy)
+   cancelled.push({id:stop.id,date:stop.dispatch_date})
+  }
+  retainApprovedRoutes(database,approvals,changedBy,'Supervisor confirmed Branch lifecycle')
+  if(cancelled.length)database.prepare("INSERT INTO audit_logs(action,entity_type,entity_id,after_json) VALUES('branch_lifecycle_stops_synced','branch',?,?)").run(String(branchId),JSON.stringify({changedBy,startDate,cancelled,preserved}))
+  return {cancelled,preserved}
+ })
+}
+
 function scheduleStopHasProtectedWork(db,stop){
  if(stop.arrived_at||stop.completed_at||['active','completed'].includes(stop.status)||stop.override_note||stop.invoice_number||stop.collected_weight_kg!=null||stop.payment_status)return true
  if(['purchase_bills','stop_documents','stop_step_records'].some(table=>db.prepare(`SELECT 1 FROM ${table} WHERE dispatch_stop_id=?`).get(stop.id)))return true

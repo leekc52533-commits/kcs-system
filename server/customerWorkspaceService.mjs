@@ -46,10 +46,11 @@ export function saveCustomerWorkspace(payload,actor={},db=defaultDb){
   const customer=before.customer?updateCustomer(before.customer.customerId,c,db):createCustomer(c,db)
   const bp={...pick(payload.branch,branchFields),customerId:customer.customerId,reason,changedBy}
   let branch=before.branch?updateBranchWithLifecycle(before.branch.branchId,bp,{changedBy,accountId:actor.id},db):createBranch(bp,db)
+  let lifecycleSync=null
   const requestedStatus=payload.branch?.lifecycleStatus
   if(requestedStatus!==undefined&&requestedStatus!==(branch.lifecycleStatus||'ACTIVE')){
    if(!['ACTIVE','TEMPORARILY_PAUSED','CLOSED'].includes(requestedStatus)||!['ACTIVE','TEMPORARILY_PAUSED','CLOSED'].includes(branch.lifecycleStatus||'ACTIVE'))throw fail('Invalid Branch lifecycle status')
-   applyBranchLifecycle(branch.branchId,{lifecycleStatus:requestedStatus,reason},{changedBy,accountId:actor.id},db)
+   lifecycleSync=applyBranchLifecycle(branch.branchId,{lifecycleStatus:requestedStatus,reason},{changedBy,accountId:actor.id},db)
    branch=getBranch(branch.branchId,db)
   }
   if(payload.schedule&&branch.lifecycleStatus==='ACTIVE'&&!['paused','closed'].includes(customer.status)){
@@ -62,7 +63,7 @@ export function saveCustomerWorkspace(payload,actor={},db=defaultDb){
    captureBranchGps(branch.branchId,{...pick(payload.gps,['latitude','longitude','accuracyM','capturedLatitude','capturedLongitude','capturedAccuracyM','deviceCapturedAt','manuallyAdjusted','adjustmentReason','address','state','street','city','streetNumber','postalCode','reverseGeocodeProvider','locationSource']),remark:reason,capturedBy:changedBy,changedBy,employeeId:actor.employeeId},db)
   }
   saveLocationCheck(payload,locationProof,getBranch(branch.branchId,db),actor,db)
-  let review=[]
+  let review=(lifecycleSync?.scheduleSync?.preserved||[]).map(item=>({...item,kind:'lifecycle_protected',branchId:branch.branchId,branchName:branch.branchName}))
   if(payload.schedule&&branch.lifecycleStatus==='ACTIVE'&&!['paused','closed'].includes(customer.status)){
    if(db.prepare('SELECT 1 FROM weekly_route_plans WHERE is_active=1').get())generateWeek({startDate:kuchingDate(),count:7,onlyMissing:true,generatedBy:changedBy},db)
    review=reconcileScheduleWindow({branchIds:[branch.internalId],changedBy},db).map(r=>({...r,expectedRevision:db.prepare('SELECT revision FROM dispatch_days WHERE dispatch_date=?').get(r.date)?.revision}))
