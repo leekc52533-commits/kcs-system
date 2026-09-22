@@ -34,12 +34,12 @@ test('Branch Directory remains internal and the empty Unlinked Branches tab is r
   assert.doesNotMatch(workspace,/UnlinkedBranchesPage|\['unlinked'/)
 })
 
-test('Customer search also returns Branch matches and opens the parent Customer',()=>{
+test('Customer search opens the matching Branch directly',()=>{
   assert.match(master,/api\(`\/api\/master\/branches\?search=\$\{encodeURIComponent\(term\)\}&pageSize=100`\)/)
   assert.match(master,/customerHierarchy\.branchMatches/)
   assert.match(master,/formatBranchId\(branch\.branchId\)/)
   assert.match(master,/formatCustomerId\(branch\.customerId\)/)
-  assert.match(master,/openBranchMatch=async branch=>\{await open\(\{customerId:branch\.customerId\}\);setExpanded\(branch\.branchId\)\}/)
+  assert.match(master,/openBranchMatch=async branch=>\{await editBranch\(branch\)\}/)
 })
 
 test('Customer hierarchy navigation labels remain complete in EN BM and ZH',()=>{

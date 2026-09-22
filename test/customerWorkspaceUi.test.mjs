@@ -168,3 +168,30 @@ test('standalone customer editor closes outside only when clean or discard confi
   await act(async()=>backdrop.click());assert.equal(closed,2)
  }finally{window.confirm=originalConfirm;await act(async()=>root.unmount())}
 })
+
+test('search result opens exact branch directly and closing preserves search; customer opens branch list',async()=>{
+ const {CustomerManager}=await vite.ssrLoadModule('/src/MasterDataPage.jsx')
+ const customer={customerId:'10063',customerName:'JUMBO',status:'active',branches:[{branchId:'10452',branchName:'JUMBO BAU',lifecycleStatus:'ACTIVE'}]},branch={...customer.branches[0],customerId:'10063'},calls=[]
+ window.history.replaceState({},'','/')
+ globalThis.fetch=async(url)=>{url=String(url);calls.push(url);let data
+ if(url.startsWith('/api/customer-workspace?'))data={customer,branch,schedule:null,pending:[],areas:[],routeOptions:[],revision:'r1'}
+ else if(url==='/api/master/branches/10452')data=branch
+ else if(url.startsWith('/api/master/branches?'))data={items:[branch]}
+ else if(url==='/api/customers/10063')data=customer
+ else if(url.startsWith('/api/customers?'))data={items:[customer]}
+ else data={items:[]}
+ return{ok:true,json:async()=>data}}
+ const root=createRoot(document.getElementById('root'))
+ try{
+  await act(async()=>root.render(React.createElement(I18nProvider,{language:'en'},React.createElement(CustomerManager,{actor:{canManageMaster:true},notify(){},fail:e=>{throw Error(e)}}))))
+  await change(document.querySelector('.master-filters input'),'JUMBO')
+  await act(async()=>new Promise(resolve=>setTimeout(resolve,250)))
+  await act(async()=>document.querySelector('.customer-branch-search-results button').click())
+  assert.ok(document.querySelector('.master-modal'));assert.ok([...document.querySelectorAll('.master-modal input')].some(x=>x.value==='JUMBO BAU'))
+  assert.equal(calls.includes('/api/customers/10063'),false);assert.equal(window.location.search,'')
+  await act(async()=>document.querySelector('.master-modal').click())
+  assert.equal(document.querySelector('.master-modal'),null);assert.equal(document.querySelector('.master-filters input').value,'JUMBO')
+  await act(async()=>[...document.querySelectorAll('.customer-master-table button')].find(b=>b.textContent==='JUMBO').click())
+  assert.ok(document.querySelector('.customer-detail'));assert.ok(document.querySelector('.customer-branch-list'));assert.equal(document.querySelector('.master-modal'),null)
+ }finally{await act(async()=>root.unmount());window.history.replaceState({},'','/')}
+})
