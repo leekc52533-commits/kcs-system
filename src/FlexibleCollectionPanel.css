@@ -10,4 +10,3 @@
 .route-card-actions .route-customer-transfer{flex:0 1 auto;margin:0;padding:0;border:0;background:transparent}
 .route-card-actions .route-customer-transfer:not([open]){max-width:none}
 .route-card-actions .route-customer-transfer[open]{flex-basis:100%;padding:12px;border:1px solid #bddbd5;border-radius:12px;background:#fff}
-.route-card-actions .route-customer-transfer>summary{font-family:inherit;font-size:.82rem;font-weight:600;line-height:1.4}
