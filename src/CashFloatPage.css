@@ -4,3 +4,10 @@
 .cash-history-title{display:flex;align-items:center;gap:12px}.cash-download-icon{display:grid;place-items:center}.cash-download-range{display:flex;align-items:end;gap:10px;flex-wrap:wrap;padding:14px;margin:12px 0;background:#f2f8f6;border:1px solid #bdd8d1;border-radius:12px}.cash-download-range label{display:grid;gap:5px}.cash-download-range input{max-width:100%;box-sizing:border-box}.cash-date-options{display:grid;gap:4px;max-height:250px;overflow:auto;min-width:145px;padding:8px;border:1px solid #bdd8d1;border-radius:12px;background:white;box-shadow:0 5px 16px #19332e22}.cash-date-options button{text-align:left}
 
 .cash-ledger th{font-size:.78rem;padding:11px 10px;white-space:nowrap}
+
+/* Anchor More to the card action row so it cannot extend underneath the sidebar. */
+.cash-card-actions{position:relative}
+.cash-card-actions .cash-more{position:static}
+.cash-card-actions .cash-more>div{left:0;right:auto;top:calc(100% + 4px);box-sizing:border-box;width:100%;max-width:100%;padding:12px}
+.cash-more .cash-line{flex-wrap:wrap;gap:6px 12px}
+.cash-more .cash-line>span{min-width:0;overflow-wrap:anywhere}
