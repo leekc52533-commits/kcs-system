@@ -42,7 +42,8 @@
 .route-assignment-card summary .route-name-trigger{display:block;min-width:0;max-width:100%;margin:0;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;color:inherit;font:inherit;font-weight:700;line-height:inherit;text-align:left;white-space:normal;overflow-wrap:anywhere;cursor:pointer}.route-assignment-card summary .route-name-trigger:hover{text-decoration:underline;text-underline-offset:3px}.route-assignment-card summary .route-name-trigger:focus-visible{outline:3px solid #8dd3c2;outline-offset:3px}
 
 /* Route assignments use the same compact header-and-row layout as the records tables. */
-.route-week-board,.week-board--single-day{display:block;width:100%}
+.route-week-board{display:block;width:100%}
+.planner-page .week-board--single-day{display:block;width:100%;overflow:visible}
 .route-week-board>.vehicle-day,.week-board--single-day>.vehicle-day,.route-week-board .route-assignment-panel,.week-board--single-day .route-assignment-panel{box-sizing:border-box;width:100%;min-width:0}
 .route-assignment-grid,.route-week-board .route-assignment-grid{display:block;overflow-x:auto;scrollbar-width:thin}
 .route-assignment-heading,.route-assignment-card summary{display:grid;grid-template-columns:minmax(130px,1.4fr) 65px minmax(120px,1fr) minmax(120px,1fr) minmax(110px,.9fr) minmax(120px,1fr);min-width:740px;width:100%;align-items:center;gap:8px}
