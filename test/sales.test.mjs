@@ -1,3 +1,4 @@
+import {applyV85Migration} from '../server/migrationV85.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {DatabaseSync} from 'node:sqlite'
@@ -59,5 +60,23 @@ test('precision migration preserves existing purchase bill cents and merges equi
  assert.equal(applyV84Migration(db).noOp,true)
  assert.deepEqual(listSalePrices(db).map(row=>row.unitPrice),['0.420'])
  assert.equal(db.prepare('SELECT COUNT(*) n FROM sale_price_audit').get().n,1)
+ assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(),[])
+})
+
+test('confirmed OCC OCR aliases normalize old records without changing prices or totals',t=>{
+ const aliases=['OUD CORRUGATED BOX','bee OLD CORRUGATED BOX','CORRUGATED BOX','LD CORRUGATED BOX','SLD CORRUGATED BOX','ULD CURRUGATED BOX','OLD CORRUATED BOX','GUD CORRUGATED BOX','OLD CORRUGATED BOX -','OUDCORRUGATED BOx -']
+ for(const alias of aliases)assert.equal(canonicalSaleMaterial(alias),'OCC')
+ assert.equal(canonicalSaleMaterial('NEW CORRUGATED BOX'),'NEW CORRUGATED BOX')
+ assert.equal(canonicalSaleMaterial('Mixed Paper'),'Mixed Paper')
+ const{db,uploadsRoot}=setup(t),bill=payload(),saved=saveSales(bill,office,db,{uploadsRoot})
+ const lines=bill.lines.map((line,i)=>({...line,description:aliases[i]}))
+ db.prepare('UPDATE sales_settlements SET lines_json=? WHERE id=?').run(JSON.stringify(lines),saved.id)
+ for(const [name,price] of [['OCC','0.420'],[aliases[0],'0.420'],[aliases[1],'0.470']])db.prepare('INSERT INTO sale_price_catalog(description,description_key,unit_price,updated_by) VALUES(?,?,?,?)').run(name,name.toLowerCase(),price,'Office')
+ db.exec('INSERT INTO schema_meta(version) VALUES(84)')
+ applyV85Migration(db)
+ assert.equal(applyV85Migration(db).noOp,true)
+ assert.deepEqual(salesRecord(saved.id,office,db).lines,lines.map(line=>({...line,description:'OCC'})))
+ assert.equal(salesRecord(saved.id,office,db).total,saved.total)
+ assert.deepEqual(listSalePrices(db).map(row=>[row.description,row.unitPrice]),[['OCC','0.420'],['OCC','0.470']])
  assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(),[])
 })

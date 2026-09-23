@@ -1,9 +1,11 @@
 export const salesColumns=['documentNumber','settlementDate','deliveryDate','billNumber','buyerName','vehiclePlate','slipNumber','description','weightKg','unitPrice','amount','total','remarks','createdBy']
 export const billKey=value=>String(value||'').trim().toUpperCase().replace(/\s+/g,'')
+const occMaterialAliases=new Set(['OCC','OLDCORRUGATED','OLDCORRUGATEDBOX','OUDCORRUGATEDBOX','BEEOLDCORRUGATEDBOX','CORRUGATEDBOX','LDCORRUGATEDBOX','SLDCORRUGATEDBOX','ULDCURRUGATEDBOX','OLDCORRUATEDBOX','GUDCORRUGATEDBOX'])
 // Sale documents may spell the same recovered material in several ways.
 export const canonicalSaleMaterial=value=>{
  const name=String(value||'').trim().replace(/\s+/g,' ')
- return /^(?:OCC|OLD CORRUGATED(?: BOX)?)$/i.test(name)?'OCC':name
+ const key=name.toUpperCase().replace(/[\s-]+/g,'')
+ return occMaterialAliases.has(key)?'OCC':name
 }
 export const validSalesDate=value=>/^\d{4}-\d{2}-\d{2}$/.test(String(value))&&!Number.isNaN(Date.parse(value+'T00:00:00Z'))&&new Date(value+'T00:00:00Z').toISOString().slice(0,10)===value
 // New quantities/prices use two/three decimals; final amounts are integer cents.
