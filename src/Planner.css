@@ -40,3 +40,21 @@
 .route-assignment-card .route-handover button+button{margin-left:8px}
 
 .route-assignment-card summary .route-name-trigger{display:block;min-width:0;max-width:100%;margin:0;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;color:inherit;font:inherit;font-weight:700;line-height:inherit;text-align:left;white-space:normal;overflow-wrap:anywhere;cursor:pointer}.route-assignment-card summary .route-name-trigger:hover{text-decoration:underline;text-underline-offset:3px}.route-assignment-card summary .route-name-trigger:focus-visible{outline:3px solid #8dd3c2;outline-offset:3px}
+
+/* Route assignments use the same compact header-and-row layout as the records tables. */
+.route-week-board{grid-template-columns:minmax(0,1fr)}
+.route-assignment-grid,.route-week-board .route-assignment-grid{display:block;overflow-x:auto;scrollbar-width:thin}
+.route-assignment-heading,.route-assignment-card summary{display:grid;grid-template-columns:minmax(130px,1.4fr) 65px minmax(120px,1fr) minmax(120px,1fr) minmax(110px,.9fr) minmax(120px,1fr);min-width:740px;align-items:center;gap:8px}
+.route-assignment-heading{padding:10px 12px;background:#f2f6f9;border:1px solid #d6e0e7;border-radius:8px 8px 0 0;color:#526474;font-weight:700;font-size:.82rem}
+.route-assignment-card,.route-assignment-card.approved{margin:0;padding:0;border-radius:0;border-top:0;background:#fff}
+.route-assignment-card:last-child{border-radius:0 0 8px 8px}
+.route-assignment-card summary{box-sizing:border-box;min-height:58px;padding:8px 12px;list-style:none}
+.route-assignment-card summary::-webkit-details-marker{display:none}
+.route-assignment-card.approved summary{background:#edf6ff}
+.route-assignment-card summary strong,.route-assignment-card summary em,.route-assignment-card summary .route-service-date{grid-column:auto;margin:0;font-size:.82rem}
+.route-assignment-card summary .route-name-row{color:#196c5f}
+.route-assignment-card summary .route-name-trigger{text-decoration:underline;text-underline-offset:3px}
+.route-assignment-card summary .route-collection-control{margin:0}
+.route-assignment-card summary .route-collection-control button{min-height:36px;padding:5px 9px;font-size:.78rem}
+.route-assignment-card> :not(summary){margin-left:12px;margin-right:12px}
+.route-assignment-card> :last-child{margin-bottom:12px}
