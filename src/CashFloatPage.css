@@ -11,3 +11,14 @@
 .cash-card-actions .cash-more>div{left:0;right:auto;top:calc(100% + 4px);box-sizing:border-box;width:100%;max-width:100%;padding:12px}
 .cash-more .cash-line{flex-wrap:wrap;gap:6px 12px}
 .cash-more .cash-line>span{min-width:0;overflow-wrap:anywhere}
+
+/* Compact employee cards without changing shared ledger or spending rows. */
+.cash-account-grid{align-items:start}
+.cash-account-grid article{padding:12px}
+.cash-account-grid h2{margin:2px 0 4px}
+.cash-account-grid .cash-arithmetic{margin:6px 0 8px}
+.cash-account-grid .cash-line{padding:4px 0}
+.cash-account-grid .cash-line-total{margin-top:3px;padding:7px 0}
+.cash-account-grid .cash-card-actions button,
+.cash-account-grid .cash-more summary,
+.cash-account-grid article>button{box-sizing:border-box;min-height:44px;padding:8px 12px}
