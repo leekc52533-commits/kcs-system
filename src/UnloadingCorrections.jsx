@@ -3,9 +3,10 @@ import {useState,useEffect} from 'react'
 import {useI18n} from './i18n.jsx'
 import {apiRequest} from './apiClient.js'
 import {unloadingCorrectionWords} from '../shared/unloadingCorrectionWords.js'
+import {formatWeight} from '../shared/measurePrecision.js'
 const keys=['weighedAt','tripNumber','vehicleCode','registrationNumber','driverName','crew','locationName','address','estimatedWeightKg','grossWeightKg','tareWeightKg','confirmedWeightKg']
 const local=v=>new Date(Date.parse(v)+8*3600000).toISOString().slice(0,19)
-export function UnloadingDiff({before,after,w}){const a=typeof before==='string'?JSON.parse(before):before,b=typeof after==='string'?JSON.parse(after):after;return <dl>{keys.filter(k=>a[k]!==b[k]).map(k=><div key={k}><dt>{w[k]}</dt><dd data-i18n-raw>{a[k]??'—'} → {b[k]??'—'}</dd></div>)}</dl>}
+export function UnloadingDiff({before,after,w}){const a=typeof before==='string'?JSON.parse(before):before,b=typeof after==='string'?JSON.parse(after):after,display=(key,value)=>value==null?'—':key.endsWith('Kg')?formatWeight(value):value;return <dl>{keys.filter(k=>a[k]!==b[k]).map(k=><div key={k}><dt>{w[k]}</dt><dd data-i18n-raw>{display(k,a[k])} → {display(k,b[k])}</dd></div>)}</dl>}
 export default function UnloadingCorrections({onClose,onSaved,initialCode=''}){
  const{language,t}=useI18n(),w=unloadingCorrectionWords[language]||unloadingCorrectionWords.en
  const[q,setQ]=useState(initialCode),[data,setData]=useState(null),[item,setItem]=useState(null),[values,setValues]=useState(null),[reason,setReason]=useState(''),[reviews,setReviews]=useState({}),[busy,setBusy]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState(''),[searched,setSearched]=useState(false)
