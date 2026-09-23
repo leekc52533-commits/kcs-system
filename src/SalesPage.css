@@ -1,12 +1,12 @@
 @import './ExpenseRecordsPage.css';
-.sales-link{border:0;background:transparent;color:#186e5c;font:inherit;font-weight:800;text-decoration:underline;cursor:pointer}.sales-modal>form{width:min(1200px,96vw)!important;max-width:96vw!important}.sales-review-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px}.sales-proof{width:100%;max-height:480px;object-fit:contain}.sales-fields,.sales-lines fieldset{display:grid;gap:12px}.sales-lines fieldset{grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid #bdd5ce;border-radius:12px;margin:16px 0}.sales-modal label{display:grid;gap:6px}.sales-modal input,.sales-modal select{box-sizing:border-box;width:100%;font:inherit;padding:10px;border:1px solid #bdd5ce;border-radius:10px}.sales-modal button{font:inherit;font-weight:700;background:#e8f3ef;color:#24584b;border:1px solid #bdd5ce;border-radius:12px;padding:10px 16px}.sales-modal button:disabled{opacity:.5}.sales-modal .sales-confirm{display:flex;align-items:center;gap:12px;margin:16px 0}.sales-confirm input{width:20px;height:20px;accent-color:#186e5c}@media(max-width:700px){.sales-review-grid{grid-template-columns:1fr}.sales-lines fieldset{grid-template-columns:repeat(2,minmax(0,1fr))}.sales-proof{max-height:280px}}
+.sales-link{border:0;background:transparent;color:#186e5c;font:inherit;font-weight:400;text-decoration:none;cursor:pointer}.sales-modal>form{width:min(1200px,96vw)!important;max-width:96vw!important}.sales-review-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px}.sales-proof{width:100%;max-height:480px;object-fit:contain}.sales-fields,.sales-lines fieldset{display:grid;gap:12px}.sales-lines fieldset{grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid #bdd5ce;border-radius:12px;margin:16px 0}.sales-modal label{display:grid;gap:6px}.sales-modal input,.sales-modal select{box-sizing:border-box;width:100%;font:inherit;padding:10px;border:1px solid #bdd5ce;border-radius:10px}.sales-modal button{font:inherit;font-weight:700;background:#e8f3ef;color:#24584b;border:1px solid #bdd5ce;border-radius:12px;padding:10px 16px}.sales-modal button:disabled{opacity:.5}.sales-modal .sales-confirm{display:flex;align-items:center;gap:12px;margin:16px 0}.sales-confirm input{width:20px;height:20px;accent-color:#186e5c}@media(max-width:700px){.sales-review-grid{grid-template-columns:1fr}.sales-lines fieldset{grid-template-columns:repeat(2,minmax(0,1fr))}.sales-proof{max-height:280px}}
 
 /* KC's compact text, spacing and icon standard. */
 #root .sales-page{font-size:1rem;gap:8px}
 #root .sales-page .archive-table th{font-size:inherit;font-weight:700;line-height:1.2;padding:4px 10px}
 #root .sales-page .archive-table td{font-size:inherit;line-height:1.1;padding:1px 10px;height:31px;vertical-align:middle}
 #root .sales-page .expense-filter-trigger{font:inherit;font-weight:700;min-height:0;padding:0;gap:4px}
-#root .sales-page .sales-link{font:inherit;font-weight:600;padding:0;min-height:0;line-height:1.1;border:0;background:transparent}
+#root .sales-page .sales-link{font:inherit;font-weight:400;text-decoration:none;padding:0;min-height:0;line-height:1.1;border:0;background:transparent}
 #root .sales-page .expense-toolbar{gap:8px;padding:4px 0;margin:0;flex-wrap:wrap;overflow:visible}
 #root .sales-page .expense-toolbar>label{font:inherit;gap:6px}
 #root .sales-page .expense-toolbar input{font:inherit;width:148px;min-height:32px;height:32px;padding:4px 8px;border-radius:6px}
@@ -16,3 +16,5 @@
 #root .sales-page .expense-toolbar>button:hover{background:#f0f1f2}
 #root .sales-page .expense-toolbar>button.active{background:#e8f3ef;color:#186e5c}
 #root .sales-page .expense-toolbar>button:focus-visible{outline:2px solid #196c5d;outline-offset:2px}
+
+#root .sales-page .expense-toolbar>button.sales-action-icon{flex:0 0 auto;width:auto;font:inherit;font-weight:400;padding:2px 6px}
