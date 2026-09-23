@@ -4492,3 +4492,6 @@ Object.assign(messages.zh,{'salePrices.title':'卖货货品与价格','salePrice
 Object.assign(messages.en,{'salePrices.confirmRemove':'Remove this selling price? Saved bills will stay unchanged.'})
 Object.assign(messages.ms,{'salePrices.confirmRemove':'Buang harga jualan ini? Bil yang disimpan tidak berubah.'})
 Object.assign(messages.zh,{'salePrices.confirmRemove':'删除这项卖价？已保存的卖货单不会改变。'})
+Object.assign(messages.en,{'salePrices.help':'Set one selling price for each material. Sales bills still save their actual entered prices.','apiError.sales_price_invalid':'Enter a material and a valid selling price.'})
+Object.assign(messages.ms,{'salePrices.help':'Tetapkan satu harga jualan bagi setiap bahan. Bil jualan tetap menyimpan harga sebenar yang diisi.','apiError.sales_price_invalid':'Isi bahan dan harga jualan yang sah.'})
+Object.assign(messages.zh,{'salePrices.help':'每种货品设定一个卖价；卖货单仍按实际填写的价格保存。','apiError.sales_price_invalid':'请填写货品及正确卖价。'})
