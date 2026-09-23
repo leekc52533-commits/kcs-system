@@ -10,7 +10,7 @@ export function myBills(query={},ctx={},db=defaultDb){
  const page=Math.max(0,Math.floor(Number(query.page)||0));if(!Number.isSafeInteger(page)||page>1000000)throw fail('INVALID_DATE',400)
  const total=db.prepare('SELECT COUNT(*) n FROM purchase_bills pb WHERE '+where.join(' AND ')).get(...args).n
  const rows=db.prepare(`SELECT pb.id,pb.bill_number billNumber,pb.service_date serviceDate,pb.customer_name_snapshot customerName,pb.branch_name_snapshot branchName,pb.driver_name_snapshot issuedBy,pb.vehicle_code_snapshot vehicleCode,pb.registration_number_snapshot registrationNumber,pb.total_cents totalCents,pb.payment_method paymentMethod,pb.status,pb.issued_at issuedAt,EXISTS(SELECT 1 FROM purchase_payment_proofs p WHERE p.purchase_bill_id=pb.id) hasProof FROM purchase_bills pb WHERE ${where.join(' AND ')} ORDER BY pb.service_date DESC,pb.id DESC LIMIT 50 OFFSET ?`).all(...args,page*50)
- const items=db.prepare('SELECT product_name_snapshot item,short_form_snapshot shortForm,unit_snapshot unit,quantity,unit_price_cents unitPriceCents,line_total_cents itemTotalCents FROM purchase_bill_items WHERE purchase_bill_id=? ORDER BY id')
+ const items=db.prepare('SELECT product_name_snapshot item,short_form_snapshot shortForm,unit_snapshot unit,quantity,unit_price_cents unitPriceCents,unit_price_mills unitPriceMills,COALESCE(unit_price_mills,unit_price_cents*10)/1000.0 unitPrice,line_total_cents itemTotalCents FROM purchase_bill_items WHERE purchase_bill_id=? ORDER BY id')
  return {total,page,items:rows.map(row=>({...row,items:items.all(row.id)})),hasMore:(page+1)*50<total}
 }
 export function myBillProof(billId,ctx={},db=defaultDb){

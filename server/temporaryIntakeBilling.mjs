@@ -1,4 +1,5 @@
 import {flexibleExecution} from './flexibleCollectionPolicy.mjs'
+import {validUnitPrice} from '../shared/measurePrecision.js'
 // No database singleton: usable inside the existing billing transaction.
 export const temporaryIntake=(db,stopId)=>db.prepare('SELECT * FROM temporary_customer_intakes WHERE dispatch_stop_id=?').get(Number(stopId))
 export function intakeEvent(db,id,action,actor,details={}){
@@ -14,13 +15,13 @@ export function temporaryPrice(db,stopId,item){
  const products=temporaryProducts(db,stopId)
  if(!products)return null
  const p=products.find(p=>p.productId===Number(item.productId)),raw=item.unitPrice??p?.currentPrice,price=Number(raw)
- if(!p||raw==null||String(raw).trim()===''||!Number.isFinite(price)||price<0||price>100000||Math.abs(price*100-Math.round(price*100))>1e-6){const e=Error('Enter a valid price for this temporary collection.');e.code='INTAKE_PRICE';e.statusCode=400;throw e}
+ if(!p||raw==null||String(raw).trim()===''||!Number.isFinite(price)||!validUnitPrice(raw)||price>100000){const e=Error('Enter a valid price for this temporary collection.');e.code='INTAKE_PRICE';e.statusCode=400;throw e}
  return {...p,currentPrice:price}
 }
 export function notifyIntakeBill(db,stopId,billId,items,actor){
  const intake=temporaryIntake(db,stopId)
  if(!intake)return
- db.prepare("UPDATE temporary_customer_intakes SET status=CASE WHEN status='draft' THEN 'pending' ELSE status END,prices_json=? WHERE id=?").run(JSON.stringify(Object.fromEntries(items.map(i=>[i.productId,i.unitPriceCents/100]))),intake.id)
+ db.prepare("UPDATE temporary_customer_intakes SET status=CASE WHEN status='draft' THEN 'pending' ELSE status END,prices_json=? WHERE id=?").run(JSON.stringify(Object.fromEntries(items.map(i=>[i.productId,i.unitPriceMills/1000]))),intake.id)
  intakeEvent(db,intake.id,'bill_issued',actor,{billId,prices:items.map(i=>({productId:i.productId,unitPriceCents:i.unitPriceCents,quantity:i.quantity}))})
 }
 

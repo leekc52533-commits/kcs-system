@@ -9,7 +9,7 @@ import {sortMaterials} from '../shared/materialOrder.js'
 export {COLLECTION_FREQUENCIES, normalizeCollectionSettings}
 export const WEEKDAYS=COLLECTION_WEEKDAYS
 const text=value=>String(value??'').trim()
-const amount=value=>{const number=Number(value);if(!Number.isFinite(number)||number<0)throw new Error('Price must be zero or greater');return Math.round(number*1e6)/1e6}
+const amount=value=>{const number=Number(value);if(!Number.isFinite(number)||number<0||String(value).split('.')[1]?.length>3)throw new Error('Price must be zero or greater with at most 3 decimal places');return Math.round(number*1e3)/1e3}
 const specialPriceAmount=value=>{
   const raw=text(value),number=Number(raw)
   if(!raw||!Number.isFinite(number))throw new Error('Special Price must be a valid number')

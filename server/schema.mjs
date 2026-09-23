@@ -1548,6 +1548,7 @@ CREATE TABLE IF NOT EXISTS purchase_bill_items (
   unit_snapshot TEXT,
   quantity REAL NOT NULL CHECK(quantity>0),
   unit_price_cents INTEGER NOT NULL CHECK(unit_price_cents>0),
+  unit_price_mills INTEGER,
   line_total_cents INTEGER NOT NULL CHECK(line_total_cents>=0),
   price_type_snapshot TEXT,
   price_group_id_snapshot INTEGER,

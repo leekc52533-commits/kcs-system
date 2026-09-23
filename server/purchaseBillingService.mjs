@@ -9,12 +9,13 @@ import {db as defaultDb} from './database.mjs'
 import {withImmediateTransaction} from './branchServiceDateGuard.mjs'
 import {listBranchProducts,requireBranchProductPrice} from './materialProductService.mjs'
 import {kuchingDate} from '../shared/kuchingTime.js'
+import {validWeight,formatWeight,validUnitPrice,formatUnitPrice} from '../shared/measurePrecision.js'
 import {recordCashPurchase} from './cashFloatService.mjs'
 import {activeRouteDriver} from './routeDriverAuthorization.mjs'
 
 const fail=(message,code='INVALID_BILL',statusCode=409)=>{const error=new Error(message);error.code=code;error.statusCode=statusCode;return error}
 const nowKuching=(input=new Date())=>{const parts=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuching',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(input)).map(part=>[part.type,part.value]));return`${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}+08:00`}
-const money=value=>Math.round(Number(value)*100)
+const priceMills=value=>Math.round(Number(value)*1000)
 
 function activeDriver(database,employeeId,role){
   const employee=activeRouteDriver(database,employeeId,role)
@@ -45,7 +46,7 @@ function bill(database,stopId,billId=null){
     FROM purchase_bills pb WHERE pb.dispatch_stop_id=? AND ((? IS NULL AND pb.status='issued') OR pb.id=?)`).get(Number(stopId),billId,billId)
   if(!header)return null
   const items=database.prepare(`SELECT id,product_id productId,material_id materialId,product_code_snapshot productCode,product_name_snapshot productName,
-    short_form_snapshot shortForm,unit_snapshot unit,quantity,unit_price_cents unitPriceCents,line_total_cents lineTotalCents,
+    short_form_snapshot shortForm,unit_snapshot unit,quantity,unit_price_cents unitPriceCents,unit_price_mills unitPriceMills,COALESCE(unit_price_mills,unit_price_cents*10)/1000.0 unitPrice,line_total_cents lineTotalCents,
     price_type_snapshot priceType,price_group_id_snapshot priceGroupId FROM purchase_bill_items WHERE purchase_bill_id=? ORDER BY id`).all(header.id)
   return{id:Number(header.id),billNumber:header.bill_number,stopId:Number(header.dispatch_stop_id),serviceDate:header.service_date,
     customerName:header.customer_name_snapshot,branchId:header.branch_code_snapshot,branchName:header.branch_name_snapshot,
@@ -77,9 +78,10 @@ export function createPurchaseBill(stopId,payload={},context={},database=default
     if(ids.some(id=>!Number.isInteger(id)||id<=0)||new Set(ids).size!==ids.length)throw fail('Each Product can appear only once.','DUPLICATE_PRODUCT',400)
     const items=payload.items.map(item=>{
       const product=temporaryPrice(database,stop.id,item)||requireBranchProductPrice(stop.branchId,item.productId,database),quantity=Number(item.quantity)
-      if(!Number.isFinite(quantity)||quantity<=0||quantity>1000000)throw fail(`Enter a valid quantity for ${product.fullName}.`,'INVALID_QUANTITY',400)
-      const unitPriceCents=money(product.currentPrice),lineTotalCents=Math.round(quantity*unitPriceCents)
-      return{...product,quantity,unitPriceCents,lineTotalCents}
+      if(!validWeight(item.quantity)||quantity>1000000)throw fail(`Enter a valid quantity for ${product.fullName}.`,'INVALID_QUANTITY',400)
+      if(!validUnitPrice(formatUnitPrice(product.currentPrice)))throw fail(`Enter a valid unit price for ${product.fullName}.`,'INVALID_PRICE',400)
+      const unitPriceMills=priceMills(product.currentPrice),unitPriceCents=Math.max(1,Math.round(unitPriceMills/10)),lineTotalCents=Math.round(Math.round(quantity*100)*unitPriceMills/1000)
+      return{...product,quantity:Number(formatWeight(quantity)),unitPriceMills,unitPriceCents,lineTotalCents}
     })
     const totalCents=items.reduce((sum,item)=>sum+item.lineTotalCents,0),issuedAt=nowKuching(now),temporary=`PENDING-${crypto.randomUUID()}`
     const result=database.prepare(`INSERT INTO purchase_bills(bill_number,dispatch_stop_id,dispatch_trip_id,dispatch_day_id,branch_id,customer_id,driver_employee_id,vehicle_id,service_date,
@@ -88,8 +90,8 @@ export function createPurchaseBill(stopId,payload={},context={},database=default
         stop.customerName||'Unknown Customer',stop.branchCode,stop.branchName||stop.branchCode,stop.driverName,stop.vehicleCode,stop.registrationNumber,stop.paymentMethod,weightMethod,printChoice,totalCents,totalCents,issuedAt)
     const purchaseBillId=Number(result.lastInsertRowid),billNumber=allocateDocumentNumber(database,'P','purchase-'+purchaseBillId,now)
     database.prepare('UPDATE purchase_bills SET bill_number=? WHERE id=?').run(billNumber,purchaseBillId)
-    const insert=database.prepare(`INSERT INTO purchase_bill_items(purchase_bill_id,product_id,material_id,product_code_snapshot,product_name_snapshot,short_form_snapshot,unit_snapshot,quantity,unit_price_cents,line_total_cents,price_type_snapshot,price_group_id_snapshot) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`)
-    for(const item of items)insert.run(purchaseBillId,item.productId,item.materialId,item.productCode,item.fullName,item.shortForm,item.unit,item.quantity,item.unitPriceCents,item.lineTotalCents,item.priceType,item.priceGroupId)
+    const insert=database.prepare(`INSERT INTO purchase_bill_items(purchase_bill_id,product_id,material_id,product_code_snapshot,product_name_snapshot,short_form_snapshot,unit_snapshot,quantity,unit_price_cents,unit_price_mills,line_total_cents,price_type_snapshot,price_group_id_snapshot) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    for(const item of items)insert.run(purchaseBillId,item.productId,item.materialId,item.productCode,item.fullName,item.shortForm,item.unit,item.quantity,item.unitPriceCents,item.unitPriceMills,item.lineTotalCents,item.priceType,item.priceGroupId)
     const totalWeight=items.filter(item=>/kg|kilogram/i.test(String(item.unit||'kg'))).reduce((sum,item)=>sum+item.quantity,0)
     database.prepare('UPDATE dispatch_stops SET invoice_number=?,payment_status=?,collected_weight_kg=CASE WHEN ?>0 THEN ? ELSE collected_weight_kg END WHERE id=?').run(billNumber,stop.paymentMethod==='Cash'?'pending_proof':'credit',totalWeight,totalWeight,stop.id)
     database.prepare(`INSERT OR REPLACE INTO stop_step_records(dispatch_stop_id,step_key,completed_by,completed_at,payload_json) VALUES(?,'invoice_driver_confirmed',NULL,?,?)`).run(stop.id,issuedAt,JSON.stringify({method:'electronic_purchase_bill',billId:purchaseBillId,billNumber,paymentMethod:stop.paymentMethod,driverEmployeeId:Number(employeeId)}))

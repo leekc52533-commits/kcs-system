@@ -117,7 +117,7 @@ export function validateCustomerPricing(items) {
 
 export function formatPrice(price) {
   return price !== null && price !== undefined && price !== '' && Number.isFinite(Number(price))
-    ? `RM${Number(price).toFixed(2)}/kg`
+    ? `RM${Number(price).toFixed(3)}/kg`
     : 'Price not configured'
 }
 

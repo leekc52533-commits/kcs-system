@@ -1,3 +1,4 @@
+import {applyV84Migration} from './migrationV84.mjs'
 import {applyV83Migration} from './migrationV83.mjs'
 import {applyV82Migration} from './migrationV82.mjs'
 import {applyV81Migration} from './migrationV81.mjs'
@@ -382,6 +383,7 @@ applyV80Migration(db)
 applyV81Migration(db)
 applyV82Migration(db)
 applyV83Migration(db)
+applyV84Migration(db)
 const officialVehicles = [
   ['Lorry 1','QAV3468','available',0,null],
   ['Lorry 2','QAA4293N','active',1,null],

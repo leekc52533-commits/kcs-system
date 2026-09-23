@@ -1,7 +1,7 @@
 import {legacySalesRows} from './legacySalesEarnings.mjs'
 import {createHash} from 'node:crypto'
 import {kuchingDate} from '../shared/kuchingTime.js'
-export const defaultEarningsRules={driver:[{from:0,rate:0.03},{from:25000,rate:0.04},{from:27500.001,rate:0.043},{from:30000,rate:0.045},{from:34500.001,rate:0.047},{from:40000,rate:0.05}],crewRate:0.03}
+export const defaultEarningsRules={driver:[{from:0,rate:0.03},{from:25000,rate:0.04},{from:27500.01,rate:0.043},{from:30000,rate:0.045},{from:34500.01,rate:0.047},{from:40000,rate:0.05}],crewRate:0.03}
 const fail=(code,statusCode=400)=>Object.assign(Error(code),{code,statusCode})
 const kg=n=>Math.round(n*1000)/1000
 const precision=(n,d)=>Number.isFinite(n)&&Math.abs(n*Math.pow(10,d)-Math.round(n*Math.pow(10,d)))<0.00001
@@ -17,7 +17,7 @@ export function earningsAmount(driverKg,crewKg,rules=defaultEarningsRules){const
 function currentRule(db,start){const r=db.prepare('SELECT * FROM earnings_rules WHERE effective_start<=? ORDER BY effective_start DESC,id DESC LIMIT 1').get(start);return{version:r?.id||0,...(r?JSON.parse(r.rules_json):defaultEarningsRules)}}
 export function earningsSettings(db,ctx){owner(ctx);return{revision:db.prepare('SELECT COALESCE(MAX(id),0) id FROM earnings_rules').get().id,versions:db.prepare('SELECT id,effective_start effectiveStart,rules_json rules,created_at createdAt FROM earnings_rules ORDER BY effective_start DESC,id DESC').all().map(r=>({...r,rules:JSON.parse(r.rules)})),defaults:defaultEarningsRules}}
 export function saveEarningsSettings(db,ctx,p){owner(ctx);const period=earningsPeriod(p.effectiveStart);if(period.start!==p.effectiveStart||period.start<earningsPeriod(ctx.today||kuchingDate()).start)throw fail('EARN_DATE');const rules=p.rules;
- if(!rules||!Array.isArray(rules.driver)||!rules.driver.length||rules.driver.length>20||rules.driver[0].from!==0||!precision(rules.crewRate,6)||rules.crewRate<0||rules.crewRate>10||rules.driver.some((r,i)=>!r||!precision(r.from,3)||r.from<0||r.from>1e9||!precision(r.rate,6)||r.rate<0||r.rate>10||(i>0&&(r.from<=rules.driver[i-1].from||r.rate<rules.driver[i-1].rate))))throw fail('EARN_RULE')
+ if(!rules||!Array.isArray(rules.driver)||!rules.driver.length||rules.driver.length>20||rules.driver[0].from!==0||!precision(rules.crewRate,3)||rules.crewRate<0||rules.crewRate>10||rules.driver.some((r,i)=>!r||!precision(r.from,2)||r.from<0||r.from>1e9||!precision(r.rate,3)||r.rate<0||r.rate>10||(i>0&&(r.from<=rules.driver[i-1].from||r.rate<rules.driver[i-1].rate))))throw fail('EARN_RULE')
  return atomic(db,()=>{if(Number(p.revision)!==earningsSettings(db,ctx).revision)throw fail('EARN_STALE',409);if(db.prepare('SELECT 1 FROM earnings_payments WHERE period_start>=?').get(period.start))throw fail('EARN_LOCKED',409);db.prepare('INSERT INTO earnings_rules(effective_start,rules_json,actor_id) VALUES(?,?,?)').run(period.start,JSON.stringify(rules),ctx.employeeId);return earningsSettings(db,ctx)})
 }
 // A slip is used only when vehicle, ticket and delivery date match uniquely in BOTH sources.

@@ -6,7 +6,7 @@ export const canonicalSaleMaterial=value=>{
  return /^(?:OCC|OLD CORRUGATED(?: BOX)?)$/i.test(name)?'OCC':name
 }
 export const validSalesDate=value=>/^\d{4}-\d{2}-\d{2}$/.test(String(value))&&!Number.isNaN(Date.parse(value+'T00:00:00Z'))&&new Date(value+'T00:00:00Z').toISOString().slice(0,10)===value
-// Quantities/prices are stored to three/six decimals; final amounts are integer cents.
+// New quantities/prices use two/three decimals; final amounts are integer cents.
 export const salesLineCents=(kg,price)=>Math.round((Number(kg)*Number(price)+Number.EPSILON)*100)
 export function filterSales(rows,query={}){
  const collator=new Intl.Collator('en',{numeric:true,sensitivity:'base'}),str=v=>String(v??'').trim()

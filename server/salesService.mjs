@@ -3,6 +3,7 @@ import {db as defaultDb} from './database.mjs'
 import {withImmediateTransaction} from './branchServiceDateGuard.mjs'
 import {image} from './driverExecutionService.mjs'
 import {billKey,validSalesDate,salesLineCents,filterSales,salesColumns,canonicalSaleMaterial} from '../shared/sales.js'
+import {formatWeight,formatUnitPrice,validWeight,validUnitPrice} from '../shared/measurePrecision.js'
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
@@ -12,12 +13,12 @@ export function assertSalesAccess(context){if(!['owner','owner_admin','operation
 export function salesMasters(db=defaultDb){
  const salePrices=[],seen=new Set()
  for(const item of listSalePrices(db)){
-  const key=`all:${item.description.toLowerCase()}:${item.unitPrice}`
-  seen.add(key);salePrices.push({buyerId:null,description:item.description,unitPrice:item.unitPrice})
+  const unitPrice=formatUnitPrice(item.unitPrice),key=`all:${item.description.toLowerCase()}:${unitPrice}`
+  seen.add(key);salePrices.push({buyerId:null,description:item.description,unitPrice})
  }
  for(const sale of db.prepare('SELECT buyer_id,lines_json FROM sales_settlements ORDER BY id DESC LIMIT 500').all()){
   for(const line of JSON.parse(sale.lines_json)){
-   const description=canonicalSaleMaterial(line.description),unitPrice=String(line.unitPrice||'').trim()
+   const description=canonicalSaleMaterial(line.description),unitPrice=line.unitPrice?formatUnitPrice(line.unitPrice):''
    if(!description||!unitPrice)continue
    const key=`${sale.buyer_id}:${description.toLowerCase()}:${unitPrice}`
    if(!seen.has(key)){seen.add(key);salePrices.push({buyerId:sale.buyer_id,description,unitPrice})}
@@ -30,8 +31,8 @@ export function listSalePrices(db=defaultDb){return db.prepare('SELECT id,descri
 export function saveSalePrice(payload,context,db=defaultDb){
  assertSalesAccess(context)
  const description=canonicalSaleMaterial(payload?.description),rawPrice=String(payload?.unitPrice||'').trim()
- if(!description||description.length>300||!/^\d{1,5}(\.\d{1,6})?$/.test(rawPrice)||Number(rawPrice)<=0)throw fail('SALES_PRICE_INVALID')
- const unitPrice=Number(rawPrice).toFixed(6).replace(/0+$/,'').replace(/\.$/,'')
+ if(!description||description.length>300||!validUnitPrice(rawPrice))throw fail('SALES_PRICE_INVALID')
+ const unitPrice=formatUnitPrice(rawPrice)
  const descriptionKey=description.toLowerCase(),actor=String(context.employeeName||context.role)
  return withImmediateTransaction(db,()=>{
   const old=payload.id?db.prepare('SELECT * FROM sale_price_catalog WHERE id=?').get(Number(payload.id)):null
@@ -70,9 +71,9 @@ function validate(payload,db,old){
   const slipNumber=String(l.slipNumber||'').trim(),description=canonicalSaleMaterial(l.description),weightKg=String(l.weightKg??'').trim(),unitPrice=String(l.unitPrice??'').trim(),amount=String(l.amount??'').trim()
   if(!validSalesDate(l.deliveryDate)||l.deliveryDate>payload.settlementDate)throw fail('SALES_DATE')
   if(!slipNumber||slipNumber.length>100||!description||description.length>300||slips.has(billKey(slipNumber)))throw fail('SALES_LINES');slips.add(billKey(slipNumber))
-  if(!/^\d{1,7}(\.\d{1,3})?$/.test(weightKg)||Number(weightKg)<=0||!/^\d{1,5}(\.\d{1,6})?$/.test(unitPrice)||Number(unitPrice)<=0||!/^\d{1,10}(\.\d{1,2})?$/.test(amount))throw fail('SALES_LINES')
+  if(!validWeight(weightKg)||!validUnitPrice(unitPrice)||!/^\d{1,10}(\.\d{1,2})?$/.test(amount))throw fail('SALES_LINES')
   if(salesLineCents(weightKg,unitPrice)!==Math.round(Number(amount)*100))throw fail('SALES_MATH')
-  return{deliveryDate:l.deliveryDate,slipNumber,description,weightKg,unitPrice,amount:Number(amount).toFixed(2)}
+  return{deliveryDate:l.deliveryDate,slipNumber,description,weightKg:formatWeight(weightKg),unitPrice:formatUnitPrice(unitPrice),amount:Number(amount).toFixed(2)}
  })
  if(!/^-?\d{1,6}(\.\d{1,2})?$/.test(String(payload.rounding||'0'))||!/^\d{1,10}(\.\d{1,2})?$/.test(String(payload.total)))throw fail('SALES_MATH')
  const rounding=Math.round(Number(payload.rounding||0)*100),total=Math.round(Number(payload.total)*100)
@@ -101,6 +102,7 @@ export function salesPhoto(id,context,db=defaultDb){assertSalesAccess(context);c
 export async function exportSales(query,context,db=defaultDb,{uploadsRoot}={}){
  const{items}=listSales(query,context,db),book=new ExcelJS.Workbook(),sheet=book.addWorksheet('Sales')
  sheet.addRow(salesColumns);items.forEach(r=>sheet.addRow(salesColumns.map(k=>['amount','total','weightKg','unitPrice'].includes(k)?Number(r[k]):String(r[k]??''))))
+ for(let row=2;row<=sheet.rowCount;row++){sheet.getCell(row,salesColumns.indexOf('weightKg')+1).numFmt='0.00';sheet.getCell(row,salesColumns.indexOf('unitPrice')+1).numFmt='0.000'}
  sheet.columns.forEach(c=>c.width=24);sheet.getRow(1).font={bold:true};sheet.views=[{state:'frozen',ySplit:1}]
  const proofs=book.addWorksheet('Bill Photos');proofs.getColumn(1).width=100
  let row=1

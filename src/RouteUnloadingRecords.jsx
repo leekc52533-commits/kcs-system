@@ -1,3 +1,4 @@
+import {formatWeight} from '../shared/measurePrecision.js'
 import {useUi} from './i18n.jsx'
 import {useEffect,useState} from 'react'
 import {apiRequest} from './apiClient.js'
@@ -22,7 +23,7 @@ export default function RouteUnloadingRecords({date,routeNumber,revision}){
         {data.items.map(item=><article key={item.id}>
           <strong>{item.code}</strong><span>{item.status==='confirmed'?ui("已确认"):ui("等待员工确认重量")}</span>
           <span>{item.weighedAt.replace('T',' ').replace('+08:00','')} · <span data-i18n-raw>{item.registrationNumber||item.vehicleCode}</span></span>
-          <b>{item.confirmedWeightKg==null?ui("重量待确认"):`${item.confirmedWeightKg} kg`}</b>
+          <b>{item.confirmedWeightKg==null?ui("重量待确认"):`${formatWeight(item.confirmedWeightKg)} kg`}</b>
           <span>{ui("卸货提交司机：")}<span data-i18n-raw>{item.driverName}</span></span><span>{ui("当时 Attendant：")}{item.crew||ui("未记录")}</span>
           {item.locationName&&<span><span data-i18n-raw>{item.locationName}</span></span>}
           {item.routes.length>1&&<small>{ui("这车货关联 ROUTE")}{item.routes.join(' / ')}{ui("，同一卸货编号只计算一次。")}</small>}

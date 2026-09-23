@@ -35,6 +35,19 @@ function fixture(){
 }
 const arrive=(db,id)=>arriveAtStop(id,{latitude:3.1001,longitude:101.6001,accuracy:10,captured_at:'2026-09-07T00:59:30Z'},context,db)
 
+test('three-decimal material price and two-decimal weight determine exact Purchase Bill cents',()=>{
+ const{db,stops,productId}=fixture()
+ db.prepare('UPDATE material_price_levels SET price_amount=0.421,price_cents=42 WHERE product_id=?').run(productId)
+ arrive(db,stops[0])
+ assert.throws(()=>createPurchaseBill(stops[0],{weightMethod:'on_site',printChoice:'no_print',items:[{productId,quantity:35.255}]},context,db),/valid quantity/i)
+ const bill=createPurchaseBill(stops[0],{weightMethod:'on_site',printChoice:'no_print',items:[{productId,quantity:35.25}]},context,db)
+ assert.equal(bill.items[0].unitPrice,0.421)
+ assert.equal(bill.items[0].unitPriceMills,421)
+ assert.equal(bill.items[0].quantity,35.25)
+ assert.equal(bill.totalCents,1484)
+ assert.equal(db.prepare('SELECT unit_price_mills FROM purchase_bill_items WHERE purchase_bill_id=?').get(bill.id).unit_price_mills,421)
+})
+
 test('today handover preserves bills and completed stops, changes ownership and carries cargo estimate',()=>{
   const{db,stops,productId}=fixture()
   db.prepare("INSERT INTO vehicles(vehicle_code,registration_number,status,operational_status) VALUES('V2','NEW2','available','active')").run()

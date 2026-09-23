@@ -1,4 +1,5 @@
 import {receiptTimestamp} from '../shared/customerReceipt.js'
+import {formatWeight,formatUnitPrice} from '../shared/measurePrecision.js'
 const money=n=>`RM ${(Number(n||0)/100).toFixed(2)}`
 // Render bill snapshots only: no page chrome, payment photos or account details.
 export async function receiptImage(bill){
@@ -20,7 +21,7 @@ export async function receiptImage(bill){
  add('No: '+bill.billNumber);add('Date: '+bill.serviceDate)
  add('To: '+bill.branchName);add('Att: '+(bill.registrationNumber||''))
  add('')
- for(const item of bill.items){add(`${item.quantity} ${item.unit||''} · ${item.shortForm||item.productName||item.item||''}`);add(`${money(item.unitPriceCents)} / ${item.unit||'unit'}    ${money(item.lineTotalCents??item.itemTotalCents)}`);add('')}
+ for(const item of bill.items){add(`${/kg|kilogram/i.test(item.unit)?formatWeight(item.quantity):item.quantity} ${item.unit||''} · ${item.shortForm||item.productName||item.item||''}`);add(`RM ${formatUnitPrice(item.unitPrice??item.unitPriceCents/100)} / ${item.unit||'unit'}    ${money(item.lineTotalCents??item.itemTotalCents)}`);add('')}
  add('Total: '+money(bill.totalCents),true);add(bill.paymentMethod);if(bill.issuedAt)add(receiptTimestamp(bill.issuedAt))
  canvas.width=width;canvas.height=pad*2+lines.length*lineHeight
  ctx.fillStyle='#fff';ctx.fillRect(0,0,width,canvas.height);ctx.fillStyle='#111';ctx.textBaseline='top'

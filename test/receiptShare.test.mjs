@@ -8,7 +8,7 @@ test('only receipt snapshots are rendered on white PNG, long names wrap',async()
  try{
   const bill={billNumber:'P1',serviceDate:'2026-09-14',branchName:'A'.repeat(120),vehicleCode:'QAA4293N',totalCents:665,paymentMethod:'Cash',items:[{quantity:35,unit:'kg',productName:'Paper',unitPriceCents:19,lineTotalCents:665}],proof:'SECRET',menu:'More'}
   const result=await receiptImage(bill);assert.equal(result.type,'image/png');assert.equal(canvas.width,640);assert(canvas.height>300)
-  assert(drawn.includes('Total: RM 6.65'));assert(drawn.includes('35 kg · Paper'));assert(!drawn.join('').includes('SECRET'));assert(!drawn.includes('More'));assert(drawn.every(s=>s.length<=39))
+  assert(drawn.includes('Total: RM 6.65'));assert(drawn.includes('35.00 kg · Paper'));assert(!drawn.join('').includes('SECRET'));assert(!drawn.includes('More'));assert(drawn.every(s=>s.length<=39))
  }finally{globalThis.document=previous}
 })
 test('sharing is explicit, passes image only, cancellation is harmless and unsupported browsers can save',async()=>{

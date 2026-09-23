@@ -70,7 +70,7 @@ export async function recognizeUnloadingWeight(payload={},context={},database=de
 
 export function confirmUnloadingWeight(recordId,payload={},context={},database=defaultDb){
   driver(database,context.employeeId,context.role);const weight=Number(payload.weightKg)
-  if(!Number.isFinite(weight)||weight<=0||weight>200000)throw fail('Enter a valid confirmed weight in kg.','INVALID_WEIGHT')
+  if(!Number.isFinite(weight)||weight<=0||weight>200000||Math.abs(weight*100-Math.round(weight*100))>0.000001)throw fail('Enter a valid confirmed weight in kg with at most two decimal places.','INVALID_WEIGHT')
   database.exec('BEGIN IMMEDIATE')
   try{
    const row=database.prepare('SELECT * FROM unloading_weight_records WHERE id=? AND driver_employee_id=?').get(Number(recordId),Number(context.employeeId))

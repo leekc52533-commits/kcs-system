@@ -1,3 +1,4 @@
+import {formatWeight} from '../shared/measurePrecision.js'
 import RecordActionIcon from './RecordActionIcon.jsx'
 import UnloadingCorrections from './UnloadingCorrections.jsx'
 import {unloadingCorrectionWords} from '../shared/unloadingCorrectionWords.js'
@@ -20,7 +21,7 @@ export default function UnloadingArchivePage({onBack}){
  const [filters,setFilters]=useState({}),[sort,setSort]=useState({}),[open,setOpen]=useState(null),[data,setData]=useState(null),[error,setError]=useState(''),[refresh,setRefresh]=useState(0),[download,setDownload]=useState(false),[exportRange,setExportRange]=useState({from:today(),to:today()})
  const query=new URLSearchParams({columns:JSON.stringify(filters),sortKey:sort.key||'',sortDirection:sort.direction||''}).toString()
  useEffect(()=>{let active=true;setError('');setData(null);apiRequest('/api/unloading-archive?'+query).then(d=>{if(active)setData(d)}).catch(e=>{if(active)setError(e.message)});return()=>{active=false}},[query,refresh])
- const display=(key,value)=>value==null||value===''?'—':key==='status'?unloadingStatus[lang][value]:key==='date'?value.slice(8)+'-'+value.slice(5,7)+'-'+value.slice(2,4):value
+ const display=(key,value)=>value==null||value===''?'—':key==='status'?unloadingStatus[lang][value]:key==='date'?value.slice(8)+'-'+value.slice(5,7)+'-'+value.slice(2,4):key==='confirmedWeightKg'?formatWeight(value):value
  return <div className="page purchase-archive expense-records unloading-archive">
  <div className="expense-toolbar"><BackButton iconOnly fallback={onBack}/><button className="unloading-download" title={t('unloading.download')} aria-label={t('unloading.download')} aria-expanded={download} onClick={()=>{setExportRange({from:today(),to:today()});setDownload(!download);setOpen(null)}}><RecordActionIcon kind="download"/></button>{data?.canCorrect&&<button className="record-icon-button" title={w.title} aria-label={w.title} onClick={()=>setCorrection('')}><RecordActionIcon kind="correction"/></button>}<button className="record-icon-button" title={expenseColumnWords[lang].title} aria-label={expenseColumnWords[lang].title} onClick={()=>setShowOrder(true)}><RecordActionIcon kind="columns"/></button><button className="record-icon-button" title={t('void.refresh')} aria-label={t('void.refresh')} onClick={()=>setRefresh(n=>n+1)}><RecordActionIcon kind="refresh"/></button></div>
  {correction!==null&&<UnloadingCorrections initialCode={correction} onClose={()=>setCorrection(null)} onSaved={()=>setRefresh(n=>n+1)}/>}
