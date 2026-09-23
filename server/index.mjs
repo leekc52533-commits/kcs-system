@@ -29,7 +29,7 @@ import {isNoGoodsPhotoPath,noGoodsProofForViewer} from './noGoodsProofAccess.mjs
 import {cashDailyWorkbook} from './cashDailyWorkbook.mjs'
 import {dailyEmployeeSpending} from './cashFloatOverview.mjs'
 import {readMenu,saveMenu} from './menuLayoutService.mjs'
-import {assertSalesAccess,salesMasters,listSales,salesRecord,saveSales,salesPhoto,exportSales} from './salesService.mjs'
+import {assertSalesAccess,salesMasters,listSales,salesRecord,saveSales,salesPhoto,exportSales,listSalePrices,saveSalePrice,deleteSalePrice} from './salesService.mjs'
 import {recognizeSales} from './salesOcr.mjs'
 import {submitNoGoodsNotice,restoreNoGoodsNotice,noGoodsNoticePhoto} from './noGoodsNoticeService.mjs'
 import {canManageDispatch} from '../shared/dispatchAccess.js'
@@ -211,6 +211,9 @@ const server = http.createServer(async (request, response) => {
     if(request.method==='POST'&&url.pathname==='/api/expenses/recognize'){if(!canManageCashFloat(session)&&!mobileCashFloat(session.employeeId).configured)return sendJson(response,403,{error:'Expense access is restricted.'});return sendJson(response,200,await recognizeExpenseReceipt((await readJson(request)).payload.proof,expenseVehicles(db)))}
     if(url.pathname==='/api/sales'||url.pathname.startsWith('/api/sales/')){
       assertSalesAccess(session)
+      if(request.method==='GET'&&url.pathname==='/api/sales/prices'){const masters=salesMasters(db);return sendJson(response,200,{items:listSalePrices(db),buyers:masters.buyers,productNames:masters.productNames})}
+      if(request.method==='POST'&&url.pathname==='/api/sales/prices')return sendJson(response,200,saveSalePrice((await readJson(request)).payload,session,db))
+      if(request.method==='DELETE'&&/^\/api\/sales\/prices\/\d+$/.test(url.pathname))return sendJson(response,200,deleteSalePrice(url.pathname.split('/')[4],session,db))
       if(request.method==='GET'&&url.pathname==='/api/sales')return sendJson(response,200,listSales(Object.fromEntries(url.searchParams),session))
       if(request.method==='POST'&&url.pathname==='/api/sales')return sendJson(response,200,saveSales((await readJson(request)).payload,session,db,{uploadsRoot:uploadsDir}))
       if(request.method==='POST'&&url.pathname==='/api/sales/recognize')return sendJson(response,200,await recognizeSales((await readJson(request)).payload.proof,salesMasters()))

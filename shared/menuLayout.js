@@ -1,5 +1,5 @@
 export const billMenuIds=['purchase-bills','sales','expense-records','bill-voids','unloading-records']
-export const topMenuIds=['dashboard','earnings','notices','operations','acting-collector','documents','cash-float','customers','buyers','company-settings','location-zone','vehicles','materials','staff']
+export const topMenuIds=['dashboard','earnings','notices','operations','acting-collector','documents','cash-float','customers','buyers','company-settings','location-zone','vehicles','materials','sale-prices','staff']
 export const pageMenuIds=[...topMenuIds.filter(id=>id!=='documents'),...billMenuIds]
 export const defaultMenuLayout=()=>({top:[...topMenuIds],documents:[...billMenuIds]})
 export const menuGroups=layout=>[{id:'documents',name:layout.documentName||'',items:layout.documents},...(layout.folders||[])]
@@ -26,7 +26,7 @@ export function normalizeMenuLayout(layout){
  for(const id of layout.top||[])if(groupIds.includes(id)){if(!top.includes(id))top.push(id)}else if(pageMenuIds.includes(id)&&!seen.has(id)){seen.add(id);top.push(id)}
  const documents=take(layout.documents),nextFolders=folders.map(f=>({id:f.id,name:f.name,items:take(f.items)}))
  for(const id of groupIds)if(!top.includes(id))top.push(id)
- for(const id of pageMenuIds)if(!seen.has(id)){if(id==='notices')top.splice(Math.max(0,top.indexOf('dashboard')+1),0,id);else if(billMenuIds.includes(id))documents.push(id);else top.push(id)}
+ for(const id of pageMenuIds)if(!seen.has(id)){if(id==='notices')top.splice(Math.max(0,top.indexOf('dashboard')+1),0,id);else if(id==='sale-prices')top.splice(Math.max(0,top.indexOf('materials')+1),0,id);else if(billMenuIds.includes(id))documents.push(id);else top.push(id)}
  const pageNames=Object.fromEntries(Object.entries(layout.pageNames||{}).filter(([id,name])=>pageMenuIds.includes(id)&&goodName(name)).map(([id,name])=>[id,name.trim()]))
  return {top,documents,...(Object.keys(pageNames).length?{pageNames}:{}),...(goodName(layout.documentName)?{documentName:layout.documentName}:{}),...(nextFolders.length?{folders:nextFolders}:{})}
 }

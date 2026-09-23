@@ -9,7 +9,48 @@ import crypto from 'node:crypto'
 import ExcelJS from 'exceljs'
 const fail=code=>Object.assign(new Error(code),{code,statusCode:400})
 export function assertSalesAccess(context){if(!['owner','owner_admin','operations_admin','supervisor','office','dispatcher'].includes(context.role))throw Object.assign(fail('SALES_ACCESS'),{statusCode:403})}
-export function salesMasters(db=defaultDb){return{buyers:db.prepare("SELECT id,buyer_name name FROM buyers WHERE status='active' ORDER BY buyer_name").all(),vehicles:db.prepare("SELECT id,registration_number plate,vehicle_code code FROM vehicles WHERE status IN ('active','available','assigned') ORDER BY vehicle_code").all()}}
+export function salesMasters(db=defaultDb){
+ const salePrices=[],seen=new Set()
+ for(const item of listSalePrices(db)){
+  const key=`${item.buyerId}:${item.description.toLowerCase()}:${item.unitPrice}`
+  seen.add(key);salePrices.push({buyerId:item.buyerId,description:item.description,unitPrice:item.unitPrice})
+ }
+ for(const sale of db.prepare('SELECT buyer_id,lines_json FROM sales_settlements ORDER BY id DESC LIMIT 500').all()){
+  for(const line of JSON.parse(sale.lines_json)){
+   const description=String(line.description||'').trim(),unitPrice=String(line.unitPrice||'').trim()
+   if(!description||!unitPrice)continue
+   const key=`${sale.buyer_id}:${description.toLowerCase()}:${unitPrice}`
+   if(!seen.has(key)){seen.add(key);salePrices.push({buyerId:sale.buyer_id,description,unitPrice})}
+  }
+ }
+ const productNames=db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='material_products'").get()?db.prepare("SELECT full_name FROM material_products WHERE status='active' AND unit='kg' ORDER BY full_name").all().map(row=>row.full_name):[]
+ return{buyers:db.prepare("SELECT id,buyer_name name FROM buyers WHERE status='active' ORDER BY buyer_name").all(),vehicles:db.prepare("SELECT id,registration_number plate,vehicle_code code FROM vehicles WHERE status IN ('active','available','assigned') ORDER BY vehicle_code").all(),productNames,salePrices}
+}
+export function listSalePrices(db=defaultDb){return db.prepare('SELECT p.id,p.buyer_id buyerId,b.buyer_name buyerName,p.description,p.unit_price unitPrice,p.updated_by updatedBy,p.updated_at updatedAt FROM sale_price_catalog p JOIN buyers b ON b.id=p.buyer_id ORDER BY b.buyer_name,p.description').all()}
+export function saveSalePrice(payload,context,db=defaultDb){
+ assertSalesAccess(context)
+ const buyerId=Number(payload.buyerId),buyer=db.prepare("SELECT id FROM buyers WHERE id=? AND status='active'").get(buyerId),description=String(payload.description||'').trim().replace(/\s+/g,' '),unitPrice=String(payload.unitPrice||'').trim()
+ if(!buyer||!description||description.length>300||!/^\d{1,5}(\.\d{1,6})?$/.test(unitPrice)||Number(unitPrice)<=0)throw fail('SALES_PRICE_INVALID')
+ const descriptionKey=description.toLowerCase(),actor=String(context.employeeName||context.role)
+ return withImmediateTransaction(db,()=>{
+  const old=db.prepare('SELECT * FROM sale_price_catalog WHERE buyer_id=? AND description_key=?').get(buyerId,descriptionKey)
+  if(old)db.prepare('UPDATE sale_price_catalog SET description=?,unit_price=?,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(description,unitPrice,actor,old.id)
+  else db.prepare('INSERT INTO sale_price_catalog(buyer_id,description,description_key,unit_price,updated_by) VALUES(?,?,?,?,?)').run(buyerId,description,descriptionKey,unitPrice,actor)
+  const next=db.prepare('SELECT * FROM sale_price_catalog WHERE buyer_id=? AND description_key=?').get(buyerId,descriptionKey)
+  db.prepare('INSERT INTO sale_price_audit(catalog_id,actor,before_json,after_json) VALUES(?,?,?,?)').run(next.id,actor,old?JSON.stringify(old):null,JSON.stringify(next))
+  return next
+ })
+}
+export function deleteSalePrice(id,context,db=defaultDb){
+ assertSalesAccess(context)
+ return withImmediateTransaction(db,()=>{
+  const old=db.prepare('SELECT * FROM sale_price_catalog WHERE id=?').get(Number(id))
+  if(!old)throw fail('SALES_PRICE_NOT_FOUND')
+  db.prepare('INSERT INTO sale_price_audit(catalog_id,actor,before_json,after_json) VALUES(?,?,?,NULL)').run(old.id,String(context.employeeName||context.role),JSON.stringify(old))
+  db.prepare('DELETE FROM sale_price_catalog WHERE id=?').run(old.id)
+  return{ok:true}
+ })
+}
 const decode=r=>({...r,buyerId:r.buyer_id,buyerName:r.buyer_name,vehicleId:r.vehicle_id,vehiclePlate:r.vehicle_plate,billNumber:r.bill_number,settlementDate:r.settlement_date,lines:JSON.parse(r.lines_json),total:(r.total_cents/100).toFixed(2),rounding:(r.rounding_cents/100).toFixed(2),createdBy:r.created_by,createdAt:r.created_at})
 export function salesRecord(id,context,db=defaultDb){assertSalesAccess(context);const r=db.prepare('SELECT * FROM sales_settlements WHERE id=?').get(Number(id));if(!r)throw fail('SALES_NOT_FOUND');const decoded={...decode(r),documentNumber:documentNumber(db,'sales-'+r.id)};delete decoded.storage_key;return decoded}
 export function listSales(query,context,db=defaultDb){assertSalesAccess(context);if(!validSalesDate(query.from)||!validSalesDate(query.to)||query.from>query.to)throw fail('SALES_DATE');const numbers=documentNumberMap(db);const records=db.prepare('SELECT * FROM sales_settlements WHERE settlement_date BETWEEN ? AND ? ORDER BY settlement_date DESC,id DESC').all(query.from,query.to).map(decode);const rows=records.flatMap(r=>r.lines.map((l,i)=>({id:r.id,rowKey:r.id+'-'+i,documentNumber:numbers.get('sales-'+r.id)||'',settlementDate:r.settlementDate,billNumber:r.billNumber,buyerName:r.buyerName,vehiclePlate:r.vehiclePlate,...l,total:r.total,remarks:r.remarks,createdBy:r.createdBy})));return{...filterSales(rows,query),...salesMasters(db)}}
