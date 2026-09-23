@@ -4495,3 +4495,6 @@ Object.assign(messages.zh,{'salePrices.confirmRemove':'删除这项卖价？已�
 Object.assign(messages.en,{'salePrices.help':'Set one selling price for each material. Sales bills still save their actual entered prices.','apiError.sales_price_invalid':'Enter a material and a valid selling price.'})
 Object.assign(messages.ms,{'salePrices.help':'Tetapkan satu harga jualan bagi setiap bahan. Bil jualan tetap menyimpan harga sebenar yang diisi.','apiError.sales_price_invalid':'Isi bahan dan harga jualan yang sah.'})
 Object.assign(messages.zh,{'salePrices.help':'每种货品设定一个卖价；卖货单仍按实际填写的价格保存。','apiError.sales_price_invalid':'请填写货品及正确卖价。'})
+Object.assign(messages.en,{'salePrices.help':'A material can have several selling prices. Choose the actual price for each sales bill line.','salePrices.updatePrice':'Update price','apiError.sales_price_duplicate':'This material already has that selling price.'})
+Object.assign(messages.ms,{'salePrices.help':'Satu bahan boleh ada beberapa harga jualan. Pilih harga sebenar bagi setiap baris bil.','salePrices.updatePrice':'Kemas kini harga','apiError.sales_price_duplicate':'Harga jualan ini sudah ada untuk bahan tersebut.'})
+Object.assign(messages.zh,{'salePrices.help':'同一种货品可以保存多个卖价；填写卖货单时逐行选择实际价格。','salePrices.updatePrice':'更新卖价','apiError.sales_price_duplicate':'这项货品已有相同卖价。'})

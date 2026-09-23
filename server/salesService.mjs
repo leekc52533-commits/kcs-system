@@ -26,18 +26,23 @@ export function salesMasters(db=defaultDb){
  const productNames=db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='material_products'").get()?db.prepare("SELECT full_name FROM material_products WHERE status='active' AND unit='kg' ORDER BY full_name").all().map(row=>row.full_name):[]
  return{buyers:db.prepare("SELECT id,buyer_name name FROM buyers WHERE status='active' ORDER BY buyer_name").all(),vehicles:db.prepare("SELECT id,registration_number plate,vehicle_code code FROM vehicles WHERE status IN ('active','available','assigned') ORDER BY vehicle_code").all(),productNames,salePrices}
 }
-export function listSalePrices(db=defaultDb){return db.prepare('SELECT id,description,unit_price unitPrice,updated_by updatedBy,updated_at updatedAt FROM sale_price_catalog ORDER BY description').all()}
+export function listSalePrices(db=defaultDb){return db.prepare('SELECT id,description,unit_price unitPrice,updated_by updatedBy,updated_at updatedAt FROM sale_price_catalog ORDER BY description_key,CAST(unit_price AS REAL),id').all()}
 export function saveSalePrice(payload,context,db=defaultDb){
  assertSalesAccess(context)
- const description=String(payload.description||'').trim().replace(/\s+/g,' '),unitPrice=String(payload.unitPrice||'').trim()
- if(!description||description.length>300||!/^\d{1,5}(\.\d{1,6})?$/.test(unitPrice)||Number(unitPrice)<=0)throw fail('SALES_PRICE_INVALID')
+ const description=String(payload?.description||'').trim().replace(/\s+/g,' '),rawPrice=String(payload?.unitPrice||'').trim()
+ if(!description||description.length>300||!/^\d{1,5}(\.\d{1,6})?$/.test(rawPrice)||Number(rawPrice)<=0)throw fail('SALES_PRICE_INVALID')
+ const unitPrice=Number(rawPrice).toFixed(6).replace(/0+$/,'').replace(/\.$/,'')
  const descriptionKey=description.toLowerCase(),actor=String(context.employeeName||context.role)
  return withImmediateTransaction(db,()=>{
-  const old=db.prepare('SELECT * FROM sale_price_catalog WHERE description_key=?').get(descriptionKey)
-  if(old)db.prepare('UPDATE sale_price_catalog SET description=?,unit_price=?,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(description,unitPrice,actor,old.id)
+  const old=payload.id?db.prepare('SELECT * FROM sale_price_catalog WHERE id=?').get(Number(payload.id)):null
+  if(payload.id&&!old)throw fail('SALES_PRICE_NOT_FOUND')
+  const duplicate=db.prepare('SELECT * FROM sale_price_catalog WHERE description_key=? AND CAST(unit_price AS REAL)=? AND id<>?').get(descriptionKey,Number(unitPrice),old?.id||0)
+  if(duplicate&&old)throw fail('SALES_PRICE_DUPLICATE')
+  if(duplicate){db.prepare('UPDATE sale_price_catalog SET description=?,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(description,actor,duplicate.id)}
+  else if(old)db.prepare('UPDATE sale_price_catalog SET description=?,description_key=?,unit_price=?,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(description,descriptionKey,unitPrice,actor,old.id)
   else db.prepare('INSERT INTO sale_price_catalog(description,description_key,unit_price,updated_by) VALUES(?,?,?,?)').run(description,descriptionKey,unitPrice,actor)
-  const next=db.prepare('SELECT * FROM sale_price_catalog WHERE description_key=?').get(descriptionKey)
-  db.prepare('INSERT INTO sale_price_audit(catalog_id,actor,before_json,after_json) VALUES(?,?,?,?)').run(next.id,actor,old?JSON.stringify(old):null,JSON.stringify(next))
+  const next=db.prepare('SELECT * FROM sale_price_catalog WHERE id=?').get(duplicate?.id||old?.id||Number(db.prepare('SELECT last_insert_rowid() id').get().id))
+  db.prepare('INSERT INTO sale_price_audit(catalog_id,actor,before_json,after_json) VALUES(?,?,?,?)').run(next.id,actor,old||duplicate?JSON.stringify(old||duplicate):null,JSON.stringify(next))
   return next
  })
 }

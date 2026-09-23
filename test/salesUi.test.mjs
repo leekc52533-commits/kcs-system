@@ -10,6 +10,7 @@ const{createRoot}=await import('react-dom/client'),vite=await createServer({logL
 after(()=>vite.close())
 
 const{SalesForm}=await vite.ssrLoadModule('/src/SalesPage.jsx'),{I18nProvider}=await vite.ssrLoadModule('/src/i18n.jsx')
+const{default:SalePricesPage}=await vite.ssrLoadModule('/src/SalePricesPage.jsx')
 const change=async(n,v)=>act(async()=>{Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set.call(n,v);n.dispatchEvent(new Event('input',{bubbles:true}))})
 test('three-language review form requires confirmation and blocks a mismatched total',async()=>{
  for(const language of ['en','ms','zh']){
@@ -27,17 +28,32 @@ test('three-language review form requires confirmation and blocks a mismatched t
  await act(async()=>root.unmount())
  }
 })
-test('buyer-specific sale products suggest matching prices and allow manual override',async()=>{
+test('several prices for a material require choosing the actual price',async()=>{
  const root=createRoot(document.getElementById('root'))
  const initial={id:1,buyerId:1,vehicleId:1,billNumber:'CP1',settlementDate:'2026-09-10',total:'10.00',rounding:'0.00',lines:[{deliveryDate:'2026-09-09',slipNumber:'TN1',description:'OCC',weightKg:'20',unitPrice:'0.50',amount:'10.00'}]}
- const masters={buyers:[{id:1,name:'Factory'}],vehicles:[{id:1,plate:'QTY5028'}],salePrices:[{buyerId:1,description:'MIX PAPER',unitPrice:'0.25'},{buyerId:1,description:'MIX PAPER',unitPrice:'0.30'},{buyerId:2,description:'MIX PAPER',unitPrice:'0.90'}]}
+ const masters={buyers:[{id:1,name:'Factory'}],vehicles:[{id:1,plate:'QTY5028'}],salePrices:[{buyerId:null,description:'MIX PAPER',unitPrice:'0.25'},{buyerId:null,description:'MIX PAPER',unitPrice:'0.30'},{buyerId:2,description:'MIX PAPER',unitPrice:'0.90'}]}
  await act(async()=>root.render(React.createElement(I18nProvider,{language:'zh'},React.createElement(SalesForm,{initial,masters,onSave:()=>{},onClose:()=>{}}))))
  assert.ok([...document.querySelectorAll('fieldset .sales-choice')[0].options].some(option=>option.value==='MIX PAPER'))
  await change(document.querySelectorAll('fieldset input')[2],'MIX PAPER')
- assert.equal(document.querySelectorAll('fieldset input')[4].value,'0.25')
- assert.equal(document.querySelectorAll('fieldset input')[5].value,'5.00')
+ assert.equal(document.querySelectorAll('fieldset input')[4].value,'')
+ assert.equal(document.querySelectorAll('fieldset input')[5].value,'')
  assert.deepEqual([...document.querySelectorAll('fieldset .sales-choice')[1].options].slice(1).map(option=>option.value),['0.25','0.30'])
+ await act(async()=>{const select=document.querySelectorAll('fieldset .sales-choice')[1];select.value='0.30';select.dispatchEvent(new Event('change',{bubbles:true}))})
+ assert.equal(document.querySelectorAll('fieldset input')[4].value,'0.30')
+ assert.equal(document.querySelectorAll('fieldset input')[5].value,'6.00')
  await change(document.querySelectorAll('fieldset input')[4],'0.28')
  assert.equal(document.querySelectorAll('fieldset input')[5].value,'5.60')
  await act(async()=>root.unmount())
+})
+test('price catalog sends the material and price as direct API fields',async()=>{
+ const previousFetch=globalThis.fetch,requests=[]
+ globalThis.fetch=async(url,options={})=>{if(options.method==='POST')requests.push(JSON.parse(options.body));return{ok:true,json:async()=>({items:[],productNames:[]})}}
+ const root=createRoot(document.getElementById('root'))
+ try{
+  await act(async()=>root.render(React.createElement(I18nProvider,{language:'zh'},React.createElement(SalePricesPage,{onBack:()=>{}}))))
+  await change(document.querySelectorAll('.sale-prices-form input')[0],'OCC')
+  await change(document.querySelectorAll('.sale-prices-form input')[1],'0.42')
+  await act(async()=>document.querySelector('.sale-prices-form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})))
+  assert.deepEqual(requests,[{description:'OCC',unitPrice:'0.42'}])
+ }finally{await act(async()=>root.unmount());globalThis.fetch=previousFetch}
 })
