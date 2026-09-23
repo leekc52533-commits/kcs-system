@@ -4,3 +4,6 @@
 .route-customer-transfer form{display:grid;gap:10px;padding-top:10px}
 .route-customer-transfer label{display:grid;gap:5px}
 .route-customer-transfer input,.route-customer-transfer select{width:100%;box-sizing:border-box;min-width:0}
+.route-customer-transfer:not([open]){display:table;width:auto;max-width:calc(100% - 24px);margin:8px 12px;padding:0;border:0;background:transparent}
+.route-customer-transfer>summary{display:inline-flex;align-items:center;box-sizing:border-box;min-height:36px;padding:7px 12px;border:1px solid #b9d5ce;border-radius:9px;background:#fff;color:#176b5b;font-size:.82rem;font-weight:600;line-height:1.4;list-style:none}
+.route-customer-transfer>summary::-webkit-details-marker{display:none}
