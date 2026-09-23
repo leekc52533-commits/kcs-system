@@ -32,6 +32,7 @@
 .route-assignment-card > summary{grid-template-columns:minmax(0,1fr) auto;align-items:center}.route-name-row{display:flex;align-items:center;gap:8px;min-width:0}.route-name-row>b{min-width:0;overflow-wrap:anywhere}
 
 .route-assignment-card .route-card-actions>button,
+.route-assignment-card .route-card-actions .route-customer-transfer>summary,
 .route-assignment-card .route-handover button{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;min-height:36px;max-width:100%;margin:0;padding:7px 12px;border:1px solid #b9d5ce;border-radius:9px;background:#fff;color:#176b5b;font-family:inherit;font-size:.82rem;font-weight:600;line-height:1.4;text-align:center;cursor:pointer}
 .route-assignment-card .route-card-actions>button.primary{background:#176b5b;border-color:#176b5b;color:#fff}
 .route-assignment-card .route-card-actions>button:disabled,.route-assignment-card .route-handover button:disabled{opacity:.5;cursor:not-allowed}
@@ -45,9 +46,9 @@
 .route-week-board{display:block;width:100%}
 .planner-page .week-board--single-day{display:block;width:100%;overflow:visible}
 .route-week-board>.vehicle-day,.week-board--single-day>.vehicle-day,.route-week-board .route-assignment-panel,.week-board--single-day .route-assignment-panel{box-sizing:border-box;width:100%;min-width:0}
-.route-assignment-grid,.route-week-board .route-assignment-grid{display:block;overflow-x:auto;scrollbar-width:thin}
+.route-assignment-grid,.route-week-board .route-assignment-grid{display:block;max-width:100%;min-width:0;overflow-x:auto;scrollbar-width:thin}
 .route-assignment-heading,.route-assignment-card > summary{display:grid;grid-template-columns:minmax(130px,1.4fr) 65px minmax(120px,1fr) minmax(120px,1fr) minmax(110px,.9fr) minmax(120px,1fr);min-width:740px;width:100%;align-items:center;gap:8px}
-.route-assignment-heading{padding:10px 12px;background:#f2f6f9;border:1px solid #d6e0e7;border-radius:8px 8px 0 0;color:#526474;font-weight:700;font-size:.82rem}
+.route-assignment-heading{box-sizing:border-box;padding:10px 12px;background:#f2f6f9;border:1px solid #d6e0e7;border-radius:8px 8px 0 0;color:#526474;font-weight:700;font-size:.82rem}
 .route-assignment-card,.route-assignment-card.approved{margin:0;padding:0;border-radius:0;border-top:0;background:#fff}
 .route-assignment-card:last-child{border-radius:0 0 8px 8px}
 .route-assignment-card > summary{box-sizing:border-box;min-height:58px;padding:8px 12px;list-style:none}
