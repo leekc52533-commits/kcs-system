@@ -53,3 +53,13 @@
 .area-detail-popup .adjacent-areas span[data-i18n-raw]{padding:0;border:0;background:none;font-size:inherit;color:inherit;line-height:inherit;height:auto;max-height:none;overflow:visible}
 .area-detail-popup .area-detail button,.area-detail-popup .area-detail input{font-size:16px;line-height:1.5}
 @media(max-width:480px){.area-detail-popup .area-detail-summary{grid-template-columns:minmax(0,1fr)}}
+.route-name-manager{margin:16px 0;padding:16px;border:1px solid #bddbd5;border-radius:12px;background:#fff}
+.route-name-manager h3{margin:0 0 6px;color:#315f50}
+.route-name-manager>p{margin:0 0 12px;color:#536572}
+.route-name-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px}
+.route-name-list>div{display:grid;gap:6px;min-width:0;padding:10px;border:1px solid #d9e5df;border-radius:9px}
+.route-name-list>div>span{color:#526474;font-size:.85rem}
+.route-name-list .route-name-edit{text-align:left;padding:6px 0;border:0;background:transparent;color:#176b5b;font:inherit;font-weight:700;text-decoration:underline;cursor:pointer;overflow-wrap:anywhere}
+.route-name-list form{display:flex;gap:6px;flex-wrap:wrap}
+.route-name-list form input{flex:1 1 150px;min-width:0;box-sizing:border-box;padding:7px;border:1px solid #bddbd5;border-radius:7px;font:inherit}
+.route-name-list form button{padding:7px 10px;border:1px solid #bddbd5;border-radius:7px;background:#fff;color:#176b5b;cursor:pointer}
