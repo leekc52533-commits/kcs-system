@@ -56,6 +56,7 @@
 .route-assignment-card.approved > summary{background:#edf6ff}
 .route-assignment-card > summary strong,.route-assignment-card > summary em,.route-assignment-card > summary .route-service-date{grid-column:auto;margin:0;font-size:.82rem}
 .route-assignment-card > summary .route-name-row{color:#196c5f}
+.route-assignment-card > summary .route-name-row>b{text-decoration:underline;text-underline-offset:3px}
 .route-assignment-card > summary .route-name-trigger{text-decoration:underline;text-underline-offset:3px}
 .route-assignment-card > summary .route-collection-control{margin:0}
 .route-assignment-card > summary .route-collection-control button{min-height:36px;padding:5px 9px;font-size:.78rem}
