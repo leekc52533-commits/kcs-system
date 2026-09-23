@@ -35,13 +35,31 @@ export function reportSelection(data,key,metric=true){
 const vehicleMetrics=['vehicles','plannedBranches','collectedBranches','noGoodsBranches','pendingBranches','cancelledBranches','weightKg','trips']
 export default function DailyReport({account}){
  const {language}=useI18n(),w=k=>reportWord(language,k),[open,setOpen]=useState(false),[date,setDate]=useState(kuchingDate),[data,setData]=useState(null),[error,setError]=useState(''),[refresh,setRefresh]=useState(0),[selection,setSelection]=useState(null),[target,setTarget]=useState(2000),[columnToolbar,setColumnToolbar]=useState(null)
+ const reportRef=useRef(null),openRef=useRef(null)
+ useEffect(()=>{
+  if(!open)return
+  let start=null
+  const nested=()=>document.querySelector('.daily-report-overlay,.expense-column-modal,.expense-filter-menu,[aria-modal="true"]')
+  const down=e=>{start=e.button===0?{x:e.clientX,y:e.clientY,target:e.target}:null}
+  const up=e=>{
+   const first=start;start=null
+   if(!first||Math.hypot(e.clientX-first.x,e.clientY-first.y)>6||nested()||window.getSelection()?.toString())return
+   if(reportRef.current?.contains(first.target)||reportRef.current?.contains(e.target))return
+   if(e.target.closest('button,a,input,select,textarea,label,[role="button"],[role="menu"],[role="dialog"]'))return
+   if(e.target.matches('div,section,main,header,footer,aside,body'))setOpen(false)
+  }
+  const key=e=>{if(e.key==='Escape'&&!nested()){setOpen(false);setTimeout(()=>openRef.current?.focus({preventScroll:true}),0)}}
+  const cancel=()=>{start=null}
+  document.addEventListener('pointerdown',down);document.addEventListener('pointerup',up);document.addEventListener('pointercancel',cancel);document.addEventListener('scroll',cancel,true);document.addEventListener('keydown',key)
+  return()=>{document.removeEventListener('pointerdown',down);document.removeEventListener('pointerup',up);document.removeEventListener('pointercancel',cancel);document.removeEventListener('scroll',cancel,true);document.removeEventListener('keydown',key)}
+ },[open])
  useEffect(()=>{setSelection(null);if(!open)return;let active=true;setData(null);setError('');apiRequest('/api/daily-report?date='+encodeURIComponent(date)).then(r=>{if(active)setData(r)}).catch(()=>{if(active)setError(w('failed'))});return()=>{active=false}},[open,date,refresh,language])
  let chosen=data&&selection?reportSelection(data,selection.key,selection.metric):null
  if(chosen&&selection.vehicleId!=null){const id=String(selection.vehicleId);chosen=['vehicles','weightKg','trips'].includes(selection.key)?{section:'vehicles',rows:data.sections.vehicles.filter(r=>r.id===id)}:{...chosen,rows:chosen.rows.filter(r=>String(r.detail?.vehicleId)===id)}}
  const metricTargets=new Set(Object.keys(data?.summary||{}).map(k=>metricSections[k]||k))
- return <section className="daily-report">
-  <header><h2>{w('title')}</h2><button onClick={()=>setOpen(v=>!v)} aria-expanded={open}>{w(open?'close':'open')}</button></header>
-  {open&&<><div className="daily-report-controls"><span className="daily-report-column-slot" ref={setColumnToolbar}/><button type="button" className="record-icon-button daily-report-refresh" title={w('refresh')} aria-label={w('refresh')} onClick={()=>setRefresh(v=>v+1)}><RecordActionIcon kind="refresh-single"/></button><label>{w('date')}<input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><label>{w('target')}<input type="number" min="1" step="100" value={target} onChange={e=>setTarget(e.target.value)}/></label></div>
+ return <section className="daily-report" ref={reportRef}>
+  <header><h2>{w('title')}</h2>{open?<div className="daily-report-actions"><span className="daily-report-column-slot" ref={setColumnToolbar}/><button type="button" className="record-icon-button daily-report-refresh" title={w('refresh')} aria-label={w('refresh')} onClick={()=>setRefresh(v=>v+1)}><RecordActionIcon kind="refresh-single"/></button></div>:<button ref={openRef} onClick={()=>setOpen(true)} aria-expanded={false}>{w('open')}</button>}</header>
+  {open&&<><div className="daily-report-controls"><label>{w('date')}<input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><label>{w('target')}<input type="number" min="1" step="100" value={target} onChange={e=>setTarget(e.target.value)}/></label></div>
    {error?<p role="alert">{error}</p>:!data||data.date!==date?<p role="status">{w('loading')}</p>:<>
     <p>{w(data.access.full?'full':data.access.finance?'finance':'operations')} · {w('saved')}: {reportTime(data.generatedAt)}</p>
     <VehicleMatrix toolbarTarget={columnToolbar} data={data} w={w} language={language} account={account} onSelect={setSelection}/>

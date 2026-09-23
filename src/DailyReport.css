@@ -32,3 +32,17 @@
 .daily-report .daily-report-matrix tbody th[scope="row"]{background:#fff}
 
 .daily-report .daily-report-refresh{align-self:flex-end}
+
+/* Compact report toolbar and rows. */
+.daily-report-actions{display:flex;align-items:center;gap:8px}
+.daily-report .daily-report-actions .record-icon-button{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;min-height:44px;padding:8px;border:0;border-radius:0;background:transparent;box-shadow:none;color:#196c5e}
+.daily-report .daily-report-actions .record-icon-button:hover{background:#edf6f3}
+.daily-report .daily-report-controls{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;max-width:560px;align-items:end;margin-top:14px}
+.daily-report-controls label{min-width:0;line-height:1.35}
+.daily-report .daily-report-controls input{box-sizing:border-box;min-width:0;width:100%;max-width:none;height:42px;padding:7px 9px}
+.daily-report .daily-report-matrix td,.daily-report .daily-report-matrix tbody th{padding:3px 10px;line-height:1.35}
+.daily-report .daily-report-matrix td button{min-height:34px;padding:4px 10px;line-height:1.35}
+.daily-report .daily-report-unified dt{padding:5px 0;line-height:1.35}
+.daily-report .daily-report-unified button{min-height:36px;padding:4px 10px;line-height:1.35}
+.daily-report .daily-report-unified strong{line-height:1.35}
+@media(max-width:640px){.daily-report .daily-report-controls{gap:10px}.daily-report-controls label{font-size:13px}.daily-report .daily-report-matrix td,.daily-report .daily-report-matrix tbody th{padding:2px 8px}}

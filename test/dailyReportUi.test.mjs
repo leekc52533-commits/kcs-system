@@ -35,3 +35,21 @@ test('matrix puts vehicles across columns and total last; vehicle cells open onl
  await act(async()=>document.querySelector('[data-metric="plannedBranches"] td button').click());assert.match(document.querySelector('.daily-report-dialog').textContent,/First branch/);assert.doesNotMatch(document.querySelector('.daily-report-dialog').textContent,/Second branch/);
  }finally{await act(async()=>root.unmount())}
 })
+
+test('report outside blank closes only deliberate taps; controls, drag and nested dialogs stay open',async()=>{
+ const root=createRoot(document.getElementById('root'));globalThis.fetch=async url=>({ok:true,json:async()=>result(new URL(url,'https://localhost').searchParams.get('date'))})
+ const point=(target,type,x=20)=>target.dispatchEvent(new MouseEvent(type,{bubbles:true,button:0,clientX:x,clientY:20}))
+ try{
+  await act(async()=>root.render(React.createElement(I18nProvider,{language:'en'},React.createElement(Report,{account:{id:1}}))))
+  await act(async()=>click('Open report'))
+  assert.equal(document.querySelectorAll('.daily-report-actions button').length,2)
+  assert.equal([...document.querySelectorAll('.daily-report>header button')].some(b=>b.textContent==='Close'),false)
+  const input=document.querySelector('.daily-report-controls input')
+  await act(async()=>{point(input,'pointerdown');point(input,'pointerup')});assert.ok(document.querySelector('.daily-report-controls'))
+  await act(async()=>{point(document.body,'pointerdown');point(document.body,'pointerup',60)});assert.ok(document.querySelector('.daily-report-controls'))
+  await act(async()=>document.querySelector('.daily-report-matrix td button').click())
+  await act(async()=>{point(document.body,'pointerdown');point(document.body,'pointerup')});assert.ok(document.querySelector('.daily-report-controls'))
+  await act(async()=>click('Close'))
+  await act(async()=>{point(document.body,'pointerdown');point(document.body,'pointerup')});assert.equal(document.querySelector('.daily-report-controls'),null)
+ }finally{await act(async()=>root.unmount())}
+})
