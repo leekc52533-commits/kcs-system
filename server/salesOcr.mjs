@@ -4,7 +4,7 @@ import path from 'node:path'
 import {execFile} from 'node:child_process'
 import {promisify} from 'node:util'
 import {image} from './driverExecutionService.mjs'
-import {validSalesDate,salesLineCents} from '../shared/sales.js'
+import {validSalesDate,salesLineCents,canonicalSaleMaterial} from '../shared/sales.js'
 const run=promisify(execFile)
 let reading=false
 const normalize=s=>String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'')
@@ -28,7 +28,7 @@ export function parseSalesOcr(text,masters={buyers:[],vehicles:[]}){
   const numeric=[...line.matchAll(/\b(\d[\d,]*\.\d{2,6})\b/g)].map(m=>decimal(m[1]))
   const desc=line.match(/(?:^|\s)([A-Z][A-Z /-]+?)\s+\d{2}\/\d{2}/i)?.[1]?.trim()||''
   let deliveryDate='';if(delivery&&fields.settlementDate){const year=Number(fields.settlementDate.slice(0,4)),md=`${delivery[2]}-${delivery[1]}`;const guess=`${md>fields.settlementDate.slice(5)?year-1:year}-${md}`;if(validSalesDate(guess))deliveryDate=guess}
-  fields.lines.push({slipNumber:slip?'TN-'+slip[1]:'',description:desc,deliveryDate,weightKg:numeric.length>=3?numeric.at(-3):'',unitPrice:numeric.length>=2?numeric.at(-2):'',amount:numeric.length>=1?Number(numeric.at(-1)).toFixed(2):''})
+  fields.lines.push({slipNumber:slip?'TN-'+slip[1]:'',description:canonicalSaleMaterial(desc),deliveryDate,weightKg:numeric.length>=3?numeric.at(-3):'',unitPrice:numeric.length>=2?numeric.at(-2):'',amount:numeric.length>=1?Number(numeric.at(-1)).toFixed(2):''})
  }
  return fields
 }

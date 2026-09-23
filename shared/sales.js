@@ -1,5 +1,10 @@
 export const salesColumns=['documentNumber','settlementDate','deliveryDate','billNumber','buyerName','vehiclePlate','slipNumber','description','weightKg','unitPrice','amount','total','remarks','createdBy']
 export const billKey=value=>String(value||'').trim().toUpperCase().replace(/\s+/g,'')
+// Sale documents may spell the same recovered material in several ways.
+export const canonicalSaleMaterial=value=>{
+ const name=String(value||'').trim().replace(/\s+/g,' ')
+ return /^(?:OCC|OLD CORRUGATED(?: BOX)?)$/i.test(name)?'OCC':name
+}
 export const validSalesDate=value=>/^\d{4}-\d{2}-\d{2}$/.test(String(value))&&!Number.isNaN(Date.parse(value+'T00:00:00Z'))&&new Date(value+'T00:00:00Z').toISOString().slice(0,10)===value
 // Quantities/prices are stored to three/six decimals; final amounts are integer cents.
 export const salesLineCents=(kg,price)=>Math.round((Number(kg)*Number(price)+Number.EPSILON)*100)

@@ -2,7 +2,7 @@ import {allocateDocumentNumber,documentNumber,documentNumberMap} from './documen
 import {db as defaultDb} from './database.mjs'
 import {withImmediateTransaction} from './branchServiceDateGuard.mjs'
 import {image} from './driverExecutionService.mjs'
-import {billKey,validSalesDate,salesLineCents,filterSales,salesColumns} from '../shared/sales.js'
+import {billKey,validSalesDate,salesLineCents,filterSales,salesColumns,canonicalSaleMaterial} from '../shared/sales.js'
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
@@ -17,19 +17,19 @@ export function salesMasters(db=defaultDb){
  }
  for(const sale of db.prepare('SELECT buyer_id,lines_json FROM sales_settlements ORDER BY id DESC LIMIT 500').all()){
   for(const line of JSON.parse(sale.lines_json)){
-   const description=String(line.description||'').trim(),unitPrice=String(line.unitPrice||'').trim()
+   const description=canonicalSaleMaterial(line.description),unitPrice=String(line.unitPrice||'').trim()
    if(!description||!unitPrice)continue
    const key=`${sale.buyer_id}:${description.toLowerCase()}:${unitPrice}`
    if(!seen.has(key)){seen.add(key);salePrices.push({buyerId:sale.buyer_id,description,unitPrice})}
   }
  }
- const productNames=db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='material_products'").get()?db.prepare("SELECT full_name FROM material_products WHERE status='active' AND unit='kg' ORDER BY full_name").all().map(row=>row.full_name):[]
+ const productNames=db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='material_products'").get()?[...new Set(db.prepare("SELECT full_name FROM material_products WHERE status='active' AND unit='kg' ORDER BY full_name").all().map(row=>canonicalSaleMaterial(row.full_name)))]:[]
  return{buyers:db.prepare("SELECT id,buyer_name name FROM buyers WHERE status='active' ORDER BY buyer_name").all(),vehicles:db.prepare("SELECT id,registration_number plate,vehicle_code code FROM vehicles WHERE status IN ('active','available','assigned') ORDER BY vehicle_code").all(),productNames,salePrices}
 }
 export function listSalePrices(db=defaultDb){return db.prepare('SELECT id,description,unit_price unitPrice,updated_by updatedBy,updated_at updatedAt FROM sale_price_catalog ORDER BY description_key,CAST(unit_price AS REAL),id').all()}
 export function saveSalePrice(payload,context,db=defaultDb){
  assertSalesAccess(context)
- const description=String(payload?.description||'').trim().replace(/\s+/g,' '),rawPrice=String(payload?.unitPrice||'').trim()
+ const description=canonicalSaleMaterial(payload?.description),rawPrice=String(payload?.unitPrice||'').trim()
  if(!description||description.length>300||!/^\d{1,5}(\.\d{1,6})?$/.test(rawPrice)||Number(rawPrice)<=0)throw fail('SALES_PRICE_INVALID')
  const unitPrice=Number(rawPrice).toFixed(6).replace(/0+$/,'').replace(/\.$/,'')
  const descriptionKey=description.toLowerCase(),actor=String(context.employeeName||context.role)
@@ -67,7 +67,7 @@ function validate(payload,db,old){
  if(!validSalesDate(payload.settlementDate))throw fail('SALES_DATE')
  if(!Array.isArray(payload.lines)||!payload.lines.length||payload.lines.length>100)throw fail('SALES_LINES')
  const slips=new Set(),lines=payload.lines.map(l=>{
-  const slipNumber=String(l.slipNumber||'').trim(),description=String(l.description||'').trim(),weightKg=String(l.weightKg??'').trim(),unitPrice=String(l.unitPrice??'').trim(),amount=String(l.amount??'').trim()
+  const slipNumber=String(l.slipNumber||'').trim(),description=canonicalSaleMaterial(l.description),weightKg=String(l.weightKg??'').trim(),unitPrice=String(l.unitPrice??'').trim(),amount=String(l.amount??'').trim()
   if(!validSalesDate(l.deliveryDate)||l.deliveryDate>payload.settlementDate)throw fail('SALES_DATE')
   if(!slipNumber||slipNumber.length>100||!description||description.length>300||slips.has(billKey(slipNumber)))throw fail('SALES_LINES');slips.add(billKey(slipNumber))
   if(!/^\d{1,7}(\.\d{1,3})?$/.test(weightKg)||Number(weightKg)<=0||!/^\d{1,5}(\.\d{1,6})?$/.test(unitPrice)||Number(unitPrice)<=0||!/^\d{1,10}(\.\d{1,2})?$/.test(amount))throw fail('SALES_LINES')

@@ -11,6 +11,8 @@ import {applyV60Migration} from '../server/migrationV60.mjs'
 import {applyV80Migration} from '../server/migrationV80.mjs'
 import {applyV81Migration} from '../server/migrationV81.mjs'
 import {applyV82Migration} from '../server/migrationV82.mjs'
+import {applyV83Migration} from '../server/migrationV83.mjs'
+import {canonicalSaleMaterial} from '../shared/sales.js'
 const office={role:'office',employeeName:'Office'},photo={name:'settlement.png',dataUrl:'data:image/png;base64,iVBORw0KGgo='}
 const payload=()=>({buyerId:1,vehicleId:1,billNumber:'CP-2026091027',settlementDate:'2026-09-10',total:'15.00',rounding:'0.00',reviewed:true,proof:photo,lines:[{deliveryDate:'2026-09-09',slipNumber:'TN-1',description:'OCC',weightKg:'10',unitPrice:'0.50',amount:'5.00'},{deliveryDate:'2026-09-09',slipNumber:'TN-2',description:'OCC',weightKg:'20',unitPrice:'0.50',amount:'10.00'}]})
 function setup(t){const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON;'+schemaSql);db.exec("INSERT INTO buyers(buyer_code,buyer_name) VALUES('F1','Factory One'),('F2','Factory Two');INSERT INTO vehicles(vehicle_code,registration_number,status) VALUES('V1','QTY5028','available');INSERT INTO schema_meta(version) VALUES(59)");const uploadsRoot=fs.mkdtempSync(path.join(os.tmpdir(),'kcs-sales-test-'));t.after(()=>{db.close();fs.rmSync(uploadsRoot,{recursive:true,force:true})});return{db,uploadsRoot}}
@@ -28,3 +30,22 @@ test('migration is idempotent and preserves master records',t=>{const{db}=setup(
 test('selling price migration upgrades through version 81',t=>{const{db}=setup(t);db.exec('INSERT INTO schema_meta(version) VALUES(79)');applyV80Migration(db);applyV81Migration(db);applyV81Migration(db);assert.equal(db.prepare('SELECT MAX(version) version FROM schema_meta').get().version,81);assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(),[])})
 test('migration retains existing factory prices as global prices',t=>{const{db}=setup(t);db.exec('DROP TABLE sale_price_catalog');db.exec("CREATE TABLE sale_price_catalog(id INTEGER PRIMARY KEY,buyer_id INTEGER,description TEXT,description_key TEXT,unit_price TEXT,updated_by TEXT,updated_at TEXT DEFAULT CURRENT_TIMESTAMP,UNIQUE(buyer_id,description_key))");db.prepare('INSERT INTO sale_price_catalog(buyer_id,description,description_key,unit_price,updated_by) VALUES(?,?,?,?,?)').run(1,'OCC','occ','0.42','Office');db.prepare('INSERT INTO sale_price_catalog(buyer_id,description,description_key,unit_price,updated_by) VALUES(?,?,?,?,?)').run(2,'OCC','occ','0.45','Office');db.exec('INSERT INTO schema_meta(version) VALUES(80)');applyV81Migration(db);assert.equal(listSalePrices(db).length,1);assert.equal(listSalePrices(db)[0].unitPrice,'0.45');assert.equal(db.prepare('SELECT MAX(version) version FROM schema_meta').get().version,81)})
 test('migration to multi-price keeps existing global price IDs and audit history',t=>{const{db}=setup(t);db.exec('DROP TABLE sale_price_catalog');db.exec("CREATE TABLE sale_price_catalog(id INTEGER PRIMARY KEY,description TEXT NOT NULL,description_key TEXT NOT NULL UNIQUE,unit_price TEXT NOT NULL,updated_by TEXT NOT NULL,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)");db.exec("INSERT INTO sale_price_catalog(id,description,description_key,unit_price,updated_by) VALUES(7,'OCC','occ','0.42','Office');INSERT INTO sale_price_audit(catalog_id,actor) VALUES(7,'Office');INSERT INTO schema_meta(version) VALUES(81)");applyV82Migration(db);applyV82Migration(db);assert.equal(db.prepare('SELECT MAX(version) v FROM schema_meta').get().v,82);assert.equal(db.prepare('SELECT id FROM sale_price_catalog').get().id,7);assert.equal(db.prepare('SELECT catalog_id FROM sale_price_audit').get().catalog_id,7);saveSalePrice({description:'OCC',unitPrice:'0.45'},office,db);assert.deepEqual(listSalePrices(db).map(p=>p.unitPrice),['0.42','0.45']);assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(),[])})
+test('OCC aliases share one name while different sale prices and historical amounts survive migration',t=>{
+ const{db,uploadsRoot}=setup(t)
+ const bill=payload();bill.lines[0].description='OLD CORRUGATED BOX';bill.lines[1].description='OLD CORRUGATED'
+ const saved=saveSales(bill,office,db,{uploadsRoot})
+ assert.deepEqual(saved.lines.map(line=>line.description),['OCC','OCC'])
+ db.prepare('UPDATE sales_settlements SET lines_json=? WHERE id=?').run(JSON.stringify(bill.lines),saved.id)
+ db.prepare('INSERT INTO sale_price_catalog(description,description_key,unit_price,updated_by) VALUES(?,?,?,?)').run('OCC','occ','0.42','Office')
+ db.prepare('INSERT INTO sale_price_catalog(description,description_key,unit_price,updated_by) VALUES(?,?,?,?)').run('OLD CORRUGATED BOX','old corrugated box','0.42','Office')
+ db.prepare('INSERT INTO sale_price_catalog(description,description_key,unit_price,updated_by) VALUES(?,?,?,?)').run('OLD CORRUGATED','old corrugated','0.47','Office')
+ db.exec('INSERT INTO schema_meta(version) VALUES(82)')
+ applyV83Migration(db);assert.equal(applyV83Migration(db).noOp,true)
+ assert.deepEqual(listSalePrices(db).map(item=>[item.description,item.unitPrice]),[['OCC','0.42'],['OCC','0.47']])
+ assert.deepEqual(salesRecord(saved.id,office,db).lines.map(line=>line.description),['OCC','OCC'])
+ assert.equal(salesRecord(saved.id,office,db).total,'15.00')
+ assert.equal(listSales({from:'2026-09-01',to:'2026-09-30'},office,db).items[0].description,'OCC')
+ assert.ok(fs.existsSync(path.join(uploadsRoot,salesPhoto(saved.id,office,db).storage_key)))
+ assert.equal(saveSalePrice({description:'old corrugated box',unitPrice:'0.48'},office,db).description,'OCC')
+ assert.equal(canonicalSaleMaterial('OLD CORRUGATED BOXES'),'OLD CORRUGATED BOXES')
+})
