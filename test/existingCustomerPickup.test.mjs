@@ -150,7 +150,7 @@ test('schema 62 upgrade is repeatable and preserves pending transfers and dispat
  assert.equal(db.prepare('PRAGMA integrity_check').get().integrity_check,'ok');db.close()
 })
 
-import {collectionAccess,setCollectionAccess,dispatchOpenCollection} from '../server/flexibleCollectionService.mjs'
+import {collectionAccess,setCollectionAccess,dispatchOpenCollection,collectionDispatchOptions} from '../server/flexibleCollectionService.mjs'
 import {branchCollectionOpen} from '../server/flexibleCollectionPolicy.mjs'
 import {driverToday} from '../server/dispatchService.mjs'
 import {applyV74Migration} from '../server/migrationV74.mjs'
@@ -240,7 +240,7 @@ test('source route permission follows an untouched claim onto a closed destinati
  assert.equal(branchCollectionOpen(db,1,date),true);assert.equal(flexibleExecution(db,stops[0]),true)
  assert.equal(flexibleExecution(db,stops[1]),false)
  setCollectionAccess(db,owner,2,{isOpen:false,revision:1});assert.equal(flexibleExecution(db,stops[0]),false)
- setCollectionAccess(db,owner,2,{isOpen:true,revision:2});dispatchOpenCollection(db,manager,{routeNumber:2,branchId:1,tripId})
+ setCollectionAccess(db,owner,2,{isOpen:true,revision:2});assert.equal(collectionDispatchOptions(db,manager,2).branches.length,0);dispatchOpenCollection(db,manager,{routeNumber:1,branchId:1,tripId})
  assert.equal(db.prepare('SELECT dispatch_trip_id id FROM dispatch_stops WHERE id=?').get(stops[0]).id,tripId)
  }finally{db.close()}
 })
@@ -282,5 +282,22 @@ test('approved vehicle transfer synchronizes both previously approved routes',()
   for(const route of [1,2])db.prepare("INSERT OR REPLACE INTO daily_route_approvals(dispatch_day_id,route_number,route_signature,actor,reason) VALUES(?,?,?,'Supervisor','Ready')").run(day,route,approvalSignature(db,day,route))
   const r=request(db,targetId);approve(db,r.requestId)
   for(const route of [1,2])assert.equal(db.prepare('SELECT route_signature s FROM daily_route_approvals WHERE dispatch_day_id=? AND route_number=?').get(day,route).s,approvalSignature(db,day,route))
+ }finally{db.close()}
+})
+
+test('route transfer lists only today current-route pending stops and revalidates date and membership',()=>{
+ const {db,targetId,stops}=twoCars();try{
+ openZone(db)
+ const options=collectionDispatchOptions(db,manager,1)
+ assert.equal(options.serviceDate,date);assert.ok(options.branches.some(b=>b.id===1))
+ db.prepare("INSERT INTO branches(jodoo_branch_id,customer_id,area_id,branch_name) VALUES('UNSCHEDULED',1,1,'Not today')").run()
+ assert.equal(collectionDispatchOptions(db,manager,1).branches.some(b=>b.name==='Not today'),false)
+ assert.throws(()=>dispatchOpenCollection(db,manager,{routeNumber:1,branchId:1,tripId:targetId,serviceDate:'2026-09-15'}),{code:'PICKUP_STALE'})
+ db.prepare('UPDATE dispatch_stops SET route_number=2 WHERE id=?').run(stops[0])
+ assert.equal(collectionDispatchOptions(db,manager,1).branches.some(b=>b.id===1),false)
+ assert.throws(()=>dispatchOpenCollection(db,manager,{routeNumber:1,branchId:1,tripId:targetId}),{code:'FLEX_CLOSED'})
+ db.prepare('UPDATE dispatch_stops SET route_number=1,arrived_at=? WHERE id=?').run(now.toISOString(),stops[0])
+ assert.equal(collectionDispatchOptions(db,manager,1).branches.some(b=>b.id===1),false)
+ assert.equal(collectionDispatchOptions(db,{...manager,today:'2026-09-15'},1).branches.length,0)
  }finally{db.close()}
 })

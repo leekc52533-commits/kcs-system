@@ -13,11 +13,33 @@ test('owner switches use live revision and translated labels; supervisors retain
  for(const language of ['zh','en','ms'])for(const canEdit of [true,false]){
   const root=createRoot(document.getElementById('root')),calls=[];let isOpen=0,revision=4
   globalThis.fetch=async(url,options={})=>{calls.push([url,options]);if(options.method==='PATCH'){const p=JSON.parse(options.body);assert.equal(p.revision,4);assert.equal(p.isOpen,true);isOpen=1;revision++}return{ok:true,json:async()=>({canEdit,items:[{id:1,name:'Kuching MPKS',isOpen,active:1,revision}]})}}
-  try{await act(async()=>root.render(React.createElement(I18nProvider,{language},React.createElement(React.Fragment,null,React.createElement(Switch,{routeNumber:1,access:{data:{canEdit,items:[{id:1,name:'Kuching MPKS',isOpen:0,revision:4}]},refresh:async()=>{}}}),React.createElement(Page)))))
+  try{await act(async()=>root.render(React.createElement(I18nProvider,{language},React.createElement(React.Fragment,null,React.createElement(Switch,{routeNumber:1,access:{data:{canEdit,items:[{id:1,name:'Kuching MPKS',isOpen:0,revision:4}]},refresh:async()=>{}}}),React.createElement(Page,{routeNumber:1,date:'2026-09-23',isOpen:true})))))
    if(canEdit)assert.match(document.querySelector('[role=switch]').getAttribute('aria-label'),/Kuching MPKS/);assert.equal(document.body.textContent.includes('flex.'),false)
    assert.equal(document.querySelectorAll('[role=switch]').length,canEdit?1:0)
    assert.ok(document.querySelector('details form'));assert.equal(document.querySelectorAll('input[type=date]').length,0)
    if(canEdit){await act(async()=>document.querySelector('[role=switch]').click());assert.equal(calls.filter(c=>c[1].method==='PATCH').length,1);assert.equal(calls.find(c=>c[1].method==='PATCH')[0],'/api/route-collection-access/1')}
   }finally{await act(async()=>root.unmount())}
+ }
+})
+
+test('customer transfer uses route card context, selects customer before vehicle and refreshes after saving',async()=>{
+ for(const language of ['zh','en','ms']){
+ const root=createRoot(document.getElementById('root')),calls=[];let refreshed=0
+ const refresh=()=>refreshed++;window.addEventListener('kcs-customer-transferred',refresh)
+ globalThis.fetch=async(url,options={})=>{calls.push([url,options]);return {ok:true,json:async()=>options.method==='POST'?{ok:true}:{serviceDate:'2026-09-23',branches:[{id:10,name:'Branch A',company:'Company',tripId:1}],trips:[{id:1,plate:'OWN',driverName:'A',tripNumber:1},{id:2,plate:'OTHER',driverName:'B',tripNumber:1}]}}}
+ try{
+ await act(async()=>root.render(React.createElement(I18nProvider,{language},React.createElement(Page,{routeNumber:3,date:'2026-09-23',isOpen:true}))))
+ assert.match(document.querySelector('summary').textContent,/客户转接|Pass Customer|Customer Transfer/)
+ await act(async()=>{const d=document.querySelector('details');d.open=true;d.dispatchEvent(new Event('toggle'))})
+ assert.ok(calls.some(c=>c[0]==='/api/route-collection-access/3/dispatch'))
+ assert.equal(document.querySelectorAll('select').length,1)
+ await act(async()=>{const s=document.querySelector('select');s.value='10';s.dispatchEvent(new Event('change',{bubbles:true}))})
+ assert.equal(document.querySelectorAll('select').length,2)
+ assert.equal(document.querySelectorAll('select')[1].textContent.includes('OWN'),false)
+ await act(async()=>{const s=document.querySelectorAll('select')[1];s.value='2';s.dispatchEvent(new Event('change',{bubbles:true}))})
+ await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})))
+ assert.deepEqual(JSON.parse(calls.find(c=>c[1].method==='POST')[1].body),{routeNumber:3,serviceDate:'2026-09-23',branchId:10,tripId:2})
+ assert.equal(refreshed,1)
+ }finally{window.removeEventListener('kcs-customer-transferred',refresh);await act(async()=>root.unmount())}
  }
 })

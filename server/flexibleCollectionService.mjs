@@ -2,7 +2,7 @@ import {readMenu} from './menuLayoutService.mjs'
 import {canManageDispatch} from '../shared/dispatchAccess.js'
 import {withImmediateTransaction} from './branchServiceDateGuard.mjs'
 import {kuchingDate} from '../shared/kuchingTime.js'
-import {branchCollectionOpen,branchCollectionRoutes} from './flexibleCollectionPolicy.mjs'
+import {branchCollectionOpen} from './flexibleCollectionPolicy.mjs'
 import {collectExistingCustomer} from './existingCustomerPickupService.mjs'
 const fail=(code,statusCode=409)=>{throw Object.assign(Error(code),{code,statusCode})}
 function manager(ctx){if(!canManageDispatch(ctx))fail('INTAKE_PERMISSION',403)}
@@ -16,11 +16,12 @@ export function setCollectionAccess(db,ctx,id,payload){return withImmediateTrans
  db.prepare('INSERT INTO route_collection_access_events(route_number,is_open,account_id,reason) VALUES(?,?,?,?)').run(Number(id),Number(payload.isOpen),ctx.id,'Owner route switch')
  return {ok:true}
 })}
-export function collectionDispatchOptions(db,ctx,zoneId){manager(ctx);const date=ctx.today||kuchingDate();return {
- branches:db.prepare(`SELECT b.id,b.branch_name name,c.name company FROM branches b JOIN customers c ON c.id=b.customer_id WHERE b.is_active=1 AND b.status='active' AND b.lifecycle_status='ACTIVE' AND c.is_active=1 ORDER BY c.name,b.branch_name`).all().filter(b=>branchCollectionRoutes(db,b.id,date).includes(Number(zoneId))&&branchCollectionOpen(db,b.id,date)),
+export function collectionDispatchOptions(db,ctx,zoneId){manager(ctx);const date=ctx.today||kuchingDate();return {serviceDate:date,
+ branches:db.prepare(`SELECT b.id,b.jodoo_branch_id branchCode,b.branch_name name,c.name company,s.dispatch_trip_id tripId FROM branches b JOIN customers c ON c.id=b.customer_id JOIN dispatch_stops s ON s.branch_id=b.id JOIN dispatch_trips t ON t.id=s.dispatch_trip_id JOIN dispatch_days dd ON dd.id=t.dispatch_day_id WHERE b.is_active=1 AND b.status='active' AND b.lifecycle_status='ACTIVE' AND c.is_active=1 AND dd.dispatch_date=? AND s.route_number=? AND s.status IN ('locked','available') AND s.arrived_at IS NULL AND s.completed_at IS NULL AND t.completed_at IS NULL ORDER BY c.name,b.branch_name`).all(date,Number(zoneId)).filter(b=>branchCollectionOpen(db,b.id,date)),
  trips:db.prepare(`SELECT t.id,t.trip_number tripNumber,d.driver_id driverId,e.name driverName,v.registration_number plate FROM dispatch_trips t JOIN dispatches d ON d.id=t.dispatch_id JOIN dispatch_days dd ON dd.id=t.dispatch_day_id JOIN employees e ON e.id=d.driver_id JOIN vehicles v ON v.id=d.vehicle_id WHERE dd.dispatch_date=? AND dd.status='in_progress' AND t.execution_status='in_progress' AND t.completed_at IS NULL AND e.is_active=1 AND e.employment_status='active' AND v.operational_status IN ('active','available') AND v.status IN ('available','assigned') ORDER BY v.registration_number,t.trip_number`).all(date)
 }}
 export function dispatchOpenCollection(db,ctx,payload){manager(ctx);return withImmediateTransaction(db,()=>{
+ if(payload.serviceDate&&payload.serviceDate!==(ctx.today||kuchingDate()))fail('PICKUP_STALE')
  if(!branchCollectionOpen(db,payload.branchId,ctx.today||kuchingDate()))fail('FLEX_CLOSED')
  const options=collectionDispatchOptions(db,ctx,payload.routeNumber);if(!options.branches.some(b=>b.id===Number(payload.branchId)))fail('FLEX_CLOSED');const t=options.trips.find(t=>t.id===Number(payload.tripId));if(!t)fail('INTAKE_TRIP')
  // Only this trusted server path may attribute a supervisor push to a target driver.
