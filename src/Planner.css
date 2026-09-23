@@ -60,3 +60,13 @@
 .route-assignment-card summary .route-collection-control button{min-height:36px;padding:5px 9px;font-size:.78rem}
 .route-assignment-card> :not(summary){margin-left:12px;margin-right:12px}
 .route-assignment-card> :last-child{margin-bottom:12px}
+.route-execution-controls{margin-top:10px}
+.route-execution-controls>label{display:grid;gap:5px}
+.route-handover{margin-top:0!important}
+.route-handover-fields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.route-handover-fields label,.route-handover-actions label{display:grid;gap:5px;margin:0}
+.route-handover-fields select,.route-handover-actions input{box-sizing:border-box;width:100%;min-width:0;padding:8px;border:1px solid #cbd8d4;border-radius:8px;background:#fff;font:inherit}
+.route-handover-actions{display:flex;align-items:end;gap:8px;flex-wrap:wrap;margin-top:10px}
+.route-handover-actions label{flex:1 1 220px}
+@media(max-width:900px){.route-handover-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:520px){.route-handover-fields{grid-template-columns:minmax(0,1fr)}}

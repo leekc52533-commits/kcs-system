@@ -64,6 +64,22 @@ test('today handover preserves bills and completed stops, changes ownership and 
   assert.equal(db.prepare('PRAGMA integrity_check').get().integrity_check,'ok')
 })
 
+test('today handover changes attendants without changing vehicle or driver',()=>{
+  const {db}=fixture()
+  db.prepare("INSERT INTO employees(employee_code,name,job_role,employment_status,is_active) VALUES('A2','Attendant Two','Attendant / Crew','active',1)").run()
+  db.prepare('UPDATE dispatch_stops SET route_number=1,route_stop_sequence=stop_sequence').run()
+  const day=getDispatchDay(date,db)
+  db.prepare('INSERT INTO daily_route_assignments(dispatch_day_id,route_number,vehicle_id) VALUES(?,1,1)').run(day.id)
+  const context={role:'supervisor',employeeName:'Supervisor',today:date}
+  const payload={vehicleId:1,driverId:1,assistantIds:[2],reason:'Attendant replacement',expectedRevision:day.revision}
+  assert.throws(()=>handoverRoute(date,1,{...payload,assistantIds:[1]},context,db),/跟车员选择无效/)
+  handoverRoute(date,1,payload,context,db)
+  assert.deepEqual(db.prepare('SELECT employee_id id FROM dispatch_vehicle_assistants WHERE dispatch_day_id=? AND vehicle_id=1').all(day.id).map(row=>row.id),[2])
+  assert.equal(getDispatchDay(date,db).vehicleBoards.find(board=>board.id===1).driverId,1)
+  assert.equal(db.prepare('SELECT assistant_id id FROM dispatches WHERE vehicle_id=1 LIMIT 1').get().id,2)
+  assert.equal(db.prepare("SELECT json_extract(after_json,'$.assistantIds[0]') id FROM dispatch_change_logs WHERE change_type='route_day_handover' ORDER BY id DESC LIMIT 1").get().id,2)
+})
+
 test('v44 migration is additive, preserves dispatch counts and is idempotent',()=>{
   const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON;'+schemaSql);db.exec('DROP TABLE purchase_payment_proofs;DROP TABLE purchase_bill_items;DROP TABLE purchase_bills;DELETE FROM schema_meta;INSERT INTO schema_meta(version) VALUES(43)')
   const first=applyV44Migration(db),second=applyV44Migration(db);assert.equal(first.schemaVersion,44);assert.deepEqual(first.before,first.after);assert.equal(second.noOp,true);assert.equal(db.prepare('PRAGMA integrity_check').get().integrity_check,'ok')

@@ -885,6 +885,14 @@ export function handoverRoute(date,routeNumber,payload={},context={},database=de
     if(!assignment?.vehicleId)throw fail('请先为这条 Route 分配车辆')
     const trips=database.prepare('SELECT d.* FROM dispatches d JOIN dispatch_trips dt ON dt.dispatch_id=d.id WHERE dt.dispatch_day_id=? AND d.vehicle_id=?').all(day.id,assignment.vehicleId)
     if(!trips.length)throw fail('没有可交接的行程')
+    const currentAssistants=database.prepare('SELECT employee_id id FROM dispatch_vehicle_assistants WHERE dispatch_day_id=? AND vehicle_id=? ORDER BY employee_id').all(day.id,assignment.vehicleId).map(row=>row.id)
+    if(payload.assistantIds!==undefined&&!Array.isArray(payload.assistantIds))throw fail('跟车员选择无效')
+    const assistantIds=payload.assistantIds===undefined?currentAssistants:payload.assistantIds.map(Number)
+    if(assistantIds.length>MAX_ASSIGNED_CREW||new Set(assistantIds).size!==assistantIds.length||assistantIds.some(id=>!Number.isInteger(id)||id<=0||id===driverId))throw fail('跟车员选择无效')
+    for(const employeeId of assistantIds){
+      const attendant=database.prepare(`SELECT 1 FROM employees e WHERE e.id=? AND e.is_active=1 AND e.employment_status='active' AND (lower(e.job_role) IN ('assistant','crew','attendant / crew') OR EXISTS(SELECT 1 FROM employee_job_roles r WHERE r.employee_id=e.id AND r.role='Attendant / Crew' AND r.is_active=1)) AND NOT EXISTS(SELECT 1 FROM route_employee_availability a WHERE a.employee_id=e.id AND a.availability_date=? AND a.status<>'available')`).get(employeeId,date)
+      if(!attendant||database.prepare('SELECT 1 FROM dispatch_vehicle_assistants WHERE dispatch_day_id=? AND employee_id=? AND vehicle_id<>?').get(day.id,employeeId,assignment.vehicleId)||database.prepare('SELECT 1 FROM dispatch_trips dt JOIN dispatches d ON d.id=dt.dispatch_id WHERE dt.dispatch_day_id=? AND d.driver_id=? AND d.vehicle_id<>?').get(day.id,employeeId,assignment.vehicleId))throw fail('跟车员当天不可用或已有其他任务')
+    }
     const usable=database.prepare("SELECT 1 FROM vehicles v WHERE id=? AND operational_status IN ('available','active') AND status IN ('available','assigned') AND (is_temporary=0 OR temporary_date=?) AND NOT EXISTS(SELECT 1 FROM route_vehicle_availability va WHERE va.vehicle_id=v.id AND va.availability_date=? AND va.status<>'available')").get(vehicleId,date,date)
     const driver=database.prepare(`SELECT e.* FROM employees e WHERE id=? AND is_active=1 AND employment_status='active' AND (lower(job_role) IN ('driver','supervisor') OR EXISTS(SELECT 1 FROM employee_job_roles r WHERE r.employee_id=e.id AND r.role='Driver' AND r.is_active=1)) AND NOT EXISTS(SELECT 1 FROM route_employee_availability a WHERE a.employee_id=e.id AND a.availability_date=? AND a.status<>'available')`).get(driverId,date)
     if(!usable||!driver)throw fail('请选择可用车辆和司机')
@@ -894,18 +902,24 @@ export function handoverRoute(date,routeNumber,payload={},context={},database=de
     const targetTrips=vehicleId===assignment.vehicleId?[]:database.prepare('SELECT d.id,dt.id tripId,dt.execution_status FROM dispatches d JOIN dispatch_trips dt ON dt.dispatch_id=d.id WHERE dt.dispatch_day_id=? AND d.vehicle_id=?').all(day.id,vehicleId)
     for(const target of targetTrips)if(target.execution_status!=='not_started'||database.prepare('SELECT 1 FROM dispatch_stops WHERE dispatch_trip_id=? LIMIT 1').get(target.tripId)||database.prepare('SELECT 1 FROM unloading_weight_records WHERE dispatch_trip_id=? LIMIT 1').get(target.tripId))throw fail('接手车辆已有收货或卸货记录，不能合并')
     if(vehicleId!==assignment.vehicleId&&database.prepare('SELECT 1 FROM dispatch_vehicle_assistants WHERE dispatch_day_id=? AND vehicle_id=?').get(day.id,vehicleId))throw fail('接手车辆已有跟车员安排，请先核对')
-    if(trips.every(t=>t.vehicle_id===vehicleId&&t.driver_id===driverId))throw fail('车辆和司机没有改变')
-    const before={vehicleId:assignment.vehicleId,trips,targetTrips}
+    if(trips.every(t=>t.vehicle_id===vehicleId&&t.driver_id===driverId)&&assistantIds.length===currentAssistants.length&&assistantIds.every(id=>currentAssistants.includes(id)))throw fail('当天车辆、司机和跟车员没有改变')
+    const before={vehicleId:assignment.vehicleId,trips,targetTrips,assistantIds:currentAssistants}
     const approval=database.prepare('SELECT route_signature signature FROM daily_route_approvals WHERE dispatch_day_id=? AND route_number=?').get(day.id,route)
     const preserveApproval=approval&&(approval.signature===routeSignature(database,day.id,route)||trips.some(t=>t.status==='in_progress'))
     for(const target of targetTrips)database.prepare('UPDATE dispatches SET vehicle_id=NULL,driver_id=NULL WHERE id=?').run(target.id)
     for(const trip of trips)database.prepare('UPDATE dispatches SET vehicle_id=?,driver_id=?,driver_employment_period_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(vehicleId,driverId,currentEmploymentPeriod(database,driverId),trip.id)
     if(vehicleId!==assignment.vehicleId)database.prepare('UPDATE dispatch_vehicle_assistants SET vehicle_id=? WHERE dispatch_day_id=? AND vehicle_id=?').run(vehicleId,day.id,assignment.vehicleId)
+    if(payload.assistantIds!==undefined){
+      database.prepare('DELETE FROM dispatch_vehicle_assistants WHERE dispatch_day_id=? AND vehicle_id=?').run(day.id,vehicleId)
+      const insert=database.prepare('INSERT INTO dispatch_vehicle_assistants(dispatch_day_id,vehicle_id,employee_id,employment_period_id) VALUES(?,?,?,?)')
+      for(const employeeId of assistantIds)insert.run(day.id,vehicleId,employeeId,currentEmploymentPeriod(database,employeeId))
+      for(const trip of trips)database.prepare('UPDATE dispatches SET assistant_id=?,assistant_employment_period_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(assistantIds[0]||null,currentEmploymentPeriod(database,assistantIds[0]||null),trip.id)
+    }
     database.prepare('UPDATE daily_route_assignments SET vehicle_id=?,updated_at=CURRENT_TIMESTAMP WHERE dispatch_day_id=? AND route_number=?').run(vehicleId,day.id,route)
     // Supervisor confirms the new operational assignment; no automatic approval of unapproved Routes.
     if(preserveApproval)database.prepare('UPDATE daily_route_approvals SET route_signature=? WHERE dispatch_day_id=? AND route_number=?').run(routeSignature(database,day.id,route),day.id,route)
     database.prepare("UPDATE dispatch_days SET approved_revision=CASE WHEN status='approved' AND approved_revision=revision THEN revision+1 ELSE approved_revision END,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(day.id)
-    database.prepare(`INSERT INTO dispatch_change_logs(dispatch_day_id,actor,change_type,entity_type,entity_id,before_json,after_json,requires_reapproval) VALUES(?,?,'route_day_handover','route',?,?,?,0)`).run(day.id,actor(context.employeeName),String(route),json(before),json({vehicleId,driverId,reason,date,temporary:true}))
+    database.prepare(`INSERT INTO dispatch_change_logs(dispatch_day_id,actor,change_type,entity_type,entity_id,before_json,after_json,requires_reapproval) VALUES(?,?,'route_day_handover','route',?,?,?,0)`).run(day.id,actor(context.employeeName),String(route),json(before),json({vehicleId,driverId,assistantIds,reason,date,temporary:true}))
     return getDispatchDay(date,database)
   })
 }
