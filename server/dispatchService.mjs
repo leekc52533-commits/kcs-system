@@ -304,6 +304,14 @@ function generateRange({startDate=iso(),generatedBy='Supervisor',count=7,onlyMis
 // Fill the rolling window without regenerating any existing day or its approvals.
 export function ensureRollingWeek({startDate=iso(),generatedBy='Supervisor'}={},database=defaultDb){
   const start=iso(startDate),end=addDays(start,6)
+  // Repair legacy inactive branches that predate lifecycle synchronization.
+  withImmediateTransaction(database,()=>{
+   const inactive=database.prepare(`SELECT DISTINCT b.id FROM branches b JOIN dispatch_stops s ON s.branch_id=b.id
+    JOIN dispatch_trips t ON t.id=s.dispatch_trip_id JOIN dispatch_days day ON day.id=t.dispatch_day_id
+    WHERE day.dispatch_date>=? AND s.status NOT IN ('completed','cancelled')
+    AND (b.is_active<>1 OR lower(b.status)<>'active' OR COALESCE(b.lifecycle_status,'ACTIVE')<>'ACTIVE')`).all(start)
+   for(const b of inactive)syncInactiveBranchStops({branchId:b.id,startDate:start,changedBy:generatedBy},database)
+  })
   const count=database.prepare('SELECT COUNT(*) n FROM dispatch_days WHERE dispatch_date BETWEEN ? AND ?').get(start,end).n
   if(count!==7)generateRange({startDate:start,generatedBy,count:7,onlyMissing:true},database)
   const sundayReview=withImmediateTransaction(database,()=>{const reviews=[];for(let i=0;i<7;i++){const d=dayByDate(database,addDays(start,i));if(d){const warning=prepareSundayDay(database,d);if(warning)reviews.push(warning)}}fillRouteVehicleDefaults(database,start);return reviews})
@@ -1300,8 +1308,8 @@ export function syncSupervisorSavedSchedule({branchId,scheduleId,startDate=iso()
 // Other explicit visits and all execution/pending-review protections remain intact.
 export function syncInactiveBranchStops({branchId,startDate=iso(),changedBy='Supervisor'},database=defaultDb){
  return withImmediateTransaction(database,()=>{
-  const branch=database.prepare('SELECT lifecycle_status FROM branches WHERE id=?').get(branchId)
-  if(!['TEMPORARILY_PAUSED','CLOSED'].includes(branch?.lifecycle_status))throw new Error('Paused or closed Branch required')
+  const branch=database.prepare('SELECT lifecycle_status,status,is_active FROM branches WHERE id=?').get(branchId)
+  if(!branch||(branch.is_active===1&&String(branch.status).toLowerCase()==='active'&&(!branch.lifecycle_status||branch.lifecycle_status==='ACTIVE')))throw new Error('Inactive Branch required')
   const stops=database.prepare(`SELECT s.*,day.dispatch_date,day.status day_status,t.execution_status,d.status dispatch_status
    FROM dispatch_stops s JOIN dispatch_trips t ON t.id=s.dispatch_trip_id
    JOIN dispatch_days day ON day.id=t.dispatch_day_id JOIN dispatches d ON d.id=s.dispatch_id
