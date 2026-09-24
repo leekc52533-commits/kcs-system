@@ -40,10 +40,10 @@ export default function ExpenseRecordsPage({onBack}){
   const displayed=rows
   const save=async form=>{setBusy(true);setError('');setMessage('');try{const description=form.category==='Other'?form.otherDescription.trim():form.category;await api('/api/expenses',{method:'POST',body:JSON.stringify({...form,description:description||'Other',proof:await proofData(form.proof)})});setShowForm(false);setMessage('✓ Expense and receipt photo saved.');await load()}catch(item){setError(item.status===413?'The receipt upload is too large. Retake the photo.':item.message)}finally{setBusy(false)}}
   return <div className="page purchase-archive expense-records unified-expenses">
-    <div className="expense-toolbar expense-icon-toolbar"><button type="button" title={ui("＋ Record Expense")} aria-label={ui("＋ Record Expense")} className={showForm?'active':''} onClick={()=>{setOpenFilter(null);setShowForm(true)}}><RecordActionIcon kind="add"/></button>
-      {data?.canCorrect&&<ExpenseCorrectionCenter.Entry iconOnly onClick={()=>setCorrection(true)}/>}
+    <div className="expense-toolbar expense-icon-toolbar"><button type="button" title={ui("Record Expense")} aria-label={ui("Record Expense")} className={'expense-record-action'+(showForm?' active':'')} onClick={()=>{setOpenFilter(null);setShowForm(true)}}>{ui("Record Expense")}</button>
+      {exportTarget&&data?.canCorrect&&createPortal(<ExpenseCorrectionCenter.Entry iconOnly onClick={()=>setCorrection(true)}/>,exportTarget)}
       {exportTarget&&createPortal(<button type="button" title={ui("Download Excel with Receipts")} aria-label={ui("Download Excel with Receipts")} aria-haspopup="dialog" aria-expanded={showExport} onClick={()=>{setOpenFilter(null);setShowExport(true)}}><ExpenseExportIcon/></button>,exportTarget)}
-      <button type="button" title={w.title} aria-label={w.title} onClick={()=>{setOpenFilter(null);setShowColumns(true)}}><RecordActionIcon kind="columns"/></button>
+      {exportTarget&&createPortal(<button type="button" title={w.title} aria-label={w.title} onClick={()=>{setOpenFilter(null);setShowColumns(true)}}><RecordActionIcon kind="columns"/></button>,exportTarget)}
     </div>
     {showColumns&&<ExpenseColumnOrder order={columnOrder} columns={columns.map(([k,l])=>[k,columnLabel(k,l)])} w={w} onSave={setColumnOrder} onClose={()=>setShowColumns(false)}/>}
     {historyItem&&<ExpenseCorrection readOnly item={historyItem} onClose={()=>setHistoryItem(null)}/>}
