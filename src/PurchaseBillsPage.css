@@ -15,7 +15,7 @@
 #root .purchase-archive .expense-toolbar{gap:8px;padding:4px 0;margin:0;flex-wrap:wrap;overflow:visible}
 #root .purchase-archive .expense-toolbar>label{font:inherit;gap:6px}
 #root .purchase-archive .expense-toolbar input{font:inherit;width:148px;min-height:32px;height:32px;padding:4px 8px;border-radius:6px}
-#root .purchase-archive .expense-toolbar>button{font:inherit;font-weight:400;border:1px solid #168675;background:#e8f3ef;color:#176e60;min-height:32px;padding:4px 10px;border-radius:6px;flex:0 0 auto}
+#root .purchase-archive .expense-toolbar>button{font:inherit;font-weight:700;border:1px solid #176f60;background:#176f60;color:#fff;height:40px;min-height:40px;padding:8px 16px;border-radius:10px;flex:0 0 auto}
 #root .purchase-archive .archive-table th{font-size:inherit;font-weight:700;line-height:1.2;padding:4px 10px}
 #root .purchase-archive .archive-table td{font-size:inherit;line-height:1.1;padding:1px 10px;height:31px;vertical-align:middle}
 #root .purchase-archive .expense-filter-trigger{font:inherit;font-weight:700;min-height:0;padding:0;gap:4px}
