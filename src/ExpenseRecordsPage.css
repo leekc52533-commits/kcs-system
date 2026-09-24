@@ -32,3 +32,26 @@
 .expense-column-row{display:flex;gap:8px;align-items:center;border-bottom:1px solid #dce6e7;padding:8px 0}.expense-column-row>span{flex:1}.expense-column-row>button{min-width:34px;padding:5px}.expense-corrected-tag{border:1px solid #d19a41;border-radius:6px;background:#fff3d9;color:#80500b;padding:5px 8px;white-space:nowrap}.expense-column-modal header{gap:12px;align-items:flex-start}
 
 .cash-modal.expense-column-modal form{display:flex;flex-direction:column;overflow:hidden;height:min(720px,90dvh);max-height:90vh;width:min(580px,100%);box-sizing:border-box}.expense-column-modal header,.expense-column-modal footer,.expense-column-hint{flex-shrink:0}.expense-column-modal .expense-column-list{overflow-y:auto;min-height:0;flex:1;overscroll-behavior:contain}.expense-column-modal .expense-column-row{padding:6px 0;min-height:42px;box-sizing:border-box}.expense-column-modal .expense-column-grip{display:flex;align-items:center;gap:10px;flex:1;cursor:grab;touch-action:none;user-select:none;min-width:0}.expense-column-handle{color:#708897;font-size:23px;flex:none}.expense-column-modal .expense-column-position{flex:0 0 24px;font-size:12px;color:#708897;text-align:right}.expense-column-modal .is-dragging{background:#dff3eb;outline:2px solid #187760;outline-offset:-2px}.expense-column-modal .is-dragging .expense-column-grip{cursor:grabbing}.expense-column-modal footer{border-top:1px solid #dce6e7;padding-top:12px;flex-wrap:wrap;background:white}.expense-column-modal .expense-column-hint{margin:8px 0 12px;font-size:14px}.expense-column-modal .expense-column-row>button{font-size:16px;min-width:30px;width:30px;height:30px;padding:2px}
+
+#root .expense-topbar .expense-heading-row{display:flex;align-items:center;gap:8px}
+#root .expense-topbar .expense-heading-row>.record-page-title{font-size:28px;line-height:1.2;font-weight:800}
+#root .expense-topbar .kcs-back-button,#root #expense-header-export>button{display:inline-flex!important;align-items:center;justify-content:center;margin:0!important;padding:2px!important;border:0!important;background:transparent!important;color:#1d3039!important;box-shadow:none}
+#root .expense-topbar .kcs-back-button{width:40px!important;min-width:40px!important;height:40px!important;min-height:40px!important;flex:0 0 40px!important}
+#root .expense-topbar .kcs-back-arrow{font-size:36px;line-height:1}
+#root #expense-header-export{margin-left:auto;display:flex;align-items:center}
+#root #expense-header-export>button{width:28px!important;min-width:28px!important;height:28px!important;min-height:28px!important;flex:0 0 28px!important}
+#root #expense-header-export svg{width:20px;height:20px}
+#root .expense-topbar .account-profile{margin-left:0}
+#root #expense-header-export>button:focus-visible{outline:2px solid #196c5d;outline-offset:2px}
+
+#root .unified-expenses{font-size:1rem;gap:8px}
+#root .unified-expenses .expense-toolbar{gap:8px;padding:4px 0;margin:0;flex-wrap:wrap;overflow:visible}
+#root .unified-expenses .expense-icon-toolbar>button{display:inline-flex;align-items:center;justify-content:center;width:28px;min-width:28px;height:28px;min-height:28px;flex:0 0 28px;padding:2px;border:0;background:transparent;color:#1d3039;box-shadow:none}
+#root .unified-expenses .expense-icon-toolbar>button.active{background:#e8f3ef;color:#186e5c}
+#root .unified-expenses .expense-icon-toolbar svg,#root .unified-expenses .expense-export-modal footer svg{width:20px;height:20px}
+#root .unified-expenses .archive-table th{font-size:inherit;font-weight:700;line-height:1.2;padding:4px 10px}
+#root .unified-expenses .archive-table td{font-size:inherit;line-height:1.1;padding:1px 10px;height:31px;vertical-align:middle}
+#root .unified-expenses .expense-filter-trigger{font:inherit;font-weight:700;min-height:0;padding:0;gap:4px}
+#root .unified-expenses .archive-table :is(b,a){font:inherit;font-weight:400;text-decoration:none}
+#root .unified-expenses .archive-table td small{font-size:inherit;line-height:1.1;margin-top:1px}
+#root .unified-expenses [data-numeric]{text-align:right;font-variant-numeric:tabular-nums}
