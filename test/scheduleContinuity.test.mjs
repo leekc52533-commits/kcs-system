@@ -1,3 +1,4 @@
+import {driverArrangementSchemaSql} from '../server/migrationV64.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {DatabaseSync} from 'node:sqlite'
@@ -9,7 +10,7 @@ import {getCollectionScheduleManagement,saveCollectionScheduleManagement} from '
 import {routeScheduleProposals} from '../server/routeSchedulePlanning.mjs'
 import {synchronizeRouteScheduleBaseline} from '../server/routeScheduleBaselineService.mjs'
 import {scheduleMatchesDate} from '../shared/scheduleRecurrence.js'
-function fixture(){const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON;'+schemaSql);ensureV28Schema(db);db.prepare("INSERT INTO customers(jodoo_customer_id,name) VALUES('C','Customer')").run();db.prepare("INSERT INTO branches(jodoo_branch_id,customer_id,branch_name,status,collection_frequency,assigned_weekdays,latitude,longitude) VALUES('B1',1,'One','active','Weekly','[\"Monday\"]',1,1),('B2',1,'Two','active','Weekly','[\"Monday\"]',1,1),('B3',1,'Three','active','Weekly','[\"Monday\"]',1,1)").run();db.prepare("INSERT INTO branch_schedules(jodoo_schedule_id,branch_id,source_branch_id,frequency,days_of_week) VALUES('S1',1,'B1','Weekly','Monday'),('S2',2,'B2','Weekly','Monday'),('S3',3,'B3','Weekly','Monday')").run();db.prepare("INSERT INTO vehicles(vehicle_code,registration_number,status,operational_status) VALUES('Lorry 2','QAA4293N','available','active'),('Lorry 3','QAB1225B','available','active')").run();db.prepare("INSERT INTO employees(employee_code,name,job_role,employment_status,is_active) VALUES('D1','Driver One','Driver','active',1),('D2','Driver Two','Driver','active',1)").run();installWeeklyRoutePlan({name:'Routes',sourceName:'test',entries:[[1,'QAA4293N',1,1,'B1','',''],[1,'QAA4293N',1,2,'B2','',''],[1,'QAB1225B',1,1,'B3','','']]},{},db);generateDay({startDate:'2026-09-07'},db);return db}
+function fixture(){const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON;'+schemaSql+driverArrangementSchemaSql);ensureV28Schema(db);db.prepare("INSERT INTO customers(jodoo_customer_id,name) VALUES('C','Customer')").run();db.prepare("INSERT INTO branches(jodoo_branch_id,customer_id,branch_name,status,collection_frequency,assigned_weekdays,latitude,longitude) VALUES('B1',1,'One','active','Weekly','[\"Monday\"]',1,1),('B2',1,'Two','active','Weekly','[\"Monday\"]',1,1),('B3',1,'Three','active','Weekly','[\"Monday\"]',1,1)").run();db.prepare("INSERT INTO branch_schedules(jodoo_schedule_id,branch_id,source_branch_id,frequency,days_of_week) VALUES('S1',1,'B1','Weekly','Monday'),('S2',2,'B2','Weekly','Monday'),('S3',3,'B3','Weekly','Monday')").run();db.prepare("INSERT INTO vehicles(vehicle_code,registration_number,status,operational_status) VALUES('Lorry 2','QAA4293N','available','active'),('Lorry 3','QAB1225B','available','active')").run();db.prepare("INSERT INTO employees(employee_code,name,job_role,employment_status,is_active) VALUES('D1','Driver One','Driver','active',1),('D2','Driver Two','Driver','active',1)").run();installWeeklyRoutePlan({name:'Routes',sourceName:'test',entries:[[1,'QAA4293N',1,1,'B1','',''],[1,'QAA4293N',1,2,'B2','',''],[1,'QAB1225B',1,1,'B3','','']]},{},db);generateDay({startDate:'2026-09-07'},db);return db}
 const context={role:'supervisor',actor:'Manager',today:'2026-09-07'}
 const stop=(db,branch,date='2026-09-07')=>db.prepare('SELECT ds.* FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id JOIN dispatch_days dd ON dd.id=dt.dispatch_day_id WHERE ds.branch_id=? AND dd.dispatch_date=? AND ds.status<>\'cancelled\'').get(branch,date)
 const addBranch=db=>db.exec(`INSERT INTO branches(jodoo_branch_id,customer_id,branch_name,status,collection_frequency,assigned_weekdays,latitude,longitude) VALUES('B4',1,'New customer','active','Weekly','["Monday"]',1,1); INSERT INTO branch_schedules(jodoo_schedule_id,branch_id,source_branch_id,frequency,days_of_week) VALUES('S4',4,'B4','Weekly','Monday')`)
@@ -298,5 +299,24 @@ for(const protection of [null,'arrived','pending'])test(`lifecycle supersedes ap
  }
  assert.deepEqual(db.prepare('SELECT * FROM driver_date_reviews').all(),history);assert.deepEqual(db.prepare('SELECT * FROM schedule_exceptions').all(),exceptions)
  assert.ok(stillApproved(db));assert.equal(db.prepare('PRAGMA foreign_key_check').all().length,0)
+ }finally{db.close()}
+})
+
+
+test('rolling refresh removes legacy inactive unworked stops and permits route approval',()=>{
+ const db=fixture();try{
+  assignRouteVehicle('2026-09-07',1,{vehicleId:1},db)
+  const old=stop(db,1),protectedStop=stop(db,3)
+  db.prepare("UPDATE branches SET is_active=0,status='paused' WHERE id IN (1,3)").run()
+  db.prepare("UPDATE dispatch_stops SET arrived_at='2026-09-07 08:00:00' WHERE id=?").run(protectedStop.id)
+  ensureRollingWeek({startDate:'2026-09-07'},db)
+  assert.equal(stop(db,1),undefined)
+  assert.equal(db.prepare('SELECT status FROM dispatch_stops WHERE id=?').get(old.id).status,'cancelled')
+  assert.ok(stop(db,3))
+  approveRoute('2026-09-07',1,{approvedBy:'Manager'},db)
+  const n=db.prepare("SELECT count(*) n FROM audit_logs WHERE action='branch_lifecycle_stops_synced'").get().n
+  ensureRollingWeek({startDate:'2026-09-07'},db)
+  assert.equal(db.prepare("SELECT count(*) n FROM audit_logs WHERE action='branch_lifecycle_stops_synced'").get().n,n)
+  assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(),[])
  }finally{db.close()}
 })
