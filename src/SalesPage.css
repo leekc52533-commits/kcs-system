@@ -29,7 +29,9 @@
 
 #root .sales-topbar .sales-heading-row{display:flex;align-items:center;gap:8px}
 #root .sales-topbar .sales-heading-row>.kcs-back-button,#root #sales-header-export>button{display:inline-flex!important;align-items:center;justify-content:center;width:28px!important;min-width:28px!important;height:28px!important;min-height:28px!important;flex:0 0 28px!important;margin:0!important;padding:2px!important;border:0!important;background:transparent!important;color:#1d3039!important;box-shadow:none}
-#root .sales-topbar .kcs-back-arrow{font-size:24px;line-height:1}
+#root .sales-topbar .sales-heading-row>.kcs-back-button{width:40px!important;min-width:40px!important;height:40px!important;min-height:40px!important;flex-basis:40px!important}
+#root .sales-topbar .kcs-back-arrow{font-size:36px;line-height:1}
+#root .sales-topbar .sales-heading-row>.record-page-title{font-size:28px;line-height:1.2;font-weight:800}
 #root #sales-header-export{margin-left:auto;display:flex;align-items:center}
 #root #sales-header-export svg{width:20px;height:20px}
 #root .sales-topbar .account-profile{margin-left:0}
