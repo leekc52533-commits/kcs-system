@@ -55,3 +55,6 @@
 #root .unified-expenses .archive-table :is(b,a){font:inherit;font-weight:400;text-decoration:none}
 #root .unified-expenses .archive-table td small{font-size:inherit;line-height:1.1;margin-top:1px}
 #root .unified-expenses [data-numeric]{text-align:right;font-variant-numeric:tabular-nums}
+
+#root #expense-header-export{gap:8px}
+#root .unified-expenses .expense-icon-toolbar>button.expense-record-action{width:auto;min-width:0;height:32px;min-height:32px;flex:0 0 auto;font:inherit;font-weight:400;padding:4px 10px;border:1px solid #168675;border-radius:6px;background:#e8f3ef;color:#176e60}
