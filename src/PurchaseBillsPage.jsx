@@ -1,10 +1,9 @@
 import {isNumericColumn} from './numericColumns.js'
 import {formatWeight,formatUnitPrice} from '../shared/measurePrecision.js'
-import RecordDownloadIcon from './RecordDownloadIcon.jsx'
+import {createPortal} from 'react-dom'
 import CustomerReceipt,{customerReceiptLabels} from './CustomerReceipt.jsx'
 import ProofViewer from './ProofViewer.jsx'
 import UnloadingArchivePage from './UnloadingArchivePage.jsx'
-import BackButton from './BackButton.jsx'
 import TableBottomScroll from './TableBottomScroll.jsx'
 import {FilterHeader} from './ExpenseRecordsPage.jsx'
 import {useUi,useI18n} from './i18n.jsx'
@@ -24,6 +23,8 @@ const columns=[['serviceDateLabel','Date'],['billNumber','PO No.'],['paymentMeth
 export default function PurchaseBillsPage({onBack}){
   const {language}=useI18n(),ui=useUi(),tableRef=useRef(null),[openFilter,setOpenFilter]=useState(null)
   const[filters,setFilters]=useState({from:firstOfMonth(),to:today(),search:'',paymentMethod:'',employeeId:''}),[columnFilters,setColumnFilters]=useState({}),[sort,setSort]=useState({}),[data,setData]=useState(null),[error,setError]=useState(''),[loading,setLoading]=useState(false),[open,setOpen]=useState(null),[showWeights,setShowWeights]=useState(false)
+  const [exportTarget,setExportTarget]=useState(null)
+  useEffect(()=>{setExportTarget(document.getElementById('purchase-header-export'))},[])
   const query=useMemo(()=>new URLSearchParams(Object.entries({...filters,columns:JSON.stringify(columnFilters),sortKey:sort.key,sortDirection:sort.direction}).filter(([,value])=>value)).toString(),[filters,columnFilters,sort])
   useEffect(()=>{let active=true;setLoading(true);setError('');apiRequest(`/api/purchase-bills?${query}`).then(result=>active&&setData(result)).catch(item=>active&&setError(item.message)).finally(()=>active&&setLoading(false));return()=>{active=false}},[query])
   const rows=useMemo(()=>(data?.items||[]).map(bill=>({...bill,serviceDateLabel:displayDate(bill.serviceDate),car:bill.registrationNumber||bill.vehicleCode||'',totalLabel:money(bill.totalCents),proofLabel:bill.proofId?'Uploaded':bill.paymentMethod==='Credit'?'Not required':'Missing',statusLabel:bill.status==='voided'?'Voided':'Issued'})),[data])
@@ -31,10 +32,10 @@ export default function PurchaseBillsPage({onBack}){
   const setColumn=(key,value)=>setColumnFilters(current=>({...current,[key]:value}))
   if(showWeights)return <UnloadingArchivePage onBack={()=>setShowWeights(false)}/>
   return <div className="page purchase-archive expense-records">
-    <div className="expense-toolbar"><BackButton fallback={onBack} iconOnly className="secondary"/><button type="button" onClick={()=>{setOpenFilter(null);setShowWeights(true)}}>{ui('Unloading Weight Records')}</button>
+    <div className="expense-toolbar"><button type="button" onClick={()=>{setOpenFilter(null);setShowWeights(true)}}>{ui('Unloading Weight Records')}</button>
       <label>{ui('From Date')}<input aria-label={ui('From Date')} type="date" value={filters.from} max={filters.to} onChange={event=>setFilters({...filters,from:event.target.value})}/></label>
       <label>{ui('To Date')}<input aria-label={ui('To Date')} type="date" value={filters.to} min={filters.from} onChange={event=>setFilters({...filters,to:event.target.value})}/></label>
-      <button type="button" className="record-icon-button" title={ui('Download Excel with Payment Proofs')} aria-label={ui('Download Excel with Payment Proofs')} onClick={()=>{window.location.href=`/api/purchase-bills/export.xlsx?${query}`}}><RecordDownloadIcon/></button></div>
+      {exportTarget&&createPortal(<button type="button" className="record-icon-button" title={ui('Download Excel with Payment Proofs')} aria-label={ui('Download Excel with Payment Proofs')} onClick={()=>{window.location.href=`/api/purchase-bills/export.xlsx?${query}`}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 15V3m-5 5 5-5 5 5M4 15v6h16v-6"/></svg></button>,exportTarget)}</div>
     {error&&<div className="data-error">{error}</div>}{loading&&!data&&<div className="data-loading">{ui('Loading Purchase Bills…')}</div>}
     <div className="archive-table" ref={tableRef}><table><thead><tr>{columns.map(([key,label])=>{
  const translated=['expenseTypeLabel','category','paymentMethod','receiptLabel','proofLabel','statusLabel']
