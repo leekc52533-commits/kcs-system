@@ -144,7 +144,8 @@ export function getReplacementBilling(billId,context={},database=defaultDb){
   return {readOnly:true,bill:replacement,products:[]}
  }
  const stop=replacementStop(database,billId,context)
- return {readOnly:false,stop,bill:bill(database,stop.id),products:(temporaryProducts(database,stop.id)||listBranchProducts(stop.branchId,database)).filter(p=>p.isSelectable&&p.currentPrice!=null)}
+ const temporary=Boolean(temporaryIntake(database,stop.id))
+ return {readOnly:false,temporary,stop,bill:bill(database,stop.id),products:(temporaryProducts(database,stop.id)||listBranchProducts(stop.branchId,database)).filter(p=>p.isSelectable&&(temporary||p.currentPrice!=null))}
 }
 export function reissuePurchaseBill(billId,payload={},context={},database=defaultDb){
  return withImmediateTransaction(database,()=>{

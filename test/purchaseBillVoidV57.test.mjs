@@ -177,3 +177,27 @@ test('overview pending void list respects ownership and clears after a decision'
  assert.equal(listBillVoids({status:'pending'},{employeeId:2,role:'supervisor'},db).items.length,0)
  db.close()
 })
+
+
+test('temporary replacement accepts corrected unit price and real weight, retaining original evidence',()=>{
+ const {db,bill,manager,stops,productId,other}=setup()
+ try{
+  db.prepare("INSERT INTO temporary_customer_intakes(request_key,branch_id,dispatch_stop_id,employee_id,prices_json) VALUES('correction',1,?,1,?)").run(stops[0],JSON.stringify({[productId]:145.260}))
+  const before=db.prepare('SELECT * FROM purchase_bill_items WHERE purchase_bill_id=?').all(bill.id)
+  const r=requestBillVoid(bill.id,{reason:'Incorrect price'},context,db)
+  decideBillVoid(r.id,'approved',{},manager,db)
+  const draft=getReplacementBilling(bill.id,context,db)
+  assert.equal(draft.temporary,true)
+  assert.ok(draft.products.some(p=>p.currentPrice==null))
+  const payload={weightMethod:'on_site',printChoice:'no_print',items:[{productId,quantity:'726.30',unitPrice:'0.200'}]}
+  assert.throws(()=>reissuePurchaseBill(bill.id,payload,other,db),{code:'PERMISSION_DENIED'})
+  for(const price of ['', '-1', '0.2001'])assert.throws(()=>reissuePurchaseBill(bill.id,{...payload,items:[{...payload.items[0],unitPrice:price}]},context,db),{code:'INTAKE_PRICE'})
+  const replacement=reissuePurchaseBill(bill.id,payload,context,db)
+  assert.equal(replacement.items[0].quantity,726.30)
+  assert.equal(replacement.items[0].unitPriceMills,200)
+  assert.equal(replacement.totalCents,14526)
+  assert.equal(mobileCashFloat(1,db).balanceCents,35474)
+  assert.deepEqual(db.prepare('SELECT * FROM purchase_bill_items WHERE purchase_bill_id=?').all(bill.id),before)
+  assert.equal(reissuePurchaseBill(bill.id,payload,context,db).id,replacement.id)
+ }finally{db.close()}
+})
