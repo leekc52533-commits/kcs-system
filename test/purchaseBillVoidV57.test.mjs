@@ -167,3 +167,13 @@ test('office and management can read other issuers replacement bills without gai
   assert.equal(getReplacementBilling(original.id,{...manager,role:'office'},db).bill.id,replacement.id)
  }finally{db.close()}
 })
+
+test('overview pending void list respects ownership and clears after a decision',()=>{
+ const {db,bill}=setup()
+ const request=requestBillVoid(bill.id,{reason:'Wrong amount'},context,db)
+ assert.equal(listBillVoids({status:'pending'},{employeeId:2,role:'supervisor'},db).items.length,1)
+ assert.equal(listBillVoids({status:'pending'},{employeeId:3,role:'driver'},db).items.length,0)
+ decideBillVoid(request.id,'rejected',{note:'Review complete'},{employeeId:2,role:'supervisor'},db)
+ assert.equal(listBillVoids({status:'pending'},{employeeId:2,role:'supervisor'},db).items.length,0)
+ db.close()
+})
