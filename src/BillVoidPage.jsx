@@ -1,3 +1,4 @@
+import DataExportButton from './DataExportButton.jsx'
 import {createPortal} from 'react-dom'
 import {isNumericColumn} from './numericColumns.js'
 import {formatWeight,formatUnitPrice} from '../shared/measurePrecision.js'
@@ -80,7 +81,7 @@ function VoidArchive({items,canReview,run,busy,showOrder,onCloseOrder}){
  const display=(k,v)=>v===''||v==null?t('sales.blank'):k==='amount'?money(v):k==='status'?t('void.'+v):k==='date'?v.slice(8)+'-'+v.slice(5,7)+'-'+v.slice(2,4):v
  const visible=rows.filter(r=>Object.entries(filters).every(([k,selected])=>selected==null||selected.includes(String(r[k]??''))))
  if(sort.key)visible.sort((a,b)=>{const k=sort.key,result=k==='amount'?a[k]-b[k]:String(a[k]).localeCompare(String(b[k]),undefined,{numeric:true,sensitivity:'base'});return sort.direction==='desc'?-result:result})
- return <>
+ return <><DataExportButton name={t('void.title')} rows={visible} columns={order.map(k=>({key:k,label:voidLabels[lang][voidKeys.indexOf(k)],value:r=>display(k,r[k])}))}/>
  {showOrder&&<ExpenseColumnOrder storageKey={storageKey} order={order} columns={voidKeys.map((k,i)=>[k,voidLabels[lang][i]])} w={w} onSave={setOrder} onClose={onCloseOrder}/>}
  <div className="archive-table" ref={ref}><table><thead><tr>{order.map(k=><FilterHeader numeric={isNumericColumn(k)} key={k} label={voidLabels[lang][voidKeys.indexOf(k)]} open={open===k} onOpen={()=>setOpen(k)} onClose={()=>setOpen(null)} value={filters[k]??null} options={[...new Set(rows.map(r=>String(r[k]??'')))].map(v=>({value:v,label:display(k,v)}))} onChange={v=>setFilters({...filters,[k]:v})} sortDirection={sort.key===k?sort.direction:null} onSort={direction=>setSort(direction?{key:k,direction}:{})}/>)}</tr></thead><tbody>{visible.map(r=><VoidRow key={r.id} row={r} order={order} display={display} expanded={expanded===r.id} onToggle={()=>setExpanded(expanded===r.id?null:r.id)} canReview={canReview} run={run} busy={busy}/>)}</tbody></table>{!visible.length&&<p className="archive-empty">{t('void.empty')}</p>}</div><TableBottomScroll scrollRef={ref}/></>
 }

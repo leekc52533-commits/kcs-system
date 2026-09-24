@@ -1,3 +1,4 @@
+import DataExportButton from './DataExportButton.jsx'
 import {useEffect,useState} from 'react'
 import {apiRequest as api} from './apiClient.js'
 import {useI18n} from './i18n.jsx'
@@ -23,7 +24,7 @@ export default function CompanySettingsPage(){
   const payload=Object.fromEntries(['name','address','phone','contactPerson','operatingHours','notes','status','latitude','longitude','canStart','canEnd','reason'].map(key=>[key,draft[key]]))
   try{await api(`/api/operational-locations/${draft.id}`,{method:'PATCH',body:JSON.stringify(payload)});setDraft(null);setMessage(w.saved);await load()}catch(e){setError(e.message)}finally{setSaving(false)}
  }
- return <div className="page master-data-page">
+ return <div className="page master-data-page"><DataExportButton name={w.title} disabled={loading} rows={items} columns={['name','address','contactPerson','phone','operatingHours','status','notes'].map(key=>({key,label:w[({contactPerson:'contact',operatingHours:'hours'})[key]||key]||key}))}/>
   <section className="master-workspace"><header><h2>{w.title}</h2></header><p>{w.help}</p><a href="?page=buyers">{w.buyers}</a>
    {message&&<p className="planner-message" role="status">{message}</p>}{error&&!draft&&<p className="data-error" role="alert">{error}</p>}
    {loading?<p>{w.loading}</p>:!items.length&&!error?<p>{w.empty}</p>:<div className="master-record-grid">{items.map(item=><article key={item.id} className="buyer-branch-card"><h3 data-i18n-raw>{item.name}</h3><p data-i18n-raw>{item.address||'—'}</p><p>{w[item.status]||item.status}</p><button type="button" onClick={()=>{setError('');setMessage('');setDraft({...item,canStart:Boolean(item.canStart),canEnd:Boolean(item.canEnd),reason:''})}}>{w.edit}</button></article>)}</div>}

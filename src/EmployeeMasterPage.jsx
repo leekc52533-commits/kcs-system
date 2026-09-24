@@ -1,3 +1,4 @@
+import DataExportButton from './DataExportButton.jsx'
 import {useEmployeeOutsideClose} from './useEmployeeOutsideClose.js'
 import {AttendanceSettings,AttendanceDaily} from './Attendance.jsx'
 import {FilterHeader} from './ExpenseRecordsPage.jsx'
@@ -124,7 +125,7 @@ export function EmployeeDirectory({items,optionItems=items,group,selectedId,open
   const columns=[['employeeCode','Employee Code'],['name','Name'],['jobRole','Primary Job Role'],['employmentType','Employment Type'],['employmentStatus','Employment Status'],['homeGpsStatus','Home GPS'],['currentStartDate',t('employee.startDate')],['lastWorkingDay','Last Working Day'],['employmentEndDate','Employment End Date'],['accountStatus','Account Status'],['phone','Phone']]
   const optionLabel=(column,value)=>!value?ui('Blank'):column==='employmentStatus'?ui(labelStatus(value)):column==='accountStatus'?ui(accountOptions.find(([key])=>key===value)?.[1]||value):['jobRole','employmentType','homeGpsStatus'].includes(column)?ui(value):value
 
-  return <><div className="employee-directory-table" ref={scrollRef}><table><thead><tr>
+  return <><DataExportButton name={t('resource.employeeMaster')+' '+ui(group)} rows={items} columns={columns.map(([key,label])=>({key,label:ui(label),value:r=>optionLabel(key,employeeDirectoryValue(r,key))}))}/><div className="employee-directory-table" ref={scrollRef}><table><thead><tr>
     {columns.map(([column,label])=>{
       const values=[...new Set(['',...optionItems.map(item=>String(employeeDirectoryValue(item,column)).trim())])].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'}))
       return <FilterHeader key={column} label={ui(label)} value={filters.columns?.[column]??null} options={values.map(value=>({value,label:optionLabel(column,value)}))} onChange={value=>setFilters(current=>({...current,columns:{...current.columns,[column]:value}}))} sortDirection={sort.column===column?sort.direction:null} onSort={direction=>setSort(direction?{column,direction}:{column:'',direction:''})} open={openColumn===column} onOpen={()=>setOpenColumn(column)} onClose={()=>setOpenColumn(null)}/>

@@ -1,3 +1,4 @@
+import DataExportButton from './DataExportButton.jsx'
 import {formatWeight} from '../shared/measurePrecision.js'
 import {WorkCloseApprovals} from './WorkClose.jsx'
 import OutsideCloseDetails from './OutsideCloseDetails.jsx'
@@ -61,7 +62,7 @@ export default function WeeklyDispatchPage({currentUser}){
   const activeWeekDate=data?.days?.some(day=>day.dispatch_date===selectedWeekDate)?selectedWeekDate:data?.days?.[0]?.dispatch_date
   const visibleDays=displayMode==='route'?(data?.days||[]):(data?.days||[]).filter(day=>day.dispatch_date===activeWeekDate)
   const prepareReviewDay=async()=>{setBusy(true);setError('');try{await request('/api/dispatch/generate-day',{method:'POST',body:JSON.stringify({payload:{startDate:reviewDate,onlyMissing:true}})});await load()}catch(e){setError(e.message)}finally{setBusy(false)}}
-  return <div className="page planner-page">
+  return <div className="page planner-page"><DataExportButton name={t('hub.weekly')+' '+(activeWeekDate||'')} disabled={!data} rows={visibleDays.flatMap(day=>(day.stops||[]).filter(stop=>displayMode!=='route'||Number(stop.routeNumber)===Number(day.sundayGrouped?({1:4,5:2}[selectedRouteNumber]||selectedRouteNumber):selectedRouteNumber)).map(stop=>({...stop,date:day.dispatch_date})))} columns={[['date','Date'],['routeNumber','Route'],['stopSequence','Sequence'],['customerName','Customer'],['branchName','Branch'],['address','Address'],['status','Status']].map(([key,label])=>({key,label}))}/>
     {canEditDispatch&&<><TripExceptions onSaved={load}/><WorkCloseApprovals onSaved={load}/></>}
     <label className="planner-date-picker">{t('dateReview.date')}<input type="date" value={reviewDate||localDate()} onChange={e=>{if(e.target.value){setReviewDate(e.target.value);setSelectedWeekDate(e.target.value)}}}/></label>
     {reviewDate&&data&&!data.days.some(d=>d.dispatch_date===reviewDate)&&<section className="planner-message"><p>{reviewDate} · {t('dateReview.missingDay')}</p>{canEditDispatch&&<button disabled={busy} onClick={prepareReviewDay}>{t('dateReview.prepareDay')}</button>}</section>}

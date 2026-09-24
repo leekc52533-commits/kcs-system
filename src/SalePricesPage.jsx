@@ -1,3 +1,4 @@
+import DataExportButton from './DataExportButton.jsx'
 import {useEffect,useState} from 'react'
 import {useI18n} from './i18n.jsx'
 import {apiRequest} from './apiClient.js'
@@ -18,7 +19,7 @@ export default function SalePricesPage({onBack}){
  useEffect(()=>{load()},[])
  const save=async e=>{e.preventDefault();setBusy(true);setError('');setMessage('');try{await apiRequest('/api/sales/prices',{method:'POST',body:JSON.stringify(draft)});setDraft({description:'',unitPrice:''});await load();setMessage(t('salePrices.saved'))}catch(e){setError(e.message)}finally{setBusy(false)}}
  const remove=async id=>{setBusy(true);setError('');setMessage('');try{await apiRequest('/api/sales/prices/'+id,{method:'DELETE'});await load()}catch(e){setError(e.message)}finally{setBusy(false)}}
- return <div className="page sale-prices-page"><div className="sale-prices-header"><BackButton iconOnly fallback={onBack}/><h1>{t('salePrices.title')}</h1></div>
+ return <div className="page sale-prices-page"><DataExportButton name={t('salePrices.title')} rows={data.items} columns={[{key:'description',label:t('sales.description')},{key:'unitPrice',label:t('sales.unitPrice'),value:r=>formatUnitPrice(r.unitPrice)},{key:'updatedAt',label:t('salePrices.updated')}]}/><div className="sale-prices-header"><BackButton iconOnly fallback={onBack}/><h1>{t('salePrices.title')}</h1></div>
  <form className="sale-prices-form" onSubmit={save}><label>{t('sales.description')}<input required maxLength="300" list="sale-price-products" value={draft.description} onChange={e=>setDraft({...draft,description:e.target.value})} onBlur={e=>setDraft(previous=>({...previous,description:canonicalSaleMaterial(e.target.value)}))}/><datalist id="sale-price-products">{[...new Set([...data.productNames,...data.items.map(item=>item.description)].map(canonicalSaleMaterial))].map(name=><option key={name} value={name}/>)}</datalist></label><label>{t('sales.unitPrice')}<input required type="number" min="0.001" step="0.001" value={draft.unitPrice} onChange={e=>setDraft({...draft,unitPrice:e.target.value})} onBlur={e=>{if(validUnitPrice(e.target.value))setDraft(previous=>({...previous,unitPrice:formatUnitPrice(e.target.value)}))}}/></label><button disabled={busy}>{draft.id?t('salePrices.updatePrice'):t('salePrices.savePrice')}</button>{draft.id&&<button type="button" disabled={busy} onClick={()=>setDraft({description:'',unitPrice:''})}>{t('sales.cancel')}</button>}</form>
  {error&&<p role="alert" className="data-error">{error}</p>}{message&&<p role="status" className="planner-message">{message}</p>}
  <div className="sale-prices-filter"><span>{data.items.length} {t('salePrices.items')}</span></div>

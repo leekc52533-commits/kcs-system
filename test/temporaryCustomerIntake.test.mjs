@@ -140,3 +140,14 @@ test('temporary collection cannot bypass an outstanding return-later supervisor 
  assert.throws(()=>create(db,tripId,{requestKey:'blocked-intake-003'}),{code:'DEFER_APPROVAL_PENDING'})
  db.close()
 })
+
+test('history export includes more than 200 rows and still requires a manager',()=>{
+ const {db,tripId}=fixture();
+ try{
+  for(let i=0;i<201;i++)create(db,tripId,{name:'Export Shop '+String(i).padStart(4,'0'),requestKey:'export-history-'+String(i).padStart(4,'0')});
+  db.prepare("UPDATE temporary_customer_intakes SET status='one_time'").run();
+  assert.equal(listIntakes(manager,db,{review:true,history:true}).length,200);
+  assert.equal(listIntakes(manager,db,{review:true,history:true,exportAll:true}).length,201);
+  assert.throws(()=>listIntakes(context,db,{review:true,history:true,exportAll:true}));
+ }finally{db.close()}
+});

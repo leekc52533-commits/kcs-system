@@ -1,3 +1,5 @@
+import {exportRows} from './dataExport.js'
+import DataExportButton from './DataExportButton.jsx'
 import {formatWeight,formatUnitPrice} from '../shared/measurePrecision.js'
 import {customerIntakeWords} from '../shared/customerIntakeWords.js'
 import CustomerPickupSearch from './CustomerPickupSearch.jsx'
@@ -49,5 +51,5 @@ export function TemporaryCustomerReviews({history=false}){
  const load=useCallback(async()=>{setReload(n=>n+1)},[])
  useEffect(()=>{let alive=true;const refresh=async()=>{try{const r=await api(`/api/customer-intakes?history=${history}`);if(alive){setItems(r.items);setError('')}}catch(e){if(alive)setError(e.message)}};setItems([]);void refresh();const timer=setInterval(refresh,10000);return()=>{alive=false;clearInterval(timer)}},[history,reload])
  if(!history&&!error&&!items.length)return null
- return <section className="temporary-intakes intake-review"><header><h2>{t(history?'intake.history':'intake.reviewTitle')} ({items.length})</h2></header>{error&&<p role="alert">{error}</p>}{history&&!items.length&&<p>{t('intake.empty')}</p>}{items.map(i=><IntakeReviewRow key={i.id} item={i} onChanged={load}/>)}</section>
+ return <section className="temporary-intakes intake-review">{history&&<DataExportButton name={t('intake.history')} getData={async()=>exportRows((await api('/api/customer-intakes?history=true&export=true')).items,['name','phone','driverName','plate','serviceDate','billNumber','status','reviewed_by','reviewed_at'].map(key=>({key,label:key})))}/>}<header><h2>{t(history?'intake.history':'intake.reviewTitle')} ({items.length})</h2></header>{error&&<p role="alert">{error}</p>}{history&&!items.length&&<p>{t('intake.empty')}</p>}{items.map(i=><IntakeReviewRow key={i.id} item={i} onChanged={load}/>)}</section>
 }

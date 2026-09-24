@@ -1,3 +1,4 @@
+import DataExportButton from './DataExportButton.jsx'
 import {useCallback,useEffect,useState} from 'react'
 import {apiRequest} from './apiClient.js'
 import {useI18n} from './i18n.jsx'
@@ -21,7 +22,7 @@ export default function AddressAnalysisPage({onOpenRecommendations}){
   const applyBatch=async()=>{if(!batchReason.trim())return setError(t('addressAnalysis.reasonRequired'));try{setBatchBusy(true);setError('');const result=await apiRequest('/api/address-analysis/batch-apply',{method:'POST',body:JSON.stringify({batchToken:batch.batchToken,reason:batchReason})});setBatch({...batch,applyResult:result});setBatchReason('');await load()}catch(err){setError(err.message)}finally{setBatchBusy(false)}}
   const keyOpen=(event,item)=>{if(['Enter',' '].includes(event.key)){event.preventDefault();open(item)}}
   const none=value=>value||t('common.notSet')
-  return <section className="address-analysis">
+  return <section className="address-analysis"><DataExportButton name={t('hub.addressAnalysis')} disabled={!data} rows={data?.items||[]} columns={['branchId','branchName','customerName','currentArea','currentZone','address','lifecycle'].map(key=>({key,label:key}))}/>
     <header className="address-safety-mode"><span>{t('addressAnalysis.safeBatch')}</span></header>
     {error&&<div className="address-error" role="alert">{error}</div>}
     <section className="address-batch"><div><h3>{t('addressAnalysis.batchTitle')}</h3><p>{t('addressAnalysis.batchHelp')}</p></div><button disabled={batchBusy} onClick={previewBatch}>{batchBusy?t('common.processing'):t('addressAnalysis.batchAnalyze')}</button>

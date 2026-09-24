@@ -57,9 +57,9 @@ const rows=`SELECT i.*,s.id stopId,s.status stopStatus,s.arrived_at arrivedAt,b.
  JOIN dispatch_trips t ON t.id=s.dispatch_trip_id JOIN dispatch_days dd ON dd.id=t.dispatch_day_id JOIN dispatches d ON d.id=t.dispatch_id
  JOIN employees e ON e.id=i.employee_id JOIN vehicles v ON v.id=d.vehicle_id
  LEFT JOIN purchase_bills pb ON pb.dispatch_stop_id=s.id AND pb.status='issued' LEFT JOIN branches linked ON linked.id=i.linked_branch_id`
-export function listIntakes(ctx={},db=defaultDb,{review=false,history=false}={}){
+export function listIntakes(ctx={},db=defaultDb,{review=false,history=false,exportAll=false}={}){
  if(review)manager(ctx);else driver(db,ctx)
- const data=review?db.prepare(rows+` WHERE ${history?"i.status IN ('formal','one_time','linked')":"i.status='pending'"} ORDER BY i.id DESC LIMIT 200`).all():db.prepare(rows+" WHERE i.employee_id=? AND (dd.dispatch_date=? OR (i.status IN ('draft','pending') AND s.status<>'completed')) ORDER BY i.id DESC LIMIT 100").all(ctx.employeeId,ctx.today||kuchingDate())
+ const data=review?db.prepare(rows+` WHERE ${history?"i.status IN ('formal','one_time','linked')":"i.status='pending'"} ORDER BY i.id DESC ${history&&exportAll?'':'LIMIT 200'}`).all():db.prepare(rows+" WHERE i.employee_id=? AND (dd.dispatch_date=? OR (i.status IN ('draft','pending') AND s.status<>'completed')) ORDER BY i.id DESC LIMIT 100").all(ctx.employeeId,ctx.today||kuchingDate())
  return data.map(r=>({...r,items:db.prepare('SELECT product_name_snapshot name,quantity,unit_price_cents unitPriceCents,unit_price_mills unitPriceMills,COALESCE(unit_price_mills,unit_price_cents*10)/1000.0 unitPrice,line_total_cents totalCents FROM purchase_bill_items WHERE purchase_bill_id=? ORDER BY id').all(r.billId??-1)}))
 }
 export function cancelIntake(id,ctx={},db=defaultDb){
