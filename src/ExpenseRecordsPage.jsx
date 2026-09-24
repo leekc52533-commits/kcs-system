@@ -4,7 +4,6 @@ import ExpenseColumnOrder,{expenseColumnWords,readExpenseOrder} from './ExpenseC
 import ExpenseCorrection from './ExpenseCorrection.jsx'
 import ExpenseCorrectionCenter,{expenseNumber} from './ExpenseCorrectionCenter.jsx'
 import {createPortal} from 'react-dom'
-import BackButton from './BackButton.jsx'
 import TableBottomScroll from './TableBottomScroll.jsx'
 import ExpenseDetailFields,{emptyExpenseDetails,ExpenseMerchantFields} from './ExpenseDetailFields.jsx'
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react'
@@ -28,6 +27,8 @@ export default function ExpenseRecordsPage({onBack}){
   const [correction,setCorrection]=useState(false),[showExport,setShowExport]=useState(false)
   const ui=useUi(),tableRef=useRef(null),[openFilter,setOpenFilter]=useState(null)
   const[filters,setFilters]=useState({from:firstOfMonth(),to:today(),search:'',expenseType:'',category:'',employeeId:''}),[columnFilters,setColumnFilters]=useState({}),[sort,setSort]=useState({}),[data,setData]=useState(null),[error,setError]=useState(''),[message,setMessage]=useState(''),[loading,setLoading]=useState(false),[showForm,setShowForm]=useState(false),[busy,setBusy]=useState(false)
+  const [exportTarget,setExportTarget]=useState(null)
+  useEffect(()=>{setExportTarget(document.getElementById('expense-header-export'))},[])
   const query=useMemo(()=>new URLSearchParams(Object.entries({...filters,columns:JSON.stringify(columnFilters),sortKey:sort.key,sortDirection:sort.direction}).filter(([,value])=>value)).toString(),[filters,columnFilters,sort])
   const requestId=useRef(0)
   const load=useCallback(async()=>{const id=++requestId.current;setLoading(true);setError('');try{const result=await api(`/api/expenses?${query}`);if(id===requestId.current)setData(result)}catch(item){if(id===requestId.current)setError(item.message)}finally{if(id===requestId.current)setLoading(false)}},[query])
@@ -38,10 +39,10 @@ export default function ExpenseRecordsPage({onBack}){
   const columnLabel=(key,label)=>key==='expenseNumber'?w.number:key==='correctionStatus'?w.history:ui(label)
   const displayed=rows
   const save=async form=>{setBusy(true);setError('');setMessage('');try{const description=form.category==='Other'?form.otherDescription.trim():form.category;await api('/api/expenses',{method:'POST',body:JSON.stringify({...form,description:description||'Other',proof:await proofData(form.proof)})});setShowForm(false);setMessage('✓ Expense and receipt photo saved.');await load()}catch(item){setError(item.status===413?'The receipt upload is too large. Retake the photo.':item.message)}finally{setBusy(false)}}
-  return <div className="page purchase-archive expense-records">
-    <div className="expense-toolbar expense-icon-toolbar"><BackButton fallback={onBack} iconOnly className="secondary"/><button type="button" title={ui("＋ Record Expense")} aria-label={ui("＋ Record Expense")} className={showForm?'active':''} onClick={()=>{setOpenFilter(null);setShowForm(true)}}><RecordActionIcon kind="add"/></button>
+  return <div className="page purchase-archive expense-records unified-expenses">
+    <div className="expense-toolbar expense-icon-toolbar"><button type="button" title={ui("＋ Record Expense")} aria-label={ui("＋ Record Expense")} className={showForm?'active':''} onClick={()=>{setOpenFilter(null);setShowForm(true)}}><RecordActionIcon kind="add"/></button>
       {data?.canCorrect&&<ExpenseCorrectionCenter.Entry iconOnly onClick={()=>setCorrection(true)}/>}
-      <button type="button" title={ui("Download Excel with Receipts")} aria-label={ui("Download Excel with Receipts")} aria-haspopup="dialog" aria-expanded={showExport} onClick={()=>{setOpenFilter(null);setShowExport(true)}}><RecordActionIcon kind="download"/></button>
+      {exportTarget&&createPortal(<button type="button" title={ui("Download Excel with Receipts")} aria-label={ui("Download Excel with Receipts")} aria-haspopup="dialog" aria-expanded={showExport} onClick={()=>{setOpenFilter(null);setShowExport(true)}}><ExpenseExportIcon/></button>,exportTarget)}
       <button type="button" title={w.title} aria-label={w.title} onClick={()=>{setOpenFilter(null);setShowColumns(true)}}><RecordActionIcon kind="columns"/></button>
     </div>
     {showColumns&&<ExpenseColumnOrder order={columnOrder} columns={columns.map(([k,l])=>[k,columnLabel(k,l)])} w={w} onSave={setColumnOrder} onClose={()=>setShowColumns(false)}/>}
@@ -49,7 +50,7 @@ export default function ExpenseRecordsPage({onBack}){
     {showExport&&<div className="cash-modal expense-export-modal" role="dialog" aria-modal="true" aria-label={ui("Download Excel with Receipts")} onClick={e=>{if(e.target===e.currentTarget)setShowExport(false)}} onKeyDown={e=>{if(e.key==='Escape')setShowExport(false)}}><form onSubmit={e=>{e.preventDefault();window.location.href=`/api/expenses/export.xlsx?${query}`}}><header><h2>{ui("Download Excel with Receipts")}</h2><button type="button" title={ui("Close")} aria-label={ui("Close")} onClick={()=>setShowExport(false)}>×</button></header>
       <label>{ui("From Date")}<input autoFocus required aria-label={ui("From Date")} type="date" value={filters.from} max={filters.to} onChange={event=>setFilters({...filters,from:event.target.value})}/></label>
       <label>{ui("To Date")}<input required aria-label={ui("To Date")} type="date" value={filters.to} min={filters.from} onChange={event=>setFilters({...filters,to:event.target.value})}/></label>
-      <footer><button type="submit" title={ui("Download Excel with Receipts")} aria-label={ui("Download Excel with Receipts")} disabled={!filters.from||!filters.to||filters.from>filters.to}><RecordActionIcon kind="download"/></button></footer>
+      <footer><button type="submit" title={ui("Download Excel with Receipts")} aria-label={ui("Download Excel with Receipts")} disabled={!filters.from||!filters.to||filters.from>filters.to}><ExpenseExportIcon/></button></footer>
     </form></div>}
     {message&&<div className="data-success">{message}</div>}{error&&<div className="data-error">{error}</div>}{loading&&!data&&<div className="data-loading">{ui("Loading Expense Records\u2026")}</div>}
     <div className="archive-table" ref={tableRef}><table className="expense-table"><thead><tr>{orderedColumns.map(([key,label])=>{
@@ -86,3 +87,5 @@ function ExpenseForm({employees,vehicles=[],initialEmployeeId='',error,busy,clos
 
 export {ExpenseForm}
 
+
+function ExpenseExportIcon(){return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 15V3m-5 5 5-5 5 5M4 15v6h16v-6"/></svg>}
