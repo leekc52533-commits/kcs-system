@@ -22,3 +22,18 @@
 #root .bill-void-desktop .bill-void-card h2{font-size:1rem;margin:4px 0}
 #root .bill-void-desktop .bill-void-card p{margin:6px 0}
 #root .bill-void-desktop .bill-void-card button{font:inherit;padding:4px 8px;border-radius:6px}
+
+#root .void-topbar .void-heading-row{display:flex;align-items:center;gap:8px}
+#root .void-topbar .void-heading-row>.record-page-title{font-size:28px;line-height:1.2;font-weight:800}
+#root .void-topbar .kcs-back-button,#root #void-header-actions>button{display:inline-flex!important;align-items:center;justify-content:center;margin:0!important;padding:2px!important;border:0!important;background:transparent!important;color:#1d3039!important;box-shadow:none}
+#root .void-topbar .kcs-back-button{width:40px!important;min-width:40px!important;height:40px!important;min-height:40px!important;flex:0 0 40px!important}
+#root .void-topbar .kcs-back-arrow{font-size:36px;line-height:1}
+#root #void-header-actions{margin-left:auto;display:flex;align-items:center}
+#root #void-header-actions>button{width:28px!important;min-width:28px!important;height:28px!important;min-height:28px!important;flex:0 0 28px!important}
+#root #void-header-actions svg{width:20px;height:20px}
+#root .void-topbar .account-profile{margin-left:0}
+#root #void-header-actions>button:focus-visible{outline:2px solid #196c5d;outline-offset:2px}
+
+#root #void-header-actions{gap:8px}
+#root #void-header-actions>button:disabled{opacity:.5;cursor:default}
+#root .bill-void-desktop [data-numeric]{text-align:right;font-variant-numeric:tabular-nums}
