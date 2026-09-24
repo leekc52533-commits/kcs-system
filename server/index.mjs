@@ -1,3 +1,4 @@
+import {isEmployeeBillVoidRoute} from './billVoidRouteAccess.mjs'
 import {reviewDateWithSystemChange,dateSystemReview} from './dateSystemReviewService.mjs'
 import {dateEvidenceForViewer,dateEvidence} from './dateRequestEvidenceService.mjs'
 import {getWorkClose,requestWorkClose,listWorkClose,workCloseTargets,reviewWorkClose} from './workCloseService.mjs'
@@ -101,7 +102,7 @@ const meta=request=>({ipAddress:request.socket.remoteAddress||null,userAgent:req
 const cookies=request=>Object.fromEntries(String(request.headers.cookie||'').split(';').map(item=>item.trim().split('=').map(decodeURIComponent)).filter(item=>item.length===2))
 const sessionCookie=(token,maxAge)=>`kcs_session=${encodeURIComponent(token||'')}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${process.env.KCS_HTTPS==='1'?'; Secure':''}`
 const networkUrls=()=>Object.values(os.networkInterfaces()).flat().filter(item=>item&&item.family==='IPv4'&&!item.internal).map(item=>`http://${item.address}:5175`)
-function permissionFor(pathname){if(isNoGoodsPhotoPath(pathname))return'mobile';if(pathname.startsWith('/api/mobile/'))return'mobile';if(/^\/api\/gps-collector\/branch\/[^/]+\/withdraw$/.test(pathname)||pathname==='/api/gps-collector'||/^\/api\/gps-collector\/\d+\/(adopt|review|photo)$/.test(pathname)||/^\/api\/temporary-locations\/\d+\/adopt$/.test(pathname))return'gps_review';if(pathname.startsWith('/api/gps-collection')||/^\/api\/gps-collector\/branch\/[^/]+$/.test(pathname))return'gps_capture';if(pathname.startsWith('/api/auth/accounts')||pathname==='/api/auth/audit')return'accounts';if(/^\/api\/gps-migration\/(?:batches\/\d+\/commit|rows\/\d+\/resolve)$/.test(pathname))return'gps_migration_approve';if(pathname.startsWith('/api/gps-migration'))return'gps_migration';return'desktop'}
+function permissionFor(pathname,method){if(isEmployeeBillVoidRoute(pathname,method))return'mobile';if(isNoGoodsPhotoPath(pathname))return'mobile';if(pathname.startsWith('/api/mobile/'))return'mobile';if(/^\/api\/gps-collector\/branch\/[^/]+\/withdraw$/.test(pathname)||pathname==='/api/gps-collector'||/^\/api\/gps-collector\/\d+\/(adopt|review|photo)$/.test(pathname)||/^\/api\/temporary-locations\/\d+\/adopt$/.test(pathname))return'gps_review';if(pathname.startsWith('/api/gps-collection')||/^\/api\/gps-collector\/branch\/[^/]+$/.test(pathname))return'gps_capture';if(pathname.startsWith('/api/auth/accounts')||pathname==='/api/auth/audit')return'accounts';if(/^\/api\/gps-migration\/(?:batches\/\d+\/commit|rows\/\d+\/resolve)$/.test(pathname))return'gps_migration_approve';if(pathname.startsWith('/api/gps-migration'))return'gps_migration';return'desktop'}
 
 const canManageEmployees=session=>accountCan(session,'employee_manage')
 const canManageSchedules=canManageDispatch
@@ -165,7 +166,7 @@ const server = http.createServer(async (request, response) => {
     if(session.mustChangePassword)return sendJson(response,403,{error:'首次登录必须先修改密码',code:'PASSWORD_CHANGE_REQUIRED'})
     if(url.pathname==='/api/company-menu'&&request.method==='GET')return sendJson(response,200,readMenu(db,session))
     if(url.pathname==='/api/company-menu'&&request.method==='PUT')return sendJson(response,200,saveMenu(db,session,(await readJson(request)).payload))
-    const permission=permissionFor(url.pathname)
+    const permission=permissionFor(url.pathname,request.method)
     if(!accountCan(session,permission))return sendJson(response,403,{error:'此账号没有权限执行该操作'})
     if (request.method === 'GET' && url.pathname === '/api/auth/accounts') return sendJson(response,200,{items:listAccounts(session)})
     if (request.method === 'POST' && url.pathname === '/api/auth/accounts') return sendJson(response,201,createAccount((await readJson(request)).payload,session,meta(request)))
