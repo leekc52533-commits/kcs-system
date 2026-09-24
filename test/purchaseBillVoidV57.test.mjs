@@ -155,7 +155,7 @@ test('office and management can read other issuers replacement bills without gai
    assert.deepEqual(result.products,[])
    assert.throws(()=>reissuePurchaseBill(original.id,payload,reader,db),{code:'PERMISSION_DENIED'})
    assert.throws(()=>uploadReplacementProof(original.id,{},reader,db),{code:'PERMISSION_DENIED'})
-   assert.throws(()=>requestBillVoid(replacement.id,{reason:'x'},reader,db),{code:'PERMISSION_DENIED'})
+   if(role==='office')assert.throws(()=>requestBillVoid(replacement.id,{reason:'x'},reader,db),{code:'PERMISSION_DENIED'})
    if(role==='office')assert.equal(archive.canReview,false)
   }
   assert.equal(listBillVoids({},other,db).items.length,0)
@@ -199,5 +199,19 @@ test('temporary replacement accepts corrected unit price and real weight, retain
   assert.equal(mobileCashFloat(1,db).balanceCents,35474)
   assert.deepEqual(db.prepare('SELECT * FROM purchase_bill_items WHERE purchase_bill_id=?').all(bill.id),before)
   assert.equal(reissuePurchaseBill(bill.id,payload,context,db).id,replacement.id)
+ }finally{db.close()}
+})
+
+test('supervisor may request on behalf of issuer with actual applicant audited',()=>{
+ const {db,bill,manager,other}=setup()
+ try{
+ assert.equal(listBillVoids({},manager,db).items[0].canRequest,true)
+ assert.throws(()=>requestBillVoid(bill.id,{reason:'Wrong'},other,db),{code:'PERMISSION_DENIED'})
+ const r=requestBillVoid(bill.id,{reason:'Office found wrong amount'},manager,db)
+ const saved=db.prepare('SELECT * FROM purchase_bill_void_requests WHERE id=?').get(r.id)
+ assert.equal(saved.requested_by,manager.employeeId)
+ assert.equal(saved.requested_name,'Manager')
+ assert.equal(db.prepare('SELECT status FROM purchase_bills WHERE id=?').get(bill.id).status,'issued')
+ assert.equal(mobileCashFloat(1,db).balanceCents,48000)
  }finally{db.close()}
 })
