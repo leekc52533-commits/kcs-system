@@ -18,3 +18,11 @@
 #root .sales-page .expense-toolbar>button:focus-visible{outline:2px solid #196c5d;outline-offset:2px}
 
 #root .sales-page .expense-toolbar>button.sales-action-icon{flex:0 0 auto;width:auto;font:inherit;font-weight:400;padding:2px 6px}
+
+#root .sales-page .sales-nav-actions{display:flex;align-items:center;gap:8px;flex:0 0 auto;flex-wrap:nowrap}
+#root .sales-page .sales-nav-actions>button{display:inline-flex!important;align-items:center;justify-content:center;width:28px!important;min-width:28px!important;height:28px!important;min-height:28px!important;flex:0 0 28px!important;padding:2px!important;margin:0!important;border:0!important;border-radius:6px!important;background:transparent!important;color:#1d3039!important;box-shadow:none}
+#root .sales-page .sales-nav-actions svg{width:20px;height:20px}
+#root .sales-page .sales-nav-actions .kcs-back-arrow{font-size:24px;line-height:1;font-weight:400}
+#root .sales-page .sales-nav-actions>button:hover{background:#f0f1f2!important}
+#root .sales-page .sales-nav-actions>button:focus-visible{outline:2px solid #196c5d;outline-offset:2px}
+#root .sales-page .expense-toolbar>button.sales-action-icon{border:1px solid #168675;background:#e8f3ef;color:#176e60;height:32px;padding:4px 10px;border-radius:6px}
