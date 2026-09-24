@@ -19,7 +19,7 @@ export function listBillVoids(query={},context={},db=defaultDb){
  const numbers=documentNumberMap(db),numberMatches=new Set(search?db.prepare('SELECT id,purchase_bill_id FROM purchase_bill_void_requests').all().filter(r=>(numbers.get('void-'+r.id)||'').toLowerCase().includes(search)).map(r=>r.purchase_bill_id):[])
  const items=db.prepare(`SELECT b.*,p.id proofId FROM purchase_bills b LEFT JOIN purchase_payment_proofs p ON p.purchase_bill_id=b.id WHERE (?=1 OR b.driver_employee_id=?) ORDER BY b.id DESC`).all(all?1:0,actor.employeeId).filter(b=>query.status!=='pending'||db.prepare("SELECT 1 FROM purchase_bill_void_requests WHERE purchase_bill_id=? AND status='pending'").get(b.id)).filter(b=>!search||numberMatches.has(b.id)||[b.bill_number,b.customer_name_snapshot,b.branch_name_snapshot,b.branch_code_snapshot,b.driver_name_snapshot].some(x=>String(x||'').toLowerCase().includes(search))).map(b=>{
   const requests=db.prepare('SELECT * FROM purchase_bill_void_requests WHERE purchase_bill_id=? ORDER BY id DESC').all(b.id).map(r=>({...r,documentNumber:documentNumber(db,'void-'+r.id)}))
-  return {...b,canViewReplacement:(canReadCompanyDocuments(actor)||b.driver_employee_id===actor.employeeId)&&requests.some(r=>r.status==='approved'&&r.replacement_bill_id),items:db.prepare('SELECT product_name_snapshot,quantity,unit_snapshot,line_total_cents FROM purchase_bill_items WHERE purchase_bill_id=? ORDER BY id').all(b.id),requests,canRequest:b.status==='issued'&&b.driver_employee_id===actor.employeeId&&!requests.some(r=>r.status==='pending'),canReissue:b.driver_employee_id===actor.employeeId&&b.status==='voided'&&requests.some(r=>r.status==='approved'&&!r.replacement_bill_id)}
+  return {...b,canViewReplacement:(canReadCompanyDocuments(actor)||b.driver_employee_id===actor.employeeId)&&requests.some(r=>r.status==='approved'&&r.replacement_bill_id),items:db.prepare('SELECT product_name_snapshot,quantity,unit_snapshot,line_total_cents FROM purchase_bill_items WHERE purchase_bill_id=? ORDER BY id').all(b.id),requests,canRequest:b.status==='issued'&&(b.driver_employee_id===actor.employeeId||reviewers.includes(actor.role))&&!requests.some(r=>r.status==='pending'),canReissue:b.driver_employee_id===actor.employeeId&&b.status==='voided'&&requests.some(r=>r.status==='approved'&&!r.replacement_bill_id)}
  })
  return {items,canReview:reviewers.includes(actor.role)}
 }
@@ -27,7 +27,7 @@ export function requestBillVoid(billId,payload={},context={},db=defaultDb){
  return withImmediateTransaction(db,()=>{
   const actor=voidActor(context,db),b=db.prepare('SELECT * FROM purchase_bills WHERE id=?').get(Number(billId))
   if(!b)throw fail('NOT_FOUND',404)
-  if(b.driver_employee_id!==actor.employeeId)throw fail('PERMISSION_DENIED',403)
+  if(b.driver_employee_id!==actor.employeeId&&!reviewers.includes(actor.role))throw fail('PERMISSION_DENIED',403)
   if(b.status!=='issued')throw fail('VOID_STATE_CONFLICT')
   const reason=String(payload.reason||'').trim()
   if(!reason||reason.length>2000)throw fail('VOID_REASON_REQUIRED',400)
