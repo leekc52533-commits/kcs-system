@@ -55,3 +55,6 @@
 }
 
 .daily-report-matrix thead .archive-filter-label{white-space:pre-line;overflow-wrap:anywhere;line-height:1.3}
+
+/* Report links remain interactive without text underlines, including hover. */
+.daily-report a,.daily-report button,.daily-report a:hover,.daily-report button:hover,.daily-report a:focus,.daily-report button:focus{ text-decoration:none!important }
