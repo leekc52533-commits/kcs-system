@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {DatabaseSync} from 'node:sqlite'
 import {applyV61Migration,ensureV61Schema} from '../server/migrationV61.mjs'
-import {readMenu,saveMenu} from '../server/menuLayoutService.mjs'
+import {readMenu,saveMenu,readPersonalMenu,savePersonalMenu} from '../server/menuLayoutService.mjs'
 import {defaultMenuLayout,normalizeMenuLayout,validMenuLayout} from '../shared/menuLayout.js'
 function fixture(){const db=new DatabaseSync(':memory:');db.exec("PRAGMA foreign_keys=ON;CREATE TABLE schema_meta(version INTEGER);INSERT INTO schema_meta VALUES(60);CREATE TABLE auth_accounts(id INTEGER PRIMARY KEY,username TEXT,is_active INTEGER);INSERT INTO auth_accounts VALUES(9,'kcadmin',1),(10,'another-admin',1);");applyV61Migration(db);return db}
 test('only pinned account ID can write; admins and spoofed usernames cannot',()=>{const db=fixture(),payload={layout:defaultMenuLayout(),revision:0};assert.equal(readMenu(db,{id:9}).canEdit,true);for(const user of [{id:10,role:'owner_admin',username:'kcadmin'},{role:'owner_admin'},{}])assert.throws(()=>saveMenu(db,user,payload),e=>e.statusCode===403);assert.equal(db.prepare('SELECT COUNT(*) n FROM company_menu_audit').get().n,0);db.close()})
@@ -24,5 +24,22 @@ test('page aliases persist and audit under pinned ownership, validate keys and s
   const moved=structuredClone(layout);moved.documents=moved.documents.filter(id=>id!=='sales');moved.top.push('sales');assert.equal(normalizeMenuLayout(moved).pageNames.sales,'Factory settlements')
   delete moved.pageNames.sales;assert.equal(saveMenu(db,{id:9},{layout:moved,revision:1}).layout.pageNames.sales,undefined)
   assert.equal(validMenuLayout(defaultMenuLayout()),true)
+ }finally{db.close()}
+})
+
+
+test('personal layout is isolated by authenticated account, persists, and rejects stale/invalid edits',()=>{
+ const db=fixture();try{
+  const initial=readPersonalMenu(db,{id:10}),layout=structuredClone(initial.layout)
+  layout.documents=layout.documents.filter(x=>x!=='sales');layout.top.unshift('sales')
+  const saved=savePersonalMenu(db,{id:10},{layout,hidden:['vehicles'],shortcuts:['sales','earnings'],revision:0,accountId:9})
+  assert.equal(saved.layout.top[0],'sales');assert.equal(saved.revision,1)
+  assert.deepEqual(readPersonalMenu(db,{id:10}).hidden,['vehicles'])
+  assert.equal(readPersonalMenu(db,{id:9}).revision,0)
+  assert.deepEqual(readMenu(db,{id:9}).layout,defaultMenuLayout())
+  assert.throws(()=>savePersonalMenu(db,{id:10},{...saved,revision:0}),e=>e.statusCode===409)
+  for(const bad of [{hidden:['dashboard']},{hidden:['unknown']},{shortcuts:['sales','sales']}])assert.throws(()=>savePersonalMenu(db,{id:10},{...saved,...bad}),e=>e.statusCode===400)
+  assert.throws(()=>readPersonalMenu(db,{}),e=>e.statusCode===403)
+  ensureV61Schema(db);assert.equal(readPersonalMenu(db,{id:10}).revision,1)
  }finally{db.close()}
 })

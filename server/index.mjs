@@ -29,7 +29,7 @@ import {intakeTrips,createIntake,listIntakes,cancelIntake,reviewIntake,intakeMat
 import {isNoGoodsPhotoPath,noGoodsProofForViewer} from './noGoodsProofAccess.mjs'
 import {cashDailyWorkbook} from './cashDailyWorkbook.mjs'
 import {dailyEmployeeSpending} from './cashFloatOverview.mjs'
-import {readMenu,saveMenu} from './menuLayoutService.mjs'
+import {readMenu,saveMenu,readPersonalMenu,savePersonalMenu} from './menuLayoutService.mjs'
 import {assertSalesAccess,salesMasters,listSales,salesRecord,saveSales,salesPhoto,exportSales,listSalePrices,saveSalePrice,deleteSalePrice} from './salesService.mjs'
 import {recognizeSales} from './salesOcr.mjs'
 import {submitNoGoodsNotice,restoreNoGoodsNotice,noGoodsNoticePhoto} from './noGoodsNoticeService.mjs'
@@ -164,6 +164,8 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && url.pathname === '/api/auth/change-password') return sendJson(response,200,changePassword(session,(await readJson(request)).payload))
     if (request.method === 'PATCH' && url.pathname === '/api/auth/preferences') return sendJson(response,200,{account:updateOwnPreferences(session,(await readJson(request)).payload)})
     if(session.mustChangePassword)return sendJson(response,403,{error:'首次登录必须先修改密码',code:'PASSWORD_CHANGE_REQUIRED'})
+    if(url.pathname==='/api/personal-menu'&&request.method==='GET')return sendJson(response,200,readPersonalMenu(db,session))
+    if(url.pathname==='/api/personal-menu'&&request.method==='PUT')return sendJson(response,200,savePersonalMenu(db,session,(await readJson(request)).payload))
     if(url.pathname==='/api/company-menu'&&request.method==='GET')return sendJson(response,200,readMenu(db,session))
     if(url.pathname==='/api/company-menu'&&request.method==='PUT')return sendJson(response,200,saveMenu(db,session,(await readJson(request)).payload))
     const permission=permissionFor(url.pathname,request.method)

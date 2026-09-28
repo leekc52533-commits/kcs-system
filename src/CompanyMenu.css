@@ -13,3 +13,13 @@ dialog.company-menu-overlay::backdrop{background:#14273770}
 @media(max-width:560px){.company-menu-row{flex-wrap:wrap}.company-menu-row span{flex-basis:calc(100% - 40px)}.company-menu-row select{flex:1}.company-menu-editor{padding:16px}.company-menu-actions{bottom:-16px}}
 
 .company-menu-row .menu-page-name{flex:1;min-width:100px;text-align:left;white-space:normal;overflow-wrap:anywhere}.company-menu-row button.menu-page-name{background:transparent;border:0;padding:6px 0;color:inherit;font:inherit}
+
+/* Compact personal shortcuts, without empty card space. */
+#root .dashboard-features .cards{grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+#root .dashboard-features .card{min-height:76px;height:auto;padding:14px;align-items:center;gap:12px}
+#root .dashboard-features .card>i{width:36px;height:36px;flex-basis:36px;font-size:20px}
+#root .dashboard-features .card strong{font-size:16px;line-height:1.4}
+#root .dashboard-features .card b{font-size:14px;text-decoration:none}
+.company-menu-row>label{display:flex;align-items:center;gap:4px;font-size:14px}
+.company-menu-row>label input{width:auto;min-height:0}
+@media(max-width:560px){#root .dashboard-features .cards{grid-template-columns:1fr}}

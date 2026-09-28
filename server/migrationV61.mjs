@@ -1,4 +1,5 @@
 export const menuSchemaSql=`
+CREATE TABLE IF NOT EXISTS personal_menu(account_id INTEGER PRIMARY KEY REFERENCES auth_accounts(id),config_json TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS company_menu(id INTEGER PRIMARY KEY CHECK(id=1),owner_account_id INTEGER REFERENCES auth_accounts(id),layout_json TEXT,revision INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS company_menu_audit(id INTEGER PRIMARY KEY,account_id INTEGER NOT NULL REFERENCES auth_accounts(id),before_json TEXT,after_json TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 `
