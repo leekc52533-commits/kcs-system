@@ -59,7 +59,21 @@ export function deleteSalePrice(id,context,db=defaultDb){
 }
 const decode=r=>({...r,buyerId:r.buyer_id,buyerName:r.buyer_name,vehicleId:r.vehicle_id,vehiclePlate:r.vehicle_plate,billNumber:r.bill_number,settlementDate:r.settlement_date,lines:JSON.parse(r.lines_json),total:(r.total_cents/100).toFixed(2),rounding:(r.rounding_cents/100).toFixed(2),createdBy:r.created_by,createdAt:r.created_at})
 export function salesRecord(id,context,db=defaultDb){assertSalesAccess(context);const r=db.prepare('SELECT * FROM sales_settlements WHERE id=?').get(Number(id));if(!r)throw fail('SALES_NOT_FOUND');const decoded={...decode(r),documentNumber:documentNumber(db,'sales-'+r.id)};delete decoded.storage_key;return decoded}
-export function listSales(query,context,db=defaultDb){assertSalesAccess(context);if(!billKey(query.lookup)&&(!validSalesDate(query.from)||!validSalesDate(query.to)||query.from>query.to))throw fail('SALES_DATE');const numbers=documentNumberMap(db);const lookup=billKey(query.lookup);const records=(lookup?db.prepare('SELECT * FROM sales_settlements WHERE bill_key=?').all(lookup):db.prepare('SELECT * FROM sales_settlements WHERE settlement_date BETWEEN ? AND ? ORDER BY settlement_date DESC,id DESC').all(query.from,query.to)).map(decode);if(lookup){for(const [key,number] of numbers){if(billKey(number)===lookup&&key.startsWith('sales-')){const found=db.prepare('SELECT * FROM sales_settlements WHERE id=?').get(Number(key.slice(6)));if(found&&!records.some(r=>r.id===found.id))records.push(decode(found))}}};const rows=records.flatMap(r=>r.lines.map((l,i)=>({id:r.id,rowKey:r.id+'-'+i,documentNumber:numbers.get('sales-'+r.id)||'',settlementDate:r.settlementDate,billNumber:r.billNumber,buyerName:r.buyerName,vehiclePlate:r.vehiclePlate,...l,total:r.total,remarks:r.remarks,createdBy:r.createdBy})));return{...filterSales(rows,lookup?{}:query),...salesMasters(db)}}
+export function listSales(query,context,db=defaultDb){
+ assertSalesAccess(context)
+ const historyKeys=['documentNumber','billNumber','settlementDate','deliveryDate']
+ let columns={};try{columns=typeof query.columns==='string'?JSON.parse(query.columns):query.columns||{}}catch{}
+ const lookup=billKey(query.lookup),allDates=historyKeys.some(key=>Array.isArray(columns?.[key]))
+ if(!lookup&&!allDates&&(!validSalesDate(query.from)||!validSalesDate(query.to)||query.from>query.to))throw fail('SALES_DATE')
+ const numbers=documentNumberMap(db)
+ const records=db.prepare('SELECT * FROM sales_settlements ORDER BY settlement_date DESC,id DESC').all().map(decode)
+ const rows=records.flatMap(r=>r.lines.map((l,i)=>({id:r.id,rowKey:r.id+'-'+i,documentNumber:numbers.get('sales-'+r.id)||'',settlementDate:r.settlementDate,billNumber:r.billNumber,buyerName:r.buyerName,vehiclePlate:r.vehiclePlate,...l,total:r.total,remarks:r.remarks,createdBy:r.createdBy})))
+ const selected=lookup?rows.filter(r=>billKey(r.documentNumber)===lookup||billKey(r.billNumber)===lookup):allDates?rows:rows.filter(r=>r.settlementDate>=query.from&&r.settlementDate<=query.to)
+ const result=filterSales(selected,lookup?{}:query),collator=new Intl.Collator('en',{numeric:true,sensitivity:'base'})
+ for(const key of historyKeys)result.filterOptions[key]=[...new Set(['',...rows.map(row=>String(row[key]??''))])].sort((a,b)=>key.endsWith('Date')?a.localeCompare(b):collator.compare(a,b))
+ return {...result,...salesMasters(db)}
+}
+
 function validate(payload,db,old){
  if(payload.reviewed!==true)throw fail('SALES_REVIEW')
  const buyer=db.prepare('SELECT * FROM buyers WHERE id=?').get(Number(payload.buyerId)),vehicle=db.prepare('SELECT * FROM vehicles WHERE id=?').get(Number(payload.vehicleId))

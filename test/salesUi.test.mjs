@@ -90,3 +90,25 @@ test('declining an old settlement date keeps the draft, accepting submits the ex
  assert.equal(saved[0].confirmedSettlementDate,'2006-09-28')
  }finally{window.confirm=previous;await act(async()=>root.unmount())}
 })
+
+test('sales error dialog closes by button, Escape and backdrop, but not inside clicks',async()=>{
+ const{SalesErrorDialog}=await vite.ssrLoadModule('/src/SalesPage.jsx'),root=createRoot(document.getElementById('root'));let closed=0
+ try{
+ await act(async()=>root.render(React.createElement(I18nProvider,{language:'zh'},React.createElement(SalesErrorDialog,{onClose:()=>closed++},'Date error'))))
+ const dialog=document.querySelector('[role=alertdialog]'),overlay=document.querySelector('.sales-error-overlay')
+ assert.ok(dialog);assert.equal(document.activeElement.getAttribute('aria-label'),'关闭')
+ await act(async()=>dialog.click());assert.equal(closed,0)
+ await act(async()=>document.activeElement.click());assert.equal(closed,1)
+ await act(async()=>dialog.dispatchEvent(new window.KeyboardEvent('keydown',{key:'Escape',bubbles:true})));assert.equal(closed,2)
+ await act(async()=>{overlay.dispatchEvent(new MouseEvent('pointerdown',{bubbles:true,clientX:2,clientY:2}));overlay.dispatchEvent(new MouseEvent('click',{bubbles:true,clientX:2,clientY:2}))});assert.equal(closed,3)
+ }finally{await act(async()=>root.unmount())}
+})
+test('history header search matches ISO years and keeps checkbox multi-selection',async()=>{
+ const{FilterHeader}=await vite.ssrLoadModule('/src/ExpenseRecordsPage.jsx'),root=createRoot(document.getElementById('root')),changes=[]
+ try{
+ await act(async()=>root.render(React.createElement(I18nProvider,{language:'en'},React.createElement('table',null,React.createElement('thead',null,React.createElement('tr',null,React.createElement(FilterHeader,{label:'Settlement date',open:true,onClose:()=>{},onChange:v=>changes.push(v),onSort:()=>{},value:[],matchOptionValue:true,options:[{value:'2006-09-28',label:'28-09-06'},{value:'2026-09-28',label:'28-09-26'}]})))))))
+ await change(document.querySelector('.expense-filter-menu input:not([type=checkbox])'),'2006')
+ const options=document.querySelectorAll('.archive-check-options input');assert.equal(options.length,1);assert.equal(options[0].value,'2006-09-28')
+ await act(async()=>options[0].click());assert.deepEqual(changes,[['2006-09-28']])
+ }finally{await act(async()=>root.unmount())}
+})

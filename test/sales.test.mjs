@@ -110,3 +110,23 @@ test('exact full-number lookup ignores date and column filters; duplicate points
  })
  assert.equal(db.prepare('SELECT COUNT(*) n FROM sales_settlements').get().n,1)
 })
+
+test('four historical header filters find old records and exports match selected delivery rows',async t=>{
+ const{db,uploadsRoot}=setup(t),saved=saveSales(payload(),office,db,{uploadsRoot})
+ const oldLines=saved.lines.map((line,i)=>({...line,deliveryDate:i?'2006-09-27':'2006-09-26'}))
+ db.prepare('UPDATE sales_settlements SET settlement_date=?,lines_json=? WHERE id=?').run('2006-09-28',JSON.stringify(oldLines),saved.id)
+ const range={from:'2026-09-01',to:'2026-09-30'},base=listSales(range,office,db)
+ assert.equal(base.items.length,0)
+ for(const [key,value] of [['documentNumber',saved.documentNumber],['billNumber',saved.billNumber],['settlementDate','2006-09-28'],['deliveryDate','2006-09-26']]){
+  assert.ok(base.filterOptions[key].includes(value))
+  const result=listSales({...range,columns:JSON.stringify({[key]:[value]})},office,db)
+  assert.equal(result.items.length,key==='deliveryDate'?1:2)
+  assert.equal(result.items[0].settlementDate,'2006-09-28')
+ }
+ const query={...range,columns:JSON.stringify({deliveryDate:['2006-09-26']})}
+ const bytes=await exportSales(query,office,db,{uploadsRoot}),{default:ExcelJS}=await import('exceljs'),book=new ExcelJS.Workbook()
+ await book.xlsx.load(bytes);assert.equal(book.getWorksheet('Sales').rowCount,2)
+ assert.equal(listSales({...range,columns:JSON.stringify({deliveryDate:[]})},office,db).items.length,0)
+ assert.equal(listSales({...range,columns:JSON.stringify({deliveryDate:null})},office,db).items.length,0)
+ assert.deepEqual(base.filterOptions.deliveryDate,['','2006-09-26','2006-09-27'])
+})
