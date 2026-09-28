@@ -40,3 +40,8 @@
 .sales-error-overlay{position:fixed;inset:0;z-index:10000;background:#0006;display:flex;align-items:center;justify-content:center;padding:20px}
 .sales-error-dialog{background:#fff;border-radius:16px;width:min(480px,100%);max-height:80vh;overflow:auto;padding:20px;box-shadow:0 12px 48px #0003}
 .sales-error-dialog header{display:flex;align-items:center;justify-content:space-between;gap:16px}.sales-error-dialog h2{margin:0;font-size:20px}.sales-error-dialog header button{border:0;background:transparent;font-size:28px}.sales-error-message{margin:16px 0;color:#aa3535;overflow-wrap:anywhere}.sales-error-dialog footer{display:flex;justify-content:flex-end}.sales-error-dialog footer button{background:#176f60;color:white;border:0;border-radius:10px;padding:8px 20px}
+/* Keep date controls and neighbouring fields inside their grid columns. */
+.sales-modal .sales-fields,.sales-modal .sales-lines,.sales-modal fieldset,.sales-modal label{min-width:0;max-width:100%;box-sizing:border-box}
+.sales-modal input,.sales-modal select,.sales-modal textarea{min-width:0;max-width:100%;box-sizing:border-box}
+@media(max-width:540px){.sales-modal .sales-lines fieldset{grid-template-columns:minmax(0,1fr)}.sales-modal>form{padding:14px!important}.sales-modal .sales-lines fieldset>label{width:100%}}
+.sales-modal>form{box-sizing:border-box;min-width:0}

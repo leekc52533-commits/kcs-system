@@ -1,3 +1,4 @@
+import {formatDateDisplay} from './dateDisplay.js'
 import CenteredNotice from './CenteredNotice.jsx'
 import {NoGoodsRecord} from './NoGoodsNotice.jsx'
 import {DateRequestReview} from './DriverDateApprovals.jsx'
@@ -43,7 +44,7 @@ function CustomerRow({stop,index,day,route,days,canEdit,editable,onReorder,busy}
       {stop.timeRestriction&&<p>{ui("约定时段：")}{stop.timeRestriction}</p>}
       {[['Parking',stop.parkingNote],['Truck access',stop.truckAccess],['GPS note',stop.gpsRemark],['跟进原因',stop.overrideReason]].filter(([,value])=>value).map(([label,value])=><p key={label}>{ui(label)}: <span data-i18n-raw>{value}</span></p>)}
       {canEdit&&<DispatchScheduleTools {...{stop,day,days}} routeNumber={route.routeNumber}/>}
-      <div className="route-customer-links">{gps?<a href={`https://www.google.com/maps/dir/?api=1&destination=${stop.latitude},${stop.longitude}`} target="_blank" rel="noreferrer">{ui("导航")}</a>:<span>{ui("GPS 未记录")}</span>}<a href={`?page=customers&tab=branches&branch=${encodeURIComponent(formatBranchId(stop.branchId))}`} onClick={event=>{event.preventDefault();setMasterOpen(true)}}>{ui("客户主资料")}</a>{canEdit&&<button type="button" disabled={protectedStop||saving} onClick={openReview}>{t('dateReview.changePlan')}</button>}</div>
+      <div className="route-customer-links">{gps?<a href={`https://www.google.com/maps/dir/?api=1&destination=${stop.latitude},${stop.longitude}`} target="_blank" rel="noreferrer">{ui("导航")}</a>:<span>{ui("GPS 未记录")}</span>}<a href={`?page=customers&tab=branches&branch=${encodeURIComponent(formatBranchId(stop.branchId))}`} onClick={event=>{event.preventDefault();setMasterOpen(true)}}>{ui("客户主资料")}</a>{canEdit&&<button type="button" disabled={protectedStop||saving} onClick={openReview}>{formatDateDisplay(t('dateReview.changePlan'))}</button>}</div>
       {canEdit&&protectedStop&&<small>{ui("已有执行或单据，保留原始收货记录。")}</small>}
       {review&&!protectedStop&&<div className="date-request-approvals"><DateRequestReview item={review} submitUrl={`/api/dispatch/stops/${stop.id}/review-change`} onSaved={result=>{setReview(null);if(result.preservedDates?.length)setError(t('dateReview.preserved')+' '+result.preservedDates.join(', '));window.dispatchEvent(new Event('kcs-handover-saved'))}}/></div>}
     </div>}

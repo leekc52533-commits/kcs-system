@@ -1,3 +1,4 @@
+import {formatDateDisplay} from './dateDisplay.js'
 import CenteredNotice from './CenteredNotice.jsx'
 import {formatWeight,formatUnitPrice} from '../shared/measurePrecision.js'
 import DateSystemReleaseNotices from './DateSystemReleaseNotices.jsx'
@@ -141,7 +142,7 @@ function PurchaseReceipt({bill}){
   const ui=useUi()
 
   if(!bill)return null
-  return <div className="purchase-receipt notranslate" translate="no"><h2>LEE SAI KER ENTERPRISE</h2><p>{ui("PURCHASE")}</p><hr/><p><b>{ui("No:")}</b> {bill.billNumber}<br/><b>{ui("Date:")}</b> {bill.serviceDate}<br/><b>{ui("To:")}</b> <span data-i18n-raw>{bill.branchName}</span><br/><b>{ui("Att:")}</b> <span data-i18n-raw>{bill.registrationNumber||''}</span></p><hr/>{bill.items.map(item=><div className="receipt-line" key={item.id||item.productId}><span>{/kg|kilogram/i.test(item.unit)?formatWeight(item.quantity):item.quantity} {item.unit||''} · <span data-i18n-raw>{item.shortForm||item.productName}</span></span><span>{rm(item.lineTotalCents)}</span></div>)}<hr/><div className="receipt-total"><b className="receipt-total-label" aria-label={ui("Total")}>{ui('Total')}</b><b>{rm(bill.totalCents)}</b></div><p><PaymentMethodLabel value={bill.paymentMethod}/></p></div>
+  return <div className="purchase-receipt notranslate" translate="no"><h2>LEE SAI KER ENTERPRISE</h2><p>{ui("PURCHASE")}</p><hr/><p><b>{ui("No:")}</b> {bill.billNumber}<br/><b>{formatDateDisplay(ui("Date:"))}</b> {formatDateDisplay(bill.serviceDate)}<br/><b>{ui("To:")}</b> <span data-i18n-raw>{bill.branchName}</span><br/><b>{ui("Att:")}</b> <span data-i18n-raw>{bill.registrationNumber||''}</span></p><hr/>{bill.items.map(item=><div className="receipt-line" key={item.id||item.productId}><span>{/kg|kilogram/i.test(item.unit)?formatWeight(item.quantity):item.quantity} {item.unit||''} · <span data-i18n-raw>{item.shortForm||item.productName}</span></span><span>{rm(item.lineTotalCents)}</span></div>)}<hr/><div className="receipt-total"><b className="receipt-total-label" aria-label={ui("Total")}>{ui('Total')}</b><b>{rm(bill.totalCents)}</b></div><p><PaymentMethodLabel value={bill.paymentMethod}/></p></div>
 }
 
 function PurchaseBillPanel({stop,onChanged,readOnly=false}){
@@ -211,12 +212,12 @@ function TodayView({data,preview=false}){
     {error&&<CenteredNotice>{ui(error)}</CenteredNotice>}
     {route.trips.map(trip=><article className="mobile-card driver-trip" key={trip.id}>
       <div className="driver-route-summary">
-        <strong>{route.date} · {ui(route.weekday)}</strong>
+        <strong>{formatDateDisplay(route.date)} · {ui(route.weekday)}</strong>
         <h2><span data-i18n-raw>{trip.registrationNumber||trip.vehicleCode}</span> · {ui("Trip")}{trip.tripNumber}</h2>
-        <span>{t('mobile.routeStatus')}: {t(trip.executionStatus==='completed'?'mobile.completed':trip.approved===false?'dateReview.awaitDeparture':trip.executionStatus==='in_progress'?'mobile.inProgress':'mobile.notStarted')}</span>
+        <span>{t('mobile.routeStatus')}: {formatDateDisplay(t(trip.executionStatus==='completed'?'mobile.completed':trip.approved===false?'dateReview.awaitDeparture':trip.executionStatus==='in_progress'?'mobile.inProgress':'mobile.notStarted'))}</span>
         <span>{t('mobile.totalStops')}: {trip.totalCount??trip.stops.length} · {t('mobile.completed')}: {trip.completedCount||0} · {t('mobile.pending')}: {trip.stops.filter(stop=>stop.status!=='completed').length} · {t('ng.title')}: {trip.noGoodsCount||0}</span>
       </div>
-      <DriverNextStep trip={trip} preview={preview}/>{trip.approved===false&&<p className="route-preview-notice">{t('dateReview.draftVisible')}</p>}
+      <DriverNextStep trip={trip} preview={preview}/>{trip.approved===false&&<p className="route-preview-notice">{formatDateDisplay(t('dateReview.draftVisible'))}</p>}
       {!preview&&trip.canStart&&<button type="button" className="primary-mobile" disabled={Boolean(busy)} onClick={()=>start(trip)}>{busy==='trip-'+trip.id?t('common.processing'):t('mobile.startTrip')}</button>}
       {trip.stops.filter(stop=>!['no_goods','no_goods_notice'].includes(stop.completionOutcome)).map(stop=>{
         const current=trip.currentStopId===stop.id,ended=stop.status==='completed',pendingApproval=stop.deferApprovalStatus==='pending',ready=stop.billCreated&&(stop.billPaymentMethod==='Credit'||stop.paymentProofUploaded),label=stop.stopSequence+'. '+stop.customerName+' — '+stop.branchName,canOpen=preview||trip.approved===false||current||stop.canArrive||stop.canFinish||stop.deferred||ended&&stop.billCreated,expanded=preview||(openStopId==null?current:openStopId===stop.id)&&canOpen

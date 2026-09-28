@@ -1,3 +1,4 @@
+import {formatDateDisplay} from './dateDisplay.js'
 import CenteredNotice from './CenteredNotice.jsx'
 import {useState} from 'react'
 import {useI18n} from './i18n.jsx'
@@ -16,5 +17,5 @@ export function NoGoodsButton({stop,onSaved,disabled=false}){
 export function NoGoodsRecord({stop,canRestore=false,onSaved}){
  const{t}=useI18n(),[reason,setReason]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),n=stop.noGoodsNotice
  const restore=async()=>{setBusy(true);setError('');try{await apiRequest(`/api/no-goods-notices/${n.id}/restore`,{method:'POST',body:JSON.stringify({reason})});await onSaved?.()}catch(e){setError(e.message)}finally{setBusy(false)}}
- return <div className="no-goods-record"><b data-i18n-raw>{stop.customerName} — {stop.branchName}</b><p>{t(stop.arrivedAt?'ng.visited':'ng.advance')}</p>{n&&<><p>{t('ng.'+n.contactMethod)} · <span data-i18n-raw>{n.employeeName}</span> · {new Date(n.createdAt).toLocaleString('en-GB',{timeZone:'Asia/Kuching'})}</p><p data-i18n-raw>{n.reason}</p><a href={`/api/no-goods-notices/${n.id}/photo`} target="_blank" rel="noreferrer">{t('ng.viewProof')}</a>{canRestore&&<div><label>{t('ng.restoreReason')}<input maxLength={1000} value={reason} onChange={e=>setReason(e.target.value)}/></label><button type="button" disabled={busy||!reason.trim()} onClick={restore}>{t(busy?'common.processing':'ng.restore')}</button></div>}</>}{error&&<CenteredNotice>{error}</CenteredNotice>}</div>
+ return <div className="no-goods-record"><b data-i18n-raw>{stop.customerName} — {stop.branchName}</b><p>{t(stop.arrivedAt?'ng.visited':'ng.advance')}</p>{n&&<><p>{t('ng.'+n.contactMethod)} · <span data-i18n-raw>{n.employeeName}</span> · {formatDateDisplay(new Date(n.createdAt).toLocaleString('en-GB',{timeZone:'Asia/Kuching'}))}</p><p data-i18n-raw>{n.reason}</p><a href={`/api/no-goods-notices/${n.id}/photo`} target="_blank" rel="noreferrer">{t('ng.viewProof')}</a>{canRestore&&<div><label>{t('ng.restoreReason')}<input maxLength={1000} value={reason} onChange={e=>setReason(e.target.value)}/></label><button type="button" disabled={busy||!reason.trim()} onClick={restore}>{t(busy?'common.processing':'ng.restore')}</button></div>}</>}{error&&<CenteredNotice>{error}</CenteredNotice>}</div>
 }

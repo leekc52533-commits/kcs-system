@@ -1,3 +1,4 @@
+import {formatDateDisplay} from './dateDisplay.js'
 import CenteredNotice from './CenteredNotice.jsx'
 import {DriverGuidePopup} from './DriverGuide.jsx'
 import NoticeArchive from './NoticeArchive.jsx'
@@ -7,7 +8,7 @@ import {useI18n} from './i18n.jsx'
 import './NoticeBoard.css'
 const NoticeContext=createContext(null)
 const dateLabel=value=>new Date(value).toLocaleString('en-GB',{timeZone:'Asia/Kuching'})
-function NoticeText({item}){const{t}=useI18n();return <><span className={'notice-priority '+item.priority}>{t('notice.'+item.priority)}</span><h3 data-i18n-raw>{item.title}</h3><p className="notice-body" data-i18n-raw>{item.body}</p><small><span data-i18n-raw>{item.publisherName}</span> · {dateLabel(item.createdAt)}</small></>}
+function NoticeText({item}){const{t}=useI18n();return <><span className={'notice-priority '+item.priority}>{t('notice.'+item.priority)}</span><h3 data-i18n-raw>{item.title}</h3><p className="notice-body" data-i18n-raw>{item.body}</p><small><span data-i18n-raw>{item.publisherName}</span> · {formatDateDisplay(dateLabel(item.createdAt))}</small></>}
 function UnreadPopup({item,remaining,onRead,onDismiss}){
  const{t}=useI18n(),ref=useRef(null),[busy,setBusy]=useState(false),[error,setError]=useState('')
  useEffect(()=>{const d=ref.current,previous=document.activeElement;if(d.showModal)d.showModal();else d.setAttribute('open','');return()=>{if(d.close)d.close();previous?.focus?.()}},[])
@@ -27,12 +28,12 @@ export function NoticeMobileProvider({children}){
 }
 export function NoticeHistory(){
  const{t}=useI18n(),{items,error,load}=useContext(NoticeContext),[search,setSearch]=useState(''),[refreshError,setRefreshError]=useState('')
- return <section className="notice-board"><header><h1>{t('notice.title')}</h1><button data-preview-safe onClick={()=>load().then(()=>setRefreshError('')).catch(e=>setRefreshError(e.message))}>{t('notice.refresh')}</button></header><label>{t('notice.search')}<input value={search} onChange={e=>setSearch(e.target.value)}/></label>{(error||refreshError)&&<CenteredNotice>{error||refreshError}</CenteredNotice>}{!items.length&&<p>{t('notice.empty')}</p>}{items.filter(i=>(i.title+' '+i.body).toLocaleLowerCase().includes(search.toLocaleLowerCase())).map(i=><article key={i.id}><NoticeText item={i}/><p>{t(i.readAt?'notice.read':'notice.unread')}{i.readAt&&<> · {dateLabel(i.readAt)}</>}</p></article>)}</section>
+ return <section className="notice-board"><header><h1>{t('notice.title')}</h1><button data-preview-safe onClick={()=>load().then(()=>setRefreshError('')).catch(e=>setRefreshError(e.message))}>{t('notice.refresh')}</button></header><label>{t('notice.search')}<input value={search} onChange={e=>setSearch(e.target.value)}/></label>{(error||refreshError)&&<CenteredNotice>{error||refreshError}</CenteredNotice>}{!items.length&&<p>{t('notice.empty')}</p>}{items.filter(i=>(i.title+' '+i.body).toLocaleLowerCase().includes(search.toLocaleLowerCase())).map(i=><article key={i.id}><NoticeText item={i}/><p>{t(i.readAt?'notice.read':'notice.unread')}{i.readAt&&<> · {formatDateDisplay(dateLabel(i.readAt))}</>}</p></article>)}</section>
 }
 function PublishedNotice({item,initiallyOpen=false}){
  const{t}=useI18n(),[open,setOpen]=useState(initiallyOpen),[receipts,setReceipts]=useState([]),[error,setError]=useState('')
  useEffect(()=>{if(!open)return;let alive=true;const refresh=async()=>{try{const r=await api(`/api/notices/${item.id}/receipts`);if(alive){setReceipts(r.items);setError('')}}catch(e){if(alive)setError(e.message)}};void refresh();const timer=setInterval(refresh,15000);return()=>{alive=false;clearInterval(timer)}},[open,item.id])
- return <article><NoticeText item={item}/><p>{t('notice.read')}: {item.readCount} / {item.recipientCount}</p><button aria-expanded={open} onClick={()=>setOpen(!open)}>{t(open?'notice.hideReceipts':'notice.receipts')}</button>{open&&<><p>{t('notice.readMeaning')}</p>{error&&<CenteredNotice>{error}</CenteredNotice>}<ul className="notice-receipts">{receipts.map(r=><li key={r.employeeId}><b data-i18n-raw>{r.employeeName}</b><span>{t(r.readAt?'notice.read':'notice.unread')}{r.readAt&&<> · {dateLabel(r.readAt)}</>}</span></li>)}</ul></>}</article>
+ return <article><NoticeText item={item}/><p>{t('notice.read')}: {item.readCount} / {item.recipientCount}</p><button aria-expanded={open} onClick={()=>setOpen(!open)}>{t(open?'notice.hideReceipts':'notice.receipts')}</button>{open&&<><p>{t('notice.readMeaning')}</p>{error&&<CenteredNotice>{error}</CenteredNotice>}<ul className="notice-receipts">{receipts.map(r=><li key={r.employeeId}><b data-i18n-raw>{r.employeeName}</b><span>{t(r.readAt?'notice.read':'notice.unread')}{r.readAt&&<> · {formatDateDisplay(dateLabel(r.readAt))}</>}</span></li>)}</ul></>}</article>
 }
 const emptyDraft=()=>({title:'',body:'',priority:'normal',audience:'all',employeeIds:[],requestKey:crypto.randomUUID()})
 export function NoticeManagement(){

@@ -1,5 +1,5 @@
 const text=value=>value==null?'':String(value).trim()
-const date=value=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(text(value));return m?`${m[3]}-${m[2]}-${m[1].slice(-2)}`:text(value)}
+const date=value=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(text(value));return m?`${m[3]}/${m[2]}/${m[1]}`:text(value)}
 const money=value=>`RM ${(Number(value||0)/100).toFixed(2)}`
 const entered=value=>{const time=text(value).match(/T(\d{2}:\d{2})/)?.[1];return time?`${date(value)} ${time}`:date(value)}
 export const archiveKeys={

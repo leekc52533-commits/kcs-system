@@ -23,8 +23,8 @@ test('sort real dates across months/years, numeric money and natural identifiers
 
 test('historical date and document columns bypass the page range while ordinary filters and clearing preserve it',()=>{
  const rows=[{billNumber:'P-OLD',serviceDate:'2006-09-28',customerName:'A'},{billNumber:'P-NEW',serviceDate:'2026-09-28',customerName:'B'}],q={from:'2026-09-01',to:'2026-09-30'}
- const base=applyArchiveColumns('purchase',rows,q);assert.deepEqual(base.items.map(r=>r.billNumber),['P-NEW']);assert.ok(base.filterOptions.billNumber.includes('P-OLD'));assert.deepEqual(base.filterOptions.serviceDateLabel,['','28-09-06','28-09-26'])
- for(const columns of [{billNumber:['P-OLD']},{serviceDateLabel:['28-09-06']}])assert.deepEqual(applyArchiveColumns('purchase',rows,{...q,columns}).items.map(r=>r.billNumber),['P-OLD'])
+ const base=applyArchiveColumns('purchase',rows,q);assert.deepEqual(base.items.map(r=>r.billNumber),['P-NEW']);assert.ok(base.filterOptions.billNumber.includes('P-OLD'));assert.deepEqual(base.filterOptions.serviceDateLabel,['','28/09/2006','28/09/2026'])
+ for(const columns of [{billNumber:['P-OLD']},{serviceDateLabel:['28/09/2006']}])assert.deepEqual(applyArchiveColumns('purchase',rows,{...q,columns}).items.map(r=>r.billNumber),['P-OLD'])
  assert.equal(applyArchiveColumns('purchase',rows,{...q,columns:{billNumber:['P-OLD'],customerName:['B']}}).items.length,0)
  assert.deepEqual(applyArchiveColumns('purchase',rows,{...q,columns:{billNumber:null}}).items.map(r=>r.billNumber),['P-NEW'])
  assert.equal(applyArchiveColumns('purchase',rows,{...q,columns:{billNumber:[]}}).items.length,0)

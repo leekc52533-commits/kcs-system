@@ -1,3 +1,5 @@
+import {formatDateDisplay} from './dateDisplay.js'
+import DateInput from './DateInput.jsx'
 import CenteredNotice from './CenteredNotice.jsx'
 import {dateSystemWords} from './dateSystemReviewWords.js'
 import {useEffect,useState} from 'react'
@@ -25,7 +27,7 @@ export default function DateRequestEvidence({code,value,onChange,busy,onBusyChan
  }
  if(!mode)return null
  return <section className="date-evidence"><b>{w.title}</b>
- {mode==='contact'&&<><label>{w.method}<select disabled={busy} value={value.contactMethod||''} onChange={e=>change('contactMethod',e.target.value)}><option value="">—</option>{['message','phone','onsite'].map(m=><option key={m} value={m}>{w[m]}</option>)}</select></label><label>{w.contact}<input maxLength={200} disabled={busy} value={value.contactName||''} onChange={e=>change('contactName',e.target.value)}/></label><label>{w.contactAt}<input type="datetime-local" disabled={busy} value={value.contactAt||''} onChange={e=>change('contactAt',e.target.value)}/></label></>}
+ {mode==='contact'&&<><label>{w.method}<select disabled={busy} value={value.contactMethod||''} onChange={e=>change('contactMethod',e.target.value)}><option value="">—</option>{['message','phone','onsite'].map(m=><option key={m} value={m}>{w[m]}</option>)}</select></label><label>{w.contact}<input maxLength={200} disabled={busy} value={value.contactName||''} onChange={e=>change('contactName',e.target.value)}/></label><label>{w.contactAt}<DateInput type="datetime-local" disabled={busy} value={value.contactAt||''} onChange={e=>change('contactAt',e.target.value)}/></label></>}
  {mode==='record'&&<label>{w.record}<input disabled={busy} value={value.billNumber||''} onChange={e=>change('billNumber',e.target.value)}/></label>}
  {mode==='operations'&&<p>{w.operations}</p>}
  {photoRequired&&<><p>{mode==='onsite'?w.capture:w.photo}</p><ProofPhotoPicker value={value.photo||null} onChange={photo} onBusyChange={setProcessing} disabled={busy||locating}/></>}
@@ -37,8 +39,8 @@ export function DateEvidenceReview({item}){
  const{language}=useI18n(),w=evidenceWords[language]||evidenceWords.en,[e,setEvidence]=useState(item.evidence),[error,setError]=useState('')
  useEffect(()=>{let alive=true;if(item.evidence===undefined)apiRequest(`/api/dispatch/date-requests/${item.id}/evidence`).then(r=>{if(alive)setEvidence(r.evidence)}).catch(err=>{if(alive)setError(err.message)});return()=>{alive=false}},[item.id,item.evidence])
  return <section className="date-evidence"><b>{w.title}</b>{error?<CenteredNotice>{error}</CenteredNotice>:e===undefined?<p>…</p>:!e?<p>{w.legacy}</p>:<>
- <p data-i18n-raw>{e.details}</p>{e.systemReview?.executionReleased&&<p>{(dateSystemWords[language]||dateSystemWords.en).released} {e.systemReview.status==='pending'?(dateSystemWords[language]||dateSystemWords.en).waiting:e.systemReview.status==='rejected'?(dateSystemWords[language]||dateSystemWords.en).systemRejected:''}</p>}{e.systemReview&&<p>{(dateSystemWords[language]||dateSystemWords.en).first}: <span data-i18n-raw>{e.systemReview.firstName} · {e.systemReview.firstAt}</span><br/>{({zh:'第二位主管',ms:'Penyelia kedua',en:'Second supervisor'})[language]||'Second supervisor'}: <span data-i18n-raw>{e.systemReview.secondName||'—'} · {e.systemReview.secondAt||'—'}</span></p>}{e.contactName&&<p>{w.contact}: <span data-i18n-raw>{e.contactName}</span> · {w[e.contactMethod]} · {e.contactAt}</p>}
- {e.bill&&<p>{w.record}: <span data-i18n-raw>{e.bill.number}</span> · {w.recordDate}: {e.bill.issuedAt}</p>}
+ <p data-i18n-raw>{e.details}</p>{e.systemReview?.executionReleased&&<p>{formatDateDisplay((dateSystemWords[language]||dateSystemWords.en).released)} {formatDateDisplay(e.systemReview.status==='pending'?(dateSystemWords[language]||dateSystemWords.en).waiting:e.systemReview.status==='rejected'?(dateSystemWords[language]||dateSystemWords.en).systemRejected:'')}</p>}{e.systemReview&&<p>{formatDateDisplay((dateSystemWords[language]||dateSystemWords.en).first)}: <span data-i18n-raw>{e.systemReview.firstName} · {e.systemReview.firstAt}</span><br/>{({zh:'第二位主管',ms:'Penyelia kedua',en:'Second supervisor'})[language]||'Second supervisor'}: <span data-i18n-raw>{e.systemReview.secondName||'—'} · {e.systemReview.secondAt||'—'}</span></p>}{e.contactName&&<p>{w.contact}: <span data-i18n-raw>{e.contactName}</span> · {w[e.contactMethod]} · {e.contactAt}</p>}
+ {e.bill&&<p>{w.record}: <span data-i18n-raw>{e.bill.number}</span> · {formatDateDisplay(w.recordDate)}: {formatDateDisplay(e.bill.issuedAt)}</p>}
  {e.position&&<p>{w.position}: <span data-i18n-raw>{e.capturedAt} · {e.position.latitude}, {e.position.longitude} ±{e.position.accuracyM}m</span></p>}
  {e.operations&&<p>{w.summary}: {w.driver} {e.operations.driverName||e.operations.driver_id||'—'} · {w.crew} {e.operations.crewName||e.operations.assistant_id||'—'} · {w.vehicle} {e.operations.plate||e.operations.vehicle_id}<br/>{w.completed}: {e.operations.completedStops}/{e.operations.totalStops} · {w.time}: {e.operations.started_at||'—'}</p>}
  {e.photoUrl&&<a href={e.photoUrl} target="_blank" rel="noreferrer">{w.view}<img src={e.photoUrl} alt={w.title} style={{display:'block',maxWidth:'100%',maxHeight:320}}/></a>}
