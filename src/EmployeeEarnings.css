@@ -55,3 +55,10 @@
 .earnings-page .earnings-scroll td[data-numeric=true]{text-align:right;font-variant-numeric:tabular-nums}
 .earnings-page .earnings-scroll th:first-child,.earnings-page .earnings-scroll td:first-child{min-width:210px;max-width:280px}
 @media(max-width:600px){.earnings-topbar .record-page-title{font-size:28px}.earnings-page .earnings-period{padding:12px}.earnings-toolbar>label{min-width:0;width:100%;max-width:290px}}
+
+/* Match the Sales header and override the shared desktop !important controls. */
+#root .earnings-topbar .earnings-heading-row{display:flex;align-items:center;gap:8px}
+#root .earnings-topbar .earnings-heading-row>.kcs-back-button{display:inline-flex!important;align-items:center;justify-content:center;width:40px!important;min-width:40px!important;height:40px!important;min-height:40px!important;flex:0 0 40px!important;margin:0!important;padding:2px!important;border:0!important;border-radius:0!important;background:transparent!important;color:#1d3039!important;box-shadow:none}
+#root .earnings-topbar .kcs-back-arrow{font-size:36px;line-height:1}
+#root .earnings-topbar .earnings-heading-row>.record-page-title{font-size:28px;line-height:1.2;font-weight:800}
+#root .shell:has(.earnings-topbar) .earnings-page-back{display:none!important}
