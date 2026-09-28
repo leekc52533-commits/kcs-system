@@ -58,3 +58,5 @@
 
 /* Report links remain interactive without text underlines, including hover. */
 .daily-report a,.daily-report button,.daily-report a:hover,.daily-report button:hover,.daily-report a:focus,.daily-report button:focus{ text-decoration:none!important }
+
+.daily-report-collapsed{cursor:pointer}.daily-report-collapsed:focus-visible{outline:3px solid #176f60;outline-offset:3px}
