@@ -26,6 +26,14 @@ test('HTTP preview uses target session for reads, denies writes and nonmanagers,
   const meta=await(await call('/api/acting-collector/preview/80002')).json();assert.equal(meta.account.employeeId,80002);assert.equal(meta.account.role,'driver');assert.equal(meta.account.preferredLanguage,'ms');assert(!('password_hash'in meta.account));
   const normal=await(await call('/api/mobile/today',80002)).json(),before=db.prepare('SELECT last_seen_at t FROM auth_sessions WHERE account_id=80002').get().t;
   const result=await call(proxy('/api/mobile/today'));assert.equal(result.status,200);assert.deepEqual(await result.json(),normal);
+  for(const employeeId of [80002,80003]){
+   const path='/api/mobile/earnings?date=2026-09-28';
+   const response=await call('/api/acting-collector/preview/'+employeeId+'/read?path='+encodeURIComponent(path));
+   assert.equal(response.status,200);
+   const report=await response.json();assert.deepEqual(report.items.map(e=>e.employeeId),[employeeId]);
+  }
+  for(const path of ['/api/earnings','/api/earnings/settings','/api/earnings/paid'])assert.equal((await call(proxy(path))).status,403);
+  assert.equal((await call(proxy('/api/mobile/earnings'),80001,'POST')).status,403);
   for(const method of ['POST','PUT','PATCH','DELETE'])assert.equal((await call(proxy('/api/mobile/today'),80001,method)).status,403);
   for(const path of ['/api/auth/accounts','/api/auth/logout','/api/mobile/guide/read','/api/acting-collector/vehicle/1'])assert.equal((await call(proxy(path))).status,403);
   assert.equal((await call(proxy('/api/mobile/notices'))).status,200);assert.equal((await call(proxy('/api/mobile/guide'))).status,200);
