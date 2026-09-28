@@ -11,8 +11,8 @@ export function legacySalesRows(db,all){
  return db.prepare('SELECT * FROM legacy_sales_driver_allocations').all().map(a=>{
  const s=settlements.find(s=>s.id===a.settlement_id),l=s&&JSON.parse(s.lines_json)[a.line_index]
  // An eventual genuine cargo link supersedes this legacy assignment, even across periods.
- if(all.some(r=>r.vehicleId===a.vehicle_id&&r.deliveryDate===a.date&&salesTicket(r.ticket)===salesTicket(a.ticket)))return null
- const valid=s&&s.vehicle_id===a.vehicle_id&&JSON.stringify(l)===a.line_json&&lines.filter(x=>x.vehicle===a.vehicle_id&&x.deliveryDate===a.date&&salesTicket(x.slipNumber)===salesTicket(a.ticket)).length===1
+ if(all.some(r=>salesTicket(r.ticket)===salesTicket(a.ticket)))return null
+ const valid=s&&s.vehicle_id===a.vehicle_id&&JSON.stringify(l)===a.line_json&&lines.filter(x=>salesTicket(x.slipNumber)===salesTicket(a.ticket)).length===1
  return {...a,valid:Boolean(valid),plate:s?.vehicle_plate||String(a.vehicle_id)}
  }).filter(Boolean)
 }
