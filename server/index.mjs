@@ -1,3 +1,4 @@
+import {ownLeave,requestLeave,pendingLeave,reviewLeave} from './leaveService.mjs'
 import {isEmployeeBillVoidRoute} from './billVoidRouteAccess.mjs'
 import {reviewDateWithSystemChange,dateSystemReview} from './dateSystemReviewService.mjs'
 import {dateEvidenceForViewer,dateEvidence} from './dateRequestEvidenceService.mjs'
@@ -194,6 +195,10 @@ const server = http.createServer(async (request, response) => {
     if(url.pathname==='/api/earnings/settings'&&request.method==='POST')return sendJson(response,200,saveEarningsSettings(db,session,(await readJson(request)).payload))
     if(url.pathname==='/api/earnings/paid'&&request.method==='POST')return sendJson(response,200,recordEarningsPayment(db,session,(await readJson(request)).payload))
     if(url.pathname.startsWith('/api/attendance')||url.pathname==='/api/mobile/attendance')response.setHeader('Cache-Control','private, no-store')
+    if(url.pathname==='/api/mobile/leave'&&request.method==='GET')return sendJson(response,200,ownLeave(db,session))
+    if(url.pathname==='/api/mobile/leave'&&request.method==='POST')return sendJson(response,200,requestLeave(db,session,(await readJson(request)).payload))
+    if(url.pathname==='/api/leave/requests'&&request.method==='GET')return sendJson(response,200,pendingLeave(db,session))
+    if(/^\/api\/leave\/requests\/\d+$/.test(url.pathname)&&request.method==='POST')return sendJson(response,200,reviewLeave(db,session,url.pathname.split('/').at(-1),(await readJson(request)).payload))
     if(url.pathname==='/api/mobile/attendance'&&request.method==='GET')return sendJson(response,200,attendanceStatus(db,session))
     if(url.pathname==='/api/mobile/attendance'&&request.method==='POST')return sendJson(response,200,clockIn(db,session,(await readJson(request)).payload))
     if(url.pathname==='/api/mobile/attendance/request'&&request.method==='POST')return sendJson(response,200,requestAttendance(db,session,(await readJson(request)).payload))

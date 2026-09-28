@@ -1,3 +1,4 @@
+import {MobileLeave} from './LeaveRequests.jsx'
 import {formatDateDisplay} from './dateDisplay.js'
 import CenteredNotice from './CenteredNotice.jsx'
 import {formatWeight,formatUnitPrice} from '../shared/measurePrecision.js'
@@ -85,7 +86,7 @@ function MobileAppContent({account,onLogout,onChangePassword,actingDriver=false}
   const submitGps=async()=>{if(!selected)return setError(t('mobile.selectBranch'));if(!capture.latitude||!capture.longitude)return setError(t('mobile.getGpsFirst'));if(['driver','crew'].includes(account.role)&&!capture.photo)return setError(t('mobile.photoRequired'));setGpsBusy('submit');setError('');try{const saved=await api(`/api/gps-collector/branch/${encodeURIComponent(selected.branchId)}`,{method:'POST',body:JSON.stringify({...capture,locationSource:capture.locationSource||'device',remark:capture.gpsRemark,photo:capture.photo?await fileData(capture.photo):undefined})});setMessage(t(saved.initialCapture?'gps.initialSaved':'gps.changePending'));setCapture(emptyCapture);setSelected(null);await loadGps();load()}catch(item){setError(item.message)}finally{setGpsBusy('')}}
   const tabs=[['today','mobile.today'],['weight','mobile.weight'],['more','mobile.more'],['earnings','earnings.income']]
   const navigation=<nav>{tabs.map(item=><button className={tab===item[0]||(item[0]==='weight'&&tab==='cargo')||(item[0]==='more'&&['gps','void','intake','notices','guide'].includes(tab))?'active':''} key={item[0]} onClick={()=>setTab(item[0])}>{item[0]==='earnings'?<>{(earningsWords[language]||earningsWords.en).income}{income.data.unread>0&&<span className="income-badge" role="status" aria-label={(earningsWords[language]||earningsWords.en).incomeUpdates}>{income.data.unread}</span>}</>:t(item[1])}</button>)}</nav>
-  if(tab==='earnings')return <main className="mobile-app">{navigation}<IncomeUpdates {...income}/><EmployeeEarnings personal/></main>
+  if(tab==='earnings')return <main className="mobile-app">{navigation}<MobileLeave/><IncomeUpdates {...income}/><EmployeeEarnings personal/></main>
   if(tab==='cargo')return <main className="mobile-app">{navigation}<CargoBatches account={account}/></main>
   if(tab==='guide')return <main className="mobile-app"><header><div><small>KCS MOBILE</small><strong>{t('guide.title')}</strong></div><AccountProfileMenu account={account} onChangePassword={onChangePassword} onLogout={onLogout}/></header>{navigation}<DriverGuide/></main>
   if(tab==='notices')return <main className="mobile-app"><header><div><small>KCS MOBILE</small><strong>{t('notice.title')}</strong></div><AccountProfileMenu account={account} onChangePassword={onChangePassword} onLogout={onLogout}/></header>{navigation}<NoticeHistory/></main>

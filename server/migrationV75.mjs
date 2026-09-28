@@ -1,4 +1,11 @@
 export const attendanceSchema=`
+CREATE TABLE IF NOT EXISTS leave_requests(
+ id INTEGER PRIMARY KEY,employee_id INTEGER NOT NULL REFERENCES employees(id),account_id INTEGER NOT NULL,
+ start_date TEXT NOT NULL,end_date TEXT NOT NULL,reason TEXT NOT NULL,requested_at TEXT NOT NULL,
+ status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),reviewed_by INTEGER,reviewed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS leave_employee_dates ON leave_requests(employee_id,start_date,end_date);
+
 CREATE TABLE IF NOT EXISTS attendance_requests(
  id INTEGER PRIMARY KEY,employee_id INTEGER NOT NULL REFERENCES employees(id),account_id INTEGER NOT NULL,
  work_date TEXT NOT NULL,requested_at TEXT NOT NULL,reason TEXT NOT NULL,gps_json TEXT NOT NULL,
