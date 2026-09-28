@@ -62,3 +62,6 @@
 #root .earnings-topbar .kcs-back-arrow{font-size:36px;line-height:1}
 #root .earnings-topbar .earnings-heading-row>.record-page-title{font-size:28px;line-height:1.2;font-weight:800}
 #root .shell:has(.earnings-topbar) .earnings-page-back{display:none!important}
+
+/* Keep the settings return arrow at the unified large navigation size. */
+#root .earnings-settings .earnings-navigation>.earnings-back{display:inline-flex;align-items:center;justify-content:center;flex:0 0 44px;width:44px;min-width:44px;height:44px;min-height:44px;padding:0!important;border:0!important;background:transparent!important;font-size:36px!important;font-weight:700;line-height:1;color:#1d3039}
