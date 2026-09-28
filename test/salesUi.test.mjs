@@ -6,6 +6,7 @@ import {JSDOM} from 'jsdom'
 const dom=new JSDOM('<html><body><div id="root"></div></body></html>',{url:'https://localhost/'})
 for(const k of ['window','document','Node','NodeFilter','HTMLElement','MutationObserver','Event','MouseEvent','localStorage','sessionStorage','FileReader'])globalThis[k]=dom.window[k]
 Object.defineProperty(globalThis,'navigator',{value:dom.window.navigator,configurable:true});globalThis.IS_REACT_ACT_ENVIRONMENT=true
+window.confirm=()=>true
 const{createRoot}=await import('react-dom/client'),vite=await createServer({logLevel:'silent',server:{middlewareMode:true},appType:'custom'})
 after(()=>vite.close())
 
@@ -71,4 +72,21 @@ test('new sales default to the Kuching date and OCC with selectable materials',a
  await change(document.querySelector('fieldset select'),'Mixed Paper')
  assert.equal(document.querySelector('fieldset select').value,'Mixed Paper')
  await act(async()=>root.unmount())
+})
+
+
+test('declining an old settlement date keeps the draft, accepting submits the exact confirmed date',async()=>{
+ const root=createRoot(document.getElementById('root')),saved=[],messages=[],previous=window.confirm
+ const initial={id:1,buyerId:1,vehicleId:1,billNumber:'CP1',settlementDate:'2006-09-28',total:'10.00',rounding:'0.00',lines:[{deliveryDate:'2006-09-28',slipNumber:'TN1',description:'OCC',weightKg:'20',unitPrice:'0.50',amount:'10.00'}]}
+ try{
+ await act(async()=>root.render(React.createElement(I18nProvider,{language:'zh'},React.createElement(SalesForm,{initial,onSave:v=>saved.push(v),onClose:()=>{}}))))
+ await act(async()=>document.querySelector('input[type=checkbox]').click())
+ window.confirm=message=>{messages.push(message);return false}
+ await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})))
+ assert.equal(saved.length,0);assert.match(messages[0],/2006-09-28/);assert.match(messages[0],/7/)
+ assert.equal(document.querySelector('.sales-fields input[type=date]').value,'2006-09-28')
+ window.confirm=()=>true
+ await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})))
+ assert.equal(saved[0].confirmedSettlementDate,'2006-09-28')
+ }finally{window.confirm=previous;await act(async()=>root.unmount())}
 })

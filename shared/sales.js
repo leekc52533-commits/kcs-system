@@ -29,3 +29,9 @@ export function mergeSalesRecognition(form,fields={},previous={}){
  if((empty||previous.lines&&JSON.stringify(form.lines)===JSON.stringify(previous.lines))&&fields.lines?.length)next.lines=fields.lines
  return next
 }
+
+export function salesDateNeedsConfirmation(value,today){
+ if(!validSalesDate(value)||!validSalesDate(today))return false
+ const days=(Date.parse(today+'T00:00:00Z')-Date.parse(value+'T00:00:00Z'))/86400000
+ return days>7||days<0
+}

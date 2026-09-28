@@ -2,7 +2,7 @@ import {allocateDocumentNumber,documentNumber,documentNumberMap} from './documen
 import {db as defaultDb} from './database.mjs'
 import {withImmediateTransaction} from './branchServiceDateGuard.mjs'
 import {image} from './driverExecutionService.mjs'
-import {billKey,validSalesDate,salesLineCents,filterSales,salesColumns,canonicalSaleMaterial} from '../shared/sales.js'
+import {billKey,validSalesDate,salesLineCents,filterSales,salesColumns,canonicalSaleMaterial,salesDateNeedsConfirmation} from '../shared/sales.js'
 import {formatWeight,formatUnitPrice,validWeight,validUnitPrice} from '../shared/measurePrecision.js'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -59,7 +59,7 @@ export function deleteSalePrice(id,context,db=defaultDb){
 }
 const decode=r=>({...r,buyerId:r.buyer_id,buyerName:r.buyer_name,vehicleId:r.vehicle_id,vehiclePlate:r.vehicle_plate,billNumber:r.bill_number,settlementDate:r.settlement_date,lines:JSON.parse(r.lines_json),total:(r.total_cents/100).toFixed(2),rounding:(r.rounding_cents/100).toFixed(2),createdBy:r.created_by,createdAt:r.created_at})
 export function salesRecord(id,context,db=defaultDb){assertSalesAccess(context);const r=db.prepare('SELECT * FROM sales_settlements WHERE id=?').get(Number(id));if(!r)throw fail('SALES_NOT_FOUND');const decoded={...decode(r),documentNumber:documentNumber(db,'sales-'+r.id)};delete decoded.storage_key;return decoded}
-export function listSales(query,context,db=defaultDb){assertSalesAccess(context);if(!validSalesDate(query.from)||!validSalesDate(query.to)||query.from>query.to)throw fail('SALES_DATE');const numbers=documentNumberMap(db);const records=db.prepare('SELECT * FROM sales_settlements WHERE settlement_date BETWEEN ? AND ? ORDER BY settlement_date DESC,id DESC').all(query.from,query.to).map(decode);const rows=records.flatMap(r=>r.lines.map((l,i)=>({id:r.id,rowKey:r.id+'-'+i,documentNumber:numbers.get('sales-'+r.id)||'',settlementDate:r.settlementDate,billNumber:r.billNumber,buyerName:r.buyerName,vehiclePlate:r.vehiclePlate,...l,total:r.total,remarks:r.remarks,createdBy:r.createdBy})));return{...filterSales(rows,query),...salesMasters(db)}}
+export function listSales(query,context,db=defaultDb){assertSalesAccess(context);if(!billKey(query.lookup)&&(!validSalesDate(query.from)||!validSalesDate(query.to)||query.from>query.to))throw fail('SALES_DATE');const numbers=documentNumberMap(db);const lookup=billKey(query.lookup);const records=(lookup?db.prepare('SELECT * FROM sales_settlements WHERE bill_key=?').all(lookup):db.prepare('SELECT * FROM sales_settlements WHERE settlement_date BETWEEN ? AND ? ORDER BY settlement_date DESC,id DESC').all(query.from,query.to)).map(decode);if(lookup){for(const [key,number] of numbers){if(billKey(number)===lookup&&key.startsWith('sales-')){const found=db.prepare('SELECT * FROM sales_settlements WHERE id=?').get(Number(key.slice(6)));if(found&&!records.some(r=>r.id===found.id))records.push(decode(found))}}};const rows=records.flatMap(r=>r.lines.map((l,i)=>({id:r.id,rowKey:r.id+'-'+i,documentNumber:numbers.get('sales-'+r.id)||'',settlementDate:r.settlementDate,billNumber:r.billNumber,buyerName:r.buyerName,vehiclePlate:r.vehiclePlate,...l,total:r.total,remarks:r.remarks,createdBy:r.createdBy})));return{...filterSales(rows,lookup?{}:query),...salesMasters(db)}}
 function validate(payload,db,old){
  if(payload.reviewed!==true)throw fail('SALES_REVIEW')
  const buyer=db.prepare('SELECT * FROM buyers WHERE id=?').get(Number(payload.buyerId)),vehicle=db.prepare('SELECT * FROM vehicles WHERE id=?').get(Number(payload.vehicleId))
@@ -85,8 +85,10 @@ export function saveSales(payload,context,db=defaultDb,{uploadsRoot}={}){
  try{return withImmediateTransaction(db,()=>{
   const old=payload.id?db.prepare('SELECT * FROM sales_settlements WHERE id=?').get(Number(payload.id)):null
   if(payload.id&&!old)throw fail('SALES_NOT_FOUND');if(old&&Number(payload.revision)!==old.revision)throw fail('SALES_STALE')
-  const v=validate(payload,db,old),duplicate=db.prepare('SELECT id FROM sales_settlements WHERE buyer_id=? AND bill_key=? AND id<>?').get(v.buyer.id,billKey(v.number),old?.id||0)
-  if(duplicate)throw fail('SALES_DUPLICATE')
+  const v=validate(payload,db,old),duplicate=db.prepare('SELECT id,bill_number,settlement_date FROM sales_settlements WHERE buyer_id=? AND bill_key=? AND id<>?').get(v.buyer.id,billKey(v.number),old?.id||0)
+  if(duplicate)throw Object.assign(fail('SALES_DUPLICATE'),{publicDetails:{details:{duplicate:{id:duplicate.id,documentNumber:documentNumber(db,'sales-'+duplicate.id),billNumber:duplicate.bill_number,settlementDate:duplicate.settlement_date}}}})
+  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuching',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(context.now||Date.now()))
+  if(salesDateNeedsConfirmation(payload.settlementDate,today)&&payload.confirmedSettlementDate!==payload.settlementDate)throw Object.assign(fail('SALES_DATE_CONFIRM'),{publicDetails:{details:{settlementDate:payload.settlementDate,today}}})
   let key=old?.storage_key,type=old?.content_type
   if(!old){if(!uploadsRoot)throw fail('SALES_STORAGE');const photo=image(payload.proof);key=`sales/${crypto.randomUUID()}.${photo.extension}`;type=photo.type;written=path.resolve(uploadsRoot,key);fs.mkdirSync(path.dirname(written),{recursive:true});fs.writeFileSync(written,photo.bytes,{flag:'wx'})}
   const actor=String(context.employeeName||context.role),values=[v.buyer.id,v.buyer.buyer_name,v.vehicle.id,v.vehicle.registration_number||v.vehicle.vehicle_code,v.number,billKey(v.number),payload.settlementDate,JSON.stringify(v.lines),v.total,v.rounding,key,type,String(payload.remarks||'').slice(0,1000)]
