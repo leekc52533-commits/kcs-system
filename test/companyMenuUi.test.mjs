@@ -49,3 +49,16 @@ test('personal editor moves a folder page outside and saves independent visibili
   assert.equal(document.querySelectorAll('nav .active').length,0)
  }finally{await act(async()=>root.unmount())}
 })
+
+test('overview folder retains ordered permitted links and closes on outside click',async()=>{
+ const{default:OverviewModules}=await vite.ssrLoadModule('/src/OverviewModules.jsx')
+ const layout=defaultMenuLayout();layout.documents=['sales','expense-records','bill-voids','purchase-bills','unloading-records'];layout.documentName='Bill'
+ const root=createRoot(document.getElementById('root'));let opened
+ try{
+  await act(async()=>root.render(React.createElement(I18nProvider,{language:'en'},React.createElement(OverviewModules,{preferences:{layout,shortcuts:['documents']},items:[['sales','x','sales.title'],['purchase-bills','x','nav.purchaseBills']],go:id=>opened=id}))))
+  const folder=document.querySelector('details');assert(folder);assert.equal(folder.querySelectorAll('button').length,2)
+  await act(async()=>folder.querySelector('summary').click());assert(folder.open)
+  await act(async()=>folder.querySelector('button').click());assert.equal(opened,'sales')
+  await act(async()=>{document.body.dispatchEvent(new MouseEvent('pointerdown',{bubbles:true,clientX:2,clientY:2}));document.body.dispatchEvent(new MouseEvent('pointerup',{bubbles:true,clientX:2,clientY:2}))});assert.equal(folder.open,false)
+ }finally{await act(async()=>root.unmount())}
+})

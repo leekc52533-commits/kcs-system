@@ -30,3 +30,12 @@ export function normalizeMenuLayout(layout){
  const pageNames=Object.fromEntries(Object.entries(layout.pageNames||{}).filter(([id,name])=>pageMenuIds.includes(id)&&goodName(name)).map(([id,name])=>[id,name.trim()]))
  return {top,documents,...(Object.keys(pageNames).length?{pageNames}:{}),...(goodName(layout.documentName)?{documentName:layout.documentName}:{}),...(nextFolders.length?{folders:nextFolders}:{})}
 }
+
+export const overviewMenuIds=layout=>[...pageMenuIds.filter(id=>!['dashboard','location-zone'].includes(id)),'special',...menuGroups(layout).map(g=>g.id)]
+export function overviewSelection(saved,layout){
+ const ids=overviewMenuIds(layout)
+ if(!saved||!Array.isArray(saved.shortcuts))return ids
+ if(saved.overviewVersion===2)return saved.shortcuts.filter(id=>ids.includes(id))
+ const oldDefaults=['operations','special','customers','vehicles','materials','staff']
+ return ids.filter(id=>saved.shortcuts.includes(id)||(!oldDefaults.includes(id)&&!saved.hidden?.includes(id)))
+}

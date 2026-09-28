@@ -43,3 +43,14 @@ test('personal layout is isolated by authenticated account, persists, and reject
   ensureV61Schema(db);assert.equal(readPersonalMenu(db,{id:10}).revision,1)
  }finally{db.close()}
 })
+
+test('overview defaults include whole folders; individual deselections and empty selection persist',()=>{
+ const db=fixture();try{
+  const layout=defaultMenuLayout();layout.top=layout.top.filter(x=>x!=='staff');layout.top.push('folder-team');layout.folders=[{id:'folder-team',name:'Employee',items:['staff']}]
+  saveMenu(db,{id:9},{layout,revision:0})
+  const initial=readPersonalMenu(db,{id:10});assert(initial.shortcuts.includes('folder-team'));assert(initial.shortcuts.includes('sales'))
+  let next=savePersonalMenu(db,{id:10},{...initial,shortcuts:['folder-team']});assert.deepEqual(next.shortcuts,['folder-team'])
+  next=savePersonalMenu(db,{id:10},{...next,shortcuts:[]});assert.deepEqual(next.shortcuts,[])
+  assert(readPersonalMenu(db,{id:9}).shortcuts.includes('folder-team'))
+ }finally{db.close()}
+})
