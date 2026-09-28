@@ -53,3 +53,5 @@
  #root .daily-report .daily-report-matrix th:first-child{box-sizing:border-box;width:130px;min-width:130px;max-width:130px;white-space:normal;overflow-wrap:break-word}
  #root .daily-report .daily-report-matrix th:not(:first-child),#root .daily-report .daily-report-matrix td{box-sizing:border-box;width:120px;min-width:120px}
 }
+
+.daily-report-matrix thead .archive-filter-label{white-space:pre-line;overflow-wrap:anywhere;line-height:1.3}

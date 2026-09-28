@@ -91,7 +91,7 @@ function VehicleMatrix({data,w,language,account,onSelect,toolbarTarget}){
  const value=(key,column)=>{if(column==='metric')return (shortMetricLabels[language]||shortMetricLabels.en)[key]||w(key);if(column==='total')return format(data.summary[key],key);const v=vehicles.find(v=>v.id===column);return key==='vehicles'?w(v.status):format(key==='weightKg'?v.quantity:v.detail?.[key],key)}
  const rows=vehicleMetrics.filter(key=>columns.every(c=>filters[c]==null||filters[c].includes(value(key,c))))
  if(sort.key)rows.sort((a,b)=>value(a,sort.key).localeCompare(value(b,sort.key),undefined,{numeric:true})*(sort.direction==='desc'?-1:1))
- const heading=c=>c==='metric'?w('metric'):c==='total'?w('total'):vehicles.find(v=>v.id===c)?.name
+ const heading=c=>c==='metric'?w('metric'):c==='total'?w('total'):[...(vehicles.find(v=>v.id===c)?.detail?.routeNames||[]),vehicles.find(v=>v.id===c)?.name].filter(Boolean).join('\n')
  return <div className="daily-report-matrix"><DataExportButton name={w('title')+' '+data.date} rows={rows.map(metric=>({metric}))} columns={columns.map(c=>({key:c,label:heading(c),value:r=>value(r.metric,c)}))}/>
   {toolbarTarget&&createPortal(<button type="button" className="record-icon-button" title={expenseColumnWords[language]?.title||expenseColumnWords.en.title} aria-label={expenseColumnWords[language]?.title||expenseColumnWords.en.title} onClick={()=>setArrange(true)}><RecordActionIcon kind="columns"/></button>,toolbarTarget)}
   {arrange&&<ExpenseColumnOrder order={order} columns={ids.map(id=>[id,heading(id)])} w={expenseColumnWords[language]||expenseColumnWords.en} storageKey={storage} onSave={setSaved} onClose={()=>setArrange(false)}/>}
