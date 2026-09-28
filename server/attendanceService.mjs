@@ -21,7 +21,7 @@ export function saveAttendanceSetup(db,ctx,id,p,now=new Date()){manager(ctx);ret
 })}
 export function attendanceStatus(db,ctx,now=new Date()){
  const id=employee(db,ctx.employeeId),config=setting(db,id),date=kuchingDate(now)
- return{date,serverTime:now.toISOString(),configured:Boolean(config.mode),mode:config.mode,record:db.prepare('SELECT id,work_date,clocked_at,mode FROM attendance_records WHERE employee_id=? AND work_date=?').get(id,date)||null}
+ return{request:db.prepare('SELECT id,status,requested_at,reason FROM attendance_requests WHERE employee_id=? AND work_date=?').get(id,date)||null,date,serverTime:now.toISOString(),configured:Boolean(config.mode),mode:config.mode,record:db.prepare('SELECT id,work_date,clocked_at,mode FROM attendance_records WHERE employee_id=? AND work_date=?').get(id,date)||null}
 }
 function distance(a,b,c,d){const rad=n=>n*Math.PI/180,x=Math.sin(rad(c-a)/2)**2+Math.cos(rad(a))*Math.cos(rad(c))*Math.sin(rad(d-b)/2)**2;return 6371000*2*Math.atan2(Math.sqrt(x),Math.sqrt(Math.max(0,1-x)))}
 export function clockIn(db,ctx,p,now=new Date()){return withImmediateTransaction(db,()=>{
@@ -41,3 +41,29 @@ export function clockIn(db,ctx,p,now=new Date()){return withImmediateTransaction
  return attendanceStatus(db,ctx,now)
 })}
 export function attendanceDaily(db,ctx,date=kuchingDate()){manager(ctx);if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date+'T00:00:00Z'))||new Date(date+'T00:00:00Z').toISOString().slice(0,10)!==date)fail('ATTENDANCE_INVALID',400);return{date,items:db.prepare(`SELECT e.id employeeId,e.name,COALESCE(r.mode,s.mode,'company') mode,r.clocked_at,r.latitude,r.longitude,r.accuracy_m FROM employees e LEFT JOIN attendance_settings s ON s.employee_id=e.id LEFT JOIN attendance_records r ON r.employee_id=e.id AND r.work_date=? WHERE (e.is_active=1 AND e.employment_status='active') OR r.id IS NOT NULL ORDER BY e.name`).all(date)}}
+
+const canReview=ctx=>['owner_admin','operations_admin','supervisor'].includes(ctx?.role)
+export function requestAttendance(db,ctx,p,now=new Date()){return withImmediateTransaction(db,()=>{
+ if(!['driver','crew'].includes(ctx?.role))fail('ATTENDANCE_DENIED',403)
+ const state=attendanceStatus(db,ctx,now);if(state.record||state.request)return state
+ const reason=String(p.reason||'').trim(),age=now.getTime()-Date.parse(p.deviceCapturedAt)
+ if(!reason||reason.length>1000)fail('ATTENDANCE_REASON',400)
+ if(!coordinates(p.latitude,p.longitude)||!Number.isFinite(p.accuracyM)||p.accuracyM<0||p.accuracyM>100||!Number.isFinite(age)||age>120000||age< -30000)fail('ATTENDANCE_GPS',400)
+ db.prepare('INSERT INTO attendance_requests(employee_id,account_id,work_date,requested_at,reason,gps_json) VALUES(?,?,?,?,?,?)').run(ctx.employeeId,ctx.id,state.date,now.toISOString(),reason,JSON.stringify({latitude:p.latitude,longitude:p.longitude,accuracyM:p.accuracyM,deviceCapturedAt:p.deviceCapturedAt}))
+ return attendanceStatus(db,ctx,now)
+})}
+export function attendanceRequests(db,ctx){if(!canReview(ctx))fail('ATTENDANCE_DENIED',403);return {items:db.prepare("SELECT r.*,e.name FROM attendance_requests r JOIN employees e ON e.id=r.employee_id WHERE r.status='pending' ORDER BY r.requested_at,r.id").all()}}
+export function reviewAttendance(db,ctx,id,p,now=new Date()){if(!canReview(ctx))fail('ATTENDANCE_DENIED',403);return withImmediateTransaction(db,()=>{
+ const r=db.prepare('SELECT * FROM attendance_requests WHERE id=?').get(Number(id))
+ if(!r||r.status!=='pending')fail('ATTENDANCE_STALE')
+ if(r.account_id===ctx.id||r.employee_id===ctx.employeeId)fail('ATTENDANCE_DENIED',403)
+ if(!['approved','rejected'].includes(p.decision))fail('ATTENDANCE_INVALID',400)
+ let status=p.decision
+ if(db.prepare('SELECT id FROM attendance_records WHERE employee_id=? AND work_date=?').get(r.employee_id,r.work_date))status='superseded'
+ if(status==='approved'){
+  employee(db,r.employee_id);const g=JSON.parse(r.gps_json)
+  db.prepare('INSERT INTO attendance_records(employee_id,work_date,clocked_at,mode,latitude,longitude,accuracy_m,device_captured_at,account_id) VALUES(?,?,?,?,?,?,?,?,?)').run(r.employee_id,r.work_date,r.requested_at,'approved',g.latitude,g.longitude,g.accuracyM,g.deviceCapturedAt,r.account_id)
+ }
+ db.prepare('UPDATE attendance_requests SET status=?,reviewed_by=?,reviewed_at=? WHERE id=?').run(status,ctx.id,now.toISOString(),r.id)
+ return {id:r.id,status}
+})}

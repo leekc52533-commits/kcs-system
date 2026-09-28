@@ -1,4 +1,11 @@
 export const attendanceSchema=`
+CREATE TABLE IF NOT EXISTS attendance_requests(
+ id INTEGER PRIMARY KEY,employee_id INTEGER NOT NULL REFERENCES employees(id),account_id INTEGER NOT NULL,
+ work_date TEXT NOT NULL,requested_at TEXT NOT NULL,reason TEXT NOT NULL,gps_json TEXT NOT NULL,
+ status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected','superseded')),
+ reviewed_by INTEGER,reviewed_at TEXT,UNIQUE(employee_id,work_date)
+);
+
 CREATE TABLE IF NOT EXISTS attendance_settings(
  employee_id INTEGER PRIMARY KEY REFERENCES employees(id),mode TEXT NOT NULL CHECK(mode IN ('home','company')),
  location_id INTEGER REFERENCES operational_locations(id),radius_m INTEGER NOT NULL DEFAULT 200 CHECK(radius_m BETWEEN 20 AND 5000),

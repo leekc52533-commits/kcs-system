@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {DatabaseSync} from 'node:sqlite'
 import {schemaSql} from '../server/schema.mjs'
 import {applyV75Migration} from '../server/migrationV75.mjs'
-import {attendanceSetup,saveAttendanceSetup,attendanceStatus,clockIn,attendanceDaily} from '../server/attendanceService.mjs'
+import {attendanceSetup,saveAttendanceSetup,attendanceStatus,clockIn,attendanceDaily,requestAttendance,attendanceRequests,reviewAttendance} from '../server/attendanceService.mjs'
 const manager={id:10,role:'owner_admin',employeeId:1},a={id:20,role:'driver',employeeId:2},b={id:30,role:'crew',employeeId:3},now=new Date('2026-09-18T00:00:00Z')
 const gps={latitude:1.5,longitude:110.3,accuracyM:10,deviceCapturedAt:now.toISOString()}
 function fixture(){const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON;'+schemaSql);db.exec(`INSERT INTO employees(id,name,employment_status,is_active) VALUES(1,'KC','active',1),(2,'A','active',1),(3,'B','active',1);INSERT INTO operational_locations(id,name,location_type,operational_type,latitude,longitude) VALUES(1,'Company','depot','Company Yard',1.5,110.3),(2,'Factory','factory','Buyer',1.5,110.3);`);return db}
@@ -63,3 +63,34 @@ test('unconfigured staff default to the sole company, home overrides survive, mu
  const next=new Date('2026-09-19T00:00:00Z');assert.throws(()=>clockIn(db,a,{...gps,deviceCapturedAt:next.toISOString()},next),{code:'ATTENDANCE_LOCATION'})
  saveAttendanceSetup(db,manager,2,company);assert.equal(attendanceSetup(db,manager,2).locationId,1)
  }finally{db.close()}})
+
+test('remote request preserves server request time, cannot self approve and unlocks only after approval',()=>{
+ const db=fixture();try{
+  const p={...gps,latitude:2,reason:'Forgot at the yard',requestedAt:'2000-01-01',employeeId:3}
+  const r=requestAttendance(db,a,p,now);assert.equal(r.record,null);assert.equal(r.request.requested_at,now.toISOString())
+  assert.equal(requestAttendance(db,a,p,new Date(now.getTime()+60000)).request.id,r.request.id)
+  assert.throws(()=>reviewAttendance(db,a,r.request.id,{decision:'approved'}),{code:'ATTENDANCE_DENIED'})
+  assert.throws(()=>reviewAttendance(db,{...a,role:'supervisor'},r.request.id,{decision:'approved'}),{code:'ATTENDANCE_DENIED'})
+  assert.throws(()=>attendanceRequests(db,a),{code:'ATTENDANCE_DENIED'})
+  assert.equal(attendanceRequests(db,{...manager,role:'supervisor'}).items.length,1)
+  reviewAttendance(db,{...manager,role:'supervisor'},r.request.id,{decision:'approved'},new Date(now.getTime()+3600000))
+  const state=attendanceStatus(db,a,now);assert.equal(state.record.clocked_at,now.toISOString());assert.equal(state.record.mode,'approved')
+  assert.equal(attendanceStatus(db,b,now).record,null)
+  assert.throws(()=>reviewAttendance(db,manager,r.request.id,{decision:'approved'}),{code:'ATTENDANCE_STALE'})
+  const audit=db.prepare('SELECT * FROM attendance_requests').get();assert.equal(audit.reviewed_by,manager.id);assert.notEqual(audit.reviewed_at,audit.requested_at)
+ }finally{db.close()}
+})
+test('rejection stays locked, normal attendance is preserved, and next-day approval does not unlock today',()=>{
+ const db=fixture();try{
+  assert.throws(()=>requestAttendance(db,a,{...gps,reason:''},now),{code:'ATTENDANCE_REASON'})
+  assert.throws(()=>requestAttendance(db,a,{...gps,reason:'x',accuracyM:200},now),{code:'ATTENDANCE_GPS'})
+  const r=requestAttendance(db,a,{...gps,reason:'Forgot'},now).request
+  reviewAttendance(db,manager,r.id,{decision:'rejected'},now);assert.equal(attendanceStatus(db,a,now).record,null)
+  const q=requestAttendance(db,b,{...gps,reason:'Forgot'},now).request
+  clockIn(db,b,gps,now);assert.equal(reviewAttendance(db,manager,q.id,{decision:'approved'},now).status,'superseded')
+  assert.equal(attendanceStatus(db,b,now).record.mode,'company')
+  const tomorrow=new Date('2026-09-19T00:00:00Z'),next=requestAttendance(db,a,{...gps,reason:'Forgot',deviceCapturedAt:tomorrow.toISOString()},tomorrow).request
+  const later=new Date('2026-09-20T00:00:00Z');reviewAttendance(db,manager,next.id,{decision:'approved'},later)
+  assert.equal(attendanceStatus(db,a,later).record,null);assert.equal(attendanceStatus(db,a,tomorrow).record.clocked_at,tomorrow.toISOString())
+ }finally{db.close()}
+})
