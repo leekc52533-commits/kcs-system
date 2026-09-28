@@ -5,8 +5,9 @@ function actor(ctx,db){const id=Number(ctx.employeeId);if(!Number.isSafeInteger(
 export function myBills(query={},ctx={},db=defaultDb){
  const id=actor(ctx,db),where=['pb.driver_employee_id=?'],args=[id]
  if((query.from&&!validSalesDate(query.from))||(query.to&&!validSalesDate(query.to))||(query.from&&query.to&&query.from>query.to))throw fail('INVALID_DATE',400)
- for(const [key,op] of [['from','>='],['to','<=']])if(query[key]){where.push('pb.service_date'+op+'?');args.push(query[key])}
- const search=String(query.search||'').trim().toLowerCase();if(search){where.push("(instr(lower(pb.bill_number),?)>0 OR instr(lower(pb.customer_name_snapshot),?)>0 OR instr(lower(pb.branch_name_snapshot),?)>0)");args.push(search,search,search)}
+ const search=String(query.search||'').trim().toLowerCase()
+ for(const [key,op] of [['from','>='],['to','<=']])if(query[key]){where.push("(pb.service_date"+op+"? OR (?<>'' AND instr(lower(pb.bill_number),?)>0))");args.push(query[key],search,search)}
+ if(search){where.push("(instr(lower(pb.bill_number),?)>0 OR instr(lower(pb.customer_name_snapshot),?)>0 OR instr(lower(pb.branch_name_snapshot),?)>0)");args.push(search,search,search)}
  const page=Math.max(0,Math.floor(Number(query.page)||0));if(!Number.isSafeInteger(page)||page>1000000)throw fail('INVALID_DATE',400)
  const total=db.prepare('SELECT COUNT(*) n FROM purchase_bills pb WHERE '+where.join(' AND ')).get(...args).n
  const rows=db.prepare(`SELECT pb.id,pb.bill_number billNumber,pb.service_date serviceDate,pb.customer_name_snapshot customerName,pb.branch_name_snapshot branchName,pb.driver_name_snapshot issuedBy,pb.vehicle_code_snapshot vehicleCode,pb.registration_number_snapshot registrationNumber,pb.total_cents totalCents,pb.payment_method paymentMethod,pb.status,pb.issued_at issuedAt,EXISTS(SELECT 1 FROM purchase_payment_proofs p WHERE p.purchase_bill_id=pb.id) hasProof FROM purchase_bills pb WHERE ${where.join(' AND ')} ORDER BY pb.service_date DESC,pb.id DESC LIMIT 50 OFFSET ?`).all(...args,page*50)

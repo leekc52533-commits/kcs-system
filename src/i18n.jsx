@@ -1,3 +1,4 @@
+import {RequiredFieldNotices} from './CenteredNotice.jsx'
 /* eslint-disable react/only-export-components -- provider, selector and hook are one i18n surface */
 import {createContext,useCallback,useContext,useEffect,useMemo} from 'react'
 import {languageOptions,translate,translateSource,translateUi} from './translations.js'
@@ -30,7 +31,7 @@ export function I18nProvider({language,setLanguage,children}){
   },[language])
   const t=useCallback((key,variables)=>translate(language,key,variables),[language])
   const value=useMemo(()=>({language,setLanguage,t}),[language,setLanguage,t])
-  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>
+  return <I18nContext.Provider value={value}>{children}<RequiredFieldNotices/></I18nContext.Provider>
 }
 
 export const useI18n=()=>useContext(I18nContext)

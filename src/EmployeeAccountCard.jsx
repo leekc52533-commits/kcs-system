@@ -1,3 +1,4 @@
+import CenteredNotice from './CenteredNotice.jsx'
 import {reportWord} from '../shared/dailyReportWords.js'
 import {useState} from 'react'
 import PasswordInput from './PasswordInput.jsx'
@@ -22,7 +23,7 @@ export default function EmployeeAccountCard({employee,actor,refresh,blocked=fals
   setBusy(true)
   try{await api(create?'/api/auth/accounts':`/api/auth/accounts/${employee.accountId}`,{method:create?'POST':'PATCH',body:JSON.stringify(payload)});setPassword('');setNewAccount(null);await refresh();setMessage(t('account.updated'))}catch(e){setError(e.message)}finally{setBusy(false)}
  }
- return <div className="employee-account-card">{blocked&&<p>{t('staff.saveFirst')}</p>}<fieldset disabled={busy||blocked}>{error&&<div role="alert" className="data-error">{error}</div>}{message&&<div role="status">{message}</div>}{employee.accountId?<>
+ return <div className="employee-account-card">{blocked&&<p>{t('staff.saveFirst')}</p>}<fieldset disabled={busy||blocked}>{error&&<CenteredNotice>{error}</CenteredNotice>}{message&&<div role="status">{message}</div>}{employee.accountId?<>
  <p>{t('list.accountStatus')}: <b>{t(employee.accountActive?'common.active':'common.disabled')}</b></p>
  <div className="employee-detail-grid"><label>{t('auth.username')}<input value={draft.username} disabled={!allowed||!owner||targetOwner||busy} onChange={e=>setDraft({...draft,username:e.target.value})}/></label><label>{t('auth.systemRole')}<select value={draft.role} disabled={!allowed||!owner||targetOwner||busy} onChange={e=>setDraft({...draft,role:e.target.value})}>{targetOwner&&<option value="owner_admin">{t('staff.role.owner_admin')}</option>}{roles.map(role=><option value={role} key={role}>{t('staff.role.'+role)}</option>)}</select></label></div>
  {allowed&&<><div className="account-actions">{owner&&!targetOwner&&<button disabled={busy} onClick={()=>update(draft)}>{t('common.save')}</button>}<button disabled={busy||targetOwner||(!employee.accountActive&&!eligible)} onClick={()=>update({isActive:!employee.accountActive})}>{t(employee.accountActive?'staff.disableLogin':'staff.enableLogin')}</button><button disabled={busy||targetOwner} onClick={()=>update({unlock:true})}>{t('account.unlock')}</button></div>

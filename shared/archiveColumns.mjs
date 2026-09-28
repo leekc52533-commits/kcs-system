@@ -26,11 +26,16 @@ export function archiveValue(kind,row,key,sort=false){
  if(key==='car')return text(row.registrationNumber||row.vehicleCode)
  return text(row[key])
 }
+export const archiveHistoryKeys={ledger:['serviceDateLabel','createdAtLabel','ledgerReference'],expense:['expenseNumber','serviceDateLabel','createdAtLabel','referenceNumber'],purchase:['serviceDateLabel','billNumber','customerReceipt']}
+export function hasArchiveHistorySelection(kind,query={}){let c=query.columns;try{if(typeof c==='string')c=JSON.parse(c)}catch{c={}}return (archiveHistoryKeys[kind]||[]).some(k=>Array.isArray(c?.[k]))}
 export function applyArchiveColumns(kind,rows,query={}){
  let selected={}
  try{const parsed=typeof query.columns==='string'?JSON.parse(query.columns):query.columns;if(parsed&&typeof parsed==='object'&&!Array.isArray(parsed))selected=parsed}catch{}
+ const historical=archiveHistoryKeys[kind]||[],allRows=rows
+ if(!hasArchiveHistorySelection(kind,query))rows=rows.filter(r=>(!(query._rangeFrom||query.from)||r.serviceDate>=(query._rangeFrom||query.from))&&(!query._rangeToExclusive||r.serviceDate<query._rangeToExclusive)&&(!query.to||r.serviceDate<=query.to))
  const keys=archiveKeys[kind],collator=new Intl.Collator('en',{numeric:true,sensitivity:'base'})
- const filterOptions=Object.fromEntries(keys.map(key=>[key,[...new Set(['',...rows.map(row=>text(archiveValue(kind,row,key)))])].sort((a,b)=>collator.compare(a,b))]))
+ const filterOptions=Object.fromEntries(keys.map(key=>[key,[...new Set(['',...(historical.includes(key)?allRows:rows).map(row=>text(archiveValue(kind,row,key)))])].sort((a,b)=>collator.compare(a,b))]))
+ for(const key of historical.filter(k=>k.endsWith('Label'))){const source=new Map(allRows.map(r=>[text(archiveValue(kind,r,key)),text(archiveValue(kind,r,key,true))]));filterOptions[key].sort((a,b)=>collator.compare(source.get(a)||'',source.get(b)||''))}
  const sets=keys.filter(key=>Array.isArray(selected[key])).map(key=>[key,new Set(selected[key].filter(v=>typeof v==='string'))])
  const items=rows.filter(row=>sets.every(([key,set])=>set.has(text(archiveValue(kind,row,key)))))
  if(keys.includes(query.sortKey)&&['asc','desc'].includes(query.sortDirection)){

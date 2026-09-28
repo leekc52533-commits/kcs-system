@@ -1,3 +1,4 @@
+import CenteredNotice from './CenteredNotice.jsx'
 import {useEffect,useState} from 'react'
 import {MobileApp} from './AuthPages.jsx'
 import {I18nProvider,useI18n} from './i18n.jsx'
@@ -21,5 +22,5 @@ function PasswordRequired(){const{t}=useI18n();return <p role="status">{t('previ
 export default function EmployeePreview({employeeId}){
  const[account,setAccount]=useState(null),[error,setError]=useState(''),[language,setLanguage]=useState('en')
  useEffect(()=>{let alive=true;setPreviewEmployee(employeeId);fetch(`/api/acting-collector/preview/${employeeId}`).then(async r=>{const data=await r.json();if(!r.ok)throw Error(apiErrorMessage(data));if(alive){setAccount(data.account);setLanguage(data.account.preferredLanguage||'en')}}).catch(e=>{if(alive)setError(e.message)});return()=>{alive=false;setPreviewEmployee(null)}},[employeeId])
- return <I18nProvider language={language} setLanguage={setLanguage}><PreviewGuard>{error?<p role="alert">{error}</p>:account?account.mustChangePassword?<PasswordRequired/>:<MobileApp account={account} onLogout={()=>{}} onChangePassword={()=>{}}/>:<p>…</p>}</PreviewGuard></I18nProvider>
+ return <I18nProvider language={language} setLanguage={setLanguage}><PreviewGuard>{error?<CenteredNotice>{error}</CenteredNotice>:account?account.mustChangePassword?<PasswordRequired/>:<MobileApp account={account} onLogout={()=>{}} onChangePassword={()=>{}}/>:<p>…</p>}</PreviewGuard></I18nProvider>
 }

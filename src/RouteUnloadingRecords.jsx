@@ -1,3 +1,4 @@
+import CenteredNotice from './CenteredNotice.jsx'
 import {formatWeight} from '../shared/measurePrecision.js'
 import {useUi} from './i18n.jsx'
 import {useEffect,useState} from 'react'
@@ -18,7 +19,7 @@ export default function RouteUnloadingRecords({date,routeNumber,revision}){
   return <details className="route-unloading" onToggle={e=>setOpen(e.currentTarget.open)}>
     <summary>{ui("卸货记录")}</summary>
     {open&&<div><button type="button" onClick={()=>setRefresh(value=>value+1)}>{ui("刷新记录")}</button>
-      {error?<p role="alert">{ui(error)}</p>:!data?<p>{ui("载入中…")}</p>:<>
+      {error?<CenteredNotice>{ui(error)}</CenteredNotice>:!data?<p>{ui("载入中…")}</p>:<>
         {data.items.length===0&&<p>{ui("当天这条 ROUTE 暂无卸货记录。")}</p>}
         {data.items.map(item=><article key={item.id}>
           <strong>{item.code}</strong><span>{item.status==='confirmed'?ui("已确认"):ui("等待员工确认重量")}</span>

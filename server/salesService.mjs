@@ -61,7 +61,7 @@ const decode=r=>({...r,buyerId:r.buyer_id,buyerName:r.buyer_name,vehicleId:r.veh
 export function salesRecord(id,context,db=defaultDb){assertSalesAccess(context);const r=db.prepare('SELECT * FROM sales_settlements WHERE id=?').get(Number(id));if(!r)throw fail('SALES_NOT_FOUND');const decoded={...decode(r),documentNumber:documentNumber(db,'sales-'+r.id)};delete decoded.storage_key;return decoded}
 export function listSales(query,context,db=defaultDb){
  assertSalesAccess(context)
- const historyKeys=['documentNumber','billNumber','settlementDate','deliveryDate']
+ const historyKeys=['documentNumber','billNumber','settlementDate','deliveryDate','slipNumber']
  let columns={};try{columns=typeof query.columns==='string'?JSON.parse(query.columns):query.columns||{}}catch{}
  const lookup=billKey(query.lookup),allDates=historyKeys.some(key=>Array.isArray(columns?.[key]))
  if(!lookup&&!allDates&&(!validSalesDate(query.from)||!validSalesDate(query.to)||query.from>query.to))throw fail('SALES_DATE')

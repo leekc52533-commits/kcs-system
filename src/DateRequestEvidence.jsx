@@ -1,3 +1,4 @@
+import CenteredNotice from './CenteredNotice.jsx'
 import {dateSystemWords} from './dateSystemReviewWords.js'
 import {useEffect,useState} from 'react'
 import {useI18n} from './i18n.jsx'
@@ -29,13 +30,13 @@ export default function DateRequestEvidence({code,value,onChange,busy,onBusyChan
  {mode==='operations'&&<p>{w.operations}</p>}
  {photoRequired&&<><p>{mode==='onsite'?w.capture:w.photo}</p><ProofPhotoPicker value={value.photo||null} onChange={photo} onBusyChange={setProcessing} disabled={busy||locating}/></>}
  {value.position&&<small data-i18n-raw>{value.capturedAt} · {value.position.latitude}, {value.position.longitude} ±{value.position.accuracyM}m</small>}
- {error&&<p role="alert">{error}</p>}{evidenceProblem(code,value)&&<small>{w.required}</small>}
+ {error&&<CenteredNotice>{error}</CenteredNotice>}{evidenceProblem(code,value)&&<small>{w.required}</small>}
  </section>
 }
 export function DateEvidenceReview({item}){
  const{language}=useI18n(),w=evidenceWords[language]||evidenceWords.en,[e,setEvidence]=useState(item.evidence),[error,setError]=useState('')
  useEffect(()=>{let alive=true;if(item.evidence===undefined)apiRequest(`/api/dispatch/date-requests/${item.id}/evidence`).then(r=>{if(alive)setEvidence(r.evidence)}).catch(err=>{if(alive)setError(err.message)});return()=>{alive=false}},[item.id,item.evidence])
- return <section className="date-evidence"><b>{w.title}</b>{error?<p role="alert">{error}</p>:e===undefined?<p>…</p>:!e?<p>{w.legacy}</p>:<>
+ return <section className="date-evidence"><b>{w.title}</b>{error?<CenteredNotice>{error}</CenteredNotice>:e===undefined?<p>…</p>:!e?<p>{w.legacy}</p>:<>
  <p data-i18n-raw>{e.details}</p>{e.systemReview?.executionReleased&&<p>{(dateSystemWords[language]||dateSystemWords.en).released} {e.systemReview.status==='pending'?(dateSystemWords[language]||dateSystemWords.en).waiting:e.systemReview.status==='rejected'?(dateSystemWords[language]||dateSystemWords.en).systemRejected:''}</p>}{e.systemReview&&<p>{(dateSystemWords[language]||dateSystemWords.en).first}: <span data-i18n-raw>{e.systemReview.firstName} · {e.systemReview.firstAt}</span><br/>{({zh:'第二位主管',ms:'Penyelia kedua',en:'Second supervisor'})[language]||'Second supervisor'}: <span data-i18n-raw>{e.systemReview.secondName||'—'} · {e.systemReview.secondAt||'—'}</span></p>}{e.contactName&&<p>{w.contact}: <span data-i18n-raw>{e.contactName}</span> · {w[e.contactMethod]} · {e.contactAt}</p>}
  {e.bill&&<p>{w.record}: <span data-i18n-raw>{e.bill.number}</span> · {w.recordDate}: {e.bill.issuedAt}</p>}
  {e.position&&<p>{w.position}: <span data-i18n-raw>{e.capturedAt} · {e.position.latitude}, {e.position.longitude} ±{e.position.accuracyM}m</span></p>}

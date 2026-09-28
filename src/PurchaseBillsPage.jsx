@@ -1,3 +1,4 @@
+import CenteredNotice from './CenteredNotice.jsx'
 import {isNumericColumn} from './numericColumns.js'
 import {formatWeight,formatUnitPrice} from '../shared/measurePrecision.js'
 import {createPortal} from 'react-dom'
@@ -36,7 +37,7 @@ export default function PurchaseBillsPage({onBack}){
       <label>{ui('From Date')}<input aria-label={ui('From Date')} type="date" value={filters.from} max={filters.to} onChange={event=>setFilters({...filters,from:event.target.value})}/></label>
       <label>{ui('To Date')}<input aria-label={ui('To Date')} type="date" value={filters.to} min={filters.from} onChange={event=>setFilters({...filters,to:event.target.value})}/></label>
       {exportTarget&&createPortal(<button type="button" className="record-icon-button" title={ui('Download Excel with Payment Proofs')} aria-label={ui('Download Excel with Payment Proofs')} onClick={()=>{window.location.href=`/api/purchase-bills/export.xlsx?${query}`}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 15V3m-5 5 5-5 5 5M4 15v6h16v-6"/></svg></button>,exportTarget)}</div>
-    {error&&<div className="data-error">{error}</div>}{loading&&!data&&<div className="data-loading">{ui('Loading Purchase Bills…')}</div>}
+    {error&&<CenteredNotice>{error}</CenteredNotice>}{loading&&!data&&<div className="data-loading">{ui('Loading Purchase Bills…')}</div>}
     <div className="archive-table" ref={tableRef}><table><thead><tr>{columns.map(([key,label])=>{
  const translated=['expenseTypeLabel','category','paymentMethod','receiptLabel','proofLabel','statusLabel']
  const options=(data?.filterOptions?.[key]||['',...new Set(rows.map(row=>String(row[key]??'')).filter(Boolean))]).map(value=>({value,label:value===''?ui('Blank'):translated.includes(key)?ui(value):value}))

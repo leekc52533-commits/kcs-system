@@ -10,7 +10,7 @@ test('ledger date/blank/multi filters, signed numeric sorting and Excel agree be
  db.exec("INSERT INTO cash_float_transactions(employee_id,transaction_type,amount_cents,service_date) VALUES(2,'top_up',50000,'2000-02-01')")
  const q={from:'2000-01-01',to:'2000-01-31',columns:JSON.stringify({employeeName:['Employee 2'],transactionTypeLabel:['Expense']}),sortKey:'amountLabel',sortDirection:'asc'}
  const data=listCashFloatTransactions(q,db);assert.equal(data.items.length,2001);assert.equal(data.items[0].amountCents,-2000);assert.equal(data.items.at(-1).amountCents,0)
- assert.equal(listCashFloatTransactions({...q,columns:JSON.stringify({ledgerReference:['']})},db).items.length,1)
+ assert.equal(listCashFloatTransactions({...q,columns:JSON.stringify({ledgerReference:['']})},db).items.length,2)
  assert.equal(listCashFloatTransactions({...q,columns:JSON.stringify({employeeName:[]})},db).items.length,0)
  assert.equal(listCashFloatTransactions({},db).items.length,2002)
  const workbook=new ExcelJS.Workbook();await workbook.xlsx.load(await cashFloatWorkbook(q,db));assert.equal(workbook.worksheets.length,1);const sheet=workbook.getWorksheet('Cash Float Ledger');assert.equal(sheet.rowCount,2002);assert.equal(sheet.getCell(2,4).value,-20);assert.equal(sheet.getCell(2002,4).value,0)

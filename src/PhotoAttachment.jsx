@@ -1,3 +1,4 @@
+import CenteredNotice from './CenteredNotice.jsx'
 import {useMemo,useState} from 'react'
 import ProofPhotoPicker from './ProofPhotoPicker.jsx'
 import {useI18n,useUi} from './i18n.jsx'
@@ -17,5 +18,5 @@ export function PhotoFilePicker({value,onChange,onBusyChange,disabled=false,allo
 export function PhotoUpload({label,save,disabled=false,allowPdf=false}){
   const {t}=useI18n(),ui=useUi(),[file,setFile]=useState(null),[processing,setProcessing]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('')
   const upload=async()=>{if(!file||busy||processing)return;setBusy(true);setError('');try{if(await save(file)!==false)setFile(null)}catch(item){setError(item.message||t('photo.uploadFailed'))}finally{setBusy(false)}}
-  return <div className="photo-upload"><PhotoFilePicker label={label} value={file} onChange={setFile} onBusyChange={setProcessing} disabled={disabled||busy} allowPdf={allowPdf}/>{error&&<p role="alert">{ui(error)}</p>}<button type="button" disabled={disabled||busy||processing||!file} onClick={upload}>{t(busy?'common.saving':'photo.confirmUpload')}</button></div>
+  return <div className="photo-upload"><PhotoFilePicker label={label} value={file} onChange={setFile} onBusyChange={setProcessing} disabled={disabled||busy} allowPdf={allowPdf}/>{error&&<CenteredNotice>{ui(error)}</CenteredNotice>}<button type="button" disabled={disabled||busy||processing||!file} onClick={upload}>{t(busy?'common.saving':'photo.confirmUpload')}</button></div>
 }

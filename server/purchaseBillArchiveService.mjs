@@ -13,7 +13,7 @@ const excelDate=value=>{const match=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(value
 const safeFile=value=>String(value||'').replace(/[^A-Za-z0-9._-]+/g,'_').replace(/^\.+/,'')||'file'
 
 function where(filters={}){
-  const range=dateRange(filters),clauses=['pb.service_date>=?','pb.service_date<?'],params=[range.from,range.to]
+  const range=dateRange(filters),clauses=['1=1'],params=[]
   const search=String(filters.search||'').trim();if(search){const q=`%${search}%`;clauses.push('(pb.bill_number LIKE ? OR pb.customer_name_snapshot LIKE ? OR pb.branch_name_snapshot LIKE ? OR pb.branch_code_snapshot LIKE ? OR EXISTS(SELECT 1 FROM temporary_customer_intakes i JOIN branches linked ON linked.id=i.linked_branch_id JOIN customers lc ON lc.id=linked.customer_id WHERE i.dispatch_stop_id=pb.dispatch_stop_id AND (linked.jodoo_branch_id LIKE ? OR linked.branch_name LIKE ? OR lc.name LIKE ?)))');params.push(q,q,q,q,q,q,q)}
   const paymentMethod=String(filters.paymentMethod||'');if(['Cash','Credit'].includes(paymentMethod)){clauses.push('pb.payment_method=?');params.push(paymentMethod)}
   const employeeId=Number(filters.employeeId);if(Number.isInteger(employeeId)&&employeeId>0){clauses.push('pb.driver_employee_id=?');params.push(employeeId)}
@@ -28,7 +28,7 @@ export function listPurchaseBillArchive(filters={},database=defaultDb){
     pb.status,pb.issued_at issuedAt,pp.id proofId,pp.original_name proofName,pp.created_at proofUploadedAt
     FROM purchase_bills pb LEFT JOIN purchase_payment_proofs pp ON pp.purchase_bill_id=pb.id WHERE ${query.sql} ORDER BY pb.service_date DESC,pb.id DESC`).all(...query.params)
   const itemStatement=database.prepare(`SELECT product_name_snapshot item,short_form_snapshot shortForm,unit_snapshot unit,quantity,unit_price_cents unitPriceCents,unit_price_mills unitPriceMills,COALESCE(unit_price_mills,unit_price_cents*10)/1000.0 unitPrice,line_total_cents itemTotalCents FROM purchase_bill_items WHERE purchase_bill_id=? ORDER BY id`)
-  const table=applyArchiveColumns('purchase',headers,filters)
+  const table=applyArchiveColumns('purchase',headers,{...filters,_rangeFrom:query.from,_rangeToExclusive:query.to})
   const items=table.items.map(row=>({...row,totalCents:Number(row.totalCents),proofId:row.proofId?Number(row.proofId):null,items:itemStatement.all(row.id).map(item=>({...item,quantity:Number(item.quantity),unitPriceCents:Number(item.unitPriceCents),itemTotalCents:Number(item.itemTotalCents)}))}))
   const employees=database.prepare(`SELECT DISTINCT pb.driver_employee_id id,pb.driver_name_snapshot name FROM purchase_bills pb WHERE pb.service_date>=? AND pb.service_date<? ORDER BY name`).all(query.from,query.to)
   return{rangeLabel:query.label,from:query.from,to:query.to,items,employees,filterOptions:table.filterOptions}

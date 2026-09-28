@@ -1,3 +1,4 @@
+import CenteredNotice from './CenteredNotice.jsx'
 import {WorkCloseApprovals} from './WorkClose.jsx'
 import EmployeeEarnings from './EmployeeEarnings.jsx'
 import DailyReport from './DailyReport.jsx'
@@ -48,7 +49,7 @@ class AppErrorBoundary extends Component {
   state={error:null}
   static getDerivedStateFromError(error){return{error}}
   componentDidCatch(error,info){console.error('KCS UI error',error,info)}
-  render(){const language=localStorage.getItem('kcs_language')||'en';if(this.state.error)return <main className="auth-page"><section className="auth-card"><div className="auth-logo">!</div><h1>{translate(language,'app.pageError')}</h1><p>{translate(language,'app.pageErrorHelp')}</p><div className="auth-error">{translate(language,'app.unknownPageError')}</div><button onClick={()=>window.location.reload()}>{translate(language,'app.reload')}</button></section></main>;return this.props.children}
+  render(){const language=localStorage.getItem('kcs_language')||'en';if(this.state.error)return <main className="auth-page"><section className="auth-card"><div className="auth-logo">!</div><h1>{translate(language,'app.pageError')}</h1><p>{translate(language,'app.pageErrorHelp')}</p><CenteredNotice>{translate(language,'app.unknownPageError')}</CenteredNotice><button onClick={()=>window.location.reload()}>{translate(language,'app.reload')}</button></section></main>;return this.props.children}
 }
 
 function AppContent(){

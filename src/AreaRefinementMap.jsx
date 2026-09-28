@@ -1,3 +1,4 @@
+import CenteredNotice from './CenteredNotice.jsx'
 import {useEffect,useRef,useState} from 'react'
 import {loadGoogleMaps} from './googleMapsLoader.js'
 import {useI18n} from './i18n.jsx'
@@ -17,5 +18,5 @@ export default function AreaRefinementMap({items=[]}){
     }).catch(()=>active&&setError(t('areaRefinement.mapUnavailable')))
     return()=>{active=false}
   },[items,t])
-  return <div className="area-refinement-map">{error?<p role="status">{error}</p>:<div ref={container} className="area-refinement-map-canvas" aria-label={t('areaRefinement.map')}/>}</div>
+  return <div className="area-refinement-map">{error?<CenteredNotice>{error}</CenteredNotice>:<div ref={container} className="area-refinement-map-canvas" aria-label={t('areaRefinement.map')}/>}</div>
 }

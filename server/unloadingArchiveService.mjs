@@ -10,8 +10,13 @@ export function listUnloadingArchive(query={},db=defaultDb){
  const rows=db.prepare(`SELECT id,service_date serviceDate,trip_number tripNumber,registration_number_snapshot registrationNumber,vehicle_code_snapshot vehicleCode,driver_name_snapshot driverName,crew_names_snapshot crew,unloading_location_name_snapshot locationName,confirmed_weight_kg confirmedWeightKg,status,weighed_at weighedAt FROM unloading_weight_records ORDER BY weighed_at DESC,id DESC`).all().map(r=>{
   const p=parts(r.weighedAt)
   return {...r,correctedCount:corrections.get(r.id)||0,code:unloadingCode(r),date:`${p.year}-${p.month}-${p.day}`,time:`${p.hour}:${p.minute}:${p.second}`,vehicle:r.registrationNumber||r.vehicleCode,photoUrl:`/api/unloading-weights/${r.id}/photo`}
- }).filter(r=>(!query.from||r.date>=query.from)&&(!query.to||r.date<=query.to)).sort((a,b)=>b.date.localeCompare(a.date)||b.time.localeCompare(a.time)||b.id-a.id)
- return filterUnloading(rows,query)
+ }).sort((a,b)=>b.date.localeCompare(a.date)||b.time.localeCompare(a.time)||b.id-a.id)
+ let columns={};try{columns=typeof query.columns==='string'?JSON.parse(query.columns):query.columns||{}}catch{}
+ const history=['date','code'],allDates=history.some(k=>Array.isArray(columns?.[k]))
+ const result=filterUnloading(allDates?rows:rows.filter(r=>(!query.from||r.date>=query.from)&&(!query.to||r.date<=query.to)),query)
+ const all=filterUnloading(rows,{})
+ for(const k of history)result.filterOptions[k]=all.filterOptions[k]
+ return result
 }
 export async function unloadingArchiveWorkbook(query={},db=defaultDb){
  const lang=unloadingLabels[query.language]?query.language:'en',book=new ExcelJS.Workbook(),sheet=book.addWorksheet('Unloading')

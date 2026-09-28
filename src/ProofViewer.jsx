@@ -1,3 +1,4 @@
+import CenteredNotice from './CenteredNotice.jsx'
 import {useEffect,useRef,useState} from 'react'
 import {createPortal} from 'react-dom'
 import {useI18n} from './i18n.jsx'
@@ -30,6 +31,6 @@ function ProofDialog({url,label,close}){
  },[url,t])
  return <dialog ref={ref} className="proof-view-dialog" onCancel={e=>{e.preventDefault();close()}} onClick={e=>{e.stopPropagation();if(e.target===e.currentTarget){const r=e.currentTarget.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)close()}}}>
  <header><strong>{label}</strong><button type="button" data-preview-safe title={t('common.back')} aria-label={t('common.back')} onClick={e=>{e.stopPropagation();close()}}>×</button></header>
- {error?<p role="alert">{error}</p>:src?<img src={src} alt={typeof label==='string'?label:''}/>:<p role="status">{t('void.loading')}</p>}
+ {error?<CenteredNotice>{error}</CenteredNotice>:src?<img src={src} alt={typeof label==='string'?label:''}/>:<p role="status">{t('void.loading')}</p>}
  </dialog>
 }

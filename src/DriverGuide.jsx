@@ -1,3 +1,4 @@
+import CenteredNotice from './CenteredNotice.jsx'
 import {useEffect,useRef,useState} from 'react'
 import {useI18n} from './i18n.jsx'
 import './DriverGuide.css'
@@ -9,7 +10,7 @@ export function DriverGuidePopup({onRead,onDismiss}){
  const{t}=useI18n(),ref=useRef(null),heading=useRef(null),[busy,setBusy]=useState(false),[error,setError]=useState('')
  useEffect(()=>{const d=ref.current,previous=document.activeElement;if(d.showModal)d.showModal();else d.setAttribute('open','');heading.current?.focus();d.scrollTop=0;return()=>{if(d.close)d.close();previous?.focus?.()}},[])
  const read=async()=>{setBusy(true);setError('');try{await onRead()}catch(e){setError(e.message);setBusy(false)}}
- return <dialog ref={ref} className="notice-popup driver-guide-popup" aria-labelledby="driver-guide-title" onCancel={e=>e.preventDefault()}><div ref={heading} tabIndex={-1}><DriverGuide popup/></div>{error&&<p role="alert">{error}</p>}<button data-preview-safe={onDismiss?true:undefined} className="notice-primary" disabled={busy} onClick={onDismiss||read}>{t(onDismiss?'preview.dismiss':busy?'common.processing':'guide.understood')}</button></dialog>
+ return <dialog ref={ref} className="notice-popup driver-guide-popup" aria-labelledby="driver-guide-title" onCancel={e=>e.preventDefault()}><div ref={heading} tabIndex={-1}><DriverGuide popup/></div>{error&&<CenteredNotice>{error}</CenteredNotice>}<button data-preview-safe={onDismiss?true:undefined} className="notice-primary" disabled={busy} onClick={onDismiss||read}>{t(onDismiss?'preview.dismiss':busy?'common.processing':'guide.understood')}</button></dialog>
 }
 export function DriverNextStep({trip,preview=false}){
  const{t}=useI18n();if(preview)return <p className="driver-next-step">{t('guide.next.preview')}</p>

@@ -1,3 +1,4 @@
+import CenteredNotice from './CenteredNotice.jsx'
 import {useCallback,useEffect,useRef,useState} from 'react'
 import {apiRequest as api} from './apiClient.js'
 import {useI18n} from './i18n.jsx'
@@ -21,7 +22,7 @@ export default function DashboardDataTasks({onOpenCustomers}){
  if(!error&&!items.length&&!editing&&!detail)return null
  return <section className="dashboard-data-tasks" aria-label={w.title}>
   <header><h2>{w.title}{data&&<> · {items.length} {w.count}</>}</h2><button type="button" onClick={()=>void load()}>{w.refresh}</button></header><p>{w.help}</p>
-  {error&&<p className="data-error" role="alert">{w.error}</p>}{!data&&!error&&<p>{w.loading}</p>}{data&&!items.length&&!error&&<p>{w.empty}</p>}
+  {error&&<CenteredNotice>{w.error}</CenteredNotice>}{!data&&!error&&<p>{w.loading}</p>}{data&&!items.length&&!error&&<p>{w.empty}</p>}
   {items.slice(current*15,current*15+15).map(item=><article key={item.key}><div><b data-i18n-raw>{item.kind==='branch'?`${formatBranchId(item.branchId)} · ${item.branchName||item.customerName||'—'}`:item.scheduleId}</b><div className="data-task-issues">{item.issues.map(issue=><span key={issue}>{w[issue]}</span>)}</div></div><button type="button" onClick={()=>item.kind==='branch'?setEditing(item.branchId):setDetail(item)}>{item.kind==='schedule'?w.details:item.issues.includes('pendingGps')?w.review:w.process}</button></article>)}
   {pages>1&&<footer><button disabled={current===0} onClick={()=>setPage(current-1)}>{w.previous}</button><span>{current+1} / {pages}</span><button disabled={current===pages-1} onClick={()=>setPage(current+1)}>{w.next}</button></footer>}
   {editing&&<CustomerWorkspaceEditor branchId={editing} onClose={()=>{setEditing(null);void load()}} onSaved={()=>void load()}/>}

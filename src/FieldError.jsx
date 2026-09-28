@@ -1,4 +1,5 @@
+import CenteredNotice from './CenteredNotice.jsx'
 export default function FieldError({id,message}){
   if(!message)return null
-  return <span className="field-error" id={id} role="alert">{message}</span>
+  return <CenteredNotice>{message}</CenteredNotice>
 }

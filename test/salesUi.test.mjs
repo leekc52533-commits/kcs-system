@@ -112,3 +112,23 @@ test('history header search matches ISO years and keeps checkbox multi-selection
  await act(async()=>options[0].click());assert.deepEqual(changes,[['2006-09-28']])
  }finally{await act(async()=>root.unmount())}
 })
+
+test('shared centered notices consolidate errors, dismiss without losing form input, and capture required fields',async()=>{
+ const{default:CenteredNotice}=await vite.ssrLoadModule('/src/CenteredNotice.jsx'),root=createRoot(document.getElementById('root'))
+ const render=(error=true)=>root.render(React.createElement(I18nProvider,{language:'zh'},React.createElement('form',null,React.createElement('label',null,'姓名',React.createElement('input',{required:true,name:'name',defaultValue:''})),React.createElement('input',{name:'draft',defaultValue:'keep draft'}),error&&React.createElement(CenteredNotice,null,'错误'),error&&React.createElement(CenteredNotice,null,'错误'))))
+ try{
+ await act(async()=>render());assert.equal(document.querySelectorAll('[role=alertdialog]').length,1)
+ await act(async()=>document.querySelector('.kcs-notice-panel footer button').click());assert.equal(document.querySelectorAll('[role=alertdialog]').length,0)
+ assert.equal(document.querySelector('input[name=draft]').value,'keep draft')
+ await act(async()=>render(false))
+ await act(async()=>document.querySelector('input[required]').dispatchEvent(new Event('invalid',{cancelable:true})))
+ assert.match(document.querySelector('[role=alertdialog]').textContent,/请填写必填项/)
+ const overlay=document.querySelector('.kcs-notice-overlay')
+ await act(async()=>{overlay.dispatchEvent(new MouseEvent('pointerdown',{bubbles:true,clientX:3,clientY:3}));overlay.dispatchEvent(new MouseEvent('click',{bubbles:true,clientX:3,clientY:3}))})
+ assert.equal(document.querySelector('[role=alertdialog]'),null);assert.equal(document.querySelector('input[name=draft]').value,'keep draft')
+ await act(async()=>document.querySelector('input[required]').dispatchEvent(new Event('invalid',{cancelable:true})))
+ assert.ok(document.querySelector('[role=alertdialog]'))
+ await act(async()=>document.querySelector('[role=alertdialog]').dispatchEvent(new window.KeyboardEvent('keydown',{key:'Escape',bubbles:true})))
+ assert.equal(document.querySelector('[role=alertdialog]'),null)
+ }finally{await act(async()=>root.unmount())}
+})

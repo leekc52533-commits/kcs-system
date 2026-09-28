@@ -1,3 +1,4 @@
+import CenteredNotice from './CenteredNotice.jsx'
 import {useEffect,useRef,useState} from 'react'
 import {useI18n,useUi} from './i18n.jsx'
 import {processPaymentProof} from './paymentProofImage.js'
@@ -53,7 +54,7 @@ export default function ProofPhotoPicker({value,onChange,onBusyChange,disabled=f
     }catch{if(request===generation.current){setError('photo.captureFailed');setProcessing(false)}}
   }
   return <div className="proof-photo-picker">
-    {error&&<p className="auth-error" role="alert">{ui(t(error))}</p>}
+    {error&&<CenteredNotice>{ui(t(error))}</CenteredNotice>}
     {!camera&&<div className="proof-source-actions">
       <button type="button" className="secondary-mobile" disabled={disabled||processing} onClick={openCamera}>{t(value?'purchase.retakePhoto':'purchase.takePhoto')}</button>
       <label className="secondary-mobile proof-input-action">{t(value?'purchase.replaceFromGallery':'purchase.chooseGallery')}<input aria-label={t('purchase.chooseGallery')} type="file" accept="image/*" disabled={disabled||processing} onChange={choose}/></label>

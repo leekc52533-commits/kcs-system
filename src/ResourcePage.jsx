@@ -1,3 +1,4 @@
+import CenteredNotice from './CenteredNotice.jsx'
 import DataExportButton from './DataExportButton.jsx'
 import {useUi} from './i18n.jsx'
 import { useCallback, useEffect, useState } from 'react'
@@ -24,7 +25,7 @@ export default function ResourcePage({currentUser,account,initialTab='vehicles',
   const addLocation=async(event)=>{event.preventDefault();await save('/api/locations','POST',location);setLocation({name:'',locationType:'depot',address:'',canStart:true,canEnd:true})}
   const editLocation=(item)=>{const name=prompt(ui("Location Name"),item.name);if(name!=null)save(`/api/locations/${item.id}`,'PATCH',{name})}
   if(vehicleDetailId)return <VehicleDetailPage vehicleId={vehicleDetailId} resources={data} currentUser={currentUser} onBack={()=>{setVehicleDetailId(null);load()}}/>
-  return <div className={embedded?'resource-page embedded':'page resource-page'}>{!embedded&&<BackButton className="vehicle-back" fallback={()=>window.history.back()}/>}{message&&<div className="planner-message">✓ {ui(message)}</div>}{error&&<div className="data-error">{ui(error)}</div>}
+  return <div className={embedded?'resource-page embedded':'page resource-page'}>{!embedded&&<BackButton className="vehicle-back" fallback={()=>window.history.back()}/>}{message&&<div className="planner-message">✓ {ui(message)}</div>}{error&&<CenteredNotice>{ui(error)}</CenteredNotice>}
     {!fixedTab&&<div className="resource-tabs"><button className={tab==='vehicles'?'active':''} onClick={()=>setTab('vehicles')}>{t('resource.vehicleMaster')}</button><button className={tab==='employees'?'active':''} onClick={()=>setTab('employees')}>{t('resource.employeeMaster')}</button><button className={tab==='locations'?'active':''} onClick={()=>setTab('locations')}>{t('resource.locationMaster')}</button><button className={tab==='zones'?'active':''} onClick={()=>setTab('zones')}><span data-i18n-raw>{t('resource.zoneGroup')}</span></button></div>}
     {!data?<div className="data-loading">{t('common.loadingData')}</div>:tab==='vehicles'?<VehicleMaster items={data.vehicles} locations={data.locations} areas={data.areas} form={vehicle} setForm={setVehicle} add={addVehicle} openDetail={setVehicleDetailId}/>:tab==='employees'?<EmployeeMasterPage onBack={onBack} account={account} resources={data} currentUser={currentUser} reload={load}/>:tab==='locations'?<LocationMaster items={data.locations} form={location} setForm={setLocation} add={addLocation} save={save} edit={editLocation}/>:<ZoneGroupManager groups={data.zoneGroups} areas={data.areas} vehicles={data.vehicles} save={save} currentUser={currentUser} pageError={error} onOpenRoute={onOpenRoute}/>}</div>
 }

@@ -1,3 +1,4 @@
+import CenteredNotice from './CenteredNotice.jsx'
 import DataExportButton from './DataExportButton.jsx'
 import {useEffect,useState} from 'react'
 import {apiRequest as api} from './apiClient.js'
@@ -26,7 +27,7 @@ export default function CompanySettingsPage(){
  }
  return <div className="page master-data-page"><DataExportButton name={w.title} disabled={loading} rows={items} columns={['name','address','contactPerson','phone','operatingHours','status','notes'].map(key=>({key,label:w[({contactPerson:'contact',operatingHours:'hours'})[key]||key]||key}))}/>
   <section className="master-workspace"><header><h2>{w.title}</h2></header><p>{w.help}</p><a href="?page=buyers">{w.buyers}</a>
-   {message&&<p className="planner-message" role="status">{message}</p>}{error&&!draft&&<p className="data-error" role="alert">{error}</p>}
+   {message&&<p className="planner-message" role="status">{message}</p>}{error&&!draft&&<CenteredNotice>{error}</CenteredNotice>}
    {loading?<p>{w.loading}</p>:!items.length&&!error?<p>{w.empty}</p>:<div className="master-record-grid">{items.map(item=><article key={item.id} className="buyer-branch-card"><h3 data-i18n-raw>{item.name}</h3><p data-i18n-raw>{item.address||'—'}</p><p>{w[item.status]||item.status}</p><button type="button" onClick={()=>{setError('');setMessage('');setDraft({...item,canStart:Boolean(item.canStart),canEnd:Boolean(item.canEnd),reason:''})}}>{w.edit}</button></article>)}</div>}
   </section>
   {draft&&<div className="master-modal"><form onSubmit={save}><header><h2>{w.edit} · <span data-i18n-raw>{draft.name}</span></h2></header><fieldset disabled={saving} style={{border:0,padding:0,minWidth:0}}><div className="editor-fields">
@@ -34,6 +35,6 @@ export default function CompanySettingsPage(){
    <label>{w.status}<select value={draft.status} onChange={e=>set('status',e.target.value)}>{['active','paused','closed'].map(status=><option key={status} value={status}>{w[status]}</option>)}</select></label>
    <label><input type="checkbox" checked={draft.canStart} onChange={e=>set('canStart',e.target.checked)}/>{w.start}</label><label><input type="checkbox" checked={draft.canEnd} onChange={e=>set('canEnd',e.target.checked)}/>{w.end}</label>
   </div><SharedGpsInput resetKey={`company-location:${draft.id}`} latitude={draft.latitude} longitude={draft.longitude} address={draft.address} onChange={change=>setDraft(d=>({...d,latitude:change.latitude,longitude:change.longitude,address:change.address??d.address}))}/></fieldset>
-  {error&&<p className="data-error" role="alert">{error}</p>}<FormActionBar><button type="button" disabled={saving} onClick={()=>{setDraft(null);setError('')}}>{w.cancel}</button><button className="primary" disabled={saving}>{saving?w.saving:w.save}</button></FormActionBar></form></div>}
+  {error&&<CenteredNotice>{error}</CenteredNotice>}<FormActionBar><button type="button" disabled={saving} onClick={()=>{setDraft(null);setError('')}}>{w.cancel}</button><button className="primary" disabled={saving}>{saving?w.saving:w.save}</button></FormActionBar></form></div>}
  </div>
 }

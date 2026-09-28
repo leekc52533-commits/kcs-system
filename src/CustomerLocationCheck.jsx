@@ -1,3 +1,4 @@
+import CenteredNotice from './CenteredNotice.jsx'
 import {useEffect,useRef,useState} from 'react'
 import {apiRequest as api} from './apiClient.js'
 import {useI18n} from './i18n.jsx'
@@ -30,5 +31,5 @@ export default function CustomerLocationCheck({payload,data,onChange,onBranchCha
  {preview?.gpsSource==='missing'&&<p>{w.missing}</p>}{preview?.addressUnavailable&&<p role="status">{w.unavailable}</p>}
  {differs&&preview.gpsSource!=='missing'&&<div className="location-suggestion"><strong>{w.suggested}</strong><p data-i18n-raw>{proposedAddress} · Area: {suggestedArea?.name||'—'} · Zone: {suggestedArea?.zone||'—'}</p><button className="primary" type="button" disabled={busy} onClick={()=>onChange({token:preview.token,address:proposedAddress,areaId:proposedAreaId})}>{w.adopt}</button></div>}
  {(data.locationReviews||[]).map(r=><div key={r.id}><strong>{w.pending}</strong><p>{r.address} · Area: {data.areas.find(a=>String(a.areaId)===r.areaId)?.name||r.areaId||'—'}</p><p>{r.requestedBy}: {r.reason}</p>{data.canReviewGps&&<><button type="button" disabled={busy||value!=null} onClick={()=>onReview(r.id,'approve')}>{w.approve}</button><button type="button" disabled={busy||value!=null} onClick={()=>onReview(r.id,'reject')}>{w.reject}</button></>}</div>)}
- {error&&<p role="alert">{error}</p>}</section>
+ {error&&<CenteredNotice>{error}</CenteredNotice>}</section>
 }

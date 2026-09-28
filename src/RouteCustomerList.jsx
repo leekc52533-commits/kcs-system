@@ -1,3 +1,4 @@
+import CenteredNotice from './CenteredNotice.jsx'
 import {NoGoodsRecord} from './NoGoodsNotice.jsx'
 import {DateRequestReview} from './DriverDateApprovals.jsx'
 import {useI18n} from './i18n.jsx'
@@ -35,7 +36,7 @@ function CustomerRow({stop,index,day,route,days,canEdit,editable,onReorder,busy}
   const reorder=async direction=>{setError('');try{await onReorder(day.dispatch_date,route.routeNumber,stop.id,direction)}catch(e){setError(e.message)}}
   return <li>
     <div className="route-customer-row"><button type="button" className="route-customer-name" aria-expanded={open} aria-controls={`route-customer-${day.id}-${stop.id}`} onClick={()=>setOpen(value=>!value)}><b>{index+1}. {formatBranchId(stop.branchId)} — <span data-i18n-raw>{stop.branchName||ui("Unnamed branch")}</span></b><small><span data-i18n-raw>{stop.zoneGroup}</span> · <span data-i18n-raw>{stop.area}</span></small></button><span className={`collection-status ${stop.status==='completed'?'done':''}`}>{ui(collectionStatus(stop))}</span>{canEdit&&<div className="route-customer-order"><button type="button" aria-label={ui("上移 {0}", {0: stop.branchName})} disabled={busy||saving||!editable||index===0} onClick={()=>reorder('up')}>↑</button><button type="button" aria-label={ui("下移 {0}", {0: stop.branchName})} disabled={busy||saving||!editable||index===route.stops.length-1} onClick={()=>reorder('down')}>↓</button></div>}</div>
-    {error&&<p role="alert">{ui(error)}</p>}
+    {error&&<CenteredNotice>{ui(error)}</CenteredNotice>}
     {open&&<div id={`route-customer-${day.id}-${stop.id}`} className="route-customer-detail">
       <p><b>{ui("Address：")}</b><span data-i18n-raw>{stop.address||ui("Not recorded")}</span></p>
       <p>{ui("联系人：")}<span data-i18n-raw>{stop.contactPerson||ui("未记录")}</span> · {stop.phone?<a href={`tel:${stop.phone.replace(/[^+0-9]/g,'')}`}><span data-i18n-raw>{stop.phone}</span></a>:ui("电话未记录")}</p>

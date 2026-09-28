@@ -1,3 +1,4 @@
+import CenteredNotice from './CenteredNotice.jsx'
 import DataExportButton from './DataExportButton.jsx'
 import {useCallback,useEffect,useState} from 'react'
 import {apiRequest} from './apiClient.js'
@@ -24,7 +25,7 @@ export default function AddressAnalysisPage({onOpenRecommendations}){
   const none=value=>value||t('common.notSet')
   return <section className="address-analysis"><DataExportButton name={t('hub.addressAnalysis')} disabled={!data} rows={data?.items||[]} columns={['branchId','branchName','customerName','currentArea','currentZone','address','lifecycle'].map(key=>({key,label:key}))}/>
     <header className="address-safety-mode"><span>{t('addressAnalysis.safeBatch')}</span></header>
-    {error&&<div className="address-error" role="alert">{error}</div>}
+    {error&&<CenteredNotice>{error}</CenteredNotice>}
     <section className="address-batch"><div><h3>{t('addressAnalysis.batchTitle')}</h3><p>{t('addressAnalysis.batchHelp')}</p></div><button disabled={batchBusy} onClick={previewBatch}>{batchBusy?t('common.processing'):t('addressAnalysis.batchAnalyze')}</button>
       {batch&&<div className="address-batch-results"><div className="address-batch-counts"><span><b>{batch.analyzed}</b>{t('addressAnalysis.batchAnalyzed')}</span><span className="reliable"><b>{batch.reliableCount}</b>{t('addressAnalysis.batchReliable')}</span><span className="review"><b>{batch.reviewCount}</b>{t('addressAnalysis.batchReview')}</span><span><b>{batch.errorCount}</b>{t('addressAnalysis.batchErrors')}</span></div>
         {batch.reliableCount>0&&!batch.applyResult&&<div className="address-batch-apply"><label>{t('addressAnalysis.batchReason')}<input value={batchReason} onChange={event=>setBatchReason(event.target.value)} placeholder={t('addressAnalysis.batchReasonPlaceholder')}/></label><button disabled={batchBusy} onClick={applyBatch}>{t('addressAnalysis.batchApply',{count:batch.reliableCount})}</button></div>}

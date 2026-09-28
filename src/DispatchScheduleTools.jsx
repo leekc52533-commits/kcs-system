@@ -1,3 +1,4 @@
+import CenteredNotice from './CenteredNotice.jsx'
 import {useUi} from './i18n.jsx'
 import {useState} from 'react'
 import {ScheduleEditor} from './DataPages.jsx'
@@ -13,7 +14,7 @@ export function DispatchScheduleTools({stop,day,days,routeNumber,notice=false}){
  const settings=async()=>{setError('');try{setEditing(await apiRequest(`/api/branches/${encodeURIComponent(formatBranchId(stop.branchId))}/collection-schedule`))}catch(e){setError(e.message)}}
  const add=async()=>{setBusy(true);setError('');try{await apiRequest(`/api/dispatch/stops/${stop.id}/extra-collection`,{method:'POST',body:JSON.stringify({date,reason,targetRevision:days.find(d=>d.dispatch_date===date)?.revision})});setExtra(false);setReason('');refresh()}catch(e){setError(e.message)}finally{setBusy(false)}}
  const noGoods=async()=>{const explanation=prompt(ui("客户通知无货、无需到店：请填写通知内容及原因。"));if(!explanation?.trim())return;setBusy(true);setError('');try{await apiRequest(`/api/dispatch/stops/${stop.id}/customer-no-goods`,{method:'POST',body:JSON.stringify({reason:explanation,expectedRevision:day.revision})});refresh()}catch(e){setError(e.message)}finally{setBusy(false)}}
- return <div className="dispatch-schedule-tools"><button type="button" onClick={settings} disabled={busy}>{ui("固定收货排程")}</button><button type="button" onClick={()=>setExtra(v=>!v)} disabled={busy}>{ui("＋ 临时增加收货")}</button>{!notice&&day.dispatch_date===kuchingDate()&&!stop.arrivedAt&&!stop.completedAt&&!stop.hasBill&&<button type="button" onClick={noGoods} disabled={busy}>{ui("客户通知无货（无需到店）")}</button>}{error&&<p role="alert">{ui(error)}</p>}
+ return <div className="dispatch-schedule-tools"><button type="button" onClick={settings} disabled={busy}>{ui("固定收货排程")}</button><button type="button" onClick={()=>setExtra(v=>!v)} disabled={busy}>{ui("＋ 临时增加收货")}</button>{!notice&&day.dispatch_date===kuchingDate()&&!stop.arrivedAt&&!stop.completedAt&&!stop.hasBill&&<button type="button" onClick={noGoods} disabled={busy}>{ui("客户通知无货（无需到店）")}</button>}{error&&<CenteredNotice>{ui(error)}</CenteredNotice>}
  {extra&&<fieldset disabled={busy}><legend>{ui("只增加一次，保留原收货记录")}</legend><label>{ui("日期")}<select value={date} onChange={e=>setDate(e.target.value)}>{days.map(d=><option key={d.id} value={d.dispatch_date}>{d.dispatch_date}</option>)}</select></label><label>{ui("原因")}<input value={reason} onChange={e=>setReason(e.target.value)}/></label><button type="button" disabled={!reason.trim()} onClick={add}>{ui("确认增加")}</button><button type="button" onClick={()=>setExtra(false)}>{ui("取消")}</button></fieldset>}
  {editing&&<ScheduleEditor item={editing} t={t} routeNumber={routeNumber} onClose={()=>setEditing(null)} onSaved={()=>{setEditing(null);refresh()}}/>}</div>
 }
@@ -31,5 +32,5 @@ export function DispatchPlanningReview({data}){
  {item.routeEvidence?.uploaded?.map(source=><p key={source.source}>{ui("来源：")}{source.source} · {source.rows.map(r=>`${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][r.weekday]} / ROUTE ${r.routeNumber}`).join('；')}</p>)}
  {item.routeEvidence?.recorded?.length>0&&<p>{ui("已有派车记录：")}{item.routeEvidence.recorded.map(r=>`${r.date} / ROUTE ${r.routeNumber}`).join('；')}</p>}
  {item.scheduleEvidence?.map(row=><p key={row.scheduleId}>{ui("排程")}{row.scheduleId}：{ui(row.frequency)} · {row.weekdays.map(day=>ui(day)).join(', ')}{ui("· 起算")}{row.anchorDate||ui("未设置")}</p>)}
- {!item.blocked&&<button type="button" onClick={()=>open(item)}>{ui("核对排程")}</button>}</article>)}{error&&<p role="alert">{ui(error)}</p>}{editing&&<><ScheduleEditor routeOptions={data.days[0]?.routeBoards||[]} item={editing} t={t} routeNumber={route?Number(route):undefined} onClose={()=>setEditing(null)} onSaved={()=>{setEditing(null);refresh()}}/></>}</details>
+ {!item.blocked&&<button type="button" onClick={()=>open(item)}>{ui("核对排程")}</button>}</article>)}{error&&<CenteredNotice>{ui(error)}</CenteredNotice>}{editing&&<><ScheduleEditor routeOptions={data.days[0]?.routeBoards||[]} item={editing} t={t} routeNumber={route?Number(route):undefined} onClose={()=>setEditing(null)} onSaved={()=>{setEditing(null);refresh()}}/></>}</details>
 }

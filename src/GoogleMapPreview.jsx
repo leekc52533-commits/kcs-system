@@ -1,3 +1,4 @@
+import CenteredNotice from './CenteredNotice.jsx'
 import {useEffect,useRef,useState} from 'react'
 import {useI18n} from './i18n.jsx'
 import {loadGoogleMaps} from './googleMapsLoader.js'
@@ -23,5 +24,5 @@ export default function GoogleMapPreview({latitude,longitude,onPositionAdjusted,
     return()=>{current=false}
   },[latitude,longitude,t,initialLatitude,initialLongitude])
   if((!latitude||!longitude)&&!initialCenter)return null
-  return <div className="google-map-preview">{error?<p role="status">{error}</p>:<div ref={container} className="google-map-canvas" aria-label={t('gpsCollection.mapPreview')}/>}</div>
+  return <div className="google-map-preview">{error?<CenteredNotice>{error}</CenteredNotice>:<div ref={container} className="google-map-canvas" aria-label={t('gpsCollection.mapPreview')}/>}</div>
 }
