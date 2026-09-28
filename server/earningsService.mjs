@@ -1,3 +1,4 @@
+import {unloadingCode} from './routeUnloadingService.mjs'
 import {legacySalesRows} from './legacySalesEarnings.mjs'
 import {createHash} from 'node:crypto'
 import {kuchingDate} from '../shared/kuchingTime.js'
@@ -24,7 +25,7 @@ export function saveEarningsSettings(db,ctx,p){owner(ctx);const period=earningsP
 export function earningsReport(db,ctx,date,{personal=false}={}){
  if(!personal)owner(ctx);else if(!ctx.employeeId)throw fail('EARN_ACCESS',403)
  const period=earningsPeriod(date||ctx.today||kuchingDate()),rules=currentRule(db,period.start)
- const sales=new Map();for(const s of db.prepare('SELECT id,vehicle_id,lines_json,revision FROM sales_settlements').all())for(const [i,l] of JSON.parse(s.lines_json).entries()){const k=[s.vehicle_id,key(l.slipNumber),l.deliveryDate].join('|');const list=sales.get(k)||[];list.push({id:s.id,index:i,weight:Number(l.weightKg),revision:s.revision});sales.set(k,list)}
+ const sales=new Map();for(const s of db.prepare('SELECT id,bill_number,vehicle_id,lines_json,revision FROM sales_settlements').all())for(const [i,l] of JSON.parse(s.lines_json).entries()){const k=[s.vehicle_id,key(l.slipNumber),l.deliveryDate].join('|');const list=sales.get(k)||[];list.push({id:s.id,billNumber:s.bill_number,index:i,weight:Number(l.weightKg),revision:s.revision});sales.set(k,list)}
  const all=db.prepare(`SELECT u.record_id recordId,u.ticket_number ticket,b.id batchId,b.code batch,b.collection_date collectionDate,b.vehicle_id batchVehicle,b.plate_snapshot plate,w.vehicle_id vehicleId,w.service_date deliveryDate,w.confirmed_weight_kg weight,w.status FROM cargo_batch_unloads u JOIN cargo_batches b ON b.id=u.batch_id JOIN unloading_weight_records w ON w.id=u.record_id WHERE w.status='confirmed'`).all()
  const counts=new Map();for(const r of all){const k=[r.vehicleId,key(r.ticket),r.deliveryDate].join('|');counts.set(k,(counts.get(k)||0)+1)}
  const members=db.prepare('SELECT batch_id batchId,employee_id employeeId,name_snapshot name,role FROM cargo_batch_members').all(),byBatch=new Map();for(const m of members){if(!byBatch.has(m.batchId))byBatch.set(m.batchId,[]);byBatch.get(m.batchId).push(m)}
@@ -34,7 +35,7 @@ export function earningsReport(db,ctx,date,{personal=false}={}){
  for(const r of all.filter(r=>r.collectionDate>=period.start&&r.collectionDate<=period.end)){
  const k=[r.vehicleId,key(r.ticket),r.deliveryDate].join('|'),candidates=sales.get(k)||[],matched=r.vehicleId===r.batchVehicle&&counts.get(k)===1&&candidates.length===1&&Number.isFinite(candidates[0].weight)&&candidates[0].weight>0,s=matched?candidates[0]:null;
  if(matched)companyKg+=s.weight;else pendingCompanyKg+=Number(r.weight||0)
- for(const m of byBatch.get(r.batchId)||[]){if(personal&&m.employeeId!==Number(ctx.employeeId))continue;const e=add(m.employeeId,m.name);if(matched)e[m.role==='driver'?'driverKg':'crewKg']+=s.weight;else{e.pendingKg+=Number(r.weight||0);e.pendingCount++}e.details.push({...r,role:m.role,matched,settledKg:s?.weight??null,settlementId:s?.id??null,settlementRevision:s?.revision??null})}
+ for(const m of byBatch.get(r.batchId)||[]){if(personal&&m.employeeId!==Number(ctx.employeeId))continue;const e=add(m.employeeId,m.name);if(matched)e[m.role==='driver'?'driverKg':'crewKg']+=s.weight;else{e.pendingKg+=Number(r.weight||0);e.pendingCount++}e.details.push({...r,unloadingNumber:unloadingCode({id:r.recordId,serviceDate:r.deliveryDate}),settlementNumber:s?.billNumber??null,role:m.role,matched,settledKg:s?.weight??null,settlementId:s?.id??null,settlementRevision:s?.revision??null})}
  }
  for(const a of legacySalesRows(db,all).filter(a=>a.date>=period.start&&a.date<=period.end)){
  if(a.valid)companyKg+=a.weight;else pendingCompanyKg+=a.weight
@@ -43,7 +44,7 @@ export function earningsReport(db,ctx,date,{personal=false}={}){
  if(a.valid)e.driverKg+=a.weight;else{e.pendingKg+=a.weight;e.pendingCount++}
  e.details.push({recordId:`legacy-sale-${a.settlement_id}-${a.line_index}`,collectionDate:a.date,deliveryDate:a.date,role:'driver',plate:a.plate,batch:'—',ticket:a.ticket,weight:a.weight,settledKg:a.valid?a.weight:null,matched:a.valid,settlementId:a.settlement_id})
  }
- let items=[...staff.values()].map(e=>{const base={...e,...earningsAmount(kg(e.driverKg),kg(e.crewKg),rules),pendingKg:kg(e.pendingKg)};const revision=createHash('sha256').update(JSON.stringify({period,rules,base})).digest('hex');const paid=db.prepare('SELECT snapshot_json,paid_at FROM earnings_payments WHERE period_start=? AND employee_id=?').get(period.start,e.employeeId);return paid?{...JSON.parse(paid.snapshot_json),paidAt:paid.paid_at,changed:JSON.parse(paid.snapshot_json).revision!==revision}:{...base,revision,paidAt:null,changed:false}})
+ let items=[...staff.values()].map(e=>{const base={...e,...earningsAmount(kg(e.driverKg),kg(e.crewKg),rules),pendingKg:kg(e.pendingKg)};const revision=createHash('sha256').update(JSON.stringify({period,rules,base:{...base,details:base.details.map(({unloadingNumber,settlementNumber,...detail})=>detail)}})).digest('hex');const paid=db.prepare('SELECT snapshot_json,paid_at FROM earnings_payments WHERE period_start=? AND employee_id=?').get(period.start,e.employeeId);return paid?{...JSON.parse(paid.snapshot_json),paidAt:paid.paid_at,changed:JSON.parse(paid.snapshot_json).revision!==revision}:{...base,revision,paidAt:null,changed:false}})
  // Paid former employees remain visible even when no longer in the active directory.
  for(const p of db.prepare('SELECT employee_id,snapshot_json,paid_at FROM earnings_payments WHERE period_start=?').all(period.start))if((!personal||p.employee_id===Number(ctx.employeeId))&&!items.some(e=>e.employeeId===p.employee_id))items.push({...JSON.parse(p.snapshot_json),paidAt:p.paid_at,changed:false})
  items.sort((a,b)=>a.name.localeCompare(b.name));return{period,rules,items,...(!personal?{companyKg:kg(companyKg),pendingCompanyKg:kg(pendingCompanyKg),unlinkedCount:db.prepare("SELECT COUNT(*) n FROM unloading_weight_records w WHERE w.status='confirmed' AND w.service_date BETWEEN ? AND ? AND NOT EXISTS(SELECT 1 FROM cargo_batch_unloads u WHERE u.record_id=w.id)").get(period.start,period.end).n}:{}),asOf:new Date().toISOString()}

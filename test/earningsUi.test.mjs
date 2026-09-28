@@ -26,7 +26,7 @@ test('merged weight and rate preserve earnings and migrate saved columns without
   assert.ok(table.textContent.includes(words.en.weightKg));assert.ok(table.textContent.includes(words.en.unitRate))
   for(const label of [words.en.note,words.en.company,words.en.unlinked,words.en.driverKg,words.en.crewKg,words.en.rate,words.en.crewRate])assert.ok(!document.body.textContent.includes(label),label)
   const values=[...table.querySelectorAll('tbody tr')].map(row=>[...row.querySelectorAll('td')].map(td=>td.textContent))
-  assert.deepEqual(values.map(row=>row.slice(1,5)),[['28000','0','0.043','1204.00'],['28000','0','0.03','840.00'],['29000','0','0.043 / 0.03','1234.00']])
+  assert.deepEqual(values.map(row=>row.slice(1,5)),[['28000.00','0.00','0.043','1204.00'],['28000.00','0.00','0.030','840.00'],['29000.00','0.00','0.043 / 0.030','1234.00']])
  }finally{await act(async()=>root.unmount());localStorage.removeItem('earnings-columns')}
 })
 
@@ -59,7 +59,7 @@ test('previous period is a compact button; dialog retains prior data and nested 
    const trigger=document.querySelector('.earnings-previous-button');assert.equal(trigger.textContent,words[language].previous);trigger.focus()
    await act(async()=>trigger.click())
    const dialog=document.querySelector('.earnings-previous-dialog');assert.ok(dialog.hasAttribute('open'))
-   assert.ok(dialog.textContent.includes('Previous Employee'));assert.ok(dialog.textContent.includes('5020'));assert.ok(dialog.textContent.includes('150.60'));assert.ok(dialog.textContent.includes('2026-09-20'))
+   assert.ok(dialog.textContent.includes('Previous Employee'));assert.ok(dialog.textContent.includes('5020'));assert.ok(dialog.textContent.includes('150.60'));assert.ok(dialog.textContent.includes('20/09/2026'))
    assert.ok(!dialog.textContent.includes('Current Employee'))
    if(!personal)assert.ok(dialog.querySelector('.earnings-previous-scroll-dock'))
    const name=dialog.querySelector('.earnings-name');name.focus();await act(async()=>name.click())
