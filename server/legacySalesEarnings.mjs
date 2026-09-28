@@ -4,7 +4,7 @@ export const legacySalesSchema=`CREATE TABLE IF NOT EXISTS legacy_sales_driver_a
  vehicle_id INTEGER NOT NULL,date TEXT NOT NULL,ticket TEXT NOT NULL,weight REAL NOT NULL,
  line_json TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
  PRIMARY KEY(settlement_id,line_index));`
-export const salesTicket=s=>String(s||'').trim().toUpperCase().replace(/^TN-?/,'TN').replace(/\s+/g,'')
+export const salesTicket=s=>String(s||'').trim().toUpperCase().replace(/\s+/g,'').replace(/^TN-?(?=\d+$)/,'')
 export function legacySalesRows(db,all){
  if(!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='legacy_sales_driver_allocations'").get())return []
  const settlements=db.prepare('SELECT * FROM sales_settlements').all(),lines=settlements.flatMap(s=>JSON.parse(s.lines_json).map((l,i)=>({...l,vehicle:s.vehicle_id,sale:s.id,index:i})))

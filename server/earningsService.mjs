@@ -1,12 +1,12 @@
 import {unloadingCode} from './routeUnloadingService.mjs'
-import {legacySalesRows} from './legacySalesEarnings.mjs'
+import {legacySalesRows,salesTicket} from './legacySalesEarnings.mjs'
 import {createHash} from 'node:crypto'
 import {kuchingDate} from '../shared/kuchingTime.js'
 export const defaultEarningsRules={driver:[{from:0,rate:0.03},{from:25000,rate:0.04},{from:27500.001,rate:0.043},{from:30000,rate:0.045},{from:34500.001,rate:0.047},{from:40000,rate:0.05}],crewRate:0.03}
 const fail=(code,statusCode=400)=>Object.assign(Error(code),{code,statusCode})
 const kg=n=>Math.round(n*1000)/1000
 const precision=(n,d)=>Number.isFinite(n)&&Math.abs(n*Math.pow(10,d)-Math.round(n*Math.pow(10,d)))<0.00001
-const key=s=>String(s||'').trim().toUpperCase()
+const key=salesTicket
 function owner(ctx){if(ctx.role!=='owner_admin')throw fail('EARN_ACCESS',403)}
 function atomic(db,fn){db.exec('BEGIN IMMEDIATE');try{const x=fn();db.exec('COMMIT');return x}catch(e){db.exec('ROLLBACK');throw e}}
 export function earningsPeriod(date=kuchingDate()){
