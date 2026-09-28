@@ -17,3 +17,6 @@
 #root .notice-management .notice-title-link{font-size:16px;font-weight:400;text-decoration:none}
 #root .notice-management .notice-archive th:first-child{position:sticky;left:0;z-index:2;background:#f0f5f8}
 #root .notice-management .notice-archive td:first-child:not(.notice-expanded){position:sticky;left:0;z-index:1;background:#fff}
+
+#root .notice-topbar .notice-heading-row>.kcs-back-button{display:inline-flex!important;align-items:center!important;justify-content:center!important;flex:0 0 40px!important;width:40px!important;min-width:40px!important;height:40px!important;min-height:40px!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;color:#1d3039!important;align-self:center}
+#root .notice-topbar .notice-heading-row>.kcs-back-button .kcs-back-arrow{font-size:36px!important;line-height:1!important}
