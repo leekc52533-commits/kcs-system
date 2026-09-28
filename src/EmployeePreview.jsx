@@ -6,15 +6,15 @@ import {apiErrorMessage,setPreviewEmployee,previewReadPath} from './apiClient.js
 import './EmployeePreview.css'
 
 export function PreviewGuard({children}){
- const{t}=useI18n(),[blocked,setBlocked]=useState(false)
- const stop=e=>{e.preventDefault();e.stopPropagation();setBlocked(true)}
+ const{t}=useI18n(),[blocked,setBlocked]=useState(0)
+ const stop=e=>{e.preventDefault();e.stopPropagation();setBlocked(n=>n+1)}
  const click=e=>{
   const el=e.target.closest('button,a,input[type=file]');if(!el)return
   if(el.matches('a')){const path=el.getAttribute('href');if(path?.startsWith('/api/')){if(!path.startsWith('/api/acting-collector/preview/'))el.href=previewReadPath(path);return}return stop(e)}
   if(el.closest('[data-preview-safe],.mobile-app > nav,.mobile-more,.route-day-switch')||el.matches('.stop-name-button,.user-menu'))return
   stop(e)
  }
- return <div onClickCapture={click} onAuxClickCapture={click} onSubmitCapture={stop}>{blocked&&<p className="employee-preview-blocked" role="status">{t('preview.blocked')}</p>}{children}</div>
+ return <div onClickCapture={click} onAuxClickCapture={click} onSubmitCapture={stop}>{blocked>0&&<CenteredNotice key={blocked}>{t('preview.blocked')}</CenteredNotice>}{children}</div>
 }
 
 function PasswordRequired(){const{t}=useI18n();return <p role="status">{t('preview.password')}</p>}
