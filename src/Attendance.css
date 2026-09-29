@@ -1,3 +1,11 @@
 .attendance-gate{min-height:100dvh;display:grid;place-items:center;background:#f3f7f8;padding:20px;box-sizing:border-box}.attendance-panel{border:1px solid #c5dcd6;border-radius:16px;padding:18px;margin:12px 0;background:#fff;color:#193c32;overflow-wrap:anywhere}.attendance-gate>.attendance-panel{width:min(100%,440px);box-sizing:border-box}.attendance-panel summary{cursor:pointer;font-size:20px;font-weight:700}.attendance-panel label{display:grid;gap:6px}.attendance-panel fieldset{border:0;padding:12px 0;display:grid;gap:12px;min-width:0}.attendance-panel input,.attendance-panel select{min-width:0;max-width:100%;box-sizing:border-box;padding:10px;font:inherit;border:1px solid #c5dcd6;border-radius:8px}.attendance-panel button{min-height:44px;padding:10px 16px;margin:8px 6px 8px 0;border:1px solid #b6d6ce;border-radius:12px;background:#fff;color:#176b59;font:inherit;cursor:pointer}.attendance-panel .attendance-clock{display:block;width:100%;min-height:64px;font-size:24px;font-weight:700;color:white;background:#176b59}.attendance-panel button:disabled{opacity:.5;cursor:default}.attendance-panel [role=alert]{color:#a32d22}.attendance-panel article{padding:12px;border-bottom:1px solid #dce6e3}.attendance-records{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:12px}.attendance-panel p{line-height:1.5}
 
 .attendance-receipt{padding:8px 16px;text-align:center;color:#176b59;background:#eaf5f1;font-size:14px}
+
+.attendance-table-scroll{max-width:100%;overflow:auto;margin-top:12px}
+#root .attendance-table{width:100%;border-collapse:collapse;font-size:16px}
+#root .attendance-table th{padding:4px 12px;line-height:1.2;font-weight:700;text-align:left;background:#f0f5f8;white-space:nowrap}
+#root .attendance-table td{padding:1px 12px;line-height:1.1;height:31px;border-bottom:1px solid #dce6e3;white-space:nowrap;font-weight:400}
+#root .attendance-table th:first-child,#root .attendance-table td:first-child{position:sticky;left:0;z-index:1;background:#fff}
+#root .attendance-table th:first-child{background:#f0f5f8;z-index:2}
+#root .attendance-table [data-numeric]{text-align:right;font-variant-numeric:tabular-nums}

@@ -1,3 +1,5 @@
+import TableBottomScroll from './TableBottomScroll.jsx'
+import DataExportButton from './DataExportButton.jsx'
 import {formatDateDisplay} from './dateDisplay.js'
 import DateInput from './DateInput.jsx'
 import CenteredNotice from './CenteredNotice.jsx'
@@ -46,9 +48,10 @@ export function AttendanceSettings({employeeId,blocked=false}){
 }
 export function AttendanceDaily(){
  const{language}=useI18n(),w=attendanceWords[language]||attendanceWords.en,[open,setOpen]=useState(false),[date,setDate]=useState(kuchingDate()),[data,setData]=useState(null),[error,setError]=useState(''),requestVersion=useRef(0)
+ const scrollRef=useRef(null),labels=({zh:{name:'员工',accuracy:'定位误差（米）'},en:{name:'Employee',accuracy:'Accuracy (m)'},ms:{name:'Pekerja',accuracy:'Ketepatan (m)'}})[language]||{name:'Employee',accuracy:'Accuracy (m)'}
  const load=()=>{const version=++requestVersion.current;setData(null);setError('');return apiRequest('/api/attendance?'+new URLSearchParams({date})).then(d=>{if(version===requestVersion.current)setData(d)}).catch(e=>{if(version===requestVersion.current)setError(e.code||'failed')})}
  useEffect(()=>{if(open)load()},[open,date])
- return <details className="attendance-panel" onToggle={e=>setOpen(e.currentTarget.open)}><summary>{w.daily}</summary>{open&&<><label>{formatDateDisplay(w.date)}<DateInput type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><button onClick={load}>{w.refresh}</button>{error&&<CenteredNotice>{w[error]||w.failed}</CenteredNotice>}<div className="attendance-records">{data?.items.map(r=><article key={r.employeeId}><b data-i18n-raw>{r.name}</b><p>{w[r.mode]} · {r.clocked_at?localTime(r.clocked_at):w.missing}</p>{r.clocked_at&&<p>{w.gps}: <span data-i18n-raw>{r.latitude}, {r.longitude} (±{r.accuracy_m} m)</span></p>}</article>)}</div>{data&&!data.items.length&&<p>{w.empty}</p>}</>}</details>
+ return <details className="attendance-panel" onToggle={e=>setOpen(e.currentTarget.open)}><summary>{w.daily}</summary>{open&&<><label>{formatDateDisplay(w.date)}<DateInput type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><button onClick={load}>{w.refresh}</button>{error&&<CenteredNotice>{w[error]||w.failed}</CenteredNotice>}<DataExportButton name={w.daily+' '+date} rows={data?.items||[]} columns={[{key:'name',label:labels.name},{key:'mode',label:w.method,value:r=>w[r.mode]||'—'},{key:'clocked_at',label:w.time,value:r=>r.clocked_at?localTime(r.clocked_at):w.missing},{key:'latitude',label:'GPS',value:r=>r.clocked_at?r.latitude+', '+r.longitude:''},{key:'accuracy_m',label:labels.accuracy,value:r=>r.clocked_at&&r.accuracy_m!=null?Number(r.accuracy_m):''}]}/><div className="attendance-table-scroll" ref={scrollRef}><table className="attendance-table"><thead><tr><th>{labels.name}</th><th>{w.method}</th><th>{w.time}</th><th>{w.gps}</th><th data-numeric>{labels.accuracy}</th></tr></thead><tbody>{data?.items.map(r=><tr key={r.employeeId}><td data-i18n-raw>{r.name}</td><td>{w[r.mode]||'—'}</td><td>{r.clocked_at?localTime(r.clocked_at):w.missing}</td><td data-i18n-raw>{r.clocked_at?r.latitude+', '+r.longitude:'—'}</td><td data-numeric>{r.clocked_at&&r.accuracy_m!=null?Number(r.accuracy_m).toFixed(2):'—'}</td></tr>)}</tbody></table></div><TableBottomScroll scrollRef={scrollRef}/>{data&&!data.items.length&&<p>{w.empty}</p>}</>}</details>
 }
 
 export function AttendanceApprovals({account}){
