@@ -210,3 +210,5 @@ These requirements were confirmed by KC on 2026-09-09. Carry them forward for la
 - KC requested on 2026-09-29: add a permanent leave-request archive under the existing Employee folder (identified by staff membership), with all pending/approved/rejected history, date/name/status filters and export. Retain existing supervisor-only review permissions and Overview approval actions.
 
 - KC requested on 2026-09-29: Overview has a compact upcoming-leave card below Daily Operations Report. Show pending and approved leave overlapping today through seven days ahead (Asia/Kuching), including ongoing leave; exclude rejected/ended requests. Use normal styling when empty and amber when populated, show names/dates/status, and link to leave history. Preserve approval workflow.
+
+- Employee detail edits use one bottom Save changes button for profile, attendance settings and internal account changes. Stage section edits until this button is pressed; preserve permissions and unsaved-change protection. On a section failure, retain pending changes and do not repeat already successful sections on retry.
