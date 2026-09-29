@@ -30,3 +30,12 @@
 .employee-master-v2 .employee-directory-table .expense-filter-trigger>span[aria-hidden]{flex:none;white-space:nowrap}
 .employee-master-v2 .employee-directory-table .expense-filter-trigger.active{color:#186e5c}
 .employee-master-v2 .employee-directory-table .expense-filter-trigger:focus-visible{outline:2px solid #186e5c;outline-offset:4px}
+
+/* Separate the open editor from the next employee and keep its identity visible. */
+.employee-master-v2 .employee-directory-table .employee-inline-row>td{padding:16px 12px 28px!important;background:#eef3f5;border-bottom:8px solid #fff;cursor:default}
+.employee-inline-panel .employee-detail-v2{max-height:75vh;max-height:75dvh;overflow-y:auto;overscroll-behavior-y:contain;scrollbar-gutter:stable;scroll-padding-top:100px;padding:0 16px 16px;border:1px solid #bdd5ce;border-radius:12px;background:#fff;box-shadow:0 4px 12px #173c3314}
+.employee-inline-panel .employee-detail-v2>header{position:sticky;top:0;z-index:5;align-items:center;margin:0 -16px;padding:14px 16px;background:#fff;border-bottom:1px solid #dbe4e7;box-shadow:0 3px 8px #173c3310}
+.employee-inline-panel .employee-detail-v2>header h2{font-size:22px;line-height:1.25;overflow-wrap:anywhere}
+.employee-inline-panel .employee-detail-v2>.employee-editing-banner{position:static}
+.employee-inline-panel .employee-detail-actions{bottom:-16px}
+@media(max-width:560px){.employee-master-v2 .employee-directory-table .employee-inline-row>td{padding:12px 6px 24px!important}.employee-inline-panel .employee-detail-v2>header h2{font-size:20px}}
