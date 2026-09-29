@@ -1,4 +1,4 @@
-import {upcomingLeave} from '../shared/upcomingLeave.js'
+import {upcomingLeave,leaveDaysUntil} from '../shared/upcomingLeave.js'
 import {useRef} from 'react'
 import {FilterHeader} from './ExpenseRecordsPage.jsx'
 import TableBottomScroll from './TableBottomScroll.jsx'
@@ -48,6 +48,7 @@ export function UpcomingLeaveCard({account,onOpen}){
  const label=({zh:{title:'七天内请假',empty:'七天内暂无请假',failed:'请假提醒暂时无法加载'},en:{title:'Leave within 7 days',empty:'No leave within 7 days',failed:'Leave reminder unavailable'},ms:{title:'Cuti dalam 7 hari',empty:'Tiada cuti dalam 7 hari',failed:'Peringatan cuti tidak tersedia'}})[language]||{}
  useEffect(()=>{if(!allowed)return;let active=true;const load=()=>{setNow(new Date());apiRequest('/api/leave/requests?scope=all').then(r=>{if(active){setData(r.items);setFailed(false)}}).catch(()=>{if(active)setFailed(true)})};load();const timer=setInterval(load,30000);window.addEventListener('focus',load);window.addEventListener('kcs-leave-updated',load);return()=>{active=false;clearInterval(timer);window.removeEventListener('focus',load);window.removeEventListener('kcs-leave-updated',load)}},[account?.id,allowed])
  if(!allowed)return null
+ const countdown=r=>{const days=leaveDaysUntil(r.start_date,now);return language==='zh'?(days>0?`还有 ${days} 天`:days===0?'今天开始':'请假中'):language==='ms'?(days>0?`${days} hari lagi`:days===0?'Bermula hari ini':'Sedang bercuti'):(days>0?`In ${days} day${days===1?'':'s'}`:days===0?'Starts today':'On leave')}
  const rows=upcomingLeave(data||[],now)
- return <button type="button" className={'upcoming-leave-card'+(rows.length?' has-leave':'')} onClick={onOpen}><strong>{label.title}{data&&!failed?' · '+rows.length:''}</strong>{failed?<span>{label.failed}</span>:data===null?<span>{w.loading}</span>:!rows.length?<span>{label.empty}</span>:rows.map(r=><span className="upcoming-leave-row" key={r.id}><span data-i18n-raw>{r.name}</span><span>{formatDateDisplay(r.start_date)} ～ {formatDateDisplay(r.end_date)} · {w[r.status]}</span></span>)}</button>
+ return <button type="button" className={'upcoming-leave-card'+(rows.length?' has-leave':'')} onClick={onOpen}><strong>{label.title}{data&&!failed?' · '+rows.length:''}</strong>{failed?<span>{label.failed}</span>:data===null?<span>{w.loading}</span>:!rows.length?<span>{label.empty}</span>:rows.map(r=><span className="upcoming-leave-row" key={r.id}><span data-i18n-raw>{r.name}</span><span>{formatDateDisplay(r.start_date)} ～ {formatDateDisplay(r.end_date)} · {w[r.status]} · <strong>{countdown(r)}</strong></span></span>)}</button>
 }
