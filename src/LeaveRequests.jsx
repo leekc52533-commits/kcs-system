@@ -1,3 +1,4 @@
+import {upcomingLeave} from '../shared/upcomingLeave.js'
 import {useRef} from 'react'
 import {FilterHeader} from './ExpenseRecordsPage.jsx'
 import TableBottomScroll from './TableBottomScroll.jsx'
@@ -25,7 +26,7 @@ export function MobileLeave(){
 export function LeaveApprovals({account}){
  const{language}=useI18n(),w=words[language]||words.en,[items,setItems]=useState([]),[error,setError]=useState(''),[busy,setBusy]=useState(false),allowed=['owner_admin','operations_admin','supervisor'].includes(account?.role)
  useEffect(()=>{if(!allowed)return;let alive=true;const load=()=>apiRequest('/api/leave/requests').then(r=>{if(alive)setItems(r.items)}).catch(e=>{if(alive)setError(e.code||'failed')});load();const timer=setInterval(load,30000);return()=>{alive=false;clearInterval(timer)}},[account?.id,allowed])
- const decide=async(id,decision)=>{setBusy(true);setError('');try{await apiRequest(`/api/leave/requests/${id}`,{method:'POST',body:JSON.stringify({decision})});setItems((await apiRequest('/api/leave/requests')).items)}catch(e){setError(e.code||'failed')}finally{setBusy(false)}}
+ const decide=async(id,decision)=>{setBusy(true);setError('');try{await apiRequest(`/api/leave/requests/${id}`,{method:'POST',body:JSON.stringify({decision})});setItems((await apiRequest('/api/leave/requests')).items);window.dispatchEvent(new Event('kcs-leave-updated'))}catch(e){setError(e.code||'failed')}finally{setBusy(false)}}
  if(!allowed||(!items.length&&!error))return null
  return <section className="leave-panel"><h2>{w.heading}</h2><p>{w.dispatch}</p>{items.map(r=><article key={r.id}><b data-i18n-raw>{r.name}</b><p>{formatDateDisplay(r.start_date)} ～ {formatDateDisplay(r.end_date)}</p><p data-i18n-raw>{r.reason}</p><button disabled={busy||r.account_id===account.id||r.employee_id===account.employeeId} onClick={()=>decide(r.id,'approved')}>{w.approve}</button><button disabled={busy||r.account_id===account.id||r.employee_id===account.employeeId} onClick={()=>decide(r.id,'rejected')}>{w.reject}</button></article>)}{error&&<CenteredNotice onClose={()=>setError('')}>{w[error]||w.failed}</CenteredNotice>}</section>
 }
@@ -40,4 +41,13 @@ export function LeaveRecords(){
  const visible=items.filter(r=>Object.entries(filters).every(([k,v])=>v==null||v.includes(String(r[k]||''))))
  if(sort)visible.sort((a,b)=>String(a[sort.key]||'').localeCompare(String(b[sort.key]||''),undefined,{numeric:true})*(sort.direction==='desc'?-1:1))
  return <section className="page"><DataExportButton name={w.history} rows={visible} columns={columns.map(([key,label])=>({key,label,value:r=>value(r,key)}))}/><div className="attendance-table-scroll" ref={ref}><table className="attendance-table"><thead><tr>{columns.map(([key,label])=><FilterHeader key={key} label={label} value={filters[key]??null} options={[...new Set(items.map(r=>String(r[key]||'')))].sort().map(v=>({value:v,label:value({[key]:v},key)}))} onChange={v=>setFilters(f=>({...f,[key]:v}))} open={menu===key} onOpen={()=>setMenu(key)} onClose={()=>setMenu(null)} sortDirection={sort?.key===key?sort.direction:null} onSort={direction=>setSort(direction?{key,direction}:null)}/>)}</tr></thead><tbody>{visible.map(r=><tr key={r.id}>{columns.map(([key])=><td key={key} data-i18n-raw>{value(r,key)}</td>)}</tr>)}</tbody></table></div><TableBottomScroll scrollRef={ref}/>{!visible.length&&<p>{w.empty}</p>}{error&&<CenteredNotice onClose={()=>setError('')}>{w[error]||w.failed}</CenteredNotice>}</section>
+}
+
+export function UpcomingLeaveCard({account,onOpen}){
+ const{language}=useI18n(),w=words[language]||words.en,[data,setData]=useState(null),[failed,setFailed]=useState(false),[now,setNow]=useState(()=>new Date()),allowed=['owner_admin','operations_admin','supervisor'].includes(account?.role)
+ const label=({zh:{title:'七天内请假',empty:'七天内暂无请假',failed:'请假提醒暂时无法加载'},en:{title:'Leave within 7 days',empty:'No leave within 7 days',failed:'Leave reminder unavailable'},ms:{title:'Cuti dalam 7 hari',empty:'Tiada cuti dalam 7 hari',failed:'Peringatan cuti tidak tersedia'}})[language]||{}
+ useEffect(()=>{if(!allowed)return;let active=true;const load=()=>{setNow(new Date());apiRequest('/api/leave/requests?scope=all').then(r=>{if(active){setData(r.items);setFailed(false)}}).catch(()=>{if(active)setFailed(true)})};load();const timer=setInterval(load,30000);window.addEventListener('focus',load);window.addEventListener('kcs-leave-updated',load);return()=>{active=false;clearInterval(timer);window.removeEventListener('focus',load);window.removeEventListener('kcs-leave-updated',load)}},[account?.id,allowed])
+ if(!allowed)return null
+ const rows=upcomingLeave(data||[],now)
+ return <button type="button" className={'upcoming-leave-card'+(rows.length?' has-leave':'')} onClick={onOpen}><strong>{label.title}{data&&!failed?' · '+rows.length:''}</strong>{failed?<span>{label.failed}</span>:data===null?<span>{w.loading}</span>:!rows.length?<span>{label.empty}</span>:rows.map(r=><span className="upcoming-leave-row" key={r.id}><span data-i18n-raw>{r.name}</span><span>{formatDateDisplay(r.start_date)} ～ {formatDateDisplay(r.end_date)} · {w[r.status]}</span></span>)}</button>
 }
