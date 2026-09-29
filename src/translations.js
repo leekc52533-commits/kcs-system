@@ -4502,3 +4502,7 @@ Object.assign(messages.zh,{'salePrices.help':'同一种货品可以保存多个�
 Object.assign(messages.en,{'attendance.title':'Employee clock-in records'})
 Object.assign(messages.ms,{'attendance.title':'Rekod daftar masuk pekerja'})
 Object.assign(messages.zh,{'attendance.title':'员工打卡记录'})
+
+Object.assign(messages.en,{'leave.records':'Leave requests'})
+Object.assign(messages.ms,{'leave.records':'Permohonan cuti'})
+Object.assign(messages.zh,{'leave.records':'请假记录'})

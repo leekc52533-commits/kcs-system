@@ -1,3 +1,7 @@
+import {useRef} from 'react'
+import {FilterHeader} from './ExpenseRecordsPage.jsx'
+import TableBottomScroll from './TableBottomScroll.jsx'
+import DataExportButton from './DataExportButton.jsx'
 import {useEffect,useState} from 'react'
 import {apiRequest,isEmployeePreview} from './apiClient.js'
 import {useI18n} from './i18n.jsx'
@@ -24,4 +28,16 @@ export function LeaveApprovals({account}){
  const decide=async(id,decision)=>{setBusy(true);setError('');try{await apiRequest(`/api/leave/requests/${id}`,{method:'POST',body:JSON.stringify({decision})});setItems((await apiRequest('/api/leave/requests')).items)}catch(e){setError(e.code||'failed')}finally{setBusy(false)}}
  if(!allowed||(!items.length&&!error))return null
  return <section className="leave-panel"><h2>{w.heading}</h2><p>{w.dispatch}</p>{items.map(r=><article key={r.id}><b data-i18n-raw>{r.name}</b><p>{formatDateDisplay(r.start_date)} ～ {formatDateDisplay(r.end_date)}</p><p data-i18n-raw>{r.reason}</p><button disabled={busy||r.account_id===account.id||r.employee_id===account.employeeId} onClick={()=>decide(r.id,'approved')}>{w.approve}</button><button disabled={busy||r.account_id===account.id||r.employee_id===account.employeeId} onClick={()=>decide(r.id,'rejected')}>{w.reject}</button></article>)}{error&&<CenteredNotice onClose={()=>setError('')}>{w[error]||w.failed}</CenteredNotice>}</section>
+}
+
+export function LeaveRecords(){
+ const{language}=useI18n(),w=words[language]||words.en,ref=useRef(null),[items,setItems]=useState([]),[error,setError]=useState(''),[filters,setFilters]=useState({}),[menu,setMenu]=useState(null),[sort,setSort]=useState(null)
+ const labels=({zh:['申请日期','员工','状态','审批日期'],en:['Requested','Employee','Status','Reviewed'],ms:['Tarikh permohonan','Pekerja','Status','Tarikh semakan']})[language]||[]
+ useEffect(()=>{let active=true;const load=()=>apiRequest('/api/leave/requests?scope=all').then(r=>{if(active)setItems(r.items)}).catch(e=>{if(active)setError(e.code||'failed')});load();const timer=setInterval(load,30000);return()=>{active=false;clearInterval(timer)}},[])
+ const date=v=>v?new Date(v).toLocaleDateString('en-GB',{timeZone:'Asia/Kuching'}):'—'
+ const columns=[['requested_at',labels[0]],['name',labels[1]],['start_date',w.start],['end_date',w.end],['reason',w.reason],['status',labels[2]],['reviewed_at',labels[3]]]
+ const value=(r,k)=>k==='status'?w[r.status]:k.endsWith('_at')?date(r[k]):k.endsWith('_date')?formatDateDisplay(r[k]):r[k]||'—'
+ const visible=items.filter(r=>Object.entries(filters).every(([k,v])=>v==null||v.includes(String(r[k]||''))))
+ if(sort)visible.sort((a,b)=>String(a[sort.key]||'').localeCompare(String(b[sort.key]||''),undefined,{numeric:true})*(sort.direction==='desc'?-1:1))
+ return <section className="page"><DataExportButton name={w.history} rows={visible} columns={columns.map(([key,label])=>({key,label,value:r=>value(r,key)}))}/><div className="attendance-table-scroll" ref={ref}><table className="attendance-table"><thead><tr>{columns.map(([key,label])=><FilterHeader key={key} label={label} value={filters[key]??null} options={[...new Set(items.map(r=>String(r[key]||'')))].sort().map(v=>({value:v,label:value({[key]:v},key)}))} onChange={v=>setFilters(f=>({...f,[key]:v}))} open={menu===key} onOpen={()=>setMenu(key)} onClose={()=>setMenu(null)} sortDirection={sort?.key===key?sort.direction:null} onSort={direction=>setSort(direction?{key,direction}:null)}/>)}</tr></thead><tbody>{visible.map(r=><tr key={r.id}>{columns.map(([key])=><td key={key} data-i18n-raw>{value(r,key)}</td>)}</tr>)}</tbody></table></div><TableBottomScroll scrollRef={ref}/>{!visible.length&&<p>{w.empty}</p>}{error&&<CenteredNotice onClose={()=>setError('')}>{w[error]||w.failed}</CenteredNotice>}</section>
 }

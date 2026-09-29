@@ -12,7 +12,7 @@ export function requestLeave(db,ctx,p,now=new Date()){return withImmediateTransa
  db.prepare('INSERT INTO leave_requests(employee_id,account_id,start_date,end_date,reason,requested_at) VALUES(?,?,?,?,?,?)').run(id,ctx.id,p.startDate,p.endDate,reason,now.toISOString())
  return ownLeave(db,ctx)
 })}
-export function pendingLeave(db,ctx){manager(ctx);return{items:db.prepare("SELECT r.*,e.name FROM leave_requests r JOIN employees e ON e.id=r.employee_id WHERE r.status='pending' ORDER BY r.requested_at,r.id").all()}}
+export function pendingLeave(db,ctx,all=false){manager(ctx);return{items:db.prepare("SELECT r.*,e.name FROM leave_requests r JOIN employees e ON e.id=r.employee_id WHERE (?=1 OR r.status='pending') ORDER BY r.requested_at DESC,r.id DESC").all(all?1:0)}}
 export function reviewLeave(db,ctx,id,p,now=new Date()){manager(ctx);return withImmediateTransaction(db,()=>{
  const r=db.prepare('SELECT * FROM leave_requests WHERE id=?').get(Number(id))
  if(!r||r.status!=='pending')fail('LEAVE_STALE',409)

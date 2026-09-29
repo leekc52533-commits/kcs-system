@@ -23,3 +23,9 @@ test('only managers decide once, with audit, no self approval and preserved hist
  const other=requestLeave(db,b,p).items[0];reviewLeave(db,boss,other.id,{decision:'rejected'});assert.equal(ownLeave(db,b).items[0].status,'rejected')
  db.exec(attendanceSchema);assert.equal(ownLeave(db,a).items.length,1)
 }finally{db.close()}})
+test('management archive retains reviewed requests and denies employee access',()=>{const db=fixture();try{
+ const r=requestLeave(db,a,p).items[0];reviewLeave(db,boss,r.id,{decision:'approved'})
+ assert.equal(pendingLeave(db,boss).items.length,0)
+ assert.equal(pendingLeave(db,boss,true).items[0].status,'approved')
+ assert.throws(()=>pendingLeave(db,a,true),e=>e.statusCode===403)
+ }finally{db.close()}})

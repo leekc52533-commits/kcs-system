@@ -68,3 +68,7 @@ test('unified save updates owner and company atomically, preserving other person
   assert.equal(readPersonalMenu(db,{id:9}).revision,saved.revision)
  }finally{db.close()}
 })
+test('new leave archive joins the existing employee folder once',()=>{
+ const layout=defaultMenuLayout();layout.top=layout.top.filter(id=>!['staff','leave-records'].includes(id));layout.top.push('folder-team');layout.folders=[{id:'folder-team',name:'Employee',items:['staff']}]
+ const next=normalizeMenuLayout(layout);assert.deepEqual(next.folders[0].items,['staff','leave-records']);assert(!next.top.includes('leave-records'));assert.deepEqual(normalizeMenuLayout(next),next)
+})
