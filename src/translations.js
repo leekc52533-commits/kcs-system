@@ -4498,3 +4498,7 @@ Object.assign(messages.zh,{'salePrices.help':'每种货品设定一个卖价；�
 Object.assign(messages.en,{'salePrices.help':'A material can have several selling prices. Choose the actual price for each sales bill line.','salePrices.updatePrice':'Update price','apiError.sales_price_duplicate':'This material already has that selling price.'})
 Object.assign(messages.ms,{'salePrices.help':'Satu bahan boleh ada beberapa harga jualan. Pilih harga sebenar bagi setiap baris bil.','salePrices.updatePrice':'Kemas kini harga','apiError.sales_price_duplicate':'Harga jualan ini sudah ada untuk bahan tersebut.'})
 Object.assign(messages.zh,{'salePrices.help':'同一种货品可以保存多个卖价；填写卖货单时逐行选择实际价格。','salePrices.updatePrice':'更新卖价','apiError.sales_price_duplicate':'这项货品已有相同卖价。'})
+
+Object.assign(messages.en,{'attendance.title':'Employee clock-in records'})
+Object.assign(messages.ms,{'attendance.title':'Rekod daftar masuk pekerja'})
+Object.assign(messages.zh,{'attendance.title':'员工打卡记录'})

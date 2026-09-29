@@ -94,3 +94,11 @@ test('rejection stays locked, normal attendance is preserved, and next-day appro
   assert.equal(attendanceStatus(db,a,later).record,null);assert.equal(attendanceStatus(db,a,tomorrow).record.clocked_at,tomorrow.toISOString())
  }finally{db.close()}
 })
+test('standalone archive includes historical records and today missing employees with management authorization',()=>{const db=fixture();try{
+ clockIn(db,a,gps,now)
+ const archive=attendanceDaily(db,manager,'all')
+ assert.equal(archive.items.filter(r=>r.employeeId===2&&r.work_date==='2026-09-18').length,1)
+ assert.ok(archive.items.some(r=>r.employeeId===3&&!r.clocked_at&&r.work_date===archive.date))
+ assert.throws(()=>attendanceDaily(db,a,'all'),e=>e.statusCode===403)
+ assert.equal(attendanceDaily(db,manager,'2026-09-18').items.find(r=>r.employeeId===2).clocked_at,now.toISOString())
+ }finally{db.close()}})

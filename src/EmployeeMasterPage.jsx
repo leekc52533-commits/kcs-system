@@ -3,7 +3,7 @@ import DateInput from './DateInput.jsx'
 import CenteredNotice from './CenteredNotice.jsx'
 import DataExportButton from './DataExportButton.jsx'
 import {useEmployeeOutsideClose} from './useEmployeeOutsideClose.js'
-import {AttendanceSettings,AttendanceDaily} from './Attendance.jsx'
+import {AttendanceSettings} from './Attendance.jsx'
 import {FilterHeader} from './ExpenseRecordsPage.jsx'
 import BackButton from './BackButton.jsx'
 import EmployeeAccountCard,{NewEmployeeAccountFields} from './EmployeeAccountCard.jsx'
@@ -94,7 +94,6 @@ export default function EmployeeMasterPage({resources,currentUser,account,reload
   const toggleTools=()=>setShowTools(value=>!value)
   const activeView=showCreate?'create':showTools?'tools':group
   return <section className="employee-master-v2"><nav className="employee-toolbar employee-groups" aria-label={t('employee.title')}><BackButton className="employee-back" fallback={onBack} iconOnly/><button data-staff-view="current" className={activeView==='current'?'active':''} onClick={()=>chooseGroup('current')}>{t('staff.current')}</button><button data-staff-view="departed" className={activeView==='departed'?'active':''} onClick={()=>chooseGroup('departed')}>{t('staff.departed')}</button><button data-staff-view="create" className={activeView==='create'?'active':''} onClick={()=>{openCreate();setShowTools(false)}}>{t('employee.add')}</button><button data-staff-view="tools" className={activeView==='tools'?'active':''} onClick={toggleTools}>{ui('Data tools ⋯')}</button></nav>{message&&<div className="planner-message">✓ {message}</div>}{error&&<CenteredNotice>{error}</CenteredNotice>}
-    {canImportEmployees&&<AttendanceDaily/>}
     {showTools&&<div className="employee-transfer">{canImportEmployees&&<><button onClick={()=>template('xlsx')}>{t('employee.downloadImportTemplate')}</button><label>{t('employee.importPreview')}<input type="file" accept=".xlsx,.csv" onChange={importFile}/></label></>}<button onClick={()=>exportEmployees('xlsx')}>{t('employee.exportData')}</button><button disabled={!preview} onClick={exportPreview}>{t('employee.exportPreview')}</button><button onClick={()=>confirm(ui("Export sensitive employee data? This action is audited."))&&sensitiveExport()}>{ui("Sensitive data export")}</button></div>}
     {preview&&<div className="employee-preview"><b>Preview: Total {preview.summary.total} · New {preview.summary.new} · Update {formatDateDisplay(preview.summary.update)} · Unchanged {preview.summary.unchanged} · Error {preview.summary.error}</b><button disabled={preview.summary.error>0} onClick={commit}>{ui("Confirm import to SQLite")}</button></div>}
     {showCreate&&<div className="employee-detail-backdrop"><div className="employee-detail-drawer">{error&&<CenteredNotice>{error}</CenteredNotice>}<EmployeeCreateDetail form={form} setForm={setForm} roles={roles} types={employmentTypes} bases={bases} areas={resources.areas} dirty={dirty} setDirty={setDirty} account={account||currentUser} saving={saving} save={create} close={closeCreate}/></div></div>}

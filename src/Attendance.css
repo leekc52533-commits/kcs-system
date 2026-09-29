@@ -11,3 +11,10 @@
 #root .attendance-table [data-numeric]{text-align:right;font-variant-numeric:tabular-nums}
 
 #root .attendance-table .expense-filter-trigger{display:inline-flex;align-items:center;gap:6px;min-height:28px;margin:0;padding:0;border:0;border-radius:0;background:transparent;color:inherit;font:inherit;font-weight:700;box-shadow:none}
+
+#root .attendance-table td.attendance-late{color:#c62828}
+#root .attendance-heading-row{display:flex;align-items:center;gap:8px}
+#root .attendance-topbar .record-page-title{font-size:28px;font-weight:800;line-height:1.2}
+#root .attendance-topbar .kcs-back-button{display:inline-flex!important;align-items:center!important;justify-content:center!important;width:40px!important;min-width:40px!important;height:40px!important;min-height:40px!important;padding:0!important;margin:0!important;border:0!important;background:transparent!important;box-shadow:none!important}
+#root .attendance-topbar .kcs-back-arrow{font-size:36px!important;line-height:1!important}
+#root .attendance-refresh{width:28px;min-width:28px;height:28px;min-height:28px;padding:0;margin:0;border:0;background:transparent;font-size:24px;color:#176f60}
