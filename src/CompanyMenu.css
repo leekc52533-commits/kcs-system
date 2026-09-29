@@ -32,3 +32,16 @@ dialog.company-menu-overlay::backdrop{background:#14273770}
 .overview-folder-entries{display:grid;padding:0 12px 12px;gap:4px}
 .overview-folder-entries button{background:transparent;border:0;text-align:left;padding:10px;color:#176f60;font:inherit;cursor:pointer;border-radius:6px}
 .overview-folder-entries button:hover{background:#e8f3ef}
+
+.company-navigation .sidebar-entry{display:flex;align-items:center;position:relative;min-width:0}
+.company-navigation .sidebar-entry>button{flex:1;min-width:0}
+.company-navigation .sidebar-item-actions{flex:none}
+#root .company-navigation .sidebar-more{width:28px;min-width:28px;padding:0;justify-content:center;background:transparent;border:0;font-size:20px}
+#root .sidebar-action-menu{position:fixed;z-index:1600;left:32px;width:240px;max-height:65vh;overflow:auto;padding:12px;background:white;color:#243440;box-shadow:0 8px 28px #14273740;border-radius:12px}
+#root .sidebar-action-menu label{display:grid;gap:6px;margin-bottom:8px}
+#root .sidebar-action-menu input,#root .sidebar-action-menu select{width:100%;min-width:0;box-sizing:border-box;font:inherit;padding:6px}
+#root .sidebar-action-menu button{color:#243440;background:transparent;margin:2px 0}
+#root .company-navigation .drop-target{outline:2px solid #176f60;background:#e8f3ef;border-radius:8px}
+.sidebar-drop-outside{padding:14px;border:2px dashed #176f60;border-radius:8px}
+
+#root .sidebar-action-menu{top:120px}

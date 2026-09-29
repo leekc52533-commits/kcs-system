@@ -19,7 +19,7 @@ export function readPersonalMenu(db,account){
  const row=db.prepare('SELECT * FROM personal_menu WHERE account_id=?').get(account.id),company=readMenu(db,account)
  const saved=row?JSON.parse(row.config_json):{}
  const layout=normalizeMenuLayout(saved.layout||company.layout)
- return {layout,hidden:saved.hidden||[],shortcuts:overviewSelection(saved,layout),revision:row?.revision||0,canEdit:true,companyCanEdit:company.canEdit,defaultLayout:company.layout}
+ return {layout,hidden:saved.hidden||[],shortcuts:overviewSelection(saved,layout),revision:row?.revision||0,canEdit:true,companyCanEdit:company.canEdit,companyRevision:company.revision,defaultLayout:company.layout}
 }
 export function savePersonalMenu(db,account,payload){
  if(!account?.id)throw fail('MENU_OWNER_ONLY',403)
@@ -30,6 +30,7 @@ export function savePersonalMenu(db,account,payload){
  try{
   const current=readPersonalMenu(db,account)
   if(payload.revision!==current.revision)throw fail('MENU_STALE',409)
+  if(payload.companyDefault){const company=readMenu(db,account);if(!company.canEdit)throw fail('MENU_OWNER_ONLY',403);if(payload.companyRevision!==company.revision)throw fail('MENU_STALE',409);const json=JSON.stringify(normalizeMenuLayout(payload.layout));db.prepare('UPDATE company_menu SET layout_json=?,revision=revision+1 WHERE id=1').run(json);db.prepare('INSERT INTO company_menu_audit(account_id,before_json,after_json) VALUES(?,?,?)').run(account.id,JSON.stringify(company.layout),json)}
   const config=JSON.stringify({layout:normalizeMenuLayout(payload.layout),hidden:payload.hidden,shortcuts:payload.shortcuts,overviewVersion:2})
   db.prepare('INSERT INTO personal_menu(account_id,config_json,revision) VALUES(?,?,1) ON CONFLICT(account_id) DO UPDATE SET config_json=excluded.config_json,revision=personal_menu.revision+1').run(account.id,config)
   const result=readPersonalMenu(db,account);db.exec('COMMIT');return result

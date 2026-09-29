@@ -54,3 +54,17 @@ test('overview defaults include whole folders; individual deselections and empty
   assert(readPersonalMenu(db,{id:9}).shortcuts.includes('folder-team'))
  }finally{db.close()}
 })
+
+test('unified save updates owner and company atomically, preserving other personal layouts',()=>{
+ const db=fixture();try{
+  const other=readPersonalMenu(db,{id:10});savePersonalMenu(db,{id:10},{...other,hidden:['vehicles']})
+  const mine=readPersonalMenu(db,{id:9}),layout=structuredClone(mine.layout)
+  layout.top=layout.top.filter(id=>id!=='attendance');layout.top.push('folder-team');layout.folders=[{id:'folder-team',name:'Employee',items:['attendance']}]
+  const saved=savePersonalMenu(db,{id:9},{...mine,layout,companyDefault:true})
+  assert.deepEqual(saved.layout,readMenu(db,{id:9}).layout)
+  assert(readPersonalMenu(db,{id:10}).layout.top.includes('attendance'))
+  assert.throws(()=>savePersonalMenu(db,{id:10},{...readPersonalMenu(db,{id:10}),companyDefault:true}),e=>e.statusCode===403)
+  assert.throws(()=>savePersonalMenu(db,{id:9},{...saved,companyDefault:true,companyRevision:0}),e=>e.statusCode===409)
+  assert.equal(readPersonalMenu(db,{id:9}).revision,saved.revision)
+ }finally{db.close()}
+})

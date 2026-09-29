@@ -18,8 +18,8 @@ test('sidebar has one active leaf and only owner can edit and save reordered doc
  const root=createRoot(document.getElementById('root')),items=[['dashboard','x','nav.dashboard'],['purchase-bills','x','nav.purchaseBills'],['sales','x','sales.title'],['expense-records','x','nav.expenseRecords'],['bill-voids','x','void.title']]
  await act(async()=>root.render(React.createElement(I18nProvider,{language:'en'},React.createElement(CompanyMenu,{items,page:'sales',go(){}}))))
  assert.equal(document.querySelectorAll('nav .active').length,1)
- const edit=[...document.querySelectorAll('nav button')].find(n=>n.textContent==='Arrange company menu')
- assert.equal(Boolean(edit),canEdit)
+ const edit=[...document.querySelectorAll('nav button')].find(n=>n.textContent==='Menu settings')
+ assert.equal(Boolean(edit),true)
  if(canEdit){await act(async()=>edit.click());const groups=document.querySelectorAll('.company-menu-editor h3');assert.equal(groups.length,2)
  const down=document.querySelectorAll('.company-menu-group')[1].querySelector('.company-menu-row button:last-child');await act(async()=>down.click())
  await act(async()=>[...document.querySelectorAll('.company-menu-actions button')].find(n=>n.textContent==='Save').click())
@@ -36,7 +36,7 @@ test('personal editor moves a folder page outside and saves independent visibili
  const root=createRoot(document.getElementById('root'))
  try{
   await act(async()=>root.render(React.createElement(I18nProvider,{language:'en'},React.createElement(CompanyMenu,{items:[['dashboard','x','nav.dashboard'],['sales','x','sales.title']],page:'sales',go(){}}))))
-  await act(async()=>[...document.querySelectorAll('nav button')].find(n=>n.textContent==='My modules').click())
+  await act(async()=>[...document.querySelectorAll('nav button')].find(n=>n.textContent==='Menu settings').click())
   let row=[...document.querySelectorAll('.company-menu-row')].find(n=>n.querySelector('select')?.value==='documents')
   await act(async()=>{const select=row.querySelector('select');select.value='top';select.dispatchEvent(new Event('change',{bubbles:true}))})
   row=[...document.querySelectorAll('.company-menu-row')].find(n=>n.querySelector('.menu-page-name')?.textContent==='Sales Records')||[...document.querySelectorAll('.company-menu-row')].find(n=>n.querySelector('select')&&n.querySelector('input[type=checkbox]')&&!n.querySelector('input[type=checkbox]').disabled)
@@ -60,5 +60,22 @@ test('overview folder retains ordered permitted links and closes on outside clic
   await act(async()=>folder.querySelector('summary').click());assert(folder.open)
   await act(async()=>folder.querySelector('button').click());assert.equal(opened,'sales')
   await act(async()=>{document.body.dispatchEvent(new MouseEvent('pointerdown',{bubbles:true,clientX:2,clientY:2}));document.body.dispatchEvent(new MouseEvent('pointerup',{bubbles:true,clientX:2,clientY:2}))});assert.equal(folder.open,false)
+ }finally{await act(async()=>root.unmount())}
+})
+
+test('dragging an outside page onto Employee saves once and renders it only inside',async()=>{
+ const layout=defaultMenuLayout();layout.top.push('folder-team');layout.folders=[{id:'folder-team',name:'Employee',items:[]}]
+ let config={layout,revision:0,canEdit:true,hidden:[],shortcuts:[],defaultLayout:layout},writes=0
+ globalThis.fetch=async(url,options={})=>{assert.equal(url,'/api/personal-menu');if(options.method==='PUT'){writes++;config={...config,...JSON.parse(options.body),revision:writes}}return{ok:true,json:async()=>config}}
+ const root=createRoot(document.getElementById('root'))
+ try{
+ await act(async()=>root.render(React.createElement(I18nProvider,{language:'en'},React.createElement(CompanyMenu,{items:[['attendance','x','attendance.title']],page:'attendance',go(){}}))))
+ const row=document.querySelector('.sidebar-entry[draggable]'),folder=document.querySelector('.sidebar-folder')
+ const start=new Event('dragstart',{bubbles:true});Object.defineProperty(start,'dataTransfer',{value:{setData(){}}})
+ await act(async()=>row.dispatchEvent(start))
+ await act(async()=>folder.dispatchEvent(new Event('drop',{bubbles:true,cancelable:true})))
+ assert.equal(writes,1);assert(!config.layout.top.includes('attendance'));assert.deepEqual(config.layout.folders[0].items,['attendance'])
+ assert.equal(document.querySelectorAll('.company-menu-children .sidebar-entry').length,1)
+ assert.equal(document.querySelectorAll('.sidebar-entry[draggable]').length,1)
  }finally{await act(async()=>root.unmount())}
 })
