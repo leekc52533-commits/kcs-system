@@ -9,3 +9,5 @@
 #root .attendance-table th:first-child,#root .attendance-table td:first-child{position:sticky;left:0;z-index:1;background:#fff}
 #root .attendance-table th:first-child{background:#f0f5f8;z-index:2}
 #root .attendance-table [data-numeric]{text-align:right;font-variant-numeric:tabular-nums}
+
+#root .attendance-table .expense-filter-trigger{display:inline-flex;align-items:center;gap:6px;min-height:28px;margin:0;padding:0;border:0;border-radius:0;background:transparent;color:inherit;font:inherit;font-weight:700;box-shadow:none}
