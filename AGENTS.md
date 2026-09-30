@@ -213,3 +213,5 @@ These requirements were confirmed by KC on 2026-09-09. Carry them forward for la
 
 - Employee detail edits use one bottom Save changes button for profile, attendance settings and internal account changes. Stage section edits until this button is pressed; preserve permissions and unsaved-change protection. On a section failure, retain pending changes and do not repeat already successful sections on retry.
 - Expanded employee details have a visible background gap before the next employee row and a bounded scrolling editor. Keep the employee name/code header pinned at the top of that editor while browsing its fields; keep the shared save action accessible at the bottom.
+
+- KC confirmed 2026-09-30: Office, Supervisor, Operations Admin and Owner can view all employee earnings and edit wage calculation rules. Payment confirmation remains owner-only; driver/crew personal income access stays restricted to their own records.

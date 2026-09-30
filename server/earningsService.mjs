@@ -7,6 +7,7 @@ const fail=(code,statusCode=400)=>Object.assign(Error(code),{code,statusCode})
 const kg=n=>Math.round(n*1000)/1000
 const precision=(n,d)=>Number.isFinite(n)&&Math.abs(n*Math.pow(10,d)-Math.round(n*Math.pow(10,d)))<0.00001
 const key=salesTicket
+function earningsManager(ctx){if(!['owner_admin','operations_admin','supervisor','office'].includes(ctx.role))throw fail('EARN_ACCESS',403)}
 function owner(ctx){if(ctx.role!=='owner_admin')throw fail('EARN_ACCESS',403)}
 function atomic(db,fn){db.exec('BEGIN IMMEDIATE');try{const x=fn();db.exec('COMMIT');return x}catch(e){db.exec('ROLLBACK');throw e}}
 export function earningsPeriod(date=kuchingDate()){
@@ -16,14 +17,14 @@ export function earningsPeriod(date=kuchingDate()){
 }
 export function earningsAmount(driverKg,crewKg,rules=defaultEarningsRules){const rate=[...rules.driver].reverse().find(t=>driverKg>=t.from)?.rate||0;return{driverKg:kg(driverKg),crewKg:kg(crewKg),rate,crewRate:rules.crewRate,amount:Number((BigInt(Math.round(driverKg*1000))*BigInt(Math.round(rate*1e6))+BigInt(Math.round(crewKg*1000))*BigInt(Math.round(rules.crewRate*1e6))+5000000n)/10000000n)/100}}
 function currentRule(db,start){const r=db.prepare('SELECT * FROM earnings_rules WHERE effective_start<=? ORDER BY effective_start DESC,id DESC LIMIT 1').get(start);return{version:r?.id||0,...(r?JSON.parse(r.rules_json):defaultEarningsRules)}}
-export function earningsSettings(db,ctx){owner(ctx);return{revision:db.prepare('SELECT COALESCE(MAX(id),0) id FROM earnings_rules').get().id,versions:db.prepare('SELECT id,effective_start effectiveStart,rules_json rules,created_at createdAt FROM earnings_rules ORDER BY effective_start DESC,id DESC').all().map(r=>({...r,rules:JSON.parse(r.rules)})),defaults:defaultEarningsRules}}
-export function saveEarningsSettings(db,ctx,p){owner(ctx);const period=earningsPeriod(p.effectiveStart);if(period.start!==p.effectiveStart||period.start<earningsPeriod(ctx.today||kuchingDate()).start)throw fail('EARN_DATE');const rules=p.rules;
+export function earningsSettings(db,ctx){earningsManager(ctx);return{revision:db.prepare('SELECT COALESCE(MAX(id),0) id FROM earnings_rules').get().id,versions:db.prepare('SELECT id,effective_start effectiveStart,rules_json rules,created_at createdAt FROM earnings_rules ORDER BY effective_start DESC,id DESC').all().map(r=>({...r,rules:JSON.parse(r.rules)})),defaults:defaultEarningsRules}}
+export function saveEarningsSettings(db,ctx,p){earningsManager(ctx);const period=earningsPeriod(p.effectiveStart);if(period.start!==p.effectiveStart||period.start<earningsPeriod(ctx.today||kuchingDate()).start)throw fail('EARN_DATE');const rules=p.rules;
  if(!rules||!Array.isArray(rules.driver)||!rules.driver.length||rules.driver.length>20||rules.driver[0].from!==0||!precision(rules.crewRate,3)||rules.crewRate<0||rules.crewRate>10||rules.driver.some((r,i)=>!r||!(precision(r.from,2)||r.from===defaultEarningsRules.driver[i]?.from)||r.from<0||r.from>1e9||!precision(r.rate,3)||r.rate<0||r.rate>10||(i>0&&(r.from<=rules.driver[i-1].from||r.rate<rules.driver[i-1].rate))))throw fail('EARN_RULE')
  return atomic(db,()=>{if(Number(p.revision)!==earningsSettings(db,ctx).revision)throw fail('EARN_STALE',409);if(db.prepare('SELECT 1 FROM earnings_payments WHERE period_start>=?').get(period.start))throw fail('EARN_LOCKED',409);db.prepare('INSERT INTO earnings_rules(effective_start,rules_json,actor_id) VALUES(?,?,?)').run(period.start,JSON.stringify(rules),ctx.employeeId);return earningsSettings(db,ctx)})
 }
 // A factory ticket must match uniquely in BOTH sources, across vehicles and dates.
 export function earningsReport(db,ctx,date,{personal=false}={}){
- if(!personal)owner(ctx);else if(!ctx.employeeId)throw fail('EARN_ACCESS',403)
+ if(!personal)earningsManager(ctx);else if(!ctx.employeeId)throw fail('EARN_ACCESS',403)
  const period=earningsPeriod(date||ctx.today||kuchingDate()),rules=currentRule(db,period.start)
  const sales=new Map();for(const s of db.prepare('SELECT id,bill_number,vehicle_id,lines_json,revision FROM sales_settlements').all())for(const [i,l] of JSON.parse(s.lines_json).entries()){const k=key(l.slipNumber);const list=sales.get(k)||[];list.push({id:s.id,billNumber:s.bill_number,index:i,weight:Number(l.weightKg),revision:s.revision});sales.set(k,list)}
  const all=db.prepare(`SELECT u.record_id recordId,u.ticket_number ticket,b.id batchId,b.code batch,b.collection_date collectionDate,b.vehicle_id batchVehicle,b.plate_snapshot plate,w.vehicle_id vehicleId,w.service_date deliveryDate,w.confirmed_weight_kg weight,w.status FROM cargo_batch_unloads u JOIN cargo_batches b ON b.id=u.batch_id JOIN unloading_weight_records w ON w.id=u.record_id WHERE w.status='confirmed'`).all()

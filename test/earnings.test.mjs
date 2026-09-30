@@ -37,3 +37,18 @@ test('unique TN matches across vehicle and date and pays only net settlement wei
 test('same TN on another unloading vehicle and date is ambiguous',()=>{const db=fixture();try{db.exec("INSERT INTO unloading_weight_records VALUES(2,99,'2026-08-01',100,'confirmed');INSERT INTO cargo_batch_unloads VALUES(2,1,'1')");assert.equal(earningsReport(db,owner,'2026-09-15').companyKg,0)}finally{db.close()}})
 
 test('cargo TN supersedes legacy allocation even with a different vehicle and date',()=>{const db=fixture();try{db.exec(legacySalesSchema);const line=JSON.stringify({slipNumber:'TN-1',deliveryDate:'2026-09-17',weightKg:28000});db.prepare('INSERT INTO legacy_sales_driver_allocations(settlement_id,line_index,employee_id,employee_name,vehicle_id,date,ticket,weight,line_json) VALUES(1,0,1,?,10,?,?,28000,?)').run('Driver A','2026-09-17','TN-1',line);assert.equal(legacySalesRows(db,[]).length,1);assert.equal(legacySalesRows(db,[{vehicleId:99,deliveryDate:'2026-01-01',ticket:'1'}]).length,0)}finally{db.close()}})
+
+test('office and higher manage earnings rules, but payment remains owner-only',()=>{
+ for(const role of ['office','supervisor','operations_admin','owner_admin']){
+  const db=fixture();try{
+   const ctx={...owner,role};assert.ok(earningsReport(db,ctx,'2026-09-15').items.length)
+   saveEarningsSettings(db,ctx,{effectiveStart:'2026-09-16',revision:0,rules:defaultEarningsRules})
+   assert.equal(db.prepare('SELECT COUNT(*) n FROM earnings_rules').get().n,1)
+   if(role!=='owner_admin')assert.throws(()=>recordEarningsPayment(db,ctx,{}),{code:'EARN_ACCESS'})
+  }finally{db.close()}
+ }
+ for(const role of ['driver','crew']){const db=fixture();try{
+  assert.throws(()=>saveEarningsSettings(db,{...owner,role},{}),{code:'EARN_ACCESS'})
+  assert.throws(()=>earningsReport(db,{...owner,role},'2026-09-15'),{code:'EARN_ACCESS'})
+ }finally{db.close()}}
+})
