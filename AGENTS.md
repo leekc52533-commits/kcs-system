@@ -231,3 +231,5 @@ These requirements were confirmed by KC on 2026-09-09. Carry them forward for la
 - Vehicle list cards show registration number only, without the Lorry code prefix, and omit the Zones summary field. Preserve stored vehicle codes and area assignments.
 
 - Vehicle details display all historical employee/company Expenses linked by vehicle_id, including amounts, invoice/merchant/odometer/remarks and original receipts. Read live expense records rather than copying transactions; corrections stay synchronized and never cause duplicate spending. Preserve expense-role permissions and do not guess vehicles for unlinked legacy expenses.
+
+- KC confirmed 2026-09-30: Expenses is the sole vehicle-expense entry UI. Vehicle detail fuel/maintenance/tyre sections retain existing historical tables only (hide when empty), with no duplicate entry forms. Usage entry omits fuel cost; vehicle Expenses remains the live financial source. Preserve all legacy records.
