@@ -39,3 +39,13 @@
 .employee-inline-panel .employee-detail-v2>.employee-editing-banner{position:static}
 .employee-inline-panel .employee-detail-actions{bottom:-16px}
 @media(max-width:560px){.employee-master-v2 .employee-directory-table .employee-inline-row>td{padding:12px 6px 24px!important}.employee-inline-panel .employee-detail-v2>header h2{font-size:20px}}
+
+/* Shared compact directory presentation. */
+#root .employee-master-v2 .employee-toolbar.employee-groups{gap:8px;padding:0;margin:0 0 16px}
+#root .employee-master-v2 .employee-toolbar.employee-groups>button{min-height:40px;padding:8px 16px;border-radius:10px;font-family:inherit;font-size:16px;font-weight:700;line-height:1.2}
+#root .employee-master-v2 .employee-toolbar.employee-groups>button.active{background:#176f60;border-color:#176f60;color:#fff}
+#root .employee-master-v2 .employee-directory-table table{font-size:16px;line-height:1.3}
+#root .employee-master-v2 .employee-directory-table th{padding:6px 10px;font-size:16px;font-weight:700}
+#root .employee-master-v2 .employee-directory-table .expense-filter-trigger{min-height:28px;font-size:16px;font-weight:700}
+#root .employee-master-v2 .employee-directory-table tr.interactive-row>td{height:31px;padding:5px 10px;font-size:16px;line-height:1.3}
+#root .employee-master-v2 .employee-directory-table .entity-name-link{padding:0;min-height:0;font-family:inherit;font-size:16px;font-weight:700;line-height:1.3;text-decoration:none}

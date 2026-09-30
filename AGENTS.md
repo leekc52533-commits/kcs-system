@@ -215,3 +215,5 @@ These requirements were confirmed by KC on 2026-09-09. Carry them forward for la
 - Expanded employee details have a visible background gap before the next employee row and a bounded scrolling editor. Keep the employee name/code header pinned at the top of that editor while browsing its fields; keep the shared save action accessible at the bottom.
 
 - KC confirmed 2026-09-30: Office, Supervisor, Operations Admin and Owner can view all employee earnings and edit wage calculation rules. Payment confirmation remains owner-only; driver/crew personal income access stays restricted to their own records.
+
+- KC requested 2026-09-30: Employee & Account uses the unified compact header, borderless title back arrow and no decorative date. Current/former directories default to natural employee-code ascending order; retain user column sorting/filtering and export the displayed order.
