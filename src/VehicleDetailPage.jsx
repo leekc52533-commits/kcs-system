@@ -1,3 +1,4 @@
+import VehicleExpenses from './VehicleExpenses.jsx'
 import {formatDateDisplay} from './dateDisplay.js'
 import DateInput from './DateInput.jsx'
 import CenteredNotice from './CenteredNotice.jsx'
@@ -19,6 +20,7 @@ export default function VehicleDetailPage({vehicleId,resources,onBack,currentUse
   const sold=detail.status==='sold',isOwnerAdmin=currentUser.role==='owner_admin',canManage=['owner_admin','operations_admin'].includes(currentUser.role)||currentUser.permissions?.includes('vehicle_manage'),canViewDocuments=['owner_admin','operations_admin','supervisor','office'].includes(currentUser.role)
   return <div className="page vehicle-detail-page"><header className="vehicle-detail-title"><div><h1>{detail.registrationNumber}</h1><p>{sold?'Sold vehicle: history only, excluded from dispatch, maintenance or compliance reminders.':'Drivers are linked through daily dispatch records, does not permanently bind a vehicle.'}</p></div><span className={`vehicle-state ${detail.status}`}>{detail.status}</span></header>{message&&<div className="planner-message">✓ {message}</div>}{error&&<CenteredNotice>{error}</CenteredNotice>}
     <nav className="vehicle-tabs" aria-label="Vehicle detail sections"><a href="#vehicle-registration">Registration Details</a>{canViewDocuments&&<a href="#vehicle-documents">Documents</a>}<a href="#vehicle-history">History / Audit</a></nav>
+    {['owner_admin','operations_admin','supervisor','office'].includes(currentUser.systemRole||currentUser.role)&&<VehicleExpenses key={vehicleId} vehicleId={vehicleId}/> }
     <div id="vehicle-registration"><BasicForm detail={detail} readOnly={!isOwnerAdmin} disabled={busy||sold} save={body=>save(`/api/vehicles/${vehicleId}`,body)}/></div>
     <div>
     {!sold&&<Compliance detail={detail.compliance||{}} disabled={busy} save={body=>save(`/api/vehicles/${vehicleId}/compliance`,body)}/>} 

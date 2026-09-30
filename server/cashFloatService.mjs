@@ -120,6 +120,7 @@ export function listExpenseRecords(filters={},database=defaultDb){
   const known=EXPENSE_CATEGORIES.map(item=>`'${item.replaceAll("'","''")}'`).join(','),clauses=['1=1'],params=[],from=String(filters.from||''),to=String(filters.to||''),category=String(filters.category||''),expenseType=String(filters.expenseType||''),search=String(filters.search||'').trim()
 
 
+  if(filters.vehicleId!=null){const vehicleId=Number(filters.vehicleId);if(!Number.isSafeInteger(vehicleId)||vehicleId<=0)throw fail('Invalid vehicle.','EXPENSE_DETAILS_INVALID');clauses.push('r.vehicleId=?');params.push(vehicleId)}
   const employeeId=Number(filters.employeeId);if(employeeId>0){clauses.push('r.employeeId=?');params.push(employeeId)}
   if([...EXPENSE_CATEGORIES,'Other'].includes(category)){clauses.push('r.category=?');params.push(category)}
   if(['employee','admin'].includes(expenseType)){clauses.push('r.expenseType=?');params.push(expenseType)}
