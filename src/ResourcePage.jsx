@@ -12,7 +12,7 @@ import BackButton from './BackButton.jsx'
 
 const selectedIds=(event)=>[...event.target.selectedOptions].map(option=>Number(option.value))
 
-export default function ResourcePage({currentUser,account,initialTab='vehicles',fixedTab=false,embedded=false,onOpenRoute,onBack}){
+export default function ResourcePage({currentUser,account,initialTab='vehicles',fixedTab=false,embedded=false,onOpenRoute,onBack,onDetailBackChange}){
   const ui=useUi()
 
   const{t}=useI18n()
@@ -20,6 +20,7 @@ export default function ResourcePage({currentUser,account,initialTab='vehicles',
   const[vehicle,setVehicle]=useState({vehicleCode:'',vehicleName:'',registrationNumber:'',capacityKg:'',defaultBaseLocationId:'',preferredAreaIds:[]})
   const[location,setLocation]=useState({name:'',locationType:'depot',address:'',canStart:true,canEnd:true})
   const load=useCallback(()=>api('/api/resources').then(setData).catch(item=>setError(item.message)),[]);useEffect(()=>{load()},[load])
+  useEffect(()=>{onDetailBackChange?.(vehicleDetailId?()=>()=>{setVehicleDetailId(null);load()}:null);return()=>onDetailBackChange?.(null)},[vehicleDetailId,onDetailBackChange,load])
   const save=async(url,method,body)=>{setError('');setMessage('');try{await api(url,{method,body:JSON.stringify({...body,changedBy:currentUser.name,actorRole:currentUser.role})});setMessage(body.successMessage||t('resource.saved'));await load();return true}catch(item){setError(item.message);return false}}
   const addVehicle=async(event)=>{event.preventDefault();const saved=await save('/api/vehicles','POST',{...vehicle,capacityKg:vehicle.capacityKg?Number(vehicle.capacityKg):null});if(saved)setVehicle({vehicleCode:'',vehicleName:'',registrationNumber:'',capacityKg:'',defaultBaseLocationId:'',preferredAreaIds:[]});return saved}
   const addLocation=async(event)=>{event.preventDefault();await save('/api/locations','POST',location);setLocation({name:'',locationType:'depot',address:'',canStart:true,canEnd:true})}

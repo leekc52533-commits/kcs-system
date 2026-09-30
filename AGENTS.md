@@ -223,3 +223,5 @@ These requirements were confirmed by KC on 2026-09-09. Carry them forward for la
 - KC requested 2026-09-30: dispatch workspace follows the unified header and compact tabs. Weekly date cards display DD/mmm (e.g. 02/Oct) without year, with spaced weekday and no text overlap; full date remains in the tooltip, date picker and stored dispatch date.
 
 - Fixed collection ScheduleEditor closes when clicking its outside grey backdrop. Clicking or dragging inside the form must not dismiss it; all close controls confirm unsaved edits and do nothing during save/preview requests.
+
+- Vehicle details use only the shared header back arrow, returning to the vehicle list. Show only registration number as detail title (no Lorry code prefix), and omit the redundant Overview navigation and summary section.
