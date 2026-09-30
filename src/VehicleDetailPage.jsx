@@ -15,7 +15,7 @@ const money=value=>value==null?'—':`RM ${Number(value).toFixed(2)}`
 const value=value=>value==null||value===''?'—':value
 
 export default function VehicleDetailPage({vehicleId,resources,onBack,currentUser}){
-  const ui=useUi(),[activeSection,setActiveSection]=useState(null)
+  const ui=useUi(),[activeSection,setActiveSection]=useState(()=>['owner_admin','operations_admin','supervisor','office'].includes(currentUser.systemRole||currentUser.role)?'expenses':'registration')
   const[detail,setDetail]=useState(null),[error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false)
   const load=useCallback(()=>api(`/api/vehicles/${vehicleId}`).then(setDetail).catch(item=>setError(item.message)),[vehicleId]);useEffect(()=>{load()},[load])
   const save=async(url,body)=>{setBusy(true);setError('');try{await api(url,{method:url===`/api/vehicles/${vehicleId}`?'PATCH':'POST',body:JSON.stringify({...body,changedBy:currentUser.name,updatedBy:currentUser.name,uploadedBy:currentUser.name})});setMessage('Saved successfully.');await load();return true}catch(item){setError(item.message);return false}finally{setBusy(false)}}

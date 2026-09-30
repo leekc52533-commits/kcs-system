@@ -237,3 +237,5 @@ These requirements were confirmed by KC on 2026-09-09. Carry them forward for la
 - Vehicle detail sections are selected by compact top buttons with triangle indicators; all start collapsed, one section is shown at a time, and switching hides rather than resets unsaved forms. Vehicle Expenses column headings provide searchable multi-selection and sorting; export and total follow displayed filters/order.
 
 - Vehicle section buttons omit triangles and order Expenses, Compliance, Maintenance, Registration first. Hide Usage History and History/Audit from the vehicle UI, preserving stored history. Maintenance permits searchable non-financial repair/service/tyre notes (date, mileage, work, parts/tyre position, workshop, follow-up); financial entry remains exclusively in Expenses.
+
+- Vehicle details default to the Vehicle Expenses panel on entry for authorized expense viewers (Registration for other roles), rather than an empty collapsed page. Other section buttons retain toggle behavior. This supersedes the all-collapsed entry default.
