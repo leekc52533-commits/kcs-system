@@ -219,3 +219,5 @@ These requirements were confirmed by KC on 2026-09-09. Carry them forward for la
 - KC requested 2026-09-30: Employee & Account uses the unified compact header, borderless title back arrow and no decorative date. Current/former directories default to natural employee-code ascending order; retain user column sorting/filtering and export the displayed order.
 
 - KC superseded inline employee expansion on 2026-09-30: opening an employee replaces the directory with a standalone detail screen, hiding all surrounding employee rows and directory toolbar. Close returns to the retained filtered/sorted list; retain pinned identity, one save action and unsaved-change protection.
+
+- KC requested 2026-09-30: dispatch workspace follows the unified header and compact tabs. Weekly date cards display DD/mmm (e.g. 02/Oct) without year, with spaced weekday and no text overlap; full date remains in the tooltip, date picker and stored dispatch date.
