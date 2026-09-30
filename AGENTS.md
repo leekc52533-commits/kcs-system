@@ -225,3 +225,5 @@ These requirements were confirmed by KC on 2026-09-09. Carry them forward for la
 - Fixed collection ScheduleEditor closes when clicking its outside grey backdrop. Clicking or dragging inside the form must not dismiss it; all close controls confirm unsaved edits and do nothing during save/preview requests.
 
 - Vehicle details use only the shared header back arrow, returning to the vehicle list. Show only registration number as detail title (no Lorry code prefix), and omit the redundant Overview navigation and summary section.
+
+- KC requested removing the Operational Details form and its tab from vehicle details; preserve stored vehicle operational data and the separate compliance, maintenance, fuel, tyre and usage records.
