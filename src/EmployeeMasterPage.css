@@ -49,3 +49,8 @@
 #root .employee-master-v2 .employee-directory-table .expense-filter-trigger{min-height:28px;font-size:16px;font-weight:700}
 #root .employee-master-v2 .employee-directory-table tr.interactive-row>td{height:31px;padding:5px 10px;font-size:16px;line-height:1.3}
 #root .employee-master-v2 .employee-directory-table .entity-name-link{padding:0;min-height:0;font-family:inherit;font-size:16px;font-weight:700;line-height:1.3;text-decoration:none}
+
+/* Employee editing replaces the directory until closed. */
+#root .employee-master-v2.employee-standalone{padding-bottom:0;min-width:0}
+#root .employee-standalone-panel{position:relative;left:auto;width:100%;max-width:100%}
+#root .employee-standalone-panel .employee-detail-v2{max-height:calc(100dvh - var(--desktop-header-height,100px) - 32px);min-height:320px}
