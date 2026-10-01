@@ -1,3 +1,4 @@
+import {cargoCorrectionSchema} from './cargoCorrections.mjs'
 export const cargoBatchSchema=`
 CREATE TABLE IF NOT EXISTS cargo_batches(
  id INTEGER PRIMARY KEY AUTOINCREMENT,code TEXT UNIQUE,vehicle_id INTEGER NOT NULL REFERENCES vehicles(id),plate_snapshot TEXT NOT NULL,
@@ -26,5 +27,5 @@ CREATE TRIGGER IF NOT EXISTS cargo_members_no_update BEFORE UPDATE ON cargo_batc
 CREATE TRIGGER IF NOT EXISTS cargo_members_no_delete BEFORE DELETE ON cargo_batch_members BEGIN SELECT RAISE(ABORT,'Cargo participation is permanent'); END;
 CREATE TRIGGER IF NOT EXISTS cargo_unloads_no_update BEFORE UPDATE ON cargo_batch_unloads BEGIN SELECT RAISE(ABORT,'Cargo unloading link is immutable'); END;
 CREATE TRIGGER IF NOT EXISTS cargo_unloads_no_delete BEFORE DELETE ON cargo_batch_unloads BEGIN SELECT RAISE(ABORT,'Cargo unloading link is permanent'); END;
-`
+`+cargoCorrectionSchema
 export function applyV71Migration(db){const v=Number(db.prepare('SELECT MAX(version) v FROM schema_meta').get().v);if(v>=71){db.exec(cargoBatchSchema);return}if(v!==70)throw Error('Schema 70 required');db.exec('BEGIN IMMEDIATE');try{db.exec(cargoBatchSchema);db.exec('INSERT INTO schema_meta(version) VALUES(71)');db.exec('COMMIT')}catch(e){db.exec('ROLLBACK');throw e}}

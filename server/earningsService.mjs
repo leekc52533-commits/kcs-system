@@ -1,3 +1,4 @@
+import {cargoAttributionSql} from './cargoCorrections.mjs'
 import {unloadingCode} from './routeUnloadingService.mjs'
 import {legacySalesRows,salesTicket} from './legacySalesEarnings.mjs'
 import {createHash} from 'node:crypto'
@@ -27,7 +28,8 @@ export function earningsReport(db,ctx,date,{personal=false}={}){
  if(!personal)earningsManager(ctx);else if(!ctx.employeeId)throw fail('EARN_ACCESS',403)
  const period=earningsPeriod(date||ctx.today||kuchingDate()),rules=currentRule(db,period.start)
  const sales=new Map();for(const s of db.prepare('SELECT id,bill_number,vehicle_id,lines_json,revision FROM sales_settlements').all())for(const [i,l] of JSON.parse(s.lines_json).entries()){const k=key(l.slipNumber);const list=sales.get(k)||[];list.push({id:s.id,billNumber:s.bill_number,index:i,weight:Number(l.weightKg),revision:s.revision});sales.set(k,list)}
- const all=db.prepare(`SELECT u.record_id recordId,u.ticket_number ticket,b.id batchId,b.code batch,b.collection_date collectionDate,b.vehicle_id batchVehicle,b.plate_snapshot plate,w.vehicle_id vehicleId,w.service_date deliveryDate,w.confirmed_weight_kg weight,w.status FROM cargo_batch_unloads u JOIN cargo_batches b ON b.id=u.batch_id JOIN unloading_weight_records w ON w.id=u.record_id WHERE w.status='confirmed'`).all()
+ const attribution=cargoAttributionSql(db)
+ const all=db.prepare(`SELECT u.record_id recordId,u.ticket_number ticket,b.id batchId,b.code batch,b.collection_date collectionDate,b.vehicle_id batchVehicle,b.plate_snapshot plate,w.vehicle_id vehicleId,w.service_date deliveryDate,w.confirmed_weight_kg weight,w.status FROM cargo_batch_unloads u ${attribution.join} JOIN cargo_batches b ON b.id=${attribution.batchId} JOIN unloading_weight_records w ON w.id=u.record_id WHERE w.status='confirmed'`).all()
  const counts=new Map();for(const r of all){const k=key(r.ticket);counts.set(k,(counts.get(k)||0)+1)}
  const members=db.prepare('SELECT batch_id batchId,employee_id employeeId,name_snapshot name,role FROM cargo_batch_members').all(),byBatch=new Map();for(const m of members){if(!byBatch.has(m.batchId))byBatch.set(m.batchId,[]);byBatch.get(m.batchId).push(m)}
  const staff=new Map();const add=(id,name)=>{if(!staff.has(id))staff.set(id,{employeeId:id,name,driverKg:0,crewKg:0,pendingKg:0,pendingCount:0,details:[]});return staff.get(id)}

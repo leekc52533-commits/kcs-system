@@ -56,3 +56,15 @@ test('Weight entry shows open codes without entering details and refreshes after
   }finally{await act(async()=>root.unmount())}
  }
 })
+
+test('old collection dates or a different driver show attribution notice and original participants',async()=>{
+ for(const language of ['zh','en','ms'])for(const mismatch of ['date','driver','none']){
+  const root=createRoot(document.getElementById('root'))
+  try{
+   await act(async()=>root.render(React.createElement(I18nProvider,{language},React.createElement(CargoUnloadFields,{items:[batch],vehicleId:1,value:{batchId:'1',ticketNumber:'',unloadMode:''},onChange:()=>{},serviceDate:mismatch==='date'?'2026-10-01':batch.collectionDate,driverName:mismatch==='driver'?'Driver B':batch.driverName}))))
+   const notice=document.querySelector('[role=alertdialog]')
+   if(mismatch==='none')assert.equal(notice,null)
+   else{assert.ok(notice.textContent.includes(words[language].attributionWarning));assert.ok(notice.textContent.includes('Driver A'));assert.ok(notice.textContent.includes('18/09/2026'))}
+  }finally{await act(async()=>root.unmount())}
+ }
+})
