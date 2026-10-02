@@ -51,7 +51,7 @@ export function AttendanceSettings({employeeId,blocked=false,stage}){
 export function AttendanceDaily(){
  const{language}=useI18n(),w=attendanceWords[language]||attendanceWords.en,[data,setData]=useState(null),[error,setError]=useState(''),requestVersion=useRef(0)
  const scrollRef=useRef(null),labels=({zh:{name:'员工',accuracy:'定位误差（米）'},en:{name:'Employee',accuracy:'Accuracy (m)'},ms:{name:'Pekerja',accuracy:'Ketepatan (m)'}})[language]||{name:'Employee',accuracy:'Accuracy (m)'}
- const [filters,setFilters]=useState({}),[sort,setSort]=useState({}),[menu,setMenu]=useState(null)
+ const [filters,setFilters]=useState(()=>({work_date:[kuchingDate()]})),[sort,setSort]=useState({}),[menu,setMenu]=useState(null)
  const [target,setTarget]=useState(null)
  useEffect(()=>setTarget(document.getElementById('page-data-exports')),[])
  const clock=value=>value?new Date(value).toLocaleTimeString('en-GB',{timeZone:'Asia/Kuching',hour12:false}):w.missing

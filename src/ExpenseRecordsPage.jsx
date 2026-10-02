@@ -18,7 +18,6 @@ import './ExpenseRecordsPage.css'
 
 const categories=['Fuel','Services','Repair','Spare Parts','Road Tax','Puspakom','Insurance','Other']
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuching',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())
-const firstOfMonth=()=>`${today().slice(0,7)}-01`
 const money=cents=>`RM ${(Number(cents||0)/100).toFixed(2)}`
 const displayDate=value=>{const match=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(value||''));return match?`${match[3]}/${match[2]}/${match[1]}`:String(value||'')}
 const displayDateTime=value=>{const date=displayDate(value),time=String(value||'').match(/T(\d{2}:\d{2})/)?.[1];return time?`${date} ${time}`:date}
@@ -29,7 +28,7 @@ export default function ExpenseRecordsPage({onBack}){
   const [columnOrder,setColumnOrder]=useState(()=>readExpenseOrder(columns.map(c=>c[0]))),[showColumns,setShowColumns]=useState(false),[historyItem,setHistoryItem]=useState(null)
   const [correction,setCorrection]=useState(false),[showExport,setShowExport]=useState(false)
   const ui=useUi(),tableRef=useRef(null),[openFilter,setOpenFilter]=useState(null)
-  const[filters,setFilters]=useState({from:firstOfMonth(),to:today(),search:'',expenseType:'',category:'',employeeId:''}),[columnFilters,setColumnFilters]=useState({}),[sort,setSort]=useState({}),[data,setData]=useState(null),[error,setError]=useState(''),[message,setMessage]=useState(''),[loading,setLoading]=useState(false),[showForm,setShowForm]=useState(false),[busy,setBusy]=useState(false)
+  const[filters,setFilters]=useState({from:today(),to:today(),search:'',expenseType:'',category:'',employeeId:''}),[columnFilters,setColumnFilters]=useState({}),[sort,setSort]=useState({}),[data,setData]=useState(null),[error,setError]=useState(''),[message,setMessage]=useState(''),[loading,setLoading]=useState(false),[showForm,setShowForm]=useState(false),[busy,setBusy]=useState(false)
   const [exportTarget,setExportTarget]=useState(null)
   useEffect(()=>{setExportTarget(document.getElementById('expense-header-export'))},[])
   const query=useMemo(()=>new URLSearchParams(Object.entries({...filters,columns:JSON.stringify(columnFilters),sortKey:sort.key,sortDirection:sort.direction}).filter(([,value])=>value)).toString(),[filters,columnFilters,sort])
