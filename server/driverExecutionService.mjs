@@ -14,7 +14,8 @@ import {activeRouteDriver} from './routeDriverAuthorization.mjs'
 
 export const ARRIVAL_RADIUS_METERS=Number(process.env.KCS_ARRIVAL_RADIUS_METERS||150)
 export const MAX_ARRIVAL_ACCURACY_METERS=Number(process.env.KCS_MAX_ARRIVAL_ACCURACY_METERS||50)
-export const isArrivalTestMode=(env=process.env)=>/^(1|true|yes|on)$/i.test(String(env.KCS_REMOTE_ARRIVAL_TEST_MODE||'').trim())
+import {isArrivalTestMode} from './arrivalPolicy.mjs'
+export {isArrivalTestMode} from './arrivalPolicy.mjs'
 const fail=(message,code='INVALID_STATUS',statusCode=409,details={})=>{const error=new Error(message);error.code=code;error.statusCode=statusCode;error.publicDetails=details;return error}
 const nowKuching=(input=new Date())=>{const parts=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuching',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(input)).map(part=>[part.type,part.value]));return`${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}+08:00`}
 const distanceMeters=(aLat,aLon,bLat,bLon)=>{const rad=value=>value*Math.PI/180,R=6371000,dLat=rad(bLat-aLat),dLon=rad(bLon-aLon),x=Math.sin(dLat/2)**2+Math.cos(rad(aLat))*Math.cos(rad(bLat))*Math.sin(dLon/2)**2;return 2*R*Math.atan2(Math.sqrt(x),Math.sqrt(1-x))}
