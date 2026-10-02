@@ -13,7 +13,7 @@ const today='2026-09-14',context={employeeId:1,role:'driver',today},office={empl
 const payload={reason:'Customer called: no cartons',contactMethod:'phone',photo:{name:'call.png',dataUrl:'data:image/png;base64,iVBORw0KGgo='}}
 function setup(t){const x=fixture(),uploadsRoot=fs.mkdtempSync(path.join(os.tmpdir(),'kcs-no-goods-'));t.after(()=>{x.db.close();fs.rmSync(uploadsRoot,{recursive:true,force:true})});return{...x,uploadsRoot}}
 function fixture(){
- const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON;'+schemaSql);ensureV28Schema(db)
+ const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON;'+schemaSql);ensureV28Schema(db);db.exec(driverArrangementSchemaSql)
  db.exec("INSERT INTO schema_meta(version) VALUES(55);INSERT INTO areas(jodoo_area_id,name) VALUES('A1','North');INSERT INTO customers(jodoo_customer_id,name) VALUES('C1','Alpha');INSERT INTO vehicles(vehicle_code,status,operational_status) VALUES('V1','available','active'),('V2','available','active');INSERT INTO employees(employee_code,name,job_role,employment_status,is_active) VALUES('D1','Driver One','Driver','active',1),('D2','Driver Two','Driver','active',1),('S1','Supervisor','Supervisor','active',1),('C1','Crew One','Crew','active',1)")
  for(let i=1;i<=3;i++){db.prepare("INSERT INTO branches(jodoo_branch_id,customer_id,area_id,branch_name,address,latitude,longitude) VALUES(?,1,1,?,'Address',3.1,101.6)").run('B'+i,'Branch '+i);db.prepare("INSERT INTO branch_schedules(jodoo_schedule_id,branch_id,source_branch_id,frequency,days_of_week) VALUES(?,?,?,'Weekly','Monday')").run('S'+i,i,'B'+i)}
  generateWeek({startDate:today},db)
@@ -31,7 +31,7 @@ import {reorderDriverStop} from '../server/driverRouteAdjustmentService.mjs'
 import {reviewArrangementRequest,listArrangementRequests,arrangementProof} from '../server/driverArrangementService.mjs'
 import {isRouteTrialDate} from '../shared/routeTrial.js'
 import {requiresDriverApproval} from '../shared/driverChangePolicy.js'
-import {applyV64Migration} from '../server/migrationV64.mjs'
+import {applyV64Migration,driverArrangementSchemaSql} from '../server/migrationV64.mjs'
 const approve=(db,id)=>reviewArrangementRequest(id,{decision:'approved',reason:'Checked with driver'},office,db)
 const snapshot=db=>db.prepare('SELECT * FROM dispatch_stops ORDER BY id').all()
 const gps={latitude:3.1,longitude:101.6,accuracy:8,captured_at:'2026-09-14T01:00:00Z'}

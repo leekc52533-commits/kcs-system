@@ -1,3 +1,4 @@
+import {GpsReleaseRequest} from './GpsRelease.jsx'
 import {MobileLeave} from './LeaveRequests.jsx'
 import {formatDateDisplay} from './dateDisplay.js'
 import CenteredNotice from './CenteredNotice.jsx'
@@ -236,9 +237,10 @@ function TodayView({data,preview=false}){
           <span>{t('mobile.estimatedWeight')}: {stop.estimatedWeightKg==null?t('mobile.notSet'):formatWeight(stop.estimatedWeightKg)+' kg'}</span>
           <span>{ui(status)}</span>
           <span className={stop.gpsAvailable?'route-ok':'route-warning'}>{t('mobile.gpsStatus')}: {t(stop.gpsAvailable?'mobile.available':'mobile.missing')}</span>
-          {stop.arrivedAt&&<span className="route-ok">{t('mobile.arrivedAt')}: {stop.arrivedAt} · {stop.arrivalDistanceMeters}m</span>}
+          {stop.arrivedAt&&<span className="route-ok">{t('mobile.arrivedAt')}: {stop.arrivedAt} · {stop.arrivalDistanceMeters==null?'—':stop.arrivalDistanceMeters+'m'}</span>}
           {stop.expectedReturnTime&&<span className="expected-return-time">{t('mobile.expectedReturnTime')}: <b>{stop.expectedReturnTime}</b></span>}
           {!preview&&stop.canArrive&&<button type="button" className="primary-mobile" disabled={Boolean(busy)} onClick={()=>arrive(stop)}>{busy==='stop-'+stop.id?t('mobile.gettingLocation'):t('mobile.arrive')}</button>}
+          {!preview&&<GpsReleaseRequest stop={stop} available={route.gpsReleaseAvailable&&current&&trip.executionStatus==='in_progress'&&trip.approved!==false} onChanged={refresh}/>}
           {stop.deferred&&<span className="deferred-reason">{ui("Reason:")}{ui(stop.deferReason||'other')}</span>}
           {pendingApproval&&<div className="defer-waiting" role="status"><b>{t('mobile.waitingSupervisor')}</b><span>{t('mobile.nextCustomerLocked')}</span><small>{t('mobile.autoRefresh')}</small></div>}
           {!preview&&stop.canFinish&&!stop.deferred&&!stop.billCreated&&<div className="driver-defer"><label>{t('mobile.comeBackLater')}<select value={deferReasons[stop.id]||'customer_requested_return'} onChange={event=>setDeferReasons(current=>({...current,[stop.id]:event.target.value}))}><option value="customer_requested_return">{t('mobile.deferCustomerRequest')}</option><option value="no_space_available">{t('mobile.deferNoSpace')}</option><option value="other">{t('mobile.deferOther')}</option></select></label><label>{t('mobile.expectedReturnTime')}<input type="time" required value={deferTimes[stop.id]||''} onChange={event=>setDeferTimes(current=>({...current,[stop.id]:event.target.value}))}/></label><button type="button" className="secondary-mobile" disabled={Boolean(busy)||!deferTimes[stop.id]} onClick={()=>deferStop(stop)}>{busy==='defer-'+stop.id?t('common.processing'):t('mobile.requestDeferApproval')}</button></div>}

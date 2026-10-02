@@ -1,3 +1,4 @@
+import {requestGpsRelease,listGpsReleases,reviewGpsRelease,withGpsReleaseState} from './gpsExceptionService.mjs'
 import {ownLeave,requestLeave,pendingLeave,reviewLeave} from './leaveService.mjs'
 import {isEmployeeBillVoidRoute} from './billVoidRouteAccess.mjs'
 import {reviewDateWithSystemChange,dateSystemReview} from './dateSystemReviewService.mjs'
@@ -176,7 +177,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'PATCH' && /^\/api\/auth\/accounts\/\d+$/.test(url.pathname)) {const payload=(await readJson(request)).payload;if(Array.isArray(payload.permissions)&&session.role!=='owner_admin')return sendJson(response,403,{error:'只有Owner Admin可以授权敏感资料权限'});return sendJson(response,200,updateAccount(Number(url.pathname.split('/').at(-1)),payload,session,meta(request)))}
     if (request.method === 'GET' && url.pathname === '/api/auth/audit') return sendJson(response,200,{items:listAuthAudit(Object.fromEntries(url.searchParams))})
     if (request.method === 'GET' && url.pathname === '/api/system/network') return sendJson(response,200,{host,apiPort:port,lanUrls:networkUrls(),httpsRequiredForGps:true})
-    if (request.method === 'GET' && url.pathname === '/api/mobile/today') return sendJson(response,200,{...driverToday({employeeId:session.employeeId,role:session.role}),arrivalTestMode:isArrivalTestMode()})
+    if (request.method === 'GET' && url.pathname === '/api/mobile/today') return sendJson(response,200,{...withGpsReleaseState(driverToday({employeeId:session.employeeId,role:session.role})),arrivalTestMode:isArrivalTestMode()})
     if (request.method === 'GET' && url.pathname === '/api/mobile/tomorrow') return sendJson(response,200,driverTomorrow({employeeId:session.employeeId,role:session.role}))
     if(url.pathname==='/api/mobile/my-bills'||/^\/api\/mobile\/my-bills\/\d+\/proof$/.test(url.pathname)){
       if(request.method!=='GET')return sendJson(response,405,{error:'Read only'})
@@ -332,6 +333,9 @@ const server = http.createServer(async (request, response) => {
     if(request.method==='POST'&&url.pathname==='/api/mobile/guide/read')return sendJson(response,200,acknowledgeDriverGuide((await readJson(request)).payload,session))
     if(request.method==='GET'&&url.pathname==='/api/mobile/notices')return sendJson(response,200,{items:employeeNotices(session)})
     if(request.method==='POST'&&/^\/api\/mobile\/notices\/\d+\/read$/.test(url.pathname))return sendJson(response,200,acknowledgeNotice(Number(url.pathname.split('/')[4]),session))
+    if(request.method==='POST'&&/^\/api\/mobile\/stops\/\d+\/gps-release$/.test(url.pathname))return sendJson(response,200,requestGpsRelease(Number(url.pathname.split('/')[4]),(await readJson(request)).payload,session))
+    if(request.method==='GET'&&url.pathname==='/api/gps-releases')return sendJson(response,200,{items:listGpsReleases(session)})
+    if(request.method==='POST'&&/^\/api\/gps-releases\/\d+\/review$/.test(url.pathname))return sendJson(response,200,reviewGpsRelease(Number(url.pathname.split('/')[3]),(await readJson(request)).payload,session))
     if(request.method==='GET'&&url.pathname==='/api/driver-arrangements')return sendJson(response,200,{items:listArrangementRequests(session)})
     if(request.method==='POST'&&/^\/api\/driver-arrangements\/\d+\/review$/.test(url.pathname))return sendJson(response,200,reviewArrangementRequest(Number(url.pathname.split('/')[3]),(await readJson(request)).payload,session))
     if(request.method==='GET'&&/^\/api\/driver-arrangements\/\d+\/photo$/.test(url.pathname)){const proof=arrangementProof(Number(url.pathname.split('/')[3]),session),file=path.resolve(uploadsDir,proof.storage_key);if(!file.startsWith(path.resolve(uploadsDir)+path.sep)||!fs.existsSync(file))return sendJson(response,404,{error:'Proof not found'});response.writeHead(200,{'Content-Type':proof.content_type,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'});return fs.createReadStream(file).pipe(response)}

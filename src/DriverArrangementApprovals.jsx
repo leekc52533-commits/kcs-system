@@ -1,3 +1,4 @@
+import {GpsReleaseApprovals} from './GpsRelease.jsx'
 import {formatDateDisplay} from './dateDisplay.js'
 import CenteredNotice from './CenteredNotice.jsx'
 import {useCallback,useEffect,useState} from 'react'
@@ -13,6 +14,6 @@ export default function DriverArrangementApprovals(){
  const{t}=useI18n(),[items,setItems]=useState([]),[error,setError]=useState('')
  const load=useCallback(async()=>{setItems((await api('/api/driver-arrangements')).items);setError('')},[])
  useEffect(()=>{const refresh=()=>load().catch(e=>setError(e.message));void refresh();const timer=setInterval(refresh,10000);return()=>clearInterval(timer)},[load])
- if(!error&&!items.length)return null
- return <section className="temporary-intakes intake-review"><h2>{t('arrange.title')} ({items.length})</h2>{!items.length&&<p>{t('intake.empty')}</p>}{error&&<CenteredNotice>{error}</CenteredNotice>}{items.map(item=><Row key={item.id} item={item} onChanged={load}/>)}</section>
+ if(!error&&!items.length)return <GpsReleaseApprovals/>
+ return <><GpsReleaseApprovals/><section className="temporary-intakes intake-review"><h2>{t('arrange.title')} ({items.length})</h2>{!items.length&&<p>{t('intake.empty')}</p>}{error&&<CenteredNotice>{error}</CenteredNotice>}{items.map(item=><Row key={item.id} item={item} onChanged={load}/>)}</section></>
 }

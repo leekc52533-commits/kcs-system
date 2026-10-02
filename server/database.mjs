@@ -1,3 +1,4 @@
+import {ensureGpsExceptionSchema} from './gpsExceptionSchema.mjs'
 import {applyV85Migration} from './migrationV85.mjs'
 import {applyV84Migration} from './migrationV84.mjs'
 import {applyV83Migration} from './migrationV83.mjs'
@@ -427,6 +428,8 @@ db.exec(`
     1,'Schema v15 migration' FROM employees;
 `)
 db.exec(`CREATE TRIGGER IF NOT EXISTS sold_vehicle_no_delete BEFORE DELETE ON vehicles WHEN OLD.operational_status='sold' BEGIN SELECT RAISE(ABORT,'Sold vehicle history cannot be deleted'); END;`)
+
+ensureGpsExceptionSchema(db)
 
 const integrityResult = db.prepare('PRAGMA integrity_check').get()
 if (integrityResult.integrity_check !== 'ok') throw new Error(`Database integrity check failed: ${integrityResult.integrity_check}`)
