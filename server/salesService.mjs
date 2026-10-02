@@ -70,7 +70,7 @@ export function listSales(query,context,db=defaultDb){
  const rows=records.flatMap(r=>r.lines.map((l,i)=>({id:r.id,rowKey:r.id+'-'+i,documentNumber:numbers.get('sales-'+r.id)||'',settlementDate:r.settlementDate,billNumber:r.billNumber,buyerName:r.buyerName,vehiclePlate:r.vehiclePlate,...l,total:r.total,remarks:r.remarks,createdBy:r.createdBy})))
  const selected=lookup?rows.filter(r=>billKey(r.documentNumber)===lookup||billKey(r.billNumber)===lookup):allDates?rows:rows.filter(r=>r.settlementDate>=query.from&&r.settlementDate<=query.to)
  const result=filterSales(selected,lookup?{}:query),collator=new Intl.Collator('en',{numeric:true,sensitivity:'base'})
- for(const key of historyKeys)result.filterOptions[key]=[...new Set(['',...rows.map(row=>String(row[key]??''))])].sort((a,b)=>key.endsWith('Date')?a.localeCompare(b):collator.compare(a,b))
+ for(const key of historyKeys){const newestFirst=key==='documentNumber'||key.endsWith('Date');result.filterOptions[key]=[...new Set(['',...rows.map(row=>String(row[key]??''))])].sort((a,b)=>newestFirst?(!a?1:!b?-1:key.endsWith('Date')?b.localeCompare(a):collator.compare(b,a)):collator.compare(a,b))}
  return {...result,...salesMasters(db)}
 }
 

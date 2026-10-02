@@ -128,5 +128,5 @@ test('four historical header filters find old records and exports match selected
  await book.xlsx.load(bytes);assert.equal(book.getWorksheet('Sales').rowCount,2)
  assert.equal(listSales({...range,columns:JSON.stringify({deliveryDate:[]})},office,db).items.length,0)
  assert.equal(listSales({...range,columns:JSON.stringify({deliveryDate:null})},office,db).items.length,0)
- assert.deepEqual(base.filterOptions.deliveryDate,['','2006-09-26','2006-09-27'])
+ assert.deepEqual(base.filterOptions.deliveryDate,['2006-09-27','2006-09-26',''])
 })
