@@ -1,4 +1,4 @@
-export const salesColumns=['documentNumber','settlementDate','deliveryDate','billNumber','buyerName','vehiclePlate','slipNumber','description','weightKg','unitPrice','amount','total','remarks','createdBy']
+export const salesColumns=['settlementDate','documentNumber','deliveryDate','billNumber','buyerName','vehiclePlate','slipNumber','description','weightKg','unitPrice','amount','total','remarks','createdBy']
 export const billKey=value=>String(value||'').trim().toUpperCase().replace(/\s+/g,'')
 const occMaterialAliases=new Set(['OCC','OLDCORRUGATED','OLDCORRUGATEDBOX','OUDCORRUGATEDBOX','BEEOLDCORRUGATEDBOX','CORRUGATEDBOX','LDCORRUGATEDBOX','SLDCORRUGATEDBOX','ULDCURRUGATEDBOX','OLDCORRUATEDBOX','GUDCORRUGATEDBOX'])
 // Sale documents may spell the same recovered material in several ways.
