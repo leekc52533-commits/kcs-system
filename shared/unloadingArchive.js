@@ -8,7 +8,7 @@ export const unloadingStatus={en:{confirmed:'Confirmed',pending_confirmation:'Pe
 export function filterUnloading(rows,query={}){
  const str=v=>String(v??''),compare=new Intl.Collator('en',{numeric:true,sensitivity:'base'}).compare
  let columns={};try{columns=typeof query.columns==='string'?JSON.parse(query.columns):query.columns||{}}catch{}
- const filterOptions=Object.fromEntries(unloadingColumns.map(k=>[k,[...new Set(['',...rows.map(r=>str(r[k]))])].sort(compare)]))
+ const filterOptions=Object.fromEntries(unloadingColumns.map(k=>[k,[...new Set(['',...rows.map(r=>str(r[k]))])].sort(k==='date'?(a,b)=>a===''?(b===''?0:1):b===''?-1:b.localeCompare(a):compare)]))
  const items=rows.filter(r=>unloadingColumns.every(k=>!Array.isArray(columns?.[k])||columns[k].includes(str(r[k]))))
  if(unloadingColumns.includes(query.sortKey)&&['asc','desc'].includes(query.sortDirection)){
   const k=query.sortKey,sign=query.sortDirection==='asc'?1:-1

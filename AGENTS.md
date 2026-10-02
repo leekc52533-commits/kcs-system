@@ -247,3 +247,5 @@ These requirements were confirmed by KC on 2026-09-09. Carry them forward for la
 - KC requested 2026-10-02: Sales system document-number and settlement/delivery-date dropdown options show newest first, using natural descending document numbering and chronological descending ISO dates, with Blank last. Preserve table sorting and all-date lookup/filter semantics.
 
 - KC confirmed 2026-10-02: matched employee earnings belong to the factory settlement date, superseding collection-date payroll attribution. Editing that date recalculates both unpaid periods, keeping unique TN net weight and batch participants. Unmatched weight stays pending on collection date until matched. Paid snapshots remain immutable; refuse duplicate payment of the same source in another period pending reconciliation.
+
+- KC confirmed 2026-10-02: date filter options in Sales, Purchase Bills, Expense Records, Unloading and Void must all be newest first chronologically, with Blank last. Preserve independent table sorting and filter selection.
