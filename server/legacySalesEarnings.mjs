@@ -13,6 +13,6 @@ export function legacySalesRows(db,all){
  // An eventual genuine cargo link supersedes this legacy assignment, even across periods.
  if(all.some(r=>salesTicket(r.ticket)===salesTicket(a.ticket)))return null
  const valid=s&&s.vehicle_id===a.vehicle_id&&JSON.stringify(l)===a.line_json&&lines.filter(x=>salesTicket(x.slipNumber)===salesTicket(a.ticket)).length===1
- return {...a,valid:Boolean(valid),plate:s?.vehicle_plate||String(a.vehicle_id)}
+ return {...a,collectionDate:a.date,date:s?.settlement_date||a.date,settlementDate:s?.settlement_date||null,valid:Boolean(valid),plate:s?.vehicle_plate||String(a.vehicle_id)}
  }).filter(Boolean)
 }

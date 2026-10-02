@@ -25,7 +25,7 @@ function fixture(){
  CREATE TABLE dispatch_trips(id INTEGER PRIMARY KEY);
  CREATE TABLE unloading_weight_records(id INTEGER PRIMARY KEY,vehicle_id,driver_employee_id,driver_name_snapshot,registration_number_snapshot,service_date,status,confirmed_weight_kg);
  CREATE TABLE audit_logs(action,entity_type,entity_id,after_json);
- CREATE TABLE sales_settlements(id INTEGER PRIMARY KEY,vehicle_id,lines_json,revision,bill_number);
+ CREATE TABLE sales_settlements(id INTEGER PRIMARY KEY,vehicle_id,lines_json,revision,bill_number,settlement_date);
  `+cargoBatchSchema+earningsSchema)
  names.forEach((name,i)=>db.prepare("INSERT INTO employees VALUES(?,?,?,1,'active')").run(i+1,name,i===4?'crew':'driver'))
  for(const [id,plate,code,date,records] of plans){
@@ -58,7 +58,7 @@ test('approved correction preserves source links, moves only ten weights, assign
   assert.equal(db.prepare('SELECT COUNT(*) n FROM cargo_batches').get().n,8)
   assert.equal(db.prepare('SELECT COUNT(*) n FROM audit_logs').get().n,10)
   assert.throws(()=>db.exec('UPDATE cargo_unload_corrections SET batch_id=1'))
-  db.prepare("INSERT INTO sales_settlements VALUES(1,999,?,1,'CP-TEST')").run(JSON.stringify([{slipNumber:'TN154571',weightKg:1270}]))
+  db.prepare("INSERT INTO sales_settlements VALUES(1,999,?,1,'CP-TEST','2026-10-02')").run(JSON.stringify([{slipNumber:'TN154571',weightKg:1270}]))
   const q=earningsReport(db,ctx,'2026-10-01').items.find(e=>e.employeeId===2)
   assert.equal(q.driverKg,1270);assert.equal(q.pendingKg,1010)
   assert.equal(earningsReport(db,{employeeId:2},'2026-10-01',{personal:true}).items.length,1)
@@ -108,7 +108,7 @@ test('crew revision corrects both days without adding October 1 crew to October 
    assert.throws(()=>linkCargoUnload(db,{employeeId:2,role:'driver',today:'2026-10-02'},{id:179,vehicle_id:2,driver_employee_id:2},{batchId,ticketNumber:'NEW',unloadMode:'supplement'}),{code:'CARGO_STATE'})
   }
   const old=lookupCargoBatch(db,{employeeId:2,role:'driver'},'H261001-026');assert.equal(old.attributionOnly,true);assert.equal(old.unloads.length,0)
-  db.prepare("INSERT INTO sales_settlements VALUES(1,999,?,1,'CP-TEST')").run(JSON.stringify([{slipNumber:'TEST-171',weightKg:1240}]))
+  db.prepare("INSERT INTO sales_settlements VALUES(1,999,?,1,'CP-TEST','2026-10-02')").run(JSON.stringify([{slipNumber:'TEST-171',weightKg:1240}]))
   const reconciled=earningsReport(db,ctx,'2026-10-02');assert.equal(reconciled.items.find(e=>e.employeeId===9).driverKg,1240);assert.equal(reconciled.items.find(e=>e.employeeId===10).crewKg,1240)
  }finally{f.close()}
 })
