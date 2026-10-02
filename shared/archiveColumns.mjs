@@ -1,3 +1,9 @@
+export function purchaseTime(value){
+ const raw=String(value||'').trim();if(!raw)return ''
+ const normalized=/[zZ]$|[+-]\d{2}:?\d{2}$/.test(raw)?raw:raw.replace(' ','T')+'Z'
+ const d=new Date(normalized);if(!Number.isFinite(d.getTime()))return ''
+ return new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kuching',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).format(d)
+}
 const text=value=>value==null?'':String(value).trim()
 const date=value=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(text(value));return m?`${m[3]}/${m[2]}/${m[1]}`:text(value)}
 const money=value=>`RM ${(Number(value||0)/100).toFixed(2)}`
@@ -5,13 +11,14 @@ const entered=value=>{const time=text(value).match(/T(\d{2}:\d{2})/)?.[1];return
 export const archiveKeys={
  ledger:['serviceDateLabel','employeeName','transactionTypeLabel','amountLabel','paymentChannel','ledgerReference','description','createdBy','createdAtLabel','receiptLabel'],
  expense:['expenseNumber','correctionStatus','serviceDateLabel','expenseTypeLabel','employeeName','category','description','amountLabel','paymentMethod','referenceNumber','vehiclePlate','odometerKm','companyName','tinNumber','remarks','createdBy','createdAtLabel','receiptLabel'],
- purchase:['serviceDateLabel','billNumber','paymentMethod','customerName','branchName','issuedBy','crew','car','totalLabel','proofLabel','customerReceipt','statusLabel']
+ purchase:['serviceDateLabel','billNumber','issuedTime','paymentMethod','customerName','branchName','issuedBy','crew','car','totalLabel','proofLabel','customerReceipt','statusLabel']
 }
 export function archiveValue(kind,row,key,sort=false){
  if(!archiveKeys[kind]?.includes(key))return ''
  if(key==='expenseNumber')return row.documentNumber||(row.recordKey?`EXP-${row.expenseType==='employee'?'E':'A'}-${String(row.sourceId).padStart(6,'0')}`:'')
  if(key==='correctionStatus')return sort?Number(row.correctionCount||0):row.correctionCount?'Corrected':'Unchanged'
  if(key==='serviceDateLabel')return sort?text(row.serviceDate):date(row.serviceDate)
+ if(key==='issuedTime')return purchaseTime(row.issuedAt)
  if(key==='createdAtLabel')return sort?text(row.createdAt):entered(row.createdAt)
  if(key==='transactionTypeLabel')return ({opening_balance:'Opening Balance',top_up:'Top Up',cash_purchase:'Cash Purchase',expense:'Expense',reversal:'Reversal',adjustment:'Adjustment'})[row.transactionType]||text(row.transactionType)
  if(key==='ledgerReference')return text(row.billNumber||row.referenceNumber)

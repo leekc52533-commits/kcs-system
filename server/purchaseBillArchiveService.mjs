@@ -1,4 +1,4 @@
-import {applyArchiveColumns} from '../shared/archiveColumns.mjs'
+import {applyArchiveColumns,purchaseTime} from '../shared/archiveColumns.mjs'
 import fs from 'node:fs'
 import path from 'node:path'
 import ExcelJS from 'exceljs'
@@ -36,19 +36,19 @@ export function listPurchaseBillArchive(filters={},database=defaultDb){
 
 export function purchaseBillRows(filters={},database=defaultDb){
   const archive=listPurchaseBillArchive(filters,database)
-  return{...archive,rows:archive.items.flatMap(bill=>bill.items.map(item=>({Date:excelDate(bill.serviceDate),'PO No.':bill.billNumber,PaymentMethod:bill.paymentMethod,'Customer Name':bill.customerName,Branch:bill.branchName,Item:item.shortForm||item.item,Quantity:item.quantity,Price:item.unitPrice,'Item Total':item.itemTotalCents/100,Total:bill.totalCents/100,'Issued By':bill.issuedBy,Crew:bill.crew||'',Car:bill.registrationNumber||bill.vehicleCode||'','Payment Gambar':bill.proofId?`${bill.billNumber}_${safeFile(bill.proofName)}`:'','Void No.':bill.status==='voided'?bill.billNumber:''})))}
+  return{...archive,rows:archive.items.flatMap(bill=>bill.items.map(item=>({Date:excelDate(bill.serviceDate),'PO No.':bill.billNumber,Time:purchaseTime(bill.issuedAt),PaymentMethod:bill.paymentMethod,'Customer Name':bill.customerName,Branch:bill.branchName,Item:item.shortForm||item.item,Quantity:item.quantity,Price:item.unitPrice,'Item Total':item.itemTotalCents/100,Total:bill.totalCents/100,'Issued By':bill.issuedBy,Crew:bill.crew||'',Car:bill.registrationNumber||bill.vehicleCode||'','Payment Gambar':bill.proofId?`${bill.billNumber}_${safeFile(bill.proofName)}`:'','Void No.':bill.status==='voided'?bill.billNumber:''})))}
 }
 
 export async function purchaseBillsWorkbook(filters={},database=defaultDb,{uploadsRoot}={}){
   const data=purchaseBillRows(filters,database),workbook=new ExcelJS.Workbook();workbook.creator='KCS Dispatch System';workbook.created=new Date()
   const sheet=workbook.addWorksheet('Purchase Bills',{views:[{state:'frozen',ySplit:1}]})
-  const columns=['Date','PO No.','PaymentMethod','Customer Name','Branch','Item','Quantity','Price','Item Total','Total','Issued By','Crew','Car','Payment Gambar','Void No.']
+  const columns=['Date','PO No.','Time','PaymentMethod','Customer Name','Branch','Item','Quantity','Price','Item Total','Total','Issued By','Crew','Car','Payment Gambar','Void No.']
   sheet.columns=columns.map(key=>({header:key,key,width:{Date:11,'PO No.':20,PaymentMethod:16,'Customer Name':20,Branch:22,Item:16,Quantity:11,Price:9,'Item Total':11,Total:11,'Issued By':20,Crew:20,Car:12,'Payment Gambar':22,'Void No.':16}[key]||14}))
-  data.rows.forEach(row=>sheet.addRow(row));sheet.autoFilter={from:'A1',to:`O${Math.max(1,sheet.rowCount)}`}
+  data.rows.forEach(row=>sheet.addRow(row));sheet.autoFilter={from:'A1',to:`P${Math.max(1,sheet.rowCount)}`}
   const header=sheet.getRow(1);header.height=21;header.eachCell(cell=>{cell.font={bold:true,color:{argb:'FFFFFFFF'}};cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF176B5B'}};cell.alignment={vertical:'middle'}})
-  for(let row=2;row<=sheet.rowCount;row++){sheet.getCell(row,1).numFmt='dd-mm-yy';sheet.getCell(row,8).numFmt='0.000';for(const column of [9,10])sheet.getCell(row,column).numFmt='0.00';sheet.getCell(row,7).numFmt='0.00'}
+  for(let row=2;row<=sheet.rowCount;row++){sheet.getCell(row,1).numFmt='dd-mm-yy';sheet.getCell(row,9).numFmt='0.000';for(const column of [10,11])sheet.getCell(row,column).numFmt='0.00';sheet.getCell(row,8).numFmt='0.00'}
   const proofSheet=workbook.addWorksheet('Payment Proofs',{views:[{state:'frozen',ySplit:1}]});proofSheet.columns=[{header:'PO No.',key:'bill',width:22},{header:'Payment Proof',key:'proof',width:55},{header:'Uploaded Date',key:'uploaded',width:16}];proofSheet.getRow(1).eachCell(cell=>{cell.font={bold:true,color:{argb:'FFFFFFFF'}};cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF176B5B'}}})
   const root=path.resolve(uploadsRoot||''),proofByBill=new Map();for(const bill of data.items){if(!bill.proofId)continue;const proof=database.prepare('SELECT storage_key storageKey,original_name originalName,content_type contentType,created_at createdAt FROM purchase_payment_proofs WHERE id=?').get(bill.proofId);if(!proof)continue;const absolute=path.resolve(root,proof.storageKey);if(!absolute.startsWith(root+path.sep)||!fs.existsSync(absolute))continue;const row=proofSheet.addRow({bill:bill.billNumber,proof:'Embedded image',uploaded:excelDate(proof.createdAt)}),extension=proof.contentType==='image/png'?'png':proof.contentType==='image/jpeg'?'jpeg':null;proofByBill.set(bill.billNumber,row.number);row.height=230;row.getCell(3).numFmt='dd-mm-yy';if(extension){const imageId=workbook.addImage({buffer:fs.readFileSync(absolute),extension});proofSheet.addImage(imageId,{tl:{col:1,row:row.number-1},ext:{width:420,height:300}})}else row.getCell(2).value='WebP proof: view in KCS system'}
-  for(let row=2;row<=sheet.rowCount;row++){const billNumber=String(sheet.getCell(row,2).value||''),proofRow=proofByBill.get(billNumber);if(proofRow)sheet.getCell(row,14).value={text:'View Payment Proof',hyperlink:`#'Payment Proofs'!A${proofRow}`}}
+  for(let row=2;row<=sheet.rowCount;row++){const billNumber=String(sheet.getCell(row,2).value||''),proofRow=proofByBill.get(billNumber);if(proofRow)sheet.getCell(row,15).value={text:'View Payment Proof',hyperlink:`#'Payment Proofs'!A${proofRow}`}}
   return{rangeLabel:data.rangeLabel,buffer:Buffer.from(await workbook.xlsx.writeBuffer()),rowCount:data.rows.length,proofCount:proofByBill.size}
 }
