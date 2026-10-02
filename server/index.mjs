@@ -237,6 +237,12 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && /^\/api\/mobile\/stops\/\d+\/(trial-reorder|request-date)$/.test(url.pathname)) {const parts=url.pathname.split('/'),payload=(await readJson(request)).payload,context={employeeId:session.employeeId,role:session.role};return sendJson(response,200,parts[5]==='trial-reorder'?reorderDriverStop(Number(parts[4]),payload,context):requestDriverDate(Number(parts[4]),payload,context))}
     if (['GET','POST'].includes(request.method) && /^\/api\/dispatch\/stops\/\d+\/review-change$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});const id=Number(url.pathname.split('/')[4]),context={role:session.role,employeeId:session.employeeId,employeeName:session.employeeName};return sendJson(response,200,request.method==='GET'?plannedCustomerReview(id,context):changePlannedCustomer(id,(await readJson(request)).payload,context))}
     if (request.method === 'GET' && url.pathname === '/api/dispatch/date-requests/options') {if(!canApproveDriverDefer(session))return sendJson(response,403,{error:'Supervisor permission required'});return sendJson(response,200,driverDateReviewOptions(url.searchParams.get('date')))}
+    if(request.method==='GET'&&/^\/api\/dispatch\/date-requests\/\d+\/repeat-proof$/.test(url.pathname)){
+      if(!canApproveDriverDefer(session))return sendJson(response,403,{error:'Supervisor permission required'})
+      const proof=db.prepare('SELECT proof,content_type FROM driver_date_repeat_reviews WHERE request_id=?').get(Number(url.pathname.split('/')[4]))
+      if(!proof?.proof)return sendJson(response,404,{error:'Proof not found'})
+      response.writeHead(200,{'Content-Type':proof.content_type,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'});return response.end(Buffer.from(proof.proof))
+    }
     if(request.method==='GET'&&/^\/api\/dispatch\/date-requests\/\d+\/(proof|evidence)$/.test(url.pathname)){
       const id=Number(url.pathname.split('/')[4]),proof=dateEvidenceForViewer(db,id,session)
       if(url.pathname.endsWith('/evidence'))return sendJson(response,200,{evidence:dateEvidence(db,id)?{...dateEvidence(db,id),systemReview:dateSystemReview(db,id)}:null})

@@ -1,3 +1,5 @@
+import {branchRescheduleHistory} from './branchRescheduleHistory.mjs'
+import {recordRepeatDateApproval} from './repeatDateGuard.mjs'
 import fs from 'node:fs'
 import {prepareDateEvidence,writeDateEvidence,dateEvidence} from './dateRequestEvidenceService.mjs'
 import {uploadsDir} from './database.mjs'
@@ -86,7 +88,7 @@ export function driverDateReviewOptions(date,db=defaultDb){
 }
 
 export function listDriverDateRequests(db=defaultDb){
- return db.prepare(`SELECT r.id,r.source_date sourceDate,r.target_date targetDate,r.reason,r.status,e.name employeeName,b.id internalBranchId,b.jodoo_branch_id branchId,b.branch_name branchName,s.route_number routeNumber,v.registration_number plate FROM driver_date_requests r JOIN dispatch_stops s ON s.id=r.dispatch_stop_id JOIN branches b ON b.id=s.branch_id JOIN employees e ON e.id=r.employee_id JOIN dispatches d ON d.id=s.dispatch_id LEFT JOIN vehicles v ON v.id=d.vehicle_id WHERE r.status='pending' OR EXISTS(SELECT 1 FROM driver_date_system_reviews v WHERE v.request_id=r.id AND v.status='pending') ORDER BY r.requested_at,r.id`).all().map(r=>({...r,evidence:dateEvidence(db,r.id),routes:driverDateReviewOptions(r.targetDate,db).routes,schedule:getCollectionScheduleManagement(r.internalBranchId,db)}))
+ return db.prepare(`SELECT r.id,r.source_date sourceDate,r.target_date targetDate,r.reason,r.status,e.name employeeName,b.id internalBranchId,b.jodoo_branch_id branchId,b.branch_name branchName,s.route_number routeNumber,v.registration_number plate FROM driver_date_requests r JOIN dispatch_stops s ON s.id=r.dispatch_stop_id JOIN branches b ON b.id=s.branch_id JOIN employees e ON e.id=r.employee_id JOIN dispatches d ON d.id=s.dispatch_id LEFT JOIN vehicles v ON v.id=d.vehicle_id WHERE r.status='pending' OR EXISTS(SELECT 1 FROM driver_date_system_reviews v WHERE v.request_id=r.id AND v.status='pending') ORDER BY r.requested_at,r.id`).all().map(r=>({...r,rescheduleHistory:branchRescheduleHistory(db,r.internalBranchId,{excludeRequestId:r.id}),evidence:dateEvidence(db,r.id),routes:driverDateReviewOptions(r.targetDate,db).routes,schedule:getCollectionScheduleManagement(r.internalBranchId,db)}))
 }
 
 export function decideDriverDate(id,decision,payload,context={},db=defaultDb,{workClose=false}={}){
@@ -100,6 +102,7 @@ export function decideDriverDate(id,decision,payload,context={},db=defaultDb,{wo
   const s=lookup(db,r.dispatch_stop_id),actor=context.employeeName||String(context.employeeId),reason=String(payload.reason).trim()
   let targetStop=null,preservedDates=[]
   if(decision==='approved'){
+   recordRepeatDateApproval(db,r,s,payload,context)
    const today=context.today||kuchingDate(),date=String(payload.targetDate||r.target_date),scope=payload.scope||'once',route=Number(payload.routeNumber)
    if(!planningDate(date)||planningDate(date)!==date||date<today)fail('routeTrial.invalidReviewDate',400)
    if(!['once','permanent'].includes(scope))fail('routeTrial.invalidScope',400)
@@ -180,7 +183,7 @@ export function plannedCustomerReview(id,context={},db=defaultDb){
  if(!canManageDispatch(context))fail('routeTrial.supervisorOnly',403)
  const s=lookup(db,id)
  if(!s)fail('routeTrial.notFound',404)
- return{id:s.id,sourceDate:s.dispatch_date,targetDate:s.dispatch_date,branchId:s.branch_code,branchName:s.branch_name,schedule:getCollectionScheduleManagement(s.branch_id,db)}
+ return{id:s.id,sourceDate:s.dispatch_date,targetDate:s.dispatch_date,branchId:s.branch_code,branchName:s.branch_name,rescheduleHistory:branchRescheduleHistory(db,s.branch_id),schedule:getCollectionScheduleManagement(s.branch_id,db)}
 }
 export function changePlannedCustomer(id,payload,context={},db=defaultDb,internalOptions={}){
  if(!canManageDispatch(context))fail('routeTrial.supervisorOnly',403)

@@ -1,3 +1,4 @@
+import {ensureRepeatDateSchema} from './repeatDateSchema.mjs'
 import {ensureGpsExceptionSchema} from './gpsExceptionSchema.mjs'
 import {applyV85Migration} from './migrationV85.mjs'
 import {applyV84Migration} from './migrationV84.mjs'
@@ -430,6 +431,7 @@ db.exec(`
 db.exec(`CREATE TRIGGER IF NOT EXISTS sold_vehicle_no_delete BEFORE DELETE ON vehicles WHEN OLD.operational_status='sold' BEGIN SELECT RAISE(ABORT,'Sold vehicle history cannot be deleted'); END;`)
 
 ensureGpsExceptionSchema(db)
+ensureRepeatDateSchema(db)
 
 const integrityResult = db.prepare('PRAGMA integrity_check').get()
 if (integrityResult.integrity_check !== 'ok') throw new Error(`Database integrity check failed: ${integrityResult.integrity_check}`)

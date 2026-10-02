@@ -1,0 +1,6 @@
+.reschedule-reminder{padding:12px 14px;margin:10px 0;border-radius:10px;border-left:4px solid;white-space:normal;overflow-wrap:anywhere;font-size:16px;line-height:1.5}
+.reschedule-reminder.first{background:#fff6e6;border-color:#bd7415;color:#794700}
+.reschedule-reminder.repeated{background:#fff0f0;border-color:#b72c37;color:#93212b}
+.reschedule-reminder p{margin:5px 0}.reschedule-reminder details>div{border-top:1px solid #e4bfc2;padding:8px 0}
+.repeat-approval-gate{margin:12px 0;padding:14px;border:1px solid #d9868e;background:#fff2f2;border-radius:10px}
+.repeat-approval-gate label{display:block;margin:10px 0}.repeat-approval-gate input,.repeat-approval-gate textarea{width:100%;box-sizing:border-box}
