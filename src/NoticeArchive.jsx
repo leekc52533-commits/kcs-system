@@ -1,3 +1,4 @@
+import {noticeText} from '../shared/noticeLanguages.js'
 import {groupNumber} from './numberDisplay.js'
 import {formatDateDisplay} from './dateDisplay.js'
 import DataExportButton from './DataExportButton.jsx'
@@ -12,8 +13,8 @@ const numeric=new Set(['recipientCount','readCount','unreadCount'])
 const natural=new Intl.Collator(undefined,{numeric:true,sensitivity:'base'})
 const dateLabel=value=>new Date(value).toLocaleString('en-GB',{timeZone:'Asia/Kuching',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})
 export default function NoticeArchive({items,renderDetail}){
- const{t}=useI18n(),[filters,setFilters]=useState({}),[sort,setSort]=useState({}),[openFilter,setOpenFilter]=useState(null),[expanded,setExpanded]=useState(null),scrollRef=useRef(null)
- const rows=items.map(i=>({...i,unreadCount:Number(i.recipientCount)-Number(i.readCount)}))
+ const{t,language}=useI18n(),[filters,setFilters]=useState({}),[sort,setSort]=useState({}),[openFilter,setOpenFilter]=useState(null),[expanded,setExpanded]=useState(null),scrollRef=useRef(null)
+ const rows=items.map(i=>({...i,...noticeText(i,language),unreadCount:Number(i.recipientCount)-Number(i.readCount)}))
  const label=(key,value)=>value===''?t('notice.blank'):key==='createdAt'?dateLabel(value):key==='priority'?t('notice.'+value):String(value)
  const compare=(key,a,b)=>key==='createdAt'?Date.parse(a)-Date.parse(b):numeric.has(key)?Number(a)-Number(b):natural.compare(label(key,a),label(key,b))
  const displayed=rows.filter(r=>Object.entries(filters).every(([key,values])=>values==null||values.includes(String(r[key]??'')))).sort((a,b)=>sort.key?(compare(sort.key,a[sort.key],b[sort.key])*(sort.direction==='desc'?-1:1)||b.id-a.id):b.id-a.id)

@@ -26,7 +26,7 @@ import {listUnloadingArchive,unloadingArchiveWorkbook} from './unloadingArchiveS
 import {canReadCompanyDocuments} from './documentReadAccess.mjs'
 import {previewEmployees,previewAccount,previewReadUrl} from './employeePreviewService.mjs'
 import {driverGuideStatus,acknowledgeDriverGuide} from './driverGuideService.mjs'
-import {noticeRecipients,publishNotice,employeeNotices,acknowledgeNotice,noticeManagement,noticeReadStatus} from './noticeBoardService.mjs'
+import {translateNotice,noticeRecipients,publishNotice,employeeNotices,acknowledgeNotice,noticeManagement,noticeReadStatus} from './noticeBoardService.mjs'
 import {listArrangementRequests,reviewArrangementRequest,arrangementProof} from './driverArrangementService.mjs'
 import {searchPickupCustomers,pickupCustomerDetails,collectExistingCustomer,listExistingPickups,listCustomerTransfers,reviewCustomerTransfer} from './existingCustomerPickupService.mjs'
 import {intakeTrips,createIntake,listIntakes,cancelIntake,reviewIntake,intakeMatchOptions} from './temporaryCustomerIntakeService.mjs'
@@ -336,6 +336,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method==='POST' && url.pathname==='/api/mobile/customer-pickups') return sendJson(response,200,collectExistingCustomer((await readJson(request)).payload,session))
     if(request.method==='GET'&&url.pathname==='/api/notices/recipients')return sendJson(response,200,{items:noticeRecipients(session)})
     if(request.method==='GET'&&url.pathname==='/api/notices')return sendJson(response,200,{items:noticeManagement(session)})
+    if(request.method==='POST'&&url.pathname==='/api/notices/translate')return sendJson(response,200,await translateNotice((await readJson(request)).payload,session))
     if(request.method==='POST'&&url.pathname==='/api/notices')return sendJson(response,201,publishNotice((await readJson(request)).payload,session))
     if(request.method==='GET'&&/^\/api\/notices\/\d+\/receipts$/.test(url.pathname))return sendJson(response,200,{items:noticeReadStatus(Number(url.pathname.split('/')[3]),session)})
     if(request.method==='GET'&&url.pathname==='/api/mobile/guide')return sendJson(response,200,driverGuideStatus(session))

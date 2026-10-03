@@ -57,3 +57,23 @@ test('schema 64 to 65 is repeatable and keeps notice and acknowledgement data',t
  assert.equal(db.prepare('SELECT MAX(version) v FROM schema_meta').get().v,65)
  assert.equal(employeeNotices(driver,db)[0].readAt,read.readAt);assert.equal(db.prepare('PRAGMA foreign_key_check').all().length,0)
 })
+
+test('three-language snapshots persist atomically, stay private and include edits in retry identity',t=>{
+ const db=fixture(t),translations={zh:{title:'通知',body:'不可填写理由'},ms:{title:'Notis',body:'Jangan isi alasan'},en:{title:'Notice',body:'Do not enter reasons'}},payload={...draft,sourceLanguage:'zh',translations}
+ const result=publishNotice(payload,manager,db)
+ assert.deepEqual(employeeNotices(driver,db)[0].translations,translations)
+ assert.deepEqual(noticeManagement(manager,db)[0].translations,translations)
+ assert.equal(employeeNotices(crew,db).length,0)
+ assert.equal(publishNotice(payload,manager,db).id,result.id)
+ assert.throws(()=>publishNotice({...payload,translations:{...translations,en:{title:'Changed',body:'Changed'}}},manager,db),{code:'NOTICE_RETRY'})
+ acknowledgeNotice(result.id,driver,db);assert.equal(noticeManagement(manager,db)[0].readCount,1)
+ assert.deepEqual(employeeNotices(driver,db)[0].translations,translations)
+ assert.throws(()=>publishNotice({...payload,requestKey:'invalid-translations-0001',translations:{ms:{title:2,body:'Bad'}}},manager,db),{code:'NOTICE_FIELDS'})
+ assert.equal(noticeManagement(manager,db).length,1)
+})
+test('translation requires active manager and never publishes or acknowledges',async t=>{
+ const {translateNotice}=await import('../server/noticeBoardService.mjs'),db=fixture(t)
+ for(const ctx of [driver,crew,{employeeId:4,role:'supervisor'}])await assert.rejects(translateNotice({...draft,sourceLanguage:'en'},ctx,db,{apiKey:''}),{code:'NOTICE_ACCESS'})
+ const r=await translateNotice({...draft,sourceLanguage:'en'},manager,db,{apiKey:''});assert.equal(r.status,'notConfigured')
+ assert.equal(noticeManagement(manager,db).length,0)
+})
