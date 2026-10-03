@@ -1,3 +1,4 @@
+import {releaseIdleSundayAssignments} from './sundayIdleAssignments.mjs'
 import {mobileRescheduleHistory} from './branchRescheduleHistory.mjs'
 import {dateSystemReleaseNotices} from './dateSystemReleaseNotices.mjs'
 import {nextBranchCollectionDate} from './nextBranchCollectionDate.mjs'
@@ -185,6 +186,7 @@ function fillRouteVehicleDefaults(database,startDate,onlyDayIds=null){
       invalidateDispatchDay(database,day.dispatch_date,'route_vehicle_carried_forward','route',routeNumber,null,source,'System')
       vehiclesCarried++
     }
+    releaseIdleSundayAssignments(database,day)
     for(const row of database.prepare('SELECT vehicle_id vehicleId FROM daily_route_assignments WHERE dispatch_day_id=? AND vehicle_id IS NOT NULL').all(day.id)){carryForwardVehicleDriver(database,day,row.vehicleId);if(isSunday(day.dispatch_date))carrySundayCrew(database,day,row.vehicleId)}
   }
   return{vehiclesCarried}
@@ -763,6 +765,7 @@ export function assignRouteVehicle(date,routeNumber,payload={},database=defaultD
     if(vehicleId)database.prepare(`INSERT INTO daily_route_assignments(dispatch_day_id,route_number,vehicle_id,assigned_by) VALUES(?,?,?,?)
       ON CONFLICT(dispatch_day_id,route_number) DO UPDATE SET vehicle_id=excluded.vehicle_id,assigned_by=excluded.assigned_by,updated_at=CURRENT_TIMESTAMP`).run(day.id,route,vehicleId,actor(payload.changedBy))
     else database.prepare('DELETE FROM daily_route_assignments WHERE dispatch_day_id=? AND route_number=?').run(day.id,route)
+    releaseIdleSundayAssignments(database,day)
     if(vehicleId)carryForwardVehicleDriver(database,day,vehicleId)
     // Keep original sequence slots, including cancelled history.
     invalidateDispatchDay(database,day.dispatch_date,'daily_route_vehicle_assigned','route',route,before,{routeNumber:route,vehicleId},payload.changedBy)
@@ -819,6 +822,7 @@ export function combineDayRoutes(date,payload={},context={},database=defaultDb){
 
 export function assignVehicleDay(date,vehicleId,payload,database=defaultDb){
   const day=dayByDate(database,iso(date));if(!day)throw new Error('Dispatch day not found')
+  releaseIdleSundayAssignments(database,day,{excludeVehicleId:vehicleId})
   const before=database.prepare(`SELECT d.driver_id driverId,d.assistant_id assistantId,d.start_location_id startLocationId,d.end_location_id endLocationId FROM dispatch_trips dt JOIN dispatches d ON d.id=dt.dispatch_id WHERE dt.dispatch_day_id=? AND d.vehicle_id=? LIMIT 1`).get(day.id,vehicleId)||{}
   before.assistantIds=database.prepare('SELECT employee_id id FROM dispatch_vehicle_assistants WHERE dispatch_day_id=? AND vehicle_id=? ORDER BY employee_id').all(day.id,vehicleId).map(item=>item.id)
   if(payload.driverId){
