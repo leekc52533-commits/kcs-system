@@ -73,3 +73,12 @@
 .route-handover-actions label{flex:1 1 220px}
 @media(max-width:900px){.route-handover-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:520px){.route-handover-fields{grid-template-columns:minmax(0,1fr)}}
+
+/* Readable crew names and clear selection on desktop and touch screens. */
+.employee-picker-panel .crew-choice{min-height:64px;padding:12px;text-align:left;border-radius:6px;white-space:normal}
+.employee-picker-panel .crew-choice strong{display:flex;align-items:center;gap:10px;font-size:16px;line-height:1.45;overflow-wrap:anywhere}
+.employee-picker-panel .crew-choice .crew-choice-check{display:inline-flex;align-items:center;justify-content:center;flex:0 0 24px;width:24px;height:24px;box-sizing:border-box;border:2px solid #53746d;border-radius:4px;background:#fff;color:#fff;font-size:20px;font-weight:800;line-height:1}
+.employee-picker-panel .crew-choice.is-selected{background:#e5f4ef}
+.employee-picker-panel .crew-choice.is-selected .crew-choice-check{background:#177568;border-color:#177568}
+.employee-picker-panel .crew-choice small{margin-left:34px;font-size:14px;line-height:1.45}
+.employee-picker-panel .crew-choice:focus-visible{outline:3px solid #177568;outline-offset:-3px}
