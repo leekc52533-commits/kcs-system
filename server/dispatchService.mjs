@@ -373,7 +373,7 @@ function dayView(database, day) {
   const definitionRows=database.prepare(`SELECT d.route_number routeNumber,d.display_name displayName FROM weekly_route_definitions d JOIN weekly_route_plans p ON p.id=d.plan_id WHERE p.is_active=1`).all(),definitionByRoute=new Map(definitionRows.map(row=>[row.routeNumber,row.displayName]))
   const approvalRows=database.prepare('SELECT route_number routeNumber,route_signature routeSignature,actor approvedBy,reason approvalReason,approved_at approvedAt FROM daily_route_approvals WHERE dispatch_day_id=?').all(day.id),approvalByRoute=new Map(approvalRows.map(row=>[row.routeNumber,row]))
   const supportRoutes=new Map(database.prepare("SELECT entity_id,after_json FROM dispatch_change_logs WHERE dispatch_day_id=? AND change_type='support_vehicle_added' ORDER BY id").all(day.id).map(r=>[Number(r.entity_id),(JSON.parse(r.after_json).sourceRouteNumbers||[JSON.parse(r.after_json).sourceRouteNumber])]))
-  const routeBoards=[1,2,3,4,5].map(routeNumber=>{const assignment=assignmentByRoute.get(routeNumber)||{},vehicle=vehicles.find(item=>item.id===assignment.vehicleId),routeStops=stops.filter(stop=>stop.routeNumber===routeNumber).sort((a,b)=>(a.routeStopSequence??999999)-(b.routeStopSequence??999999)||a.id-b.id),approval=approvalByRoute.get(routeNumber),approved=Boolean(routeStops.length&&approval&&approval.routeSignature===routeSignature(database,day.id,routeNumber));return{routeNumber,supportSourceRoute:supportRoutes.get(routeNumber)?.[0]||null,supportSourceRoutes:supportRoutes.get(routeNumber)||[],name:isSunday(day.dispatch_date)&&database.prepare('SELECT 1 FROM sunday_dispatch_setup WHERE dispatch_day_id=?').get(day.id)&&SUNDAY_GROUPS.find(g=>g.routeNumber===routeNumber)?SUNDAY_GROUPS.find(g=>g.routeNumber===routeNumber).name:definitionByRoute.get(routeNumber)||`Route ${routeNumber}`,vehicleId:assignment.vehicleId??null,vehicle:vehicle?.vehicle??null,registrationNumber:vehicle?.registrationNumber??null,assignedBy:assignment.assignedBy??null,updatedAt:assignment.updatedAt??null,customerCount:routeStops.length,stops:routeStops,approvalStatus:routeStops.length?(approved?'approved':approval?'reapproval_required':'pending'):'empty',approvedBy:approved?approval.approvedBy:null,approvedAt:approved?approval.approvedAt:null,approvalReason:approved?approval.approvalReason:null}})
+  const routeBoards=[1,2,3,4,5].map(routeNumber=>{const assignment=assignmentByRoute.get(routeNumber)||{},vehicle=vehicles.find(item=>item.id===assignment.vehicleId),routeStops=stops.filter(stop=>stop.routeNumber===routeNumber).sort((a,b)=>(a.routeStopSequence??999999)-(b.routeStopSequence??999999)||a.id-b.id),approval=approvalByRoute.get(routeNumber),approved=Boolean(routeStops.length&&approval&&approval.routeSignature===routeSignature(database,day.id,routeNumber));return{routeNumber,isSupportRoute:supportRoutes.has(routeNumber),supportSourceRoute:supportRoutes.get(routeNumber)?.[0]||null,supportSourceRoutes:supportRoutes.get(routeNumber)||[],name:isSunday(day.dispatch_date)&&database.prepare('SELECT 1 FROM sunday_dispatch_setup WHERE dispatch_day_id=?').get(day.id)&&SUNDAY_GROUPS.find(g=>g.routeNumber===routeNumber)?SUNDAY_GROUPS.find(g=>g.routeNumber===routeNumber).name:definitionByRoute.get(routeNumber)||`Route ${routeNumber}`,vehicleId:assignment.vehicleId??null,vehicle:vehicle?.vehicle??null,registrationNumber:vehicle?.registrationNumber??null,assignedBy:assignment.assignedBy??null,updatedAt:assignment.updatedAt??null,customerCount:routeStops.length,stops:routeStops,approvalStatus:routeStops.length?(approved?'approved':approval?'reapproval_required':'pending'):'empty',approvedBy:approved?approval.approvedBy:null,approvedAt:approved?approval.approvedAt:null,approvalReason:approved?approval.approvalReason:null}})
   const routeNames=new Map(routeBoards.map(r=>[r.routeNumber,r.name]))
   for(const route of routeBoards)if(route.supportSourceRoutes.length)route.name=[...new Set(route.supportSourceRoutes.map(n=>routeNames.get(n)).filter(Boolean))].join(' + ')||route.name
   const extraUnassignedStops=unassignedStops.filter(stop=>stop.routeNumber==null)
@@ -1353,12 +1353,15 @@ function scheduleStopHasProtectedWork(db,stop){
 export function addSupportVehicle(date,sourceRoute,payload={},context={},database=defaultDb){
  const fail=code=>{throw Object.assign(Error(code),{code,statusCode:code==='SUPPORT_PERMISSION'?403:409})}
  if(!canManageDispatch(context))fail('SUPPORT_PERMISSION')
- const source=Number(sourceRoute),vehicleId=Number(payload.vehicleId),driverId=Number(payload.driverId),ids=[...new Set((Array.isArray(payload.stopIds)?payload.stopIds:[]).map(Number))],crew=(Array.isArray(payload.assistantIds)?payload.assistantIds:[]).map(Number)
- if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||![source,vehicleId,driverId,...ids,...crew].every(n=>Number.isSafeInteger(n)&&n>0)||source>5||!ids.length||crew.length>MAX_ASSIGNED_CREW||new Set([driverId,...crew]).size!==crew.length+1)fail('SUPPORT_SELECTION')
+ const source=sourceRoute==null?0:Number(sourceRoute),vehicleId=Number(payload.vehicleId),driverId=Number(payload.driverId),ids=[...new Set((Array.isArray(payload.stopIds)?payload.stopIds:[]).map(Number))],crew=(Array.isArray(payload.assistantIds)?payload.assistantIds:[]).map(Number)
+ const extraIds=[...new Set((Array.isArray(payload.branchIds)?payload.branchIds:[]).map(Number))]
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||![vehicleId,driverId,...ids,...crew,...extraIds].every(n=>Number.isSafeInteger(n)&&n>0)||(!Number.isInteger(source)||source<0||source>5)||(!ids.length&&!extraIds.length)||crew.length>MAX_ASSIGNED_CREW||new Set([driverId,...crew]).size!==crew.length+1)fail('SUPPORT_SELECTION')
  return withImmediateTransaction(database,()=>{
   const day=dayByDate(database,date)
   if(!day||Number(payload.expectedRevision)!==day.revision)fail('SUPPORT_STALE')
   if(!['draft','reapproval_required','approved','published','in_progress'].includes(day.status))fail('SUPPORT_PROTECTED')
+  const eligibleExtras=new Map(supportCustomerOptions(date,context,database).items.map(b=>[b.id,b]))
+  if(extraIds.some(id=>!eligibleExtras.has(id)))fail('SUPPORT_CUSTOMER_STALE')
   const targetRoute=[1,2,3,4,5].find(n=>n!==source&&!database.prepare("SELECT 1 FROM dispatch_stops s JOIN dispatch_trips t ON t.id=s.dispatch_trip_id WHERE t.dispatch_day_id=? AND s.route_number=? AND s.status<>'cancelled'").get(day.id,n))
   if(!targetRoute)fail('SUPPORT_CAPACITY')
   const rows=database.prepare("SELECT s.*,d.vehicle_id,d.status dispatch_status,t.execution_status,t.completed_at trip_completed_at FROM dispatch_stops s JOIN dispatch_trips t ON t.id=s.dispatch_trip_id JOIN dispatches d ON d.id=s.dispatch_id WHERE t.dispatch_day_id=? AND s.route_number BETWEEN 1 AND 5 AND s.status<>'cancelled' ORDER BY s.route_number,s.route_stop_sequence,s.id").all(day.id),selected=rows.filter(s=>ids.includes(s.id))
@@ -1394,10 +1397,30 @@ export function addSupportVehicle(date,sourceRoute,payload={},context={},databas
   database.prepare('INSERT INTO daily_route_assignments(dispatch_day_id,route_number,vehicle_id,assigned_by) VALUES(?,?,?,?) ON CONFLICT(dispatch_day_id,route_number) DO UPDATE SET vehicle_id=excluded.vehicle_id,assigned_by=excluded.assigned_by,updated_at=CURRENT_TIMESTAMP').run(day.id,targetRoute,vehicleId,actor(context.employeeName))
   let sequence=0
   for(const stop of selected){assertBranchServiceDateAvailable(database,stop.branch_id,date,{excludeStopId:stop.id,entryPoint:'support_vehicle'});database.prepare('UPDATE dispatch_stops SET dispatch_id=?,dispatch_trip_id=?,stop_sequence=?,route_number=?,route_stop_sequence=? WHERE id=?').run(target.dispatch_id,target.id,++sequence,targetRoute,sequence,stop.id)}
+  const addedStopIds=[]
+  for(const id of extraIds){
+   const stop=createStop({date,branchId:eligibleExtras.get(id).branchCode,tripId:target.id,changedBy:context.employeeName},database)
+   database.prepare('UPDATE dispatch_stops SET route_number=?,route_stop_sequence=? WHERE id=?').run(targetRoute,++sequence,stop.id)
+   addedStopIds.push(stop.id)
+  }
   database.prepare('DELETE FROM daily_route_approvals WHERE dispatch_day_id=? AND route_number=?').run(day.id,targetRoute)
   for(const n of sources)if(!running.has(n))database.prepare('DELETE FROM daily_route_approvals WHERE dispatch_day_id=? AND route_number=?').run(day.id,n)
-  invalidateDispatchDay(database,date,'support_vehicle_added','route',targetRoute,{stops:selected},{sourceRouteNumber:sources[0],sourceRouteNumbers:sources,targetRouteNumber:targetRoute,vehicleId,driverId,assistantIds:crew,stopIds:ids},context.employeeName)
+  invalidateDispatchDay(database,date,'support_vehicle_added','route',targetRoute,{stops:selected},{sourceRouteNumber:sources[0],sourceRouteNumbers:sources,targetRouteNumber:targetRoute,vehicleId,driverId,assistantIds:crew,stopIds:ids,branchIds:extraIds,addedStopIds},context.employeeName)
   if(running.size)retainApprovedRoutes(database,approved.filter(a=>running.has(a.route_number)),context.employeeName,'Supervisor reassigned untouched stops to support vehicle')
   return {updated:true,day:getDispatchDay(date,database)}
  })
+}
+
+export function supportCustomerOptions(date,context={},database=defaultDb){
+ if(!canManageDispatch(context))throw Object.assign(Error('SUPPORT_PERMISSION'),{code:'SUPPORT_PERMISSION',statusCode:403})
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(date||''))throw Object.assign(Error('SUPPORT_SELECTION'),{code:'SUPPORT_SELECTION',statusCode:400})
+ const routes=database.prepare('SELECT d.route_number routeNumber,d.display_name name FROM weekly_route_definitions d JOIN weekly_route_plans p ON p.id=d.plan_id WHERE p.is_active=1 ORDER BY d.route_number').all()
+ const memberships=database.prepare('SELECT DISTINCT w.branch_id branchId,w.route_number routeNumber FROM weekly_route_plan_stops w JOIN weekly_route_plans p ON p.id=w.plan_id WHERE p.is_active=1').all(),byBranch=new Map()
+ for(const row of memberships){if(!byBranch.has(row.branchId))byBranch.set(row.branchId,[]);byBranch.get(row.branchId).push(row.routeNumber)}
+ for(const row of database.prepare('SELECT branch_id branchId,home_route_number routeNumber FROM branch_sunday_settings WHERE home_route_number IS NOT NULL AND (effective_date IS NULL OR effective_date<=?)').all(date))byBranch.set(row.branchId,[row.routeNumber])
+ const items=database.prepare(`SELECT b.id,b.jodoo_branch_id branchCode,b.branch_name branchName,c.name customerName FROM branches b JOIN customers c ON c.id=b.customer_id
+ WHERE b.is_active=1 AND b.status='active' AND b.lifecycle_status='ACTIVE' AND c.is_active=1 AND c.status='active'
+ AND NOT EXISTS(SELECT 1 FROM dispatch_stops s JOIN dispatches d ON d.id=s.dispatch_id WHERE s.branch_id=b.id AND COALESCE(s.service_date,d.dispatch_date)=? AND s.status<>'cancelled')
+ ORDER BY c.name COLLATE NOCASE,b.branch_name COLLATE NOCASE,b.id`).all(date).map(b=>({...b,routeNumbers:byBranch.get(b.id)||[]}))
+ return {items,routes}
 }

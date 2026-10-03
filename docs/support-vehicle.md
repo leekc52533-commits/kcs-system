@@ -15,3 +15,9 @@ Deploy: pull main, npm run build, restart kcs-api, verify active. No new schema 
 ## Multi-route selection
 
 The panel now groups customers from all routes on the selected date. Select from several groups in one operation; each group shows remaining and selected counts. Each affected original route must retain at least one customer. The resulting support route carries all selected stops and labels all source routes, while its audit saves `sourceRouteNumbers` (legacy single-source entries remain readable). Approval invalidation/preservation is evaluated separately for every affected source. A protected or stale stop anywhere rejects the entire operation. Also corrected a stray support-only guard in the generic manual-stop creation path; the multi-route fixture exercises that path.
+
+## Day toolbar and other customers
+
+The sole Add Support Vehicle entry is beside Combine Areas. The day-level POST `/api/dispatch/day/:date/support` accepts existing `stopIds` and optional internal `branchIds`; legacy route-scoped POST remains compatible. GET `/api/dispatch/day/:date/support-customers` requires dispatch management access and returns active branches without a non-cancelled task on the selected date, plus live fixed route names/memberships. Effective home-route settings take precedence over weekly-plan memberships.
+
+The Other Customers panel combines case-insensitive customer/branch/code/route-name search with a fixed-route selector, includes an unassigned-route option and retains selected customers across filters. Save revalidates the complete selection. Extra customers get one-date dispatch stops inside the same transaction as transferred stops and staff; no recurring schedule is created or edited. An other-only support route is supported and explicitly marked as support even without source daily routes. Existing five-slot capacity remains.
