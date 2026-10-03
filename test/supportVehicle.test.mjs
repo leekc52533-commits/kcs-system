@@ -118,3 +118,21 @@ test('mixed scheduled and other customers fail atomically when an extra customer
  assert.equal(getDispatchDay(date,db).revision,before.revision);assert.equal(db.prepare('SELECT COUNT(*) n FROM dispatch_stops').get().n,3)
  }finally{db.close()}
 })
+
+test('priority catalog includes first approved change, sorts by count, links day stops and excludes rejected or same-date changes',()=>{
+ const db=supportSetup();try{
+ const stops=db.prepare('SELECT id,branch_id FROM dispatch_stops ORDER BY branch_id').all()
+ const insert=db.prepare("INSERT INTO driver_date_requests(dispatch_stop_id,employee_id,source_date,target_date,reason,status,reviewed_at) VALUES(?,1,?,?,'Later',?,'2026-09-06 01:00:00')")
+ insert.run(stops[0].id,'2026-09-01',date,'approved')
+ insert.run(stops[1].id,'2026-08-25','2026-09-01','approved');insert.run(stops[1].id,'2026-09-01',date,'approved')
+ insert.run(stops[2].id,'2026-09-01',date,'rejected');insert.run(stops[2].id,date,date,'approved')
+ let data=supportCustomerOptions(date,manager,db)
+ assert.deepEqual(data.priority.map(b=>[b.id,b.count]),[[2,2],[1,1]])
+ assert.equal(data.priority[0].stopId,stops[1].id);assert.deepEqual(data.priority[0].routeNumbers,[1])
+ assert.equal(data.items.some(b=>b.id===1),false)
+ data=supportCustomerOptions('2026-09-08',manager,db)
+ assert.equal(data.priority[0].stopId,null);assert.ok(data.items.some(b=>b.id===2))
+ db.exec("UPDATE branches SET is_active=0 WHERE id=2")
+ assert.deepEqual(supportCustomerOptions(date,manager,db).priority.map(b=>b.id),[1])
+ }finally{db.close()}
+})

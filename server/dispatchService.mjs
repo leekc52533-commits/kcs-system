@@ -1,5 +1,5 @@
 import {releaseIdleSundayAssignments} from './sundayIdleAssignments.mjs'
-import {mobileRescheduleHistory} from './branchRescheduleHistory.mjs'
+import {branchRescheduleHistory,mobileRescheduleHistory} from './branchRescheduleHistory.mjs'
 import {dateSystemReleaseNotices} from './dateSystemReleaseNotices.mjs'
 import {nextBranchCollectionDate} from './nextBranchCollectionDate.mjs'
 import {routeSignature,captureApprovedRoutes,retainApprovedRoutes} from './routeApprovalState.mjs'
@@ -1422,5 +1422,14 @@ export function supportCustomerOptions(date,context={},database=defaultDb){
  WHERE b.is_active=1 AND b.status='active' AND b.lifecycle_status='ACTIVE' AND c.is_active=1 AND c.status='active'
  AND NOT EXISTS(SELECT 1 FROM dispatch_stops s JOIN dispatches d ON d.id=s.dispatch_id WHERE s.branch_id=b.id AND COALESCE(s.service_date,d.dispatch_date)=? AND s.status<>'cancelled')
  ORDER BY c.name COLLATE NOCASE,b.branch_name COLLATE NOCASE,b.id`).all(date).map(b=>({...b,routeNumbers:byBranch.get(b.id)||[]}))
- return {items,routes}
+ const priority=database.prepare(`SELECT DISTINCT b.id,b.jodoo_branch_id branchCode,b.branch_name branchName,c.name customerName
+ FROM branches b JOIN customers c ON c.id=b.customer_id JOIN dispatch_stops old ON old.branch_id=b.id
+ JOIN driver_date_requests r ON r.dispatch_stop_id=old.id AND r.status='approved'
+ WHERE b.is_active=1 AND b.status='active' AND b.lifecycle_status='ACTIVE' AND c.is_active=1 AND c.status='active'`).all()
+ .map(b=>({...b,routeNumbers:byBranch.get(b.id)||[],count:branchRescheduleHistory(database,b.id).count}))
+ .filter(b=>b.count>0).sort((a,b)=>b.count-a.count||a.branchName.localeCompare(b.branchName,undefined,{numeric:true}))
+ const scheduled=database.prepare(`SELECT s.branch_id branchId,s.id stopId,s.route_number routeNumber FROM dispatch_stops s JOIN dispatches d ON d.id=s.dispatch_id WHERE COALESCE(s.service_date,d.dispatch_date)=? AND s.status<>'cancelled'`).all(date)
+ const byScheduled=new Map(scheduled.map(s=>[s.branchId,s]))
+ for(const b of priority){const stop=byScheduled.get(b.id);b.stopId=stop?.stopId??null;if(stop?.routeNumber!=null)b.routeNumbers=[stop.routeNumber]}
+ return {items,routes,priority}
 }

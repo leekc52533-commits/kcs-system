@@ -41,3 +41,23 @@ test('other customers can be filtered by route and name together, with selection
  assert.deepEqual(calls[0].branchIds,[31]);assert.deepEqual(calls[0].stopIds,[])
  await act(async()=>root.unmount())
 })
+
+test('priority selection sorts descending and synchronizes with route and other-customer checkboxes without duplicate IDs',async()=>{
+ const root=createRoot(document.getElementById('root')),calls=[]
+ const extra={id:31,customerName:'Shop',branchName:'Extra',branchCode:'B31',routeNumbers:[1]}
+ globalThis.fetch=async(url,options={})=>{if(options.method==='POST')calls.push(JSON.parse(options.body));return{ok:true,headers:new Headers(),json:async()=>({items:[extra],routes:[{routeNumber:1,name:'Serian A'}],priority:[{...extra,count:1,stopId:null},{id:1,branchName:'Scheduled',routeNumbers:[4],count:3,stopId:11}]})}}
+ await act(async()=>root.render(React.createElement(I18nProvider,{language:'zh'},React.createElement(Page,{day,vehicles,employees}))))
+ await act(async()=>document.querySelector('button').click())
+ assert.equal(document.querySelectorAll('.rescheduled-customers th').length,3)
+ assert.ok(document.querySelector('.rescheduled-customers tbody tr').textContent.includes('Scheduled'))
+ const boxes=()=>document.querySelectorAll('.rescheduled-customers tbody input')
+ await act(async()=>{boxes()[0].click();boxes()[1].click()})
+ assert.equal(document.querySelector('.support-route-group input').checked,true)
+ assert.equal(document.querySelector('.support-other-results input').checked,true)
+ await act(async()=>document.querySelector('.support-other-results input').click());assert.equal(boxes()[1].checked,false)
+ await act(async()=>boxes()[1].click())
+ const selects=document.querySelectorAll('select');for(const[i,value]of [[0,'2'],[1,'3']])await act(async()=>{selects[i].value=value;selects[i].dispatchEvent(new Event('change',{bubbles:true}))})
+ await act(async()=>document.querySelector('[data-support-save]').click())
+ assert.deepEqual(calls[0].stopIds,[11]);assert.deepEqual(calls[0].branchIds,[31])
+ await act(async()=>root.unmount())
+})

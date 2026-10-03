@@ -1,0 +1,10 @@
+.rescheduled-customers{margin:18px 0;font-size:18px}
+.rescheduled-customers>header{display:flex;align-items:center;gap:14px;margin-bottom:8px}
+.rescheduled-customers .archive-table{overflow:auto}
+.rescheduled-customers table{border-collapse:separate;border-spacing:0;width:100%;min-width:600px}
+.rescheduled-customers th{background:#eff4f6;color:#536878;font-weight:700;text-align:left;padding:10px 14px}
+.rescheduled-customers td{padding:9px 14px;border-bottom:1px solid #e0e8ec;background:white}
+.rescheduled-customers th:first-child,.rescheduled-customers td:first-child{position:sticky;left:0;z-index:1}
+.rescheduled-customers th:first-child{z-index:2}
+.rescheduled-customers [data-numeric]{text-align:right;font-variant-numeric:tabular-nums}
+.rescheduled-customers .support-option{margin:0}

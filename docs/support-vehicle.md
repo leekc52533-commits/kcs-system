@@ -25,3 +25,8 @@ The Other Customers panel combines case-insensitive customer/branch/code/route-n
 ## 2026-10-03 HTTP routing fix
 
 Production request aa76cc8a-eb60-4688-a91a-0a2b73d01478 failed with `Invalid time value`: the broad GET `/api/dispatch/day/` prefix handler consumed the later `/support-customers` endpoint and passed `2026-10-04/support-customers` to date parsing. Match only the exact date path in the day-detail handler. The HTTP regression test starts the real API against a disposable database and verifies catalog 200, driver denial 403, missing day 404 and unknown child endpoint 404. This fixes routing without modifying production data.
+
+## Rescheduled customer priority
+The dispatch page includes a three-column Branch / Route / Date Changes table below the unassigned pool. The support form offers the same list for selection. Active branches with at least one approved date change since the last completed collection with an issued bill appear, highest count first, using the existing branch history counter. Rejected and same-date route changes do not count. Shared column menus allow filtering and sorting in en/ms/zh.
+
+The catalog links each branch to its existing non-cancelled stop for the selected date, using that route where present and fixed routes otherwise. Form selections share state with existing route and extra-customer selectors. Existing scheduled work uses its stop ID; eligible unscheduled branches use the other-customer path. Protected or unavailable scheduled stops cannot be selected from this list. All existing transactional save guards still apply.
