@@ -1,0 +1,13 @@
+# Add support vehicle
+
+Expand a route on Dispatch & Collection Schedule, click Add support vehicle, choose a spare vehicle, driver, up to two attendants and customers, then confirm. Only the selected date changes. Original customer rows move atomically, without copying stops or editing recurrence. At least one customer remains on the original vehicle.
+
+The new route displays the source route name plus a translated support badge and its own vehicle/count/approval controls. Approve it before departure. If the source has not departed, review and approve it again. For a running source, only untouched stops can move; its validated remaining approval is retained and audited. Other route approvals are unchanged by the operation.
+
+The existing dispatch engine has five independent daily route slots. Support uses an empty slot, including the slots freed by Sunday grouping or area combination. A full five-route day returns a translated capacity message; this change does not introduce a sixth route. Source routes with only one customer use existing whole-route reassignment instead.
+
+Checks include management access, revision, available date-specific vehicle, no existing vehicle work, active eligible staff, approved leave, employee availability, staff overlap, distinct driver/crew, source customer lifecycle, execution/document evidence and pending requests (including GPS approval). Save is one transaction; stale retries cannot create duplicate assignments. Support vehicle/driver choices are excluded from future default inheritance. Regeneration preserves same-date split stops, and later Sundays keep the fixed schedule.
+
+Tests: supportVehicle.test.mjs, supportVehicleSunday.test.mjs, supportVehicleUi.test.mjs, combineDayRoutes.test.mjs; npm run build. Existing combination tests now initialize the arrangement-request schema used by their production guards.
+
+Deploy: pull main, npm run build, restart kcs-api, verify active. No new schema migration is needed. Check 04/10/2026 with an intentionally selected spare vehicle and staff; saving assigns actual work, so do not submit a test assignment in production unless intended.
