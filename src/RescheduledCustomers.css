@@ -8,3 +8,12 @@
 .rescheduled-customers th:first-child{z-index:2}
 .rescheduled-customers [data-numeric]{text-align:right;font-variant-numeric:tabular-nums}
 .rescheduled-customers .support-option{margin:0}
+
+/* Override the archive's wide document-table minimum and constrain each column. */
+#root .rescheduled-customers{min-width:0;max-width:100%}
+#root .rescheduled-customers .archive-table{min-width:0;max-width:100%}
+#root .rescheduled-customers .archive-table>table{table-layout:fixed;width:100%;min-width:540px}
+#root .rescheduled-customers th:nth-child(1),#root .rescheduled-customers td:nth-child(1){width:44%;white-space:normal;overflow-wrap:anywhere}
+#root .rescheduled-customers th:nth-child(2),#root .rescheduled-customers td:nth-child(2){width:34%;white-space:normal;overflow-wrap:anywhere}
+#root .rescheduled-customers th:nth-child(3),#root .rescheduled-customers td:nth-child(3){width:22%;white-space:normal;text-align:right}
+#root .rescheduled-customers .expense-filter-trigger{width:auto;min-width:0;white-space:normal}
