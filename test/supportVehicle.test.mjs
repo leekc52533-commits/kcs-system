@@ -6,7 +6,7 @@ import {ensureV28Schema} from '../server/migrationV28.mjs'
 import assert from 'node:assert/strict'
 import {DatabaseSync} from 'node:sqlite'
 import {schemaSql} from '../server/schema.mjs'
-import {addSupportVehicle,approveRoute,assignRouteVehicle,assignVehicleDay,driverToday,generateDay,getDispatchDay} from '../server/dispatchService.mjs'
+import {createStop,addSupportVehicle,approveRoute,assignRouteVehicle,assignVehicleDay,driverToday,generateDay,getDispatchDay} from '../server/dispatchService.mjs'
 import {installWeeklyRoutePlan} from '../server/weeklyRoutePlanService.mjs'
 function fixture(){const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON;'+schemaSql);ensureV28Schema(db);ensureGpsExceptionSchema(db);db.exec(driverArrangementSchemaSql);db.exec(leaveSchema);db.prepare("INSERT INTO customers(jodoo_customer_id,name) VALUES('C','Customer')").run();db.prepare("INSERT INTO branches(jodoo_branch_id,customer_id,branch_name,status,collection_frequency,assigned_weekdays,latitude,longitude) VALUES('B1',1,'One','active','Weekly','[\"Monday\"]',1,1),('B2',1,'Two','active','Weekly','[\"Monday\"]',1,1),('B3',1,'Three','active','Weekly','[\"Monday\"]',1,1)").run();db.prepare("INSERT INTO branch_schedules(jodoo_schedule_id,branch_id,source_branch_id,frequency,days_of_week) VALUES('S1',1,'B1','Weekly','Monday'),('S2',2,'B2','Weekly','Monday'),('S3',3,'B3','Weekly','Monday')").run();db.prepare("INSERT INTO vehicles(vehicle_code,registration_number,status,operational_status) VALUES('Lorry 2','QAA4293N','available','active'),('Lorry 3','QAB1225B','available','active')").run();db.prepare("INSERT INTO employees(employee_code,name,job_role,employment_status,is_active) VALUES('D1','Driver One','Driver','active',1),('D2','Driver Two','Driver','active',1)").run();installWeeklyRoutePlan({name:'Routes',sourceName:'test',entries:[[1,'QAA4293N',1,1,'B1','',''],[1,'QAA4293N',1,2,'B2','',''],[1,'QAB1225B',1,1,'B3','','']]},{},db);generateDay({startDate:'2026-09-07'},db);return db}
 
@@ -57,5 +57,34 @@ test('late write failure rolls back customers, assignments, staff and revision t
  db.exec("CREATE TRIGGER support_failure BEFORE INSERT ON dispatch_change_logs WHEN NEW.change_type='support_vehicle_added' BEGIN SELECT RAISE(ABORT,'injected failure'); END")
  assert.throws(()=>addSupportVehicle(date,1,p,manager,db),/injected failure/)
  assert.deepEqual(getDispatchDay(date,db),before);assert.deepEqual(db.prepare('SELECT * FROM daily_route_assignments').all(),assignments)
+ }finally{db.close()}
+})
+
+function multiSetup(){
+ const db=supportSetup()
+ db.exec("INSERT INTO branches(jodoo_branch_id,customer_id,branch_name,status,latitude,longitude) VALUES('B4',1,'Fourth','active',1,1)")
+ const stop=createStop({date,branchId:'B4',vehicleId:2},db)
+ db.prepare('UPDATE dispatch_stops SET route_number=2,route_stop_sequence=2 WHERE id=?').run(stop.id)
+ return db
+}
+test('one support vehicle takes customers from two routes with independent approval handling and retained source identities',()=>{
+ const db=multiSetup();try{
+ approveRoute(date,1,{approvedBy:'Manager'},db);approveRoute(date,2,{approvedBy:'Manager'},db)
+ db.exec("UPDATE dispatch_days SET status='in_progress';UPDATE dispatches SET status='in_progress' WHERE vehicle_id=2;UPDATE dispatch_trips SET execution_status='in_progress' WHERE dispatch_id IN (SELECT id FROM dispatches WHERE vehicle_id=2)")
+ const before=getDispatchDay(date,db),ids=[before.routeBoards[0].stops[0].id,before.routeBoards[1].stops[0].id],r=addSupportVehicle(date,1,{...payload(db),stopIds:ids},manager,db),support=r.day.routeBoards.find(r=>r.supportSourceRoute)
+ assert.deepEqual(support.supportSourceRoutes,[1,2]);assert.deepEqual(support.stops.map(s=>s.id),ids);assert.equal(support.customerCount,2)
+ assert.equal(r.day.routeBoards[0].customerCount,1);assert.equal(r.day.routeBoards[0].approvalStatus,'pending')
+ assert.equal(r.day.routeBoards[1].customerCount,1);assert.equal(r.day.routeBoards[1].approvalStatus,'approved')
+ assert.equal(driverToday({employeeId:3,role:'driver',today:date},db).totalStops,2)
+ const audit=JSON.parse(db.prepare("SELECT after_json FROM dispatch_change_logs WHERE change_type='support_vehicle_added'").get().after_json);assert.deepEqual(audit.sourceRouteNumbers,[1,2])
+ }finally{db.close()}
+})
+test('a protected customer on another route rolls back the entire multi-route selection',()=>{
+ const db=multiSetup();try{
+ const before=getDispatchDay(date,db),ids=[before.routeBoards[0].stops[0].id,before.routeBoards[1].stops[0].id]
+ db.prepare("UPDATE dispatch_stops SET arrived_at='now' WHERE id=?").run(ids[1]);const stops=db.prepare('SELECT * FROM dispatch_stops ORDER BY id').all()
+ assert.throws(()=>addSupportVehicle(date,1,{...payload(db),stopIds:ids},manager,db),/SUPPORT_PROTECTED/)
+ assert.deepEqual(db.prepare('SELECT * FROM dispatch_stops ORDER BY id').all(),stops)
+ assert.equal(db.prepare("SELECT COUNT(*) n FROM dispatch_change_logs WHERE change_type='support_vehicle_added'").get().n,0)
  }finally{db.close()}
 })
