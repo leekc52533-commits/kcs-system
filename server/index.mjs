@@ -490,7 +490,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'GET' && /^\/api\/dispatch\/day\/[^/]+\/route\/[1-5]\/approval-check$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});const parts=url.pathname.split('/');return sendJson(response,200,routeApprovalCheck(decodeURIComponent(parts[4]),Number(parts[6])))}
     if (request.method === 'POST' && /^\/api\/dispatch\/day\/[^/]+\/route\/[1-5]\/approve$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});const parts=url.pathname.split('/'),payload=(await readJson(request)).payload;return sendJson(response,200,approveRoute(decodeURIComponent(parts[4]),Number(parts[6]),{...payload,approvedBy:session.employeeName}))}
     if (request.method === 'POST' && /^\/api\/dispatch\/day\/[^/]+\/route\/[1-5]\/reopen$/.test(url.pathname)) {if(!canManageSchedules(session))return sendJson(response,403,{error:'Schedule management permission is required.'});const parts=url.pathname.split('/'),payload=(await readJson(request)).payload;return sendJson(response,200,reopenRoute(decodeURIComponent(parts[4]),Number(parts[6]),{...payload,reopenedBy:session.employeeName}))}
-    if (request.method === 'GET' && url.pathname.startsWith('/api/dispatch/day/')) {
+    if (request.method === 'GET' && /^\/api\/dispatch\/day\/\d{4}-\d{2}-\d{2}$/.test(url.pathname)) {
       const item=getDispatchDay(decodeURIComponent(url.pathname.slice('/api/dispatch/day/'.length)))
       return item?sendJson(response,200,item):sendJson(response,404,{error:'Dispatch day not found'})
     }
