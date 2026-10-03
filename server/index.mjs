@@ -1,3 +1,5 @@
+import {ownerApproveDate} from './ownerDateApprovalService.mjs'
+import {canDirectApproveDate} from './ownerDateApprovalAccess.mjs'
 import {requestGpsRelease,listGpsReleases,reviewGpsRelease,withGpsReleaseState} from './gpsExceptionService.mjs'
 import {ownLeave,requestLeave,pendingLeave,reviewLeave} from './leaveService.mjs'
 import {isEmployeeBillVoidRoute} from './billVoidRouteAccess.mjs'
@@ -251,7 +253,8 @@ const server = http.createServer(async (request, response) => {
       if(!file.startsWith(path.resolve(uploadsDir)+path.sep)||!fs.existsSync(file))return sendJson(response,404,{error:'Proof not found'})
       response.writeHead(200,{'Content-Type':proof.content_type,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'});return fs.createReadStream(file).pipe(response)
     }
-    if (request.method === 'GET' && url.pathname === '/api/dispatch/date-requests/pending') {if(!canApproveDriverDefer(session))return sendJson(response,403,{error:'Supervisor permission required'});return sendJson(response,200,{items:listDriverDateRequests().map(item=>({...item,systemReview:dateSystemReview(db,item.id)}))})}
+    if (request.method === 'POST' && /^\/api\/dispatch\/date-requests\/\d+\/owner-approve$/.test(url.pathname)) {return sendJson(response,200,ownerApproveDate(Number(url.pathname.split('/')[4]),session))}
+    if (request.method === 'GET' && url.pathname === '/api/dispatch/date-requests/pending') {if(!canApproveDriverDefer(session))return sendJson(response,403,{error:'Supervisor permission required'});return sendJson(response,200,{items:listDriverDateRequests().map(item=>({...item,systemReview:dateSystemReview(db,item.id),canDirectApprove:canDirectApproveDate(db,session)}))})}
     if (request.method === 'POST' && /^\/api\/dispatch\/date-requests\/\d+\/(approve|reject)$/.test(url.pathname)) {if(!canApproveDriverDefer(session))return sendJson(response,403,{error:'Supervisor permission required'});const parts=url.pathname.split('/');return sendJson(response,200,reviewDateWithSystemChange(Number(parts[4]),parts[5]==='approve'?'approved':'rejected',(await readJson(request)).payload,session))}
     if (request.method === 'POST' && /^\/api\/mobile\/trips\/\d+\/start$/.test(url.pathname)) return sendJson(response,200,startDriverTrip(Number(url.pathname.split('/')[4]),{employeeId:session.employeeId,role:session.role}))
     if (request.method === 'POST' && /^\/api\/mobile\/stops\/\d+\/arrive$/.test(url.pathname)) return sendJson(response,200,arriveAtStop(Number(url.pathname.split('/')[4]),(await readJson(request)).payload,{employeeId:session.employeeId,role:session.role,remoteArrivalTestMode:isArrivalTestMode()}))

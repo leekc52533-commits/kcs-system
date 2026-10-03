@@ -1,3 +1,4 @@
+import {isDirectDateApproval} from './ownerDateApprovalAccess.mjs'
 import {branchRescheduleHistory} from './branchRescheduleHistory.mjs'
 import {recordRepeatDateApproval} from './repeatDateGuard.mjs'
 import fs from 'node:fs'
@@ -98,10 +99,12 @@ export function decideDriverDate(id,decision,payload,context={},db=defaultDb,{wo
   const r=db.prepare('SELECT * FROM driver_date_requests WHERE id=?').get(Number(id))
   if(!r)fail('routeTrial.notFound',404)
   if(r.status!=='pending'){if(r.status===decision)return{id:r.id,status:r.status,idempotent:true};fail('routeTrial.stale')}
-  if(decision==='approved'&&dateEvidence(db,r.id)&&payload.evidenceChecked!==true)throw Object.assign(new Error('DATE_EVIDENCE_REQUIRED'),{code:'DATE_EVIDENCE_REQUIRED',statusCode:400})
+  if(decision==='approved'&&dateEvidence(db,r.id)&&payload.evidenceChecked!==true&&!isDirectDateApproval(db,payload,context))throw Object.assign(new Error('DATE_EVIDENCE_REQUIRED'),{code:'DATE_EVIDENCE_REQUIRED',statusCode:400})
   const s=lookup(db,r.dispatch_stop_id),actor=context.employeeName||String(context.employeeId),reason=String(payload.reason).trim()
   let targetStop=null,preservedDates=[]
   if(decision==='approved'){
+   const eligibility=db.prepare('SELECT b.lifecycle_status,b.is_active,b.status,c.is_active customer_active,c.status customer_status FROM branches b JOIN customers c ON c.id=b.customer_id WHERE b.id=?').get(s?.branch_id)
+   if(!eligibility||eligibility.lifecycle_status!=='ACTIVE'||!eligibility.is_active||eligibility.status!=='active'||!eligibility.customer_active||eligibility.customer_status!=='active')fail('DATE_BRANCH_INACTIVE')
    recordRepeatDateApproval(db,r,s,payload,context)
    const today=context.today||kuchingDate(),date=String(payload.targetDate||r.target_date),scope=payload.scope||'once',route=Number(payload.routeNumber)
    if(!planningDate(date)||planningDate(date)!==date||date<today)fail('routeTrial.invalidReviewDate',400)

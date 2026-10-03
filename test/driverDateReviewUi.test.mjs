@@ -123,3 +123,14 @@ test('released customer notices distinguish pending and rejected master changes 
   }finally{await act(async()=>root.unmount())}
  }
 })
+
+test('direct button is visible only with server owner capability and submits without fields',async()=>{
+ const calls=[]
+ globalThis.fetch=async(url,init={})=>{calls.push({url,init});return new Response(JSON.stringify(String(url).includes('/options')?{routes:[]}:{id:1,status:'approved'}),{status:200,headers:{'content-type':'application/json'}})}
+ const root=createRoot(document.getElementById('root'))
+ const render=async canDirectApprove=>act(async()=>root.render(React.createElement(I18nProvider,{language:'zh'},React.createElement(DateRequestReview,{item:{...item,canDirectApprove,rescheduleHistory:{count:3,history:[]}},onSaved:()=>{}}))))
+ await render(false);assert.equal(document.querySelector('.owner-date-direct-approve'),null)
+ await render(true);const button=document.querySelector('.owner-date-direct-approve');assert.equal(button.disabled,false)
+ await click(button);assert.equal(calls.at(-1).url,'/api/dispatch/date-requests/1/owner-approve');assert.equal(calls.at(-1).init.body,undefined)
+ await act(async()=>root.unmount())
+})

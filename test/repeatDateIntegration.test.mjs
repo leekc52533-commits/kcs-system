@@ -42,3 +42,36 @@ test('real date approval enforces second confirmation and records it atomically'
   assert.equal(driverToday(context,db).trips.flatMap(x=>x.stops).some(x=>x.id===ids[0]),false)
  }finally{db.close()}
 })
+
+const {ownerApproveDate}=await import('../server/ownerDateApprovalService.mjs')
+const {canDirectApproveDate}=await import('../server/ownerDateApprovalAccess.mjs')
+function pinOwner(db){db.exec("INSERT INTO auth_accounts(id,employee_id,username,password_hash,role) VALUES(77,3,'kcadmin','unused','admin')");db.exec('CREATE TABLE IF NOT EXISTS company_menu(id INTEGER PRIMARY KEY,owner_account_id INTEGER); INSERT OR REPLACE INTO company_menu(id,owner_account_id) VALUES(1,77)')}
+test('pinned owner approves a third date change with no form fields, retaining audit and empty proof',()=>{
+ const{db,ids}=fixture()
+ try{
+  pinOwner(db)
+  db.prepare('UPDATE dispatch_stops SET route_number=1 WHERE id=?').run(ids[0])
+  for(const date of ['2026-09-07','2026-09-08'])db.prepare("INSERT INTO driver_date_requests(dispatch_stop_id,employee_id,source_date,target_date,reason,status,reviewed_at) VALUES(?,1,?,'2026-09-10','Previous delay','approved',?)").run(ids[0],date,date+' 02:00:00')
+  const r=request(db,ids[0]),owner={...supervisor,id:77}
+  assert.equal(canDirectApproveDate(db,{...owner,id:78,role:'owner_admin'}),false)
+  assert.throws(()=>ownerApproveDate(r.id,{...owner,id:78,role:'owner_admin'},db),{code:'OWNER_DATE_APPROVAL_ONLY'})
+  assert.throws(()=>decideDriverDateRaw(r.id,'approved',{ownerDirectApproval:true,routeNumber:1,reason:'Attempt'}, {...owner,id:78},db),{code:'DATE_EVIDENCE_REQUIRED'})
+  const result=ownerApproveDate(r.id,owner,db)
+  assert.equal(result.status,'approved')
+  const evidence=db.prepare('SELECT * FROM driver_date_repeat_reviews WHERE request_id=?').get(r.id)
+  assert.equal(evidence.approval_number,3);assert.equal(evidence.proof,null);assert.equal(evidence.contact_name,null)
+  const review=db.prepare('SELECT * FROM driver_date_reviews WHERE request_id=?').get(r.id)
+  assert.equal(review.approved_date,'2026-09-11');assert.equal(review.route_number,1);assert.equal(review.scope,'once')
+  assert.equal(JSON.parse(db.prepare("SELECT after_json FROM audit_logs WHERE action='owner_date_direct_approved'").get().after_json).accountId,77)
+  assert.equal(ownerApproveDate(r.id,owner,db).idempotent,true)
+ }finally{db.close()}
+})
+test('owner shortcut cannot schedule a closed branch and leaves approval unchanged',()=>{
+ const{db,ids}=fixture()
+ try{
+  pinOwner(db);db.prepare('UPDATE dispatch_stops SET route_number=1 WHERE id=?').run(ids[0])
+  const r=request(db,ids[0]);db.exec("UPDATE branches SET lifecycle_status='CLOSED',status='closed',is_active=0 WHERE id=1")
+  assert.throws(()=>ownerApproveDate(r.id,{...supervisor,id:77},db),{code:'DATE_BRANCH_INACTIVE'})
+  assert.equal(db.prepare('SELECT status FROM driver_date_requests WHERE id=?').get(r.id).status,'pending')
+ }finally{db.close()}
+})
