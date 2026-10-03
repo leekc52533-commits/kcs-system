@@ -12,6 +12,8 @@ export function setApiLanguage(language){
 }
 
 export function apiErrorMessage(payload,fallbackKey='apiError.generic'){
+  const specific=payload?.userMessages?.[activeLanguage]||payload?.userMessages?.en
+  if(typeof specific==='string'&&specific)return specific
   const code=payload?.errorCode||payload?.code
   if(code){
     const key=`apiError.${String(code).toLowerCase()}`

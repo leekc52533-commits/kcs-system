@@ -259,3 +259,5 @@ These requirements were confirmed by KC on 2026-09-09. Carry them forward for la
 - KC confirmed 2026-10-02: Purchase Bills and Sales archives hide the top From/To date inputs and initialize to today's Asia/Kuching business date. Preserve all-date historical lookup through date/document dropdowns. Purchase Bills adds an adjacent Time column after PO No., using issued_at in Asia/Kuching (HH:mm:ss), including filters, sort and matching export.
 
 - KC confirmed 2026-10-02: Expenses, Unloading and Employee Clock-in Records initialize to today's Asia/Kuching date. Keep historical date options accessible; explicit unloading date/code selection overrides the default-today view. Preserve independent unloading export date selection.
+
+- KC requested 2026-10-03: business errors show the specific reason and actionable next step in the selected UI language, in the existing centered dialog. Use actual registration plates for assignment conflicts. Map known business failures to 4xx, retain request references for diagnosis, and never expose raw internal exceptions or SQL. Expand the explicit public message catalog when adding new business validations.

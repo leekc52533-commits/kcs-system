@@ -1,3 +1,4 @@
+import {businessError} from './businessErrors.mjs'
 const rules=[
   ['DUPLICATE_BRANCH_SERVICE_DATE',/duplicate branch service date/i],
   ['ROUTE_GENERATION_DUPLICATES_UNRESOLVED',/route generation blocked.*duplicate/i],
@@ -27,6 +28,10 @@ export function errorCodeFor(error){
 }
 
 export function publicError(error){
+  const known=businessError(error)
+  if(known)return{errorCode:known.errorCode,error:known.errorCode,userMessages:known.messages}
   const errorCode=errorCodeFor(error)
   return{errorCode,error:errorCode==='UNKNOWN_ERROR'?'The request could not be completed.':errorCode}
 }
+
+export function errorStatusFor(error){return error.statusCode || businessError(error)?.status || (error instanceof SyntaxError?400:500)}

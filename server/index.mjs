@@ -76,7 +76,7 @@ import {listBranchProducts,materialIssueReport} from './materialProductService.m
 import {createOccPriceGroup,listOccPriceGroups,setOccPriceGroupStatus,updateOccPriceGroup} from './occPriceGroupService.mjs'
 import {changeProductGroupPrice,createCategory,createProduct,createProductPriceGroup,deleteEntity,entityPreview,getCategory,getPriceGroup,getProduct,listCategories,mergeEntities,moveProductCategory,moveProductCustomers,moveProductsCategory,previewMoveProducts,setEntityVisibility,updateCategory} from './materialCatalogService.mjs'
 import {kuchingDate} from '../shared/kuchingTime.js'
-import {publicError} from './errorCodes.mjs'
+import {publicError,errorStatusFor} from './errorCodes.mjs'
 import {assertLocationFields} from '../shared/locationText.js'
 import {configureScheduleRecurrence,getScheduleRecurrence} from './scheduleRecurrenceService.mjs'
 import {getCollectionScheduleManagement,listCollectionScheduleManagement,saveCollectionScheduleManagement} from './collectionScheduleManagementService.mjs'
@@ -616,7 +616,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && url.pathname === '/api/import/commit') return sendJson(response, 200, commitImport((await readJson(request)).payload.batchId))
     return sendJson(response, 404, { error: 'Not found' })
   } catch (error) {
-    const status=error.statusCode || (error instanceof SyntaxError ? 400 : 500),body={...publicError(error),...(error.publicDetails||{}),requestId}
+    const status=errorStatusFor(error),body={...publicError(error),...(error.publicDetails||{}),requestId}
     console.error(JSON.stringify({event:'api_error',requestId,method:request.method,path:String(request.url||'').split('?')[0],status,errorCode:body.errorCode,message:String(error?.message||error),diagnostic:request.kcsDiagnostic||null}))
     return sendJson(response,status,body)
   }
