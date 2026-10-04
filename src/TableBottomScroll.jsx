@@ -29,9 +29,9 @@ export default function TableBottomScroll({scrollRef,dockRef}){
   const resize=typeof ResizeObserver==='function'?new ResizeObserver(measure):null
   resize?.observe(element);if(element.firstElementChild)resize?.observe(element.firstElementChild)
   const mutation=new MutationObserver(measure);mutation.observe(element,{childList:true,subtree:true,characterData:true})
-  element.addEventListener('scroll',measure,{passive:true});element.addEventListener('pointerenter',select);element.addEventListener('focusin',select)
+  element.addEventListener('scroll',measure,{passive:true});element.addEventListener('pointerenter',select);element.addEventListener('pointerdown',select,{passive:true});element.addEventListener('focusin',select)
   window.addEventListener('scroll',measure,{capture:true,passive:true});window.addEventListener('resize',measure)
-  return()=>{resize?.disconnect();mutation.disconnect();element.removeEventListener('scroll',measure);element.removeEventListener('pointerenter',select);element.removeEventListener('focusin',select);window.removeEventListener('scroll',measure,true);window.removeEventListener('resize',measure);element.classList.remove('single-horizontal-scroll');tables.delete(id);if(preferred===id)preferred=null;publish()}
+  return()=>{resize?.disconnect();mutation.disconnect();element.removeEventListener('scroll',measure);element.removeEventListener('pointerenter',select);element.removeEventListener('pointerdown',select);element.removeEventListener('focusin',select);window.removeEventListener('scroll',measure,true);window.removeEventListener('resize',measure);element.classList.remove('single-horizontal-scroll');tables.delete(id);if(preferred===id)preferred=null;publish()}
  },[scrollRef,dockRef])
  if(!view)return null
  return createPortal(<div className={'table-bottom-scroll'+(dockRef?' table-bottom-scroll--docked':'')} style={{left:dockRef?undefined:view.left,width:dockRef?'100%':view.width,'--scroll-thumb-width':`${view.thumb}px`}}><input type="range" min="0" max={view.max} step="1" value={Math.min(view.max,Math.max(0,view.value))} aria-label={t('list.horizontalScroll')} title={t('list.horizontalScroll')} onChange={event=>{const value=Number(event.target.value);scrollRef.current.scrollLeft=value;setView(current=>current?{...current,value}:null)}}/></div>,dockRef?.current||document.body)

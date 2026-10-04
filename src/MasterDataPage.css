@@ -98,3 +98,9 @@
 
 .customer-detail h2 .customer-heading-edit{font:inherit;color:#176f60;padding:0;min-height:0;border:0;background:none;text-align:left;cursor:pointer}
 .customer-detail h2 .customer-heading-edit:focus-visible{outline:2px solid #176f60;outline-offset:4px}
+
+/* Keep the pinned identifier narrower than a phone viewport. */
+#root .customer-master-table.archive-table{min-width:0;max-width:100%}
+#root .customer-master-table.archive-table>table{table-layout:fixed;width:620px;min-width:100%}
+#root .customer-master-table.archive-table>table th,#root .customer-master-table.archive-table>table td{box-sizing:border-box;white-space:normal;overflow-wrap:anywhere}
+#root .customer-master-table.archive-table .entity-name-link{max-width:100%;white-space:normal;overflow-wrap:anywhere}

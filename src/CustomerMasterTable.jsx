@@ -9,6 +9,7 @@ import TableBottomScroll from './TableBottomScroll.jsx'
 import './ExpenseRecordsPage.css'
 
 const columns=[['customerId','list.customerId'],['customerName','list.customerName'],['status','list.status'],['branchCount','list.branchCount']]
+const columnWidths={customerId:120,customerName:240,status:140,branchCount:120}
 const keys=columns.map(([key])=>key)
 const natural=new Intl.Collator(undefined,{numeric:true,sensitivity:'base'})
 const raw=(row,key)=>key==='branchCount'?String(row[key]??0):String(row[key]??'')
@@ -26,7 +27,7 @@ export default function CustomerMasterTable({items,loading,onOpen,preferenceId})
   <div className="customer-table-tools"><button type="button" className="expense-column-toggle" title={w.title} aria-label={w.title} onClick={()=>setShowOrder(true)}>☷</button></div>
   {showOrder&&<ExpenseColumnOrder order={order} columns={columns.map(([key,title])=>[key,t(title)])} w={w} storageKey={storageKey} onSave={setOrder} onClose={()=>setShowOrder(false)}/>}
   <div className="customer-master-table archive-table" ref={scrollRef} aria-busy={loading}>
-   {loading?<div className="data-loading">{t('common.loadingData')}</div>:<table><thead><tr>{order.map(key=>{
+   {loading?<div className="data-loading">{t('common.loadingData')}</div>:<table><colgroup>{order.map(key=><col key={key} style={{width:columnWidths[key]}}/>)}</colgroup><thead><tr>{order.map(key=>{
     const values=[...new Set(items.map(row=>raw(row,key)))].filter(Boolean).sort((a,b)=>compare(key,a,b))
     return <FilterHeader key={key} numeric={key==='branchCount'} label={t(columns.find(c=>c[0]===key)[1])} value={filters[key]??null} options={['',...values].map(value=>({value,label:label(key,value)}))} onChange={value=>setFilters(current=>({...current,[key]:value}))} sortDirection={sort.key===key?sort.direction:null} onSort={direction=>setSort(direction?{key,direction}:{})} open={open===key} onOpen={()=>setOpen(key)} onClose={()=>setOpen(null)}/>
    })}</tr></thead><tbody>{displayed.map(item=><tr key={item.customerId}>{order.map(key=><td key={key} data-numeric={key==='branchCount'||undefined}>{key==='customerName'?<button type="button" className="entity-name-link" onClick={()=>onOpen(item)} data-i18n-raw>{item.customerName}</button>:key==='status'?<span className={`master-status ${item.status}`}>{label(key,raw(item,key))}</span>:<span data-i18n-raw>{label(key,raw(item,key))}</span>}</td>)}</tr>)}</tbody></table>}
