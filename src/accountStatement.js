@@ -23,7 +23,21 @@ export async function accountStatementBuffer(bills,{from,to,paymentMethod}){
   }
   const total=s.addRow(['Grand Total','',qty,null,cents/100]);bold.add(total.number);total.getCell(3).numFmt='#,##0';total.getCell(5).numFmt='#,##0.00'
   s.eachRow({includeEmpty:true},(row,index)=>{row.height=15;row.eachCell({includeEmpty:true},(cell,col)=>{cell.font={name:'Arial',size:10,bold:bold.has(index)};cell.border={top:{style:'thin'},bottom:{style:bold.has(index)?'medium':'thin'},left:{style:'thin'},right:{style:'thin'}};cell.alignment={vertical:'middle',horizontal:cell.isMerged?'center':typeof cell.value==='number'?'right':'left'}})})
-  s.columns.forEach((col,i)=>{let width=[15,22,14,14,17][i];col.eachCell(cell=>{if(!cell.isMerged)width=Math.max(width,Array.from(cell.value instanceof Date?'04-Oct-26':cell.text||'').reduce((n,c)=>n+(c.charCodeAt(0)>255?2:1),0)+3)});col.width=width})
+  s.columns.forEach(col=>{
+   let width=0
+   col.eachCell(cell=>{
+    if(cell.isMerged)return
+    let display=cell.text||''
+    if(cell.value instanceof Date)display=formatDateDisplay(cell.value.toISOString().slice(0,10))
+    else if(typeof cell.value==='number'){
+     const decimals=(cell.numFmt.split('.')[1]||'').length
+     display=cell.value.toLocaleString('en-US',{useGrouping:cell.numFmt.includes(','),minimumFractionDigits:decimals,maximumFractionDigits:decimals})
+    }
+    const length=Math.max(...display.split('\n').map(line=>Array.from(line).reduce((n,c)=>n+(c.charCodeAt(0)>255?2:1),0)))
+    width=Math.max(width,length+(cell.font?.bold?1:0)+3)
+   })
+   col.width=Math.max(5,width)
+  })
   s.pageSetup.printTitlesRow='1:2';s.pageSetup.printArea=`A1:E${total.number}`
  }
  if(!groups.size)throw Error('EMPTY_STATEMENT')
