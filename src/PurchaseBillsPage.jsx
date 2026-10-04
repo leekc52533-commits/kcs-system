@@ -1,3 +1,4 @@
+import AccountStatement from './AccountStatement.jsx'
 import ExportDateDialog,{downloadArchive} from './ExportDateDialog.jsx'
 import {formatDateDisplay} from './dateDisplay.js'
 import {purchaseTime} from '../shared/archiveColumns.mjs'
@@ -35,7 +36,7 @@ export default function PurchaseBillsPage({onBack}){
   const setColumn=(key,value)=>setColumnFilters(current=>({...current,[key]:value}))
   if(showWeights)return <UnloadingArchivePage onBack={()=>setShowWeights(false)}/>
   return <div className="page purchase-archive expense-records">
-    <div className="expense-toolbar"><button type="button" onClick={()=>{setOpenFilter(null);setShowWeights(true)}}>{ui('Unloading Weight Records')}</button>
+    <div className="expense-toolbar"><button type="button" onClick={()=>{setOpenFilter(null);setShowWeights(true)}}>{ui('Unloading Weight Records')}</button><AccountStatement/>
       {exportTarget&&createPortal(<button type="button" className="record-icon-button" title={ui('Download Excel with Payment Proofs')} aria-label={ui('Download Excel with Payment Proofs')} onClick={()=>{setOpenFilter(null);setShowExport(true)}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 15V3m-5 5 5-5 5 5M4 15v6h16v-6"/></svg></button>,exportTarget)}</div>
     {showExport&&<ExportDateDialog title={ui('Download Excel with Payment Proofs')} initialFrom={filters.from} initialTo={filters.to} onDownload={range=>downloadArchive(`/api/purchase-bills/export.xlsx?${query}`,range)} onClose={()=>setShowExport(false)}/>}
     {error&&<CenteredNotice>{error}</CenteredNotice>}{loading&&!data&&<div className="data-loading">{ui('Loading Purchase Bills…')}</div>}
