@@ -1,3 +1,4 @@
+import {formatDateDisplay} from './dateDisplay.js'
 import {RequiredFieldNotices} from './CenteredNotice.jsx'
 /* eslint-disable react/only-export-components -- provider, selector and hook are one i18n surface */
 import {createContext,useCallback,useContext,useEffect,useMemo} from 'react'
@@ -13,8 +14,8 @@ export function I18nProvider({language,setLanguage,children}){
       const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT)
       let node
       while((node=walker.nextNode())){
-        if(node.parentElement?.closest('[data-i18n-raw]'))continue
-        const next=translateSource(language,node.nodeValue)
+        const raw=node.parentElement?.closest('[data-i18n-raw]')
+        const next=raw?(/^\d{4}-\d{2}-\d{2}(?:[T ].*)?$|^\d{2}\/\d{2}\/\d{4}(?: .*)?$/.test(node.nodeValue)?formatDateDisplay(node.nodeValue):node.nodeValue):formatDateDisplay(translateSource(language,node.nodeValue))
         if(next!==node.nodeValue)node.nodeValue=next
       }
       for(const element of root.querySelectorAll?.('[placeholder],[aria-label],[title]')||[]){
@@ -25,8 +26,8 @@ export function I18nProvider({language,setLanguage,children}){
       }
     }
     localize(document.body)
-    const observer=new MutationObserver(records=>{for(const record of records)for(const node of record.addedNodes)if(node.nodeType===Node.ELEMENT_NODE)localize(node);else if(node.nodeType===Node.TEXT_NODE&&node.parentElement)localize(node.parentElement)})
-    observer.observe(document.body,{childList:true,subtree:true})
+    const observer=new MutationObserver(records=>{for(const record of records){if(record.type==='characterData'&&record.target.parentElement)localize(record.target.parentElement);for(const node of record.addedNodes)if(node.nodeType===Node.ELEMENT_NODE)localize(node);else if(node.nodeType===Node.TEXT_NODE&&node.parentElement)localize(node.parentElement)}})
+    observer.observe(document.body,{childList:true,subtree:true,characterData:true})
     return()=>observer.disconnect()
   },[language])
   const t=useCallback((key,variables)=>translate(language,key,variables),[language])

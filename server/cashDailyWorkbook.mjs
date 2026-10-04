@@ -1,3 +1,4 @@
+import {formatWorkbook} from '../shared/workbookPresentation.js'
 import ExcelJS from 'exceljs'
 import {expenseServiceDate} from '../shared/cashCalendar.js'
 import {dailyEmployeeSpending,employeeSpending} from './cashFloatOverview.mjs'
@@ -16,5 +17,5 @@ export async function cashDailyWorkbook(db,query){
  for(const row of total.expenseItems)items.addRow({category:row.category,description:row.description,amount:row.amountCents/100})
  items.addRow({category:'TOTAL',amount:total.expenseCents/100})
  for(const sheet of [daily,items]){sheet.views=[{state:'frozen',ySplit:1}];sheet.autoFilter={from:'A1',to:{row:Math.max(1,sheet.rowCount-1),column:sheet.columnCount}};sheet.getRow(1).eachCell(cell=>{cell.font={bold:true,color:{argb:'FFFFFFFF'}};cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF176B5B'}}});sheet.getRow(sheet.rowCount).font={bold:true};for(let r=2;r<=sheet.rowCount;r++)for(let c=sheet===daily?2:3;c<=sheet.columnCount;c++)sheet.getCell(r,c).numFmt='#,##0.00'}
- return Buffer.from(await workbook.xlsx.writeBuffer())
+ return Buffer.from(await formatWorkbook(workbook).xlsx.writeBuffer())
 }

@@ -1,3 +1,4 @@
+import {formatWorkbook} from '../shared/workbookPresentation.js'
 import ExcelJS from 'exceljs'
 import {db as defaultDb} from './database.mjs'
 import {unloadingCode} from './routeUnloadingService.mjs'
@@ -25,5 +26,5 @@ export async function unloadingArchiveWorkbook(query={},db=defaultDb){
  for(const item of listUnloadingArchive(query,db).items)sheet.addRow({...item,status:unloadingStatus[lang][item.status]})
  sheet.views=[{state:'frozen',ySplit:1}];sheet.autoFilter={from:{row:1,column:1},to:{row:1,column:unloadingColumns.length}}
  sheet.getRow(1).eachCell(c=>{c.font={bold:true,color:{argb:'FF536675'}};c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFEAF0F4'}}})
- return book.xlsx.writeBuffer()
+ return formatWorkbook(book).xlsx.writeBuffer()
 }

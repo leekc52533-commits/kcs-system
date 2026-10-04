@@ -1,3 +1,4 @@
+import {formatWorkbook} from '../shared/workbookPresentation.js'
 import {applyArchiveColumns,purchaseTime} from '../shared/archiveColumns.mjs'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -50,5 +51,5 @@ export async function purchaseBillsWorkbook(filters={},database=defaultDb,{uploa
   const proofSheet=workbook.addWorksheet('Payment Proofs',{views:[{state:'frozen',ySplit:1}]});proofSheet.columns=[{header:'PO No.',key:'bill',width:22},{header:'Payment Proof',key:'proof',width:55},{header:'Uploaded Date',key:'uploaded',width:16}];proofSheet.getRow(1).eachCell(cell=>{cell.font={bold:true,color:{argb:'FFFFFFFF'}};cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF176B5B'}}})
   const root=path.resolve(uploadsRoot||''),proofByBill=new Map();for(const bill of data.items){if(!bill.proofId)continue;const proof=database.prepare('SELECT storage_key storageKey,original_name originalName,content_type contentType,created_at createdAt FROM purchase_payment_proofs WHERE id=?').get(bill.proofId);if(!proof)continue;const absolute=path.resolve(root,proof.storageKey);if(!absolute.startsWith(root+path.sep)||!fs.existsSync(absolute))continue;const row=proofSheet.addRow({bill:bill.billNumber,proof:'Embedded image',uploaded:excelDate(proof.createdAt)}),extension=proof.contentType==='image/png'?'png':proof.contentType==='image/jpeg'?'jpeg':null;proofByBill.set(bill.billNumber,row.number);row.height=230;row.getCell(3).numFmt='dd-mm-yy';if(extension){const imageId=workbook.addImage({buffer:fs.readFileSync(absolute),extension});proofSheet.addImage(imageId,{tl:{col:1,row:row.number-1},ext:{width:420,height:300}})}else row.getCell(2).value='WebP proof: view in KCS system'}
   for(let row=2;row<=sheet.rowCount;row++){const billNumber=String(sheet.getCell(row,2).value||''),proofRow=proofByBill.get(billNumber);if(proofRow)sheet.getCell(row,15).value={text:'View Payment Proof',hyperlink:`#'Payment Proofs'!A${proofRow}`}}
-  return{rangeLabel:data.rangeLabel,buffer:Buffer.from(await workbook.xlsx.writeBuffer()),rowCount:data.rows.length,proofCount:proofByBill.size}
+  return{rangeLabel:data.rangeLabel,buffer:Buffer.from(await formatWorkbook(workbook).xlsx.writeBuffer()),rowCount:data.rows.length,proofCount:proofByBill.size}
 }

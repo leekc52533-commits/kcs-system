@@ -1,3 +1,4 @@
+import {formatWorkbook} from '../shared/workbookPresentation.js'
 import {allocateDocumentNumber,documentNumber,documentNumberMap} from './documentNumbers.mjs'
 import {db as defaultDb} from './database.mjs'
 import {withImmediateTransaction} from './branchServiceDateGuard.mjs'
@@ -125,5 +126,5 @@ export async function exportSales(query,context,db=defaultDb,{uploadsRoot}={}){
  for(const id of new Set(items.map(r=>r.id))){const record=salesRecord(id,context,db),p=salesPhoto(id,context,db),file=path.resolve(uploadsRoot,p.storage_key);proofs.getCell(row,1).value=(record.documentNumber?record.documentNumber+' / ':'')+record.billNumber+' — '+record.buyerName;row++
   if(file.startsWith(path.resolve(uploadsRoot)+path.sep)&&fs.existsSync(file)&&['image/jpeg','image/png'].includes(p.content_type)){const imageId=book.addImage({buffer:fs.readFileSync(file),extension:p.content_type==='image/jpeg'?'jpeg':'png'});proofs.addImage(imageId,{tl:{col:0,row:row-1},ext:{width:720,height:540}});row+=29}else{proofs.getCell(row++,1).value='View original: /api/sales/'+id+'/photo'}
  }
- return Buffer.from(await book.xlsx.writeBuffer())
+ return Buffer.from(await formatWorkbook(book).xlsx.writeBuffer())
 }
