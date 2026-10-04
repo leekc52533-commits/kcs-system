@@ -35,3 +35,17 @@ test('unfinished work aborts and completed records/proofs remain byte-for-byte a
  reconcile(db,{apply:true});assert.deepEqual(db.prepare('SELECT * FROM dispatch_stops').get(),stop);assert.deepEqual(db.prepare('SELECT * FROM stop_documents').get(),proof)
  assert.throws(()=>assertNewIntake(db,'B10506'),{code:'PICKUP_EXISTING_REQUIRED'})
  }finally{db.close()}})
+
+test('HNL-only repair links only the requested pair and hides retired master from normal lists',async()=>{
+ const {listBranches,listCustomers}=await import('../server/customerMasterService.mjs')
+ const db=fixture();try{
+ db.exec("UPDATE branches SET customer_id=(SELECT id FROM customers WHERE jodoo_customer_id='C10285') WHERE jodoo_branch_id='B10509'")
+ const result=reconcile(db,{apply:true,hnlOnly:true});assert.equal(result.branches.length,1);assert.equal(result.customers.length,1)
+ assert.equal(db.prepare("SELECT is_active FROM branches WHERE jodoo_branch_id='B10507'").get().is_active,1)
+ const branches=listBranches({pageSize:500},db).items
+ assert.ok(branches.some(b=>b.branchId==='B10165'));assert.ok(!branches.some(b=>b.branchId==='B10509'))
+ assert.ok(!listCustomers({pageSize:500},db).items.some(c=>c.customerId==='C10285'))
+ assert.ok(listBranches({lifecycleStatus:'DUPLICATE_REPLACED'},db).items.some(b=>b.branchId==='B10509'))
+ assert.ok(reconcile(db,{apply:true,hnlOnly:true}).branches[0].alreadyLinked)
+ }finally{db.close()}
+})

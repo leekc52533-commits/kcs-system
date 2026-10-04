@@ -40,3 +40,13 @@ test('archive multi-column filters and sort also control Excel rows and embedded
  const both=listPurchaseBillArchive({...query,columns:'{}'},db);assert.deepEqual(both.items.map(x=>x.totalCents),[800,2200])
  }finally{db.close();fs.rmSync(root,{recursive:true,force:true})}
 })
+
+test('HNL linked statement names preserve original bill snapshots',()=>{
+ const{db,root}=fixture();try{
+ db.exec("INSERT INTO customers(id,jodoo_customer_id,name) VALUES(1,'C10285','Hnl bbs'),(2,'C10056','HNL'); INSERT INTO branches(id,jodoo_branch_id,branch_name,customer_id,lifecycle_status,replaced_by_branch_id) VALUES(1,'B10509','Hnl bbs',1,'DUPLICATE_REPLACED',2),(2,'B10165','HNL BBS',2,'ACTIVE',NULL)")
+ const before=db.prepare('SELECT * FROM purchase_bills WHERE id=1').get()
+ const bill=listPurchaseBillArchive({month:'2026-09'},db).items.find(b=>b.id===1)
+ assert.equal(bill.statementCustomerName,'HNL');assert.equal(bill.statementBranchName,'HNL BBS');assert.equal(bill.customerName,'ECO')
+ assert.deepEqual(db.prepare('SELECT * FROM purchase_bills WHERE id=1').get(),before)
+ }finally{db.close();fs.rmSync(root,{recursive:true,force:true})}
+})

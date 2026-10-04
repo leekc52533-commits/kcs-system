@@ -4,11 +4,11 @@ export const branchMappings=[['B10507','B10500','C10039'],['B10503','B10500','C1
 export const customerMappings=[['C10279','C10039'],['C10283','C10039'],['C10284','C10041'],['C10285','C10056']]
 const reason='KC confirmed duplicate identifiers on 2026-09-21; canonical master retained; historical documents unchanged'
 function one(db,table,column,code){const raw=code.slice(1),rows=db.prepare(`SELECT * FROM ${table} WHERE UPPER(TRIM(${column})) IN (?,?)`).all(code,raw);if(rows.length!==1)throw Error(`Missing or ambiguous ${code}`);return rows[0]}
-export function reconcile(db,{apply=false}={}){
+export function reconcile(db,{apply=false,hnlOnly=false}={}){
  db.exec('BEGIN IMMEDIATE')
  try{
- const branches=branchMappings.map(([from,to,customer])=>{const source=one(db,'branches','jodoo_branch_id',from),target=one(db,'branches','jodoo_branch_id',to),parent=one(db,'customers','jodoo_customer_id',customer);if(target.customer_id!==parent.id||target.is_active!==1||target.lifecycle_status!=='ACTIVE'||parent.is_active!==1)throw Error(`Canonical branch/customer mismatch: ${to}/${customer}`);if(source.replaced_by_branch_id&&source.replaced_by_branch_id!==target.id)throw Error(`Conflicting replacement: ${from}`);return {from,to,source,target}})
- const customers=customerMappings.map(([from,to])=>({from,to,source:one(db,'customers','jodoo_customer_id',from),target:one(db,'customers','jodoo_customer_id',to)}))
+ const branches=branchMappings.filter(row=>!hnlOnly||row[0]==='B10509').map(([from,to,customer])=>{const source=one(db,'branches','jodoo_branch_id',from),target=one(db,'branches','jodoo_branch_id',to),parent=one(db,'customers','jodoo_customer_id',customer);if(target.customer_id!==parent.id||target.is_active!==1||target.lifecycle_status!=='ACTIVE'||parent.is_active!==1)throw Error(`Canonical branch/customer mismatch: ${to}/${customer}`);if(source.replaced_by_branch_id&&source.replaced_by_branch_id!==target.id)throw Error(`Conflicting replacement: ${from}`);return {from,to,source,target}})
+ const customers=customerMappings.filter(row=>!hnlOnly||row[0]==='C10285').map(([from,to])=>({from,to,source:one(db,'customers','jodoo_customer_id',from),target:one(db,'customers','jodoo_customer_id',to)}))
  const ids=new Set(branches.map(b=>b.source.id))
  for(const c of customers){if(c.target.is_active!==1)throw Error(`Inactive canonical customer ${c.to}`);const unexpected=db.prepare("SELECT jodoo_branch_id,id FROM branches WHERE customer_id=? AND is_active=1").all(c.source.id).filter(b=>!ids.has(b.id));if(unexpected.length)throw Error(`${c.from} has other active branches: ${unexpected.map(b=>b.jodoo_branch_id).join(', ')}`)}
  const unfinished=branches.flatMap(b=>db.prepare("SELECT s.id,s.status,d.dispatch_date FROM dispatch_stops s JOIN dispatches d ON d.id=s.dispatch_id WHERE s.branch_id=? AND s.status NOT IN ('completed','cancelled')").all(b.source.id).map(s=>({...s,branch:b.from})))
@@ -31,5 +31,5 @@ export function reconcile(db,{apply=false}={}){
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  const path=process.argv[2];if(!path)throw Error('Database path required')
  const db=new DatabaseSync(path,{open:true});db.exec('PRAGMA foreign_keys=ON;PRAGMA busy_timeout=10000')
- try{const apply=process.argv.includes('--apply');if(apply){const file=path+'.before-confirmed-customers-'+Date.now()+'.bak';await backup(db,file);console.log('BACKUP='+file)}console.log(JSON.stringify(reconcile(db,{apply}),null,2))}finally{db.close()}
+ try{const apply=process.argv.includes('--apply');if(apply){const file=path+'.before-confirmed-customers-'+Date.now()+'.bak';await backup(db,file);console.log('BACKUP='+file)}console.log(JSON.stringify(reconcile(db,{apply,hnlOnly:process.argv.includes('--hnl-only')}),null,2))}finally{db.close()}
 }
