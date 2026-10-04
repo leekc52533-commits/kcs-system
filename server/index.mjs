@@ -26,7 +26,7 @@ import {listUnloadingArchive,unloadingArchiveWorkbook} from './unloadingArchiveS
 import {canReadCompanyDocuments} from './documentReadAccess.mjs'
 import {previewEmployees,previewAccount,previewReadUrl} from './employeePreviewService.mjs'
 import {driverGuideStatus,acknowledgeDriverGuide} from './driverGuideService.mjs'
-import {translateNotice,noticeRecipients,publishNotice,employeeNotices,acknowledgeNotice,noticeManagement,noticeReadStatus} from './noticeBoardService.mjs'
+import {noticePhoto,translateNotice,noticeRecipients,publishNotice,employeeNotices,acknowledgeNotice,noticeManagement,noticeReadStatus} from './noticeBoardService.mjs'
 import {listArrangementRequests,reviewArrangementRequest,arrangementProof} from './driverArrangementService.mjs'
 import {searchPickupCustomers,pickupCustomerDetails,collectExistingCustomer,listExistingPickups,listCustomerTransfers,reviewCustomerTransfer} from './existingCustomerPickupService.mjs'
 import {intakeTrips,createIntake,listIntakes,cancelIntake,reviewIntake,intakeMatchOptions} from './temporaryCustomerIntakeService.mjs'
@@ -334,6 +334,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method==='GET' && url.pathname==='/api/mobile/customer-pickup-search') return sendJson(response,200,{items:searchPickupCustomers(url.searchParams.get('search'),session)})
     if (request.method==='GET' && url.pathname==='/api/mobile/customer-pickup-details') return sendJson(response,200,pickupCustomerDetails(url.searchParams.get('branchId'),session))
     if (request.method==='POST' && url.pathname==='/api/mobile/customer-pickups') return sendJson(response,200,collectExistingCustomer((await readJson(request)).payload,session))
+    if(request.method==='GET'&&/^\/api\/notices\/\d+\/photos\/\d+$/.test(url.pathname)){const parts=url.pathname.split('/'),photo=noticePhoto(parts[3],parts[5],session);response.writeHead(200,{'Content-Type':'image/jpeg','Content-Length':photo.length,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'});return response.end(photo)}
     if(request.method==='GET'&&url.pathname==='/api/notices/recipients')return sendJson(response,200,{items:noticeRecipients(session)})
     if(request.method==='GET'&&url.pathname==='/api/notices')return sendJson(response,200,{items:noticeManagement(session)})
     if(request.method==='POST'&&url.pathname==='/api/notices/translate')return sendJson(response,200,await translateNotice((await readJson(request)).payload,session))

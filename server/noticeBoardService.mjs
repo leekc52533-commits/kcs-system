@@ -1,3 +1,4 @@
+import {noticePhotos} from './noticePhotos.mjs'
 import {noticeVersions,noticeTerms,translateNoticeSource} from './noticeTranslation.mjs'
 import {db as defaultDb} from './database.mjs'
 import {canManageDispatch} from '../shared/dispatchAccess.js'
@@ -7,10 +8,11 @@ function employee(ctx,db){const e=db.prepare("SELECT id,name FROM employees WHER
 function manager(ctx,db){if(!canManageDispatch(ctx))fail('NOTICE_ACCESS',403);return employee(ctx,db)}
 export function noticeRecipients(ctx,db=defaultDb){manager(ctx,db);return db.prepare("SELECT id,name,employee_code employeeCode,job_role jobRole FROM employees WHERE is_active=1 AND employment_status='active' ORDER BY name COLLATE NOCASE,id").all()}
 export function publishNotice(payload,ctx,db=defaultDb){
+ if(payload.photos!==undefined)noticePhotos(payload.photos)
  const title=String(payload.title||'').trim(),body=String(payload.body||'').trim(),priority=payload.priority||'normal',audience=payload.audience,key=String(payload.requestKey||'')
  if(!title||title.length>120||!body||body.length>5000||!['normal','urgent'].includes(priority)||!['all','selected'].includes(audience)||!/^[-a-zA-Z0-9]{16,80}$/.test(key))fail('NOTICE_FIELDS')
  if(audience==='selected'&&(!Array.isArray(payload.employeeIds)||!payload.employeeIds.length||payload.employeeIds.length>1000||payload.employeeIds.some(id=>!Number.isSafeInteger(Number(id))||Number(id)<=0)))fail('NOTICE_RECIPIENTS')
- const ids=audience==='all'?[]:[...new Set(payload.employeeIds.map(Number))].sort((a,b)=>a-b),requestJson=JSON.stringify({title,body,priority,audience,ids,...noticeVersions(payload)})
+ const ids=audience==='all'?[]:[...new Set(payload.employeeIds.map(Number))].sort((a,b)=>a-b),requestJson=JSON.stringify({title,body,priority,audience,ids,...noticeVersions(payload),...(payload.photos?.length?{photos:noticePhotos(payload.photos)}:{})})
  return withImmediateTransaction(db,()=>{
   const actor=manager(ctx,db),prior=db.prepare('SELECT * FROM employee_notices WHERE request_key=?').get(key)
   if(prior){if(prior.publisher_id!==actor.id||prior.request_json!==requestJson)fail('NOTICE_RETRY',409);return{id:prior.id,idempotent:true}}
@@ -45,7 +47,7 @@ export function noticeReadStatus(id,ctx,db=defaultDb){
 
 function withTranslations(row){
  const {request_json,...item}=row
- try{const saved=JSON.parse(request_json);return {...item,sourceLanguage:saved.sourceLanguage||null,translations:saved.translations||{}}}catch{return {...item,translations:{}}}
+ try{const saved=JSON.parse(request_json);return {...item,sourceLanguage:saved.sourceLanguage||null,translations:saved.translations||{},photos:(saved.photos||[]).map((p,index)=>({name:p.name,url:`/api/notices/${item.id}/photos/${index}`}))}}catch{return {...item,translations:{}}}
 }
 const translating=new Set()
 export async function translateNotice(payload,ctx,db=defaultDb,options={}){
@@ -53,4 +55,14 @@ export async function translateNotice(payload,ctx,db=defaultDb,options={}){
  if(translating.has(actor.id))return {translations:{},failedLanguages:['zh','ms','en'],status:'busy'}
  translating.add(actor.id)
  try{return await translateNoticeSource(payload,{...options,terms:noticeTerms(db)})}finally{translating.delete(actor.id)}
+}
+
+export function noticePhoto(id,index,ctx,db=defaultDb){
+ const e=employee(ctx,db)
+ if(!canManageDispatch(ctx)&&!db.prepare('SELECT 1 FROM employee_notice_receipts WHERE notice_id=? AND employee_id=?').get(Number(id),e.id))fail('NOTICE_ACCESS',403)
+ const row=db.prepare('SELECT request_json FROM employee_notices WHERE id=?').get(Number(id))
+ if(!row)fail('NOTICE_MISSING',404)
+ const photo=JSON.parse(row.request_json).photos?.[Number(index)]
+ if(!photo)fail('NOTICE_MISSING',404)
+ return Buffer.from(photo.dataUrl.split(',')[1],'base64')
 }

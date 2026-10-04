@@ -77,3 +77,19 @@ test('translation requires active manager and never publishes or acknowledges',a
  const r=await translateNotice({...draft,sourceLanguage:'en'},manager,db,{apiKey:''});assert.equal(r.status,'notConfigured')
  assert.equal(noticeManagement(manager,db).length,0)
 })
+
+test('notice photos are atomic, private, immutable on retry and do not acknowledge',async t=>{
+ const {noticePhoto}=await import('../server/noticeBoardService.mjs'),db=fixture(t)
+ const photo={name:'camera.jpg',dataUrl:'data:image/jpeg;base64,/9j/2Q=='}
+ const r=publishNotice({...draft,photos:[photo]},manager,db)
+ assert.equal(employeeNotices(driver,db)[0].photos[0].url,`/api/notices/${r.id}/photos/0`)
+ assert.ok(!JSON.stringify(employeeNotices(driver,db)).includes('base64'))
+ assert.deepEqual(noticePhoto(r.id,0,driver,db),Buffer.from([255,216,255,217]))
+ assert.throws(()=>noticePhoto(r.id,0,crew,db),{code:'NOTICE_ACCESS'})
+ assert.throws(()=>noticePhoto(r.id,1,driver,db),{code:'NOTICE_MISSING'})
+ assert.equal(employeeNotices(driver,db)[0].readAt,null)
+ assert.equal(publishNotice({...draft,photos:[photo]},manager,db).idempotent,true)
+ assert.throws(()=>publishNotice({...draft,photos:[]},manager,db),{code:'NOTICE_RETRY'})
+ for(const photos of [[{dataUrl:'data:image/svg+xml;base64,AAAA'}],Array(6).fill(photo),{},[{dataUrl:'data:image/jpeg;base64,AAAA'}]])assert.throws(()=>publishNotice({...draft,requestKey:'invalid-photo-test-0001',photos},manager,db),{code:'NOTICE_FIELDS'})
+ assert.equal(db.prepare('SELECT COUNT(*) n FROM employee_notices').get().n,1)
+})
