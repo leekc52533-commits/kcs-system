@@ -1,3 +1,4 @@
+import ExportDateDialog,{downloadArchive} from './ExportDateDialog.jsx'
 import {formatDateDisplay} from './dateDisplay.js'
 import DateInput from './DateInput.jsx'
 import CenteredNotice from './CenteredNotice.jsx'
@@ -49,11 +50,7 @@ export default function ExpenseRecordsPage({onBack}){
     </div>
     {showColumns&&<ExpenseColumnOrder order={columnOrder} columns={columns.map(([k,l])=>[k,columnLabel(k,l)])} w={w} onSave={setColumnOrder} onClose={()=>setShowColumns(false)}/>}
     {historyItem&&<ExpenseCorrection readOnly item={historyItem} onClose={()=>setHistoryItem(null)}/>}
-    {showExport&&<div className="cash-modal expense-export-modal" role="dialog" aria-modal="true" aria-label={ui("Download Excel with Receipts")} onClick={e=>{if(e.target===e.currentTarget)setShowExport(false)}} onKeyDown={e=>{if(e.key==='Escape')setShowExport(false)}}><form onSubmit={e=>{e.preventDefault();window.location.href=`/api/expenses/export.xlsx?${query}`}}><header><h2>{ui("Download Excel with Receipts")}</h2><button type="button" title={ui("Close")} aria-label={ui("Close")} onClick={()=>setShowExport(false)}>×</button></header>
-      <label>{formatDateDisplay(ui("From Date"))}<DateInput autoFocus required aria-label={ui("From Date")} type="date" value={filters.from} max={filters.to} onChange={event=>setFilters({...filters,from:event.target.value})}/></label>
-      <label>{formatDateDisplay(ui("To Date"))}<DateInput required aria-label={ui("To Date")} type="date" value={filters.to} min={filters.from} onChange={event=>setFilters({...filters,to:event.target.value})}/></label>
-      <footer><button type="submit" title={ui("Download Excel with Receipts")} aria-label={ui("Download Excel with Receipts")} disabled={!filters.from||!filters.to||filters.from>filters.to}><ExpenseExportIcon/></button></footer>
-    </form></div>}
+    {showExport&&<ExportDateDialog title={ui("Download Excel with Receipts")} initialFrom={filters.from} initialTo={filters.to} onDownload={range=>downloadArchive(`/api/expenses/export.xlsx?${query}`,range)} onClose={()=>setShowExport(false)}/>}
     {message&&<div className="data-success">{message}</div>}{error&&<CenteredNotice>{error}</CenteredNotice>}{loading&&!data&&<div className="data-loading">{ui("Loading Expense Records\u2026")}</div>}
     <div className="archive-table" ref={tableRef}><table className="expense-table"><thead><tr>{orderedColumns.map(([key,label])=>{
  const translated=['expenseTypeLabel','category','paymentMethod','receiptLabel','proofLabel','statusLabel']

@@ -1,3 +1,4 @@
+import ExportDateDialog,{downloadArchive} from './ExportDateDialog.jsx'
 import {formatDateDisplay} from './dateDisplay.js'
 import {purchaseTime} from '../shared/archiveColumns.mjs'
 import CenteredNotice from './CenteredNotice.jsx'
@@ -25,7 +26,7 @@ const columns=[['serviceDateLabel','Date'],['billNumber','PO No.'],['issuedTime'
 export default function PurchaseBillsPage({onBack}){
   const {language}=useI18n(),ui=useUi(),tableRef=useRef(null),[openFilter,setOpenFilter]=useState(null)
   const[filters,setFilters]=useState({from:today(),to:today(),search:'',paymentMethod:'',employeeId:''}),[columnFilters,setColumnFilters]=useState({}),[sort,setSort]=useState({}),[data,setData]=useState(null),[error,setError]=useState(''),[loading,setLoading]=useState(false),[open,setOpen]=useState(null),[showWeights,setShowWeights]=useState(false)
-  const [exportTarget,setExportTarget]=useState(null)
+  const [showExport,setShowExport]=useState(false),[exportTarget,setExportTarget]=useState(null)
   useEffect(()=>{setExportTarget(document.getElementById('purchase-header-export'))},[])
   const query=useMemo(()=>new URLSearchParams(Object.entries({...filters,columns:JSON.stringify(columnFilters),sortKey:sort.key,sortDirection:sort.direction}).filter(([,value])=>value)).toString(),[filters,columnFilters,sort])
   useEffect(()=>{let active=true;setLoading(true);setError('');apiRequest(`/api/purchase-bills?${query}`).then(result=>active&&setData(result)).catch(item=>active&&setError(item.message)).finally(()=>active&&setLoading(false));return()=>{active=false}},[query])
@@ -35,7 +36,8 @@ export default function PurchaseBillsPage({onBack}){
   if(showWeights)return <UnloadingArchivePage onBack={()=>setShowWeights(false)}/>
   return <div className="page purchase-archive expense-records">
     <div className="expense-toolbar"><button type="button" onClick={()=>{setOpenFilter(null);setShowWeights(true)}}>{ui('Unloading Weight Records')}</button>
-      {exportTarget&&createPortal(<button type="button" className="record-icon-button" title={ui('Download Excel with Payment Proofs')} aria-label={ui('Download Excel with Payment Proofs')} onClick={()=>{window.location.href=`/api/purchase-bills/export.xlsx?${query}`}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 15V3m-5 5 5-5 5 5M4 15v6h16v-6"/></svg></button>,exportTarget)}</div>
+      {exportTarget&&createPortal(<button type="button" className="record-icon-button" title={ui('Download Excel with Payment Proofs')} aria-label={ui('Download Excel with Payment Proofs')} onClick={()=>{setOpenFilter(null);setShowExport(true)}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 15V3m-5 5 5-5 5 5M4 15v6h16v-6"/></svg></button>,exportTarget)}</div>
+    {showExport&&<ExportDateDialog title={ui('Download Excel with Payment Proofs')} initialFrom={filters.from} initialTo={filters.to} onDownload={range=>downloadArchive(`/api/purchase-bills/export.xlsx?${query}`,range)} onClose={()=>setShowExport(false)}/>}
     {error&&<CenteredNotice>{error}</CenteredNotice>}{loading&&!data&&<div className="data-loading">{ui('Loading Purchase Bills…')}</div>}
     <div className="archive-table" ref={tableRef}><table><thead><tr>{columns.map(([key,label])=>{
  const translated=['expenseTypeLabel','category','paymentMethod','receiptLabel','proofLabel','statusLabel']

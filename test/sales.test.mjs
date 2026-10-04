@@ -124,6 +124,7 @@ test('four historical header filters find old records and exports match selected
   assert.equal(result.items[0].settlementDate,'2006-09-28')
  }
  const query={...range,columns:JSON.stringify({deliveryDate:['2006-09-26']})}
+ assert.equal(listSales({...query,exportRange:'1'},office,db).items.length,0)
  const bytes=await exportSales(query,office,db,{uploadsRoot}),{default:ExcelJS}=await import('exceljs'),book=new ExcelJS.Workbook()
  await book.xlsx.load(bytes);assert.equal(book.getWorksheet('Sales').rowCount,2)
  assert.equal(listSales({...range,columns:JSON.stringify({deliveryDate:[]})},office,db).items.length,0)

@@ -39,7 +39,7 @@ export function applyArchiveColumns(kind,rows,query={}){
  let selected={}
  try{const parsed=typeof query.columns==='string'?JSON.parse(query.columns):query.columns;if(parsed&&typeof parsed==='object'&&!Array.isArray(parsed))selected=parsed}catch{}
  const historical=archiveHistoryKeys[kind]||[],allRows=rows
- if(!hasArchiveHistorySelection(kind,query))rows=rows.filter(r=>(!(query._rangeFrom||query.from)||r.serviceDate>=(query._rangeFrom||query.from))&&(!query._rangeToExclusive||r.serviceDate<query._rangeToExclusive)&&(!query.to||r.serviceDate<=query.to))
+ if(query.exportRange==='1'||!hasArchiveHistorySelection(kind,query))rows=rows.filter(r=>(!(query._rangeFrom||query.from)||r.serviceDate>=(query._rangeFrom||query.from))&&(!query._rangeToExclusive||r.serviceDate<query._rangeToExclusive)&&(!query.to||r.serviceDate<=query.to))
  const keys=archiveKeys[kind],collator=new Intl.Collator('en',{numeric:true,sensitivity:'base'})
  const filterOptions=Object.fromEntries(keys.map(key=>[key,[...new Set(['',...(historical.includes(key)?allRows:rows).map(row=>text(archiveValue(kind,row,key)))])].sort((a,b)=>collator.compare(a,b))]))
  for(const key of historical.filter(k=>k.endsWith('Label'))){const source=new Map(allRows.map(r=>[text(archiveValue(kind,r,key)),text(archiveValue(kind,r,key,true))]));filterOptions[key].sort((a,b)=>['serviceDateLabel','createdAtLabel'].includes(key)?(a===''?(b===''?0:1):b===''?-1:collator.compare(source.get(b)||'',source.get(a)||'')):collator.compare(source.get(a)||'',source.get(b)||''))}
