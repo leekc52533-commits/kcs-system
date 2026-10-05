@@ -12,3 +12,9 @@ export function validCoordinatePair(latitude,longitude){
   const lat=Number(latitude),lng=Number(longitude)
   return Number.isFinite(lat)&&lat>=-90&&lat<=90&&Number.isFinite(lng)&&lng>=-180&&lng<=180
 }
+
+export function coordinatesFromMapSearch(value){
+ const query=String(value??'').trim()
+ if(!/^[\s\d+.,，;()\-]+$/.test(query)||!/[，,;\s]/.test(query))return null
+ return parseCoordinates(query.replace(/，|;/g,',').replace(/[()]/g,''))
+}
