@@ -82,3 +82,22 @@ test('direct GPS role boundary ignores payload privileges, preserves audit and r
   }finally{db.close()}
  }
 })
+
+test('GPS-only saves preserve approved dispatch and schedules even when the old UI submits the unchanged schedule',()=>{
+ for(const role of ['supervisor','operations_admin','owner_admin']){
+ const db=fixture(),actor={...owner,role};saveCustomerWorkspace(payload(),actor,db)
+ db.exec("INSERT INTO weekly_route_plans(name,source_name,created_by) VALUES('Current','Test','KC');INSERT INTO weekly_route_definitions(plan_id,route_number,display_name) VALUES(1,1,'Route A');INSERT INTO weekly_route_plan_stops(plan_id,weekday,branch_id,vehicle_registration_number,trip_number,stop_sequence,route_number) VALUES(1,1,1,'ABC123',1,1,1)")
+ const today=kuchingDate(),weekday=new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Kuching',weekday:'long'}).format(new Date())
+ const r=saveCustomerWorkspace({...payload(),schedule:{frequency:'Once a week',weekdays:[weekday],routeNumber:1,effectiveDate:today,anchorDate:today}},actor,db)
+ db.exec("UPDATE dispatch_days SET status='approved'")
+ const snapshot=()=>JSON.stringify(['dispatch_days','dispatch_stops','branch_schedules','weekly_route_plan_stops'].map(table=>db.prepare('SELECT * FROM '+table).all()))
+ const before=snapshot(),fresh=customerWorkspace({branchId:r.branch.branchId},actor,db)
+ const request={requestId:randomUUID(),branchId:r.branch.branchId,revision:fresh.revision,reason:'Correct shop GPS',customer:{customerName:fresh.customer.customerName},branch:{branchName:fresh.branch.branchName},schedule:{...fresh.schedule,routeNumber:fresh.schedule.homeRouteNumber||''},gps:{latitude:1.7,longitude:110.5}}
+ const result=saveCustomerWorkspace(request,actor,db)
+ assert.equal(result.gpsOnly,true);assert.deepEqual(result.review,[]);assert.deepEqual(result.pending,[])
+ assert.equal(result.branch.officialLatitude,1.7);assert.equal(snapshot(),before)
+ assert.ok(db.prepare("SELECT 1 FROM branch_gps_history WHERE reason='Correct shop GPS'").get())
+ assert.equal(JSON.stringify(saveCustomerWorkspace(request,actor,db)),JSON.stringify(result))
+ db.close()
+ }
+})

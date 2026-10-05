@@ -242,7 +242,6 @@ export function captureBranchGps(branchId,payload,database=defaultDb,context={})
    database.prepare("UPDATE temporary_locations SET verification_status='kept_official',review_decision='keep_official',review_reason='Superseded by direct supervisor GPS edit',reviewed_by=?,reviewed_at=CURRENT_TIMESTAMP WHERE branch_id=? AND verification_status='pending_supervisor'").run(actor,branch.id)
    database.prepare("UPDATE temporary_locations SET review_decision='direct_edit',review_reason=?,reviewed_by=?,reviewed_at=CURRENT_TIMESTAMP WHERE id=?").run(text(payload.reason||payload.remark),actor,item.id)
    history(database,'branch',branchId,'direct_gps_pending_closed',pending,{latitude,longitude},{changedBy:actor,reason:text(payload.reason||payload.remark)})
-   invalidateBranches(database,[branch.id],'official_gps_direct_changed','branch',branch.id,branch,{latitude,longitude},actor)
   }
   item={...database.prepare('SELECT * FROM temporary_locations WHERE id=?').get(item.id),initialCapture:first}
   if(ownsTransaction)database.exec('COMMIT');return item

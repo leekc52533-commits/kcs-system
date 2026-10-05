@@ -1,3 +1,4 @@
+import {collectionScheduleChanged,workspaceFieldsChanged} from '../shared/customerWorkspaceChanges.js'
 import {canDirectEditGps} from '../shared/gpsAccess.js'
 import {applyBranchLifecycle} from './branchLifecycleService.mjs'
 import {activeLocationAreas,previewCustomerLocation,validateLocationCheck,saveLocationCheck,pendingLocationChecks,decideCustomerLocation} from './customerLocationCheck.mjs'
@@ -39,6 +40,18 @@ export function saveCustomerWorkspace(payload,actor={},db=defaultDb){
   if(previous){const saved=JSON.parse(previous.after_json);if(saved.signature!==signature)throw fail('Request ID already used with different data.',409);if(ownsTransaction)db.exec('COMMIT');return saved.result}
   const before=customerWorkspace(payload,actor,db)
   if((payload.branchId||payload.customerId)&&before.revision!==payload.revision)throw fail('Customer data changed. Reload before saving.',409)
+  const scheduleChanged=collectionScheduleChanged(payload.schedule,before.schedule)
+  const gpsOnly=Boolean(before.branch&&payload.gps&&!scheduleChanged&&!payload.locationCheck
+   &&!workspaceFieldsChanged(payload.customer,before.customer,customerFields)
+   &&!workspaceFieldsChanged(payload.branch,before.branch,[...branchFields,'lifecycleStatus']))
+  if(gpsOnly){
+   if(!accountCan(actor,'gps_capture',db))throw fail('GPS capture permission required.',403)
+   const changedBy=actor.employeeName||actor.username||`Account ${actor.id}`
+   captureBranchGps(before.branch.branchId,{...pick(payload.gps,['latitude','longitude','accuracyM','capturedLatitude','capturedLongitude','capturedAccuracyM','deviceCapturedAt','manuallyAdjusted','adjustmentReason','address','state','street','city','streetNumber','postalCode','reverseGeocodeProvider','locationSource']),remark:reason,capturedBy:changedBy,changedBy,employeeId:actor.employeeId},db,actor)
+   const result={...customerWorkspace({branchId:before.branch.branchId},actor,db),gpsOnly:true,review:[]}
+   db.prepare("INSERT INTO audit_logs(action,entity_type,entity_id,before_json,after_json) VALUES('customer_workspace_saved','branch',?,?,?)").run(key,JSON.stringify({branchId:before.branch.branchId,revision:before.revision}),JSON.stringify({signature,result}))
+   if(ownsTransaction)db.exec('COMMIT');return result
+  }
   const locationProof=validateLocationCheck(payload,before,actor)
   const changedBy=actor.employeeName||actor.username||`Account ${actor.id}`
   const c={...pick(payload.customer,customerFields),reason,changedBy}
@@ -54,7 +67,7 @@ export function saveCustomerWorkspace(payload,actor={},db=defaultDb){
    lifecycleSync=applyBranchLifecycle(branch.branchId,{lifecycleStatus:requestedStatus,reason},{changedBy,accountId:actor.id},db)
    branch=getBranch(branch.branchId,db)
   }
-  if(payload.schedule&&branch.lifecycleStatus==='ACTIVE'&&!['paused','closed'].includes(customer.status)){
+  if(scheduleChanged&&payload.schedule&&branch.lifecycleStatus==='ACTIVE'&&!['paused','closed'].includes(customer.status)){
    const current=getCollectionScheduleManagement(branch.branchId,db)
    if(!current)throw fail('Only active branches can change collection schedules.',409)
    saveCollectionScheduleManagement(branch.branchId,{...pick(payload.schedule,['frequency','weekdays','anchorDate','effectiveDate','monthlyOccurrence','routeNumber','sundayRouteNumber']),routeNumber:payload.schedule.routeNumber||undefined,reason,changedBy,sundayAuthorized:true,expectedUpdatedAt:current.updatedAt},db,{supervisorConfirmed:true})
@@ -65,7 +78,7 @@ export function saveCustomerWorkspace(payload,actor={},db=defaultDb){
   }
   saveLocationCheck(payload,locationProof,getBranch(branch.branchId,db),actor,db)
   let review=(lifecycleSync?.scheduleSync?.preserved||[]).map(item=>({...item,kind:'lifecycle_protected',branchId:branch.branchId,branchName:branch.branchName}))
-  if(payload.schedule&&branch.lifecycleStatus==='ACTIVE'&&!['paused','closed'].includes(customer.status)){
+  if(scheduleChanged&&payload.schedule&&branch.lifecycleStatus==='ACTIVE'&&!['paused','closed'].includes(customer.status)){
    if(db.prepare('SELECT 1 FROM weekly_route_plans WHERE is_active=1').get())generateWeek({startDate:kuchingDate(),count:7,onlyMissing:true,generatedBy:changedBy},db)
    review=reconcileScheduleWindow({branchIds:[branch.internalId],changedBy},db).map(r=>({...r,expectedRevision:db.prepare('SELECT revision FROM dispatch_days WHERE dispatch_date=?').get(r.date)?.revision}))
   }
