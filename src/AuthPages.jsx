@@ -1,3 +1,4 @@
+import {DriverPlanHeader,DriverPlanOrder} from './DriverPlanControls.jsx'
 import RescheduleReminder from './RescheduleReminder.jsx'
 import {GpsReleaseRequest} from './GpsRelease.jsx'
 import {MobileLeave} from './LeaveRequests.jsx'
@@ -208,7 +209,7 @@ function TodayView({data,preview=false}){
   return <section className="driver-route">
     <DateSystemReleaseNotices items={route.systemReviewNotices}/>
     <h1>{t(preview?'mobile.tomorrow':'mobile.today')}</h1>
-    {preview&&<p className="route-preview-notice">{t('mobile.tomorrowPreview')}</p>}
+    {preview&&!route.trips.some(trip=>trip.canPlan)&&<p className="route-preview-notice">{t('mobile.tomorrowPreview')}</p>}
     {!preview&&<CashFloatMobileCard/>}
     {!preview&&route.arrivalTestMode&&<div className="test-mode-warning">{ui("REMOTE ARRIVAL TEST MODE")}</div>}
     {message&&<div className="mobile-message" role="status">{ui(message)}</div>}
@@ -220,11 +221,11 @@ function TodayView({data,preview=false}){
         <span>{t('mobile.routeStatus')}: {formatDateDisplay(t(trip.executionStatus==='completed'?'mobile.completed':trip.approved===false?'dateReview.awaitDeparture':trip.executionStatus==='in_progress'?'mobile.inProgress':'mobile.notStarted'))}</span>
         <span>{t('mobile.totalStops')}: {trip.totalCount??trip.stops.length} · {t('mobile.completed')}: {trip.completedCount||0} · {t('mobile.pending')}: {trip.stops.filter(stop=>stop.status!=='completed').length} · {t('ng.title')}: {trip.noGoodsCount||0}</span>
       </div>
-      <DriverNextStep trip={trip} preview={preview}/>{trip.approved===false&&<p className="route-preview-notice">{formatDateDisplay(t('dateReview.draftVisible'))}</p>}
+      {preview&&<DriverPlanHeader trip={trip} busy={Boolean(busy)} run={run}/>}<DriverNextStep trip={trip} preview={preview}/>{trip.approved===false&&<p className="route-preview-notice">{formatDateDisplay(t('dateReview.draftVisible'))}</p>}
       {!preview&&trip.canStart&&<button type="button" className="primary-mobile" disabled={Boolean(busy)} onClick={()=>start(trip)}>{busy==='trip-'+trip.id?t('common.processing'):t('mobile.startTrip')}</button>}
       {trip.stops.filter(stop=>!['no_goods','no_goods_notice'].includes(stop.completionOutcome)).map(stop=>{
         const current=trip.currentStopId===stop.id,ended=stop.status==='completed',pendingApproval=stop.deferApprovalStatus==='pending',ready=stop.billCreated&&(stop.billPaymentMethod==='Credit'||stop.paymentProofUploaded),label=stop.stopSequence+'. '+stop.customerName+' — '+stop.branchName,canOpen=preview||trip.approved===false||current||stop.canArrive||stop.canFinish||stop.deferred||ended&&stop.billCreated,expanded=preview||(openStopId==null?current:openStopId===stop.id)&&canOpen
-        const adjustmentTools=!preview&&<><DriverRouteTools {...{stop,trip,route,run}} busy={Boolean(busy)}/><NoGoodsButton stop={stop} disabled={Boolean(busy)} onSaved={refresh}/></>
+        const adjustmentTools=preview?<DriverPlanOrder {...{trip,stop,run}} busy={Boolean(busy)}/>:<><DriverRouteTools {...{stop,trip,route,run}} busy={Boolean(busy)}/><NoGoodsButton stop={stop} disabled={Boolean(busy)} onSaved={refresh}/></>
         if(!expanded)return <div data-mobile-stop={stop.id} className={'driver-stop collapsed-stop'+(stop.deferred?' deferred-stop':pendingApproval?' defer-pending':'')} key={stop.id}>{canOpen?<button type="button" className="stop-name-button" onClick={()=>toggleStop(stop.id)}><b><span data-i18n-raw>{label}</span></b><span>{pendingApproval?t('mobile.waitingSupervisor')+' ▼':stop.deferred?ui("COME BACK LATER ▼"):current?ui("OPEN ▼"):'▼'}</span></button>:<b><span data-i18n-raw>{label}</span></b>}{<RescheduleReminder value={stop.rescheduleHistory}/>} {<small className="mobile-stop-area" data-i18n-raw>{[stop.zoneGroup,stop.area].filter(Boolean).join(" · ")}</small>}{adjustmentTools}</div>
         if(!preview&&ended)return <div className="driver-stop collapsed-stop" key={stop.id}><button type="button" className="stop-name-button" onClick={()=>toggleStop(stop.id)}><b><span data-i18n-raw>{label}</span></b><span>▲</span></button><PurchaseBillPanel stop={stop} onChanged={refresh} readOnly/></div>
         const mapUrl=stopMapUrl(stop),status=stop.arrivedAt?'Arrived':'Pending'
