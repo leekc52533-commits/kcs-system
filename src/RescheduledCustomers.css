@@ -27,3 +27,5 @@
 .reschedule-detail-scroll{overflow:auto;max-width:100%}
 #root .rescheduled-customers .reschedule-detail-scroll table{table-layout:auto;min-width:950px;width:100%}
 #root .rescheduled-customers .reschedule-detail-scroll th,#root .rescheduled-customers .reschedule-detail-scroll td{position:static;width:auto;white-space:normal;text-align:left;min-width:105px;overflow-wrap:anywhere}
+
+.reschedule-detail-row header .reschedule-branch-link{font-weight:inherit;padding:0;text-decoration:underline;text-underline-offset:3px;color:#137362}
