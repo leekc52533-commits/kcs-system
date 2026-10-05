@@ -1434,6 +1434,6 @@ export function supportCustomerOptions(date,context={},database=defaultDb){
  const byScheduled=new Map(scheduled.map(s=>[s.branchId,s]))
  for(const b of priority){const stop=byScheduled.get(b.id);b.stopId=stop?.stopId??null;if(stop?.routeNumber!=null)b.routeNumbers=[stop.routeNumber]}
  const due=dueCustomers(database)
- for(const b of due){const stop=byScheduled.get(b.id);b.stopId=stop?.stopId??null;if(stop?.routeNumber!=null)b.routeNumbers=[stop.routeNumber]}
+ for(const b of due){const stop=byScheduled.get(b.id);b.stopId=stop?.stopId??null;b.routeNumbers=stop?.routeNumber!=null?[stop.routeNumber]:(byBranch.get(b.id)||b.routeNumbers)}
  return {items,routes,priority,due,asOf:new Date().toISOString()}
 }

@@ -13,7 +13,7 @@ const{I18nProvider}=await vite.ssrLoadModule('/src/i18n.jsx'),{default:Page}=awa
 test('due tab supports all languages, evidence expansion and independent support selection without writes',async()=>{
  for(const language of ['zh','ms','en']){
   localStorage.clear();const root=createRoot(document.getElementById('root')),calls=[];let selected=[],stops=[]
-  const branch={id:1,branchCode:'B1',branchName:'BRANCH A',routeNumbers:[1],originalDate:'2026-10-01',newDate:'2026-10-08',overdueMinutes:6000,overdueStatus:'overdue',lastCollectionDate:'2026-09-28',driverName:'DRIVER',history:[{id:1,sourceDate:'2026-10-01',targetDate:'2026-10-08',reason:'No time',approvedBy:'Manager'}],visits:[{id:1,date:'2026-09-28',status:'collected'}]}
+  const branch={id:1,branchCode:'B1',branchName:'BRANCH A',routeNumbers:[1],dueDate:'2026-10-01',newDate:'2026-10-08',overdueMinutes:6000,overdueStatus:'overdue',lastCollectionDate:'2026-09-28',driverName:'DRIVER',history:[{id:1,sourceDate:'2026-10-01',targetDate:'2026-10-08',reason:'No time',approvedBy:'Manager'}],visits:[{id:1,date:'2026-09-28',status:'collected'}]}
   const blocked={...branch,id:2,branchName:'BRANCH B',stopId:20,overdueMinutes:100}
   globalThis.fetch=async(url,options={})=>{calls.push(options.method||'GET');return {ok:true,headers:new Headers(),json:async()=>({priority:[],items:[{id:1}],routes:[{routeNumber:1,name:'Route A'}],due:[branch,blocked],asOf:'2026-10-05T03:00:00Z'})}}
   const selection={routes:[{routeNumber:1,name:'Route A',stops:[{id:20,status:'active',arrivedAt:'2026-10-05'}]}],stops:[],otherCustomers:[],setStops:fn=>{stops=fn(stops)},setOtherCustomers:fn=>{selected=fn(selected)}}

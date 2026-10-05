@@ -1,3 +1,4 @@
+import {nextCollectionDate,normalizeRecurrenceConfig} from '../shared/scheduleRecurrence.js'
 import {addCalendarDays,kuchingDate} from '../shared/kuchingTime.js'
 
 // Only explicit clock values/deadlines are interpreted. Free-form opening hours
@@ -17,6 +18,11 @@ export function collectionDeadline(value){
 
 export function dueCustomers(db,{now=new Date()}={}){
  const today=kuchingDate(now),groups=new Map()
+ for(const b of db.prepare(`SELECT b.id,b.jodoo_branch_id branchCode,b.branch_name branchName,b.time_restriction timeRestriction,
+ b.collection_frequency frequency,b.assigned_weekdays days_of_week,c.name customerName FROM branches b JOIN customers c ON c.id=b.customer_id
+ WHERE b.is_active=1 AND b.status='active' AND b.lifecycle_status='ACTIVE' AND c.is_active=1 AND c.status='active'`).all())groups.set(b.id,{...b,stops:[],changes:[],schedules:[],bill:null})
+ for(const bill of db.prepare("SELECT id,branch_id branchId,service_date date,bill_number number FROM purchase_bills WHERE status='issued' ORDER BY service_date,id").all())if(groups.has(bill.branchId))groups.get(bill.branchId).bill=bill
+ for(const schedule of db.prepare('SELECT * FROM branch_schedules WHERE is_active=1 ORDER BY id').all())groups.get(schedule.branch_id)?.schedules.push(schedule)
  const stops=db.prepare(`SELECT b.id,b.jodoo_branch_id branchCode,b.branch_name branchName,b.time_restriction timeRestriction,
  c.name customerName,s.id evidenceStopId,COALESCE(s.service_date,d.dispatch_date) serviceDate,s.status,
  s.completion_outcome outcome,s.arrived_at arrivedAt,s.completed_at completedAt,s.route_number routeNumber,
@@ -25,7 +31,7 @@ export function dueCustomers(db,{now=new Date()}={}){
  JOIN customers c ON c.id=b.customer_id LEFT JOIN employees e ON e.id=d.driver_id
  WHERE b.is_active=1 AND b.status='active' AND b.lifecycle_status='ACTIVE' AND c.is_active=1 AND c.status='active'
  ORDER BY serviceDate,s.id`).all()
- for(const s of stops){if(!groups.has(s.id))groups.set(s.id,{...s,stops:[],changes:[]});groups.get(s.id).stops.push(s)}
+ for(const s of stops)groups.get(s.id)?.stops.push(s)
  const changes=db.prepare(`SELECT s.branch_id branchId,r.id,r.dispatch_stop_id sourceStopId,r.target_stop_id targetStopId,
  r.source_date sourceDate,COALESCE(v.approved_date,r.target_date) targetDate,r.reason,r.reviewed_by approvedBy,
  r.reviewed_at approvedAt,r.review_reason reviewReason,e.name employeeName
@@ -36,28 +42,45 @@ export function dueCustomers(db,{now=new Date()}={}){
  for(const c of changes)groups.get(c.branchId)?.changes.push(c)
  const result=[]
  for(const b of groups.values()){
-  // Arrival or a valid bill is evidence against "no arrival record", even if a
-  // collector has not completed the trip. Only completed + issued means collected.
-  const evidence=b.stops.filter(s=>s.arrivedAt||s.hasBill)
-  const lastEvidence=evidence.reduce((last,s)=>s.serviceDate>last?s.serviceDate:last,'')
-  const lastCollection=b.stops.filter(s=>s.status==='completed'&&s.outcome==='completed'&&s.completedAt&&s.hasBill).at(-1)
-  const candidates=b.stops.filter(s=>s.status!=='cancelled'&&!s.arrivedAt&&!s.hasBill).map(s=>({date:s.serviceDate,stop:s}))
-  for(const c of b.changes){const s=b.stops.find(s=>s.evidenceStopId===c.sourceStopId);if(s)candidates.push({date:c.sourceDate,stop:s})}
-  const original=candidates.filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x.date||'')&&x.date<=today&&x.date>lastEvidence).sort((a,b)=>a.date.localeCompare(b.date))[0]
-  if(!original)continue
+  // Only an issued purchase bill resets the collection clock. Trip completion,
+  // arrival and approved date requests cannot replace its business service date.
+  const lastCollection=b.bill
+  let dueDate=null,unknownStatus='schedule_unknown'
+  if(lastCollection){
+   const schedules=b.schedules.length?b.schedules:[b]
+   const dates=[]
+   for(const schedule of schedules){
+    try{
+     const config=normalizeRecurrenceConfig(schedule)
+     if(['on_call','paused'].includes(config.recurrenceType)){unknownStatus='on_call';continue}
+     // Fixed weekdays/monthly rules stay on their calendar; interval weeks restart
+     // from the actual bill date, then use the configured weekday on/after it.
+     let date
+     if(config.recurrenceType==='interval_weeks'&&[2,3].includes(config.intervalWeeks)&&config.fixedWeekday){
+      date=nextCollectionDate({frequency:'Weekly',days_of_week:config.fixedWeekday},addCalendarDays(lastCollection.date,7*config.intervalWeeks))
+     }else date=nextCollectionDate({...schedule,effective_date:null,effectiveDate:null,anchor_date:lastCollection.date,anchorDate:lastCollection.date,take_date:null,next_take_date:null},lastCollection.date,{includeFrom:false})
+     if(date)dates.push(date)
+    }catch{/* Incomplete master schedule: show unknown, never invent a deadline. */}
+   }
+   dueDate=dates.sort()[0]||null
+  }
+  if(dueDate&&dueDate>today)continue
   const deadlineTime=collectionDeadline(b.timeRestriction)
-  const deadline=Date.parse(`${deadlineTime?original.date:addCalendarDays(original.date,1)}T${deadlineTime||'00:00'}:00+08:00`)
-  const overdueMinutes=Math.max(0,Math.floor((+new Date(now)-deadline)/60000))
-  const history=b.changes.filter(c=>c.sourceDate>=original.date)
-  const latest=history.at(-1)
-  const current=b.stops.find(s=>s.evidenceStopId===latest?.targetStopId)||original.stop
+  const deadline=dueDate?Date.parse(`${deadlineTime?dueDate:addCalendarDays(dueDate,1)}T${deadlineTime||'00:00'}:00+08:00`):null
+  const overdueMinutes=deadline==null?null:Math.max(0,Math.floor((+new Date(now)-deadline)/60000))
+  const history=b.changes.filter(c=>!lastCollection||c.sourceDate>=lastCollection.date)
+  const planned=b.stops.filter(s=>s.status!=='cancelled'&&s.status!=='completed'&&s.serviceDate>=today)[0]
+  const current=planned||b.stops.at(-1)
+  const visit=dueDate?b.stops.filter(s=>s.arrivedAt&&s.serviceDate>=dueDate).at(-1):null
+  let status=!lastCollection?'no_collection':!dueDate?unknownStatus:+new Date(now)>=deadline?(deadlineTime?'timed_out':'overdue'):'today'
+  if(visit)status=['no_goods','no_goods_notice'].includes(visit.outcome)?'arrived_no_goods':'arrived'
   result.push({id:b.id,branchCode:b.branchCode,branchName:b.branchName,customerName:b.customerName,
-   originalDate:original.date,deadlineTime,timeRestriction:b.timeRestriction,newDate:latest?.targetDate||original.date,
-   overdueMinutes,overdueStatus:+new Date(now)>=deadline?(deadlineTime?'timed_out':'overdue'):'today',
-   lastCollectionDate:lastCollection?.serviceDate||null,driverName:current.driverName||original.stop.driverName||'',
-   routeNumbers:current.routeNumber==null?[]:[current.routeNumber],history,
+   dueDate,deadlineTime,timeRestriction:b.timeRestriction,newDate:planned?.serviceDate||null,lastBillNumber:lastCollection?.number||null,
+   overdueMinutes,overdueStatus:status,
+   lastCollectionDate:lastCollection?.date||null,driverName:current?.driverName||'',
+   routeNumbers:current?.routeNumber==null?[]:[current.routeNumber],history,
    visits:b.stops.filter(s=>s.arrivedAt||s.completedAt||s.hasBill).map(s=>({id:s.evidenceStopId,date:s.serviceDate,arrivedAt:s.arrivedAt,completedAt:s.completedAt,
     status:s.hasBill&&s.status==='completed'&&s.outcome==='completed'?'collected':s.arrivedAt?(['no_goods','no_goods_notice'].includes(s.outcome)?'arrived_no_goods':'arrived'):s.hasBill?'bill_record':['no_goods','no_goods_notice'].includes(s.outcome)?'reported_no_goods':'completed_unverified',driverName:s.driverName}))})
  }
- return result.sort((a,b)=>b.overdueMinutes-a.overdueMinutes||a.originalDate.localeCompare(b.originalDate)||a.branchName.localeCompare(b.branchName))
+ return result.sort((a,b)=>(b.overdueMinutes??-1)-(a.overdueMinutes??-1)||String(a.dueDate||'').localeCompare(b.dueDate||'')||a.branchName.localeCompare(b.branchName))
 }
