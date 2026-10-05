@@ -58,7 +58,7 @@ export function NoticeManagement(){
   try{
    const result=await api('/api/notices/translate',{method:'POST',body:JSON.stringify({title:draft.title,body:draft.body,sourceLanguage:draft.sourceLanguage})})
    setDraft(d=>({...d,translations:{...d.translations,...Object.fromEntries(Object.entries(result.translations||{}).filter(([lang])=>lang!==d.sourceLanguage||!d.translations[lang]))},requestKey:crypto.randomUUID()}))
-   setTranslationStatus(result.status==='ready'?'':result.status||'failed')
+   setTranslationStatus(result.status==='ready'?'':result.errorCode||result.status||'failed')
   }catch{setTranslationStatus('failed')}finally{translationLock.current=false;setTranslating(false)}
  }
  const editVersion=(lang,field,value)=>setDraft(d=>({...d,translations:{...d.translations,[lang]:{...(d.translations[lang]||(lang===d.sourceLanguage?{title:d.title,body:d.body}:{title:'',body:''})),[field]:value}},requestKey:crypto.randomUUID()}))

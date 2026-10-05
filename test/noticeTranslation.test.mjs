@@ -28,3 +28,13 @@ test('legacy and partial versions use per-field original fallback',()=>{
  assert.deepEqual(noticeText(source,'ms'),{title:source.title,body:source.body})
  assert.deepEqual(noticeText({...source,translations:{ms:{title:'Notis',body:''}}},'ms'),{title:'Notis',body:source.body})
 })
+test('provider failures expose only safe actionable codes, never provider text or key',async()=>{
+ for(const [status,code,expected] of [[401,'invalid_api_key','invalidKey'],[429,'insufficient_quota','quotaExceeded'],[403,'','permissionDenied'],[429,'','rateLimited'],[404,'','modelUnavailable'],[500,'','providerUnavailable']]){
+  const r=await translateNoticeSource(source,{apiKey:'secret-key',fetchImpl:async()=>new Response(JSON.stringify({error:{code,message:'secret-key private provider text'}}),{status})});
+  assert.equal(r.errorCode,expected);assert.equal(r.status,'failed');assert.ok(!JSON.stringify(r).includes('secret-key'));assert.deepEqual(r.failedLanguages,['ms','en']);
+ }
+});
+test('timeouts have distinct diagnostics and preserve original',async()=>{
+ const r=await translateNoticeSource(source,{apiKey:'test',fetchImpl:async()=>{throw new DOMException('timeout','TimeoutError')}});
+ assert.equal(r.errorCode,'translationTimeout');assert.equal(r.translations.zh.body,source.body);
+});
