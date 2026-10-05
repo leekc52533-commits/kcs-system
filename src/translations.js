@@ -3724,6 +3724,7 @@ operationalUiMessages.push(
  ['Sort ascending','Sort ascending','Susun menaik','升序'],
  ['Sort descending','Sort descending','Susun menurun','降序']
 )
+operationalUiMessages.push(...[["Search customer / branch name or address", "Search customer / branch name or address", "Cari nama pelanggan / cawangan atau alamat", "搜索客户／分店名称或地址"], ["Enter a customer name or address to search.", "Enter a customer name or address to search.", "Masukkan nama pelanggan atau alamat untuk carian.", "请输入客户名称或地址。"], ["Map search requires a Google Places API key.", "Map search requires a Google Places API key.", "Carian peta memerlukan kunci Google Places API.", "地图搜索需要配置 Google Places API 密钥。"], ["Enable Places API (New) and authorize the server API key in Google Cloud.", "Enable Places API (New) and authorize the server API key in Google Cloud.", "Aktifkan Places API (New) dan benarkan kunci API pelayan dalam Google Cloud.", "请在 Google Cloud 启用 Places API (New)，并授权服务器 API 密钥。"]])
 for(const row of operationalUiMessages)for(const text of row)operationalAliases.set(normalizeUiText(text),row)
 export function translateUi(language,source,variables={}){
   const value=String(source??''),normalized=normalizeUiText(value),row=operationalAliases.get(normalized)

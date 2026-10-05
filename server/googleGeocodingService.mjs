@@ -44,3 +44,27 @@ export async function geocodeGoogleAddress(address,{fetchImpl=fetch,apiKey=proce
   if(!candidates.length)throw safeError('Google returned an invalid map location.')
   return{candidates,provider:'Google Geocoding API'}
 }
+
+// Text Search finds businesses as well as street addresses. Keys stay server-side.
+export async function searchGooglePlaces(query,{fetchImpl=fetch,apiKey=process.env.GOOGLE_PLACES_API_KEY||process.env.GOOGLE_GEOCODING_API_KEY}={}){
+  const textQuery=String(query??'').trim()
+  if(!textQuery)throw safeError('Enter a customer name or address to search.',400)
+  if(!apiKey)throw safeError('Map search requires a Google Places API key.',503)
+  let response,data
+  try{
+    response=await fetchImpl('https://places.googleapis.com/v1/places:searchText',{
+      method:'POST',signal:AbortSignal.timeout(15000),
+      headers:{'Content-Type':'application/json','X-Goog-Api-Key':apiKey,'X-Goog-FieldMask':'places.id,places.displayName,places.formattedAddress,places.location'},
+      body:JSON.stringify({textQuery,languageCode:'en',regionCode:'MY',pageSize:20,locationBias:{circle:{center:{latitude:1.5533,longitude:110.3592},radius:50000}}})
+    })
+    if(response.status===403||response.status===401)throw safeError('Enable Places API (New) and authorize the server API key in Google Cloud.',503)
+    if(!response.ok)throw safeError('Map search is temporarily unavailable.')
+    data=await response.json()
+  }catch(error){if(error.statusCode)throw error;throw safeError('Map search is temporarily unavailable.')}
+  const candidates=(data.places||[]).filter(place=>{
+    const lat=place.location?.latitude,lon=place.location?.longitude
+    return typeof lat==='number'&&Number.isFinite(lat)&&Math.abs(lat)<=90&&typeof lon==='number'&&Number.isFinite(lon)&&Math.abs(lon)<=180
+  }).map((place,index)=>({id:String(place.id||index),name:place.displayName?.text||place.formattedAddress||textQuery,address:place.formattedAddress||'',latitude:String(place.location.latitude),longitude:String(place.location.longitude)}))
+  if(!candidates.length)throw safeError('No matching location was found.',404)
+  return{candidates,provider:'Google Places API'}
+}
