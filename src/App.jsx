@@ -1,3 +1,4 @@
+import MobileSimulation from './MobileSimulation.jsx'
 import {LeaveApprovals,LeaveRecords,UpcomingLeaveCard} from './LeaveRequests.jsx'
 import {AttendanceApprovals,AttendanceDaily} from './Attendance.jsx'
 import {formatDateDisplay} from './dateDisplay.js'
@@ -77,7 +78,7 @@ function AppContent(){
 
 function LoadingScreen(){const{t}=useI18n();return <main className="auth-page"><div className="auth-card">{t('app.loading')}</div></main>}
 
-export default function App(){const id=new URLSearchParams(window.location.search).get('employeePreview');return <AppErrorBoundary>{id&&/^\d+$/.test(id)?<EmployeePreview employeeId={Number(id)}/>:<AppContent/>}</AppErrorBoundary>}
+export default function App(){const id=new URLSearchParams(window.location.search).get('employeePreview');return <AppErrorBoundary>{new URLSearchParams(window.location.search).get('mobileSimulation')==='1'?<MobileSimulation/>:id&&/^\d+$/.test(id)?<EmployeePreview employeeId={Number(id)}/>:<AppContent/>}</AppErrorBoundary>}
 
 function DesktopApp({account,onLogout,onChangePassword,onEnterMobile}){
   const{t,language}=useI18n()

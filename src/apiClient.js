@@ -1,5 +1,8 @@
 import {translate,translateUi} from './translations.js'
 
+let simulationRequest=null
+export const isMobileSimulation=()=>typeof window!=='undefined'&&new URLSearchParams(window.location.search).get('mobileSimulation')==='1'
+export const setSimulationRequest=handler=>{simulationRequest=handler}
 let activeLanguage='en'
 let previewEmployeeId=null
 export function setPreviewEmployee(id){previewEmployeeId=id?Number(id):null}
@@ -24,6 +27,7 @@ export function apiErrorMessage(payload,fallbackKey='apiError.generic'){
 }
 
 export async function apiRequest(url,options={}){
+  if(isMobileSimulation()){if(!simulationRequest)throw new Error('Simulation is not ready. No request was sent.');return simulationRequest(url,options)}
   if(previewEmployeeId&&String(options.method||'GET').toUpperCase()!=='GET')throw Object.assign(new Error(translate(activeLanguage,'preview.readOnly')),{code:'PREVIEW_READ_ONLY'})
   const response=await fetch(previewReadPath(url),{headers:{'Content-Type':'application/json',...(options.headers||{})},...options})
   const data=await response.json().catch(()=>({}))

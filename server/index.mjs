@@ -25,7 +25,7 @@ import {canCorrectExpense,expenseCorrectionHistory,requestExpenseCorrection,expe
 import {myBills,myBillProof} from './myBillsService.mjs'
 import {listUnloadingArchive,unloadingArchiveWorkbook} from './unloadingArchiveService.mjs'
 import {canReadCompanyDocuments} from './documentReadAccess.mjs'
-import {previewEmployees,previewAccount,previewReadUrl} from './employeePreviewService.mjs'
+import {assertPreviewManager,previewEmployees,previewAccount,previewReadUrl} from './employeePreviewService.mjs'
 import {driverGuideStatus,acknowledgeDriverGuide} from './driverGuideService.mjs'
 import {noticePhoto,translateNotice,noticeRecipients,publishNotice,employeeNotices,acknowledgeNotice,noticeManagement,noticeReadStatus} from './noticeBoardService.mjs'
 import {listArrangementRequests,reviewArrangementRequest,arrangementProof} from './driverArrangementService.mjs'
@@ -150,6 +150,7 @@ const server = http.createServer(async (request, response) => {
     let session=getSession(cookies(request).kcs_session)
     if (request.method === 'GET' && url.pathname === '/api/auth/session') return sendJson(response,200,{account:session||null})
     if(!session)return sendJson(response,401,{error:'请先登录 KCS'})
+    if(url.pathname==='/api/acting-collector/simulation-access'){if(request.method!=='GET')return sendJson(response,403,{code:'PREVIEW_READ_ONLY'});assertPreviewManager(session);return sendJson(response,200,{allowed:true,date:kuchingDate()})}
     if(url.pathname==='/api/acting-collector/preview-employees'){
       if(request.method!=='GET')return sendJson(response,403,{code:'PREVIEW_READ_ONLY'})
       return sendJson(response,200,{items:previewEmployees(session)})
