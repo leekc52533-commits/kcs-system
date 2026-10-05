@@ -1,3 +1,4 @@
+import {canDirectEditGps} from '../shared/gpsAccess.js'
 import {applyBranchLifecycle} from './branchLifecycleService.mjs'
 import {activeLocationAreas,previewCustomerLocation,validateLocationCheck,saveLocationCheck,pendingLocationChecks,decideCustomerLocation} from './customerLocationCheck.mjs'
 import {createHash} from 'node:crypto'
@@ -25,7 +26,7 @@ export function customerWorkspace({branchId,customerId}={},actor={},db=defaultDb
  const pending=branch?listGpsCollector({branchId:branch.internalId},db):[]
  const routeOptions=db.prepare('SELECT d.route_number routeNumber,d.display_name name FROM weekly_route_definitions d JOIN weekly_route_plans p ON p.id=d.plan_id WHERE p.is_active=1 ORDER BY d.route_number').all()
  const areas=activeLocationAreas(db),locationReviews=branch?pendingLocationChecks(branch.internalId,db):[]
- return {customer,branch,schedule,pending,routeOptions,areas,locationReviews,canConfirmSchedule:['owner_admin','operations_admin','supervisor'].includes(actor.role),canManagePricing:accountCan(actor,'price_manage',db),canCaptureGps:accountCan(actor,'gps_capture',db),canReviewGps:accountCan(actor,'gps_review',db),revision:hash({customer,branch,schedule,pending,locationReviews})}
+ return {canDirectEditGps:canDirectEditGps(actor),customer,branch,schedule,pending,routeOptions,areas,locationReviews,canConfirmSchedule:['owner_admin','operations_admin','supervisor'].includes(actor.role),canManagePricing:accountCan(actor,'price_manage',db),canCaptureGps:accountCan(actor,'gps_capture',db),canReviewGps:accountCan(actor,'gps_review',db),revision:hash({customer,branch,schedule,pending,locationReviews})}
 }
 export function saveCustomerWorkspace(payload,actor={},db=defaultDb){
  assertActor(actor)
@@ -60,7 +61,7 @@ export function saveCustomerWorkspace(payload,actor={},db=defaultDb){
   }
   if(payload.gps){
    if(!accountCan(actor,'gps_capture',db))throw fail('GPS capture permission required.',403)
-   captureBranchGps(branch.branchId,{...pick(payload.gps,['latitude','longitude','accuracyM','capturedLatitude','capturedLongitude','capturedAccuracyM','deviceCapturedAt','manuallyAdjusted','adjustmentReason','address','state','street','city','streetNumber','postalCode','reverseGeocodeProvider','locationSource']),remark:reason,capturedBy:changedBy,changedBy,employeeId:actor.employeeId},db)
+   captureBranchGps(branch.branchId,{...pick(payload.gps,['latitude','longitude','accuracyM','capturedLatitude','capturedLongitude','capturedAccuracyM','deviceCapturedAt','manuallyAdjusted','adjustmentReason','address','state','street','city','streetNumber','postalCode','reverseGeocodeProvider','locationSource']),remark:reason,capturedBy:changedBy,changedBy,employeeId:actor.employeeId},db,actor)
   }
   saveLocationCheck(payload,locationProof,getBranch(branch.branchId,db),actor,db)
   let review=(lifecycleSync?.scheduleSync?.preserved||[]).map(item=>({...item,kind:'lifecycle_protected',branchId:branch.branchId,branchName:branch.branchName}))

@@ -1,3 +1,4 @@
+import {canDirectEditGps} from '../shared/gpsAccess.js'
 import { db as defaultDb } from './database.mjs'
 import { invalidateDispatchDay } from './dispatchService.mjs'
 import { addTemporaryLocation, adoptTemporaryLocation } from './specialRequestService.mjs'
@@ -212,7 +213,8 @@ export function updateBranchWithLifecycle(branchId,payload={},actor={},database=
 export function listMasterAudit(params={},database=defaultDb){const where=['1=1'],args=[];if(params.entityType){where.push('entity_type=?');args.push(params.entityType)}if(params.entityId){where.push('entity_id=?');args.push(String(params.entityId))}return database.prepare(`SELECT id,entity_type entityType,entity_id entityId,change_type changeType,field_name fieldName,old_value oldValue,new_value newValue,reason,changed_by changedBy,changed_at changedAt,before_json beforeJson,after_json afterJson FROM master_change_history WHERE ${where.join(' AND ')} ORDER BY id DESC LIMIT 300`).all(...args)}
 
 const gpsConflict=message=>Object.assign(new Error(message),{statusCode:409})
-export function captureBranchGps(branchId,payload,database=defaultDb){
+export function captureBranchGps(branchId,payload,database=defaultDb,context={}){
+ const direct=canDirectEditGps(context)
  const latitude=Number(payload.latitude),longitude=Number(payload.longitude)
  if(payload.latitude==null||payload.latitude===''||payload.longitude==null||payload.longitude===''||!Number.isFinite(latitude)||Math.abs(latitude)>90||!Number.isFinite(longitude)||Math.abs(longitude)>180||(latitude===0&&longitude===0))throw new Error('Invalid GPS latitude or longitude')
  const ownsTransaction=!database.isTransaction;if(ownsTransaction)database.exec('BEGIN IMMEDIATE')
@@ -220,20 +222,27 @@ export function captureBranchGps(branchId,payload,database=defaultDb){
   const branch=database.prepare('SELECT * FROM branches WHERE jodoo_branch_id=?').get(branchId)
   if(!branch)throw new Error('Please select a valid Customer Branch first')
   if(branch.lifecycle_status!=='ACTIVE'||!branch.is_active)throw gpsConflict('Only an Active Customer Branch can collect GPS.')
-  if(database.prepare("SELECT 1 FROM temporary_locations WHERE branch_id=? AND verification_status='pending_supervisor'").get(branch.id))throw gpsConflict('A Temporary GPS is already pending approval for this Branch.')
+  if(!direct&&database.prepare("SELECT 1 FROM temporary_locations WHERE branch_id=? AND verification_status='pending_supervisor'").get(branch.id))throw gpsConflict('A Temporary GPS is already pending approval for this Branch.')
   const existing=branch.latitude!=null&&branch.longitude!=null
   const first=!existing&&!database.prepare('SELECT 1 FROM branch_gps_history WHERE branch_id=? LIMIT 1').get(branch.id)
   if(!first&&!text(payload.reason||payload.remark||payload.gpsRemark))throw gpsConflict('A reason is required to change Official GPS.')
   const actor=payload.capturedBy||payload.changedBy||'Employee'
   let item=addTemporaryLocation({...payload,branchId:branch.id,latitude,longitude,locationSource:payload.locationSource||'Driver Captured',capturedBy:actor,adjustedBy:payload.manuallyAdjusted?actor:null,employeeId:payload.employeeId,remark:payload.gpsRemark??payload.remark},database)
   history(database,'branch',branchId,'temporary_gps_captured',null,item,{changedBy:actor,reason:payload.reason})
-  if(first){
+  if(first||direct){
    database.prepare("UPDATE branches SET latitude=?,longitude=?,gps_status='Captured',gps_verified_at=CURRENT_TIMESTAMP,gps_address=?,gps_state=?,gps_street=?,gps_city=?,gps_street_number=?,gps_postal_code=?,gps_remark=?,gps_reverse_geocode_provider=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(latitude,longitude,item.address,item.state,item.street,item.city,item.street_number,item.postal_code,item.remark,item.reverse_geocode_provider,branch.id)
-   database.prepare("INSERT INTO branch_gps_history(branch_id,action,latitude,longitude,address,actor,reason) VALUES(?,'approved',?,?,?,?,?)").run(branch.id,latitude,longitude,item.address,actor,'First GPS confirmed by recorder')
+   database.prepare("INSERT INTO branch_gps_history(branch_id,action,latitude,longitude,address,actor,reason) VALUES(?,'approved',?,?,?,?,?)").run(branch.id,latitude,longitude,item.address,actor,first?'First GPS confirmed by recorder':text(payload.reason||payload.remark))
    database.prepare("UPDATE temporary_locations SET verification_status='adopted',review_decision='initial_capture',adopted_by=?,adopted_at=CURRENT_TIMESTAMP WHERE id=?").run(actor,item.id)
-   history(database,'branch',branchId,'initial_gps_saved',{latitude:null,longitude:null},{latitude,longitude,temporaryLocationId:item.id},{changedBy:actor,reason:'First GPS confirmed by recorder'})
+   history(database,'branch',branchId,first?'initial_gps_saved':'official_gps_direct_changed',{latitude:branch.latitude,longitude:branch.longitude},{latitude,longitude,temporaryLocationId:item.id},{changedBy:actor,reason:first?'First GPS confirmed by recorder':text(payload.reason||payload.remark)})
   }else{
    database.prepare("INSERT INTO audit_logs(action,entity_type,entity_id,after_json) VALUES('gps_change_source','temporary_location',?,?)").run(String(item.id),JSON.stringify({latitude:branch.latitude,longitude:branch.longitude,historyId:database.prepare('SELECT MAX(id) id FROM branch_gps_history WHERE branch_id=?').get(branch.id).id}))
+  }
+  if(direct&&!first){
+   const pending=database.prepare("SELECT * FROM temporary_locations WHERE branch_id=? AND verification_status='pending_supervisor'").all(branch.id)
+   database.prepare("UPDATE temporary_locations SET verification_status='kept_official',review_decision='keep_official',review_reason='Superseded by direct supervisor GPS edit',reviewed_by=?,reviewed_at=CURRENT_TIMESTAMP WHERE branch_id=? AND verification_status='pending_supervisor'").run(actor,branch.id)
+   database.prepare("UPDATE temporary_locations SET review_decision='direct_edit',review_reason=?,reviewed_by=?,reviewed_at=CURRENT_TIMESTAMP WHERE id=?").run(text(payload.reason||payload.remark),actor,item.id)
+   history(database,'branch',branchId,'direct_gps_pending_closed',pending,{latitude,longitude},{changedBy:actor,reason:text(payload.reason||payload.remark)})
+   invalidateBranches(database,[branch.id],'official_gps_direct_changed','branch',branch.id,branch,{latitude,longitude},actor)
   }
   item={...database.prepare('SELECT * FROM temporary_locations WHERE id=?').get(item.id),initialCapture:first}
   if(ownsTransaction)database.exec('COMMIT');return item
