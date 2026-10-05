@@ -1,3 +1,4 @@
+import {dueCustomers} from './dueCustomers.mjs'
 import {driverPlanSummary} from './driverPlanState.mjs'
 import {releaseIdleSundayAssignments} from './sundayIdleAssignments.mjs'
 import {branchRescheduleHistory,mobileRescheduleHistory} from './branchRescheduleHistory.mjs'
@@ -1432,5 +1433,7 @@ export function supportCustomerOptions(date,context={},database=defaultDb){
  const scheduled=database.prepare(`SELECT s.branch_id branchId,s.id stopId,s.route_number routeNumber FROM dispatch_stops s JOIN dispatches d ON d.id=s.dispatch_id WHERE COALESCE(s.service_date,d.dispatch_date)=? AND s.status<>'cancelled'`).all(date)
  const byScheduled=new Map(scheduled.map(s=>[s.branchId,s]))
  for(const b of priority){const stop=byScheduled.get(b.id);b.stopId=stop?.stopId??null;if(stop?.routeNumber!=null)b.routeNumbers=[stop.routeNumber]}
- return {items,routes,priority}
+ const due=dueCustomers(database)
+ for(const b of due){const stop=byScheduled.get(b.id);b.stopId=stop?.stopId??null;if(stop?.routeNumber!=null)b.routeNumbers=[stop.routeNumber]}
+ return {items,routes,priority,due,asOf:new Date().toISOString()}
 }

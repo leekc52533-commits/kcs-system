@@ -29,3 +29,12 @@
 #root .rescheduled-customers .reschedule-detail-scroll th,#root .rescheduled-customers .reschedule-detail-scroll td{position:static;width:auto;white-space:normal;text-align:left;min-width:105px;overflow-wrap:anywhere}
 
 .reschedule-detail-row header .reschedule-branch-link{font-weight:inherit;padding:0;text-decoration:underline;text-underline-offset:3px;color:#137362}
+
+.customer-priority-tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.customer-priority-tabs button{padding:9px 14px;border:1px solid #b6cfc9;background:white;color:#24534a;border-radius:6px;font:inherit;cursor:pointer}
+.customer-priority-tabs button[aria-pressed="true"]{background:#e0f2ed;border-color:#137362;font-weight:bold}
+.due-customers>header{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.due-customers>p,.due-customers>small{font-size:14px;line-height:1.5}
+#root .rescheduled-customers .due-customers .archive-table>table{table-layout:auto;min-width:1350px}
+#root .rescheduled-customers .due-customers th,#root .rescheduled-customers .due-customers td{width:auto;min-width:120px;text-align:left;white-space:normal}
+#root .rescheduled-customers .due-customers .reschedule-detail-row>td{position:static}
