@@ -25,3 +25,13 @@ test('configuration denial and network failure are actionable without exposing k
 test('search prompt and setup error support Chinese and Malay',()=>{
  for(const language of ['zh','ms'])for(const key of ['Search customer / branch name or address','Enable Places API (New) and authorize the server API key in Google Cloud.'])assert.notEqual(translateUi(language,key),key)
 })
+
+test('public API errors explain map setup, connectivity and missing results in all languages',async()=>{
+ const {publicError}=await import('../server/errorCodes.mjs')
+ for(const message of ['Map search requires a Google Places API key.','Enable Places API (New) and authorize the server API key in Google Cloud.','Map search is temporarily unavailable.','No matching location was found.']){
+  const result=publicError(new Error(message))
+  assert.notEqual(result.errorCode,'UNKNOWN_ERROR')
+  for(const language of ['zh','ms','en'])assert.ok(result.userMessages[language])
+ }
+ assert.equal(publicError(new Error('secret SQL password')).userMessages,undefined)
+})
