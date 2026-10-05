@@ -18,7 +18,9 @@
 #root .rescheduled-customers th:nth-child(3),#root .rescheduled-customers td:nth-child(3){width:22%;white-space:normal;text-align:right}
 #root .rescheduled-customers .expense-filter-trigger{width:auto;min-width:0;white-space:normal}
 
-.reschedule-count{border:0;background:transparent;color:#137362;font:inherit;font-weight:700;cursor:pointer;padding:8px}
+.reschedule-summary-row{cursor:pointer}
+.reschedule-summary-row:hover>td{background:#f2f8f6}
+.reschedule-summary-row:focus-visible{outline:2px solid #137362;outline-offset:-2px}
 .reschedule-detail-row header{display:flex;justify-content:space-between;align-items:center;gap:12px}
 .reschedule-detail-row header button{border:0;background:none;color:#137362;font:inherit;cursor:pointer}
 #root .rescheduled-customers .reschedule-detail-row>td{position:static;width:auto;padding:16px;background:#f7faf9}
