@@ -31,3 +31,15 @@ test('historical date and document columns bypass the page range while ordinary 
 })
 
 test('explicit export range intersects historical header selections',()=>{const rows=[{billNumber:'OLD',serviceDate:'2006-09-28'},{billNumber:'NEW',serviceDate:'2026-09-28'}];assert.deepEqual(applyArchiveColumns('purchase',rows,{from:'2026-09-01',to:'2026-09-30',exportRange:'1',columns:{billNumber:['OLD','NEW']}}).items.map(r=>r.billNumber),['NEW'])})
+
+test('purchase explicit all dates differs from initial range and keeps other filters and export bounds',()=>{
+ const rows=[{id:1,serviceDate:'2026-10-05',paymentMethod:'Cash'},{id:2,serviceDate:'2026-09-08',paymentMethod:'Cash'},{id:3,serviceDate:'2026-09-07',paymentMethod:'Credit'}]
+ const q={from:'2026-10-05',to:'2026-10-05'},ids=query=>applyArchiveColumns('purchase',rows,query).items.map(r=>r.id)
+ assert.deepEqual(ids(q),[1])
+ assert.deepEqual(ids({...q,columns:JSON.stringify({serviceDateLabel:null})}),[1,2,3])
+ assert.deepEqual(ids({...q,columns:{serviceDateLabel:null,paymentMethod:['Cash']}}),[1,2])
+ assert.deepEqual(ids({...q,columns:{serviceDateLabel:[]}}),[])
+ assert.deepEqual(ids({...q,columns:{serviceDateLabel:['08/09/2026']}}),[2])
+ assert.deepEqual(ids({...q,exportRange:'1',columns:{serviceDateLabel:null}}),[1])
+ assert.deepEqual(applyArchiveColumns('expense',rows,{...q,columns:{serviceDateLabel:null}}).items.map(r=>r.id),[1])
+})

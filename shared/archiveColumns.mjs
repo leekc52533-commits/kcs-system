@@ -34,7 +34,7 @@ export function archiveValue(kind,row,key,sort=false){
  return text(row[key])
 }
 export const archiveHistoryKeys={ledger:['serviceDateLabel','createdAtLabel','ledgerReference'],expense:['expenseNumber','serviceDateLabel','createdAtLabel','referenceNumber'],purchase:['serviceDateLabel','billNumber','customerReceipt']}
-export function hasArchiveHistorySelection(kind,query={}){let c=query.columns;try{if(typeof c==='string')c=JSON.parse(c)}catch{c={}}return (archiveHistoryKeys[kind]||[]).some(k=>Array.isArray(c?.[k]))}
+export function hasArchiveHistorySelection(kind,query={}){let c=query.columns;try{if(typeof c==='string')c=JSON.parse(c)}catch{c={}}return (kind==='purchase'&&Object.hasOwn(c||{},'serviceDateLabel')&&c.serviceDateLabel===null)||(archiveHistoryKeys[kind]||[]).some(k=>Array.isArray(c?.[k]))}
 export function applyArchiveColumns(kind,rows,query={}){
  let selected={}
  try{const parsed=typeof query.columns==='string'?JSON.parse(query.columns):query.columns;if(parsed&&typeof parsed==='object'&&!Array.isArray(parsed))selected=parsed}catch{}
