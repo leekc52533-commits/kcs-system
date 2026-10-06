@@ -9,7 +9,7 @@ export const simulationLabel=(language,key)=>(simulationWords[language]||simulat
 const copy=value=>structuredClone(value)
 export function createMobileSimulation({date,paymentMethod='Credit',language=()=> 'en'}={}){
  let revision=1,checked=false,checkedAt=null,approved=false,execution='not_started',sequence=0
- const stops=[1,2,3].map(n=>({id:n,branchId:'TEST-B'+n,branchName:'TEST Branch '+n,customerName:'TEST Customer',routeNumber:1,stopSequence:n,status:'locked',gpsAvailable:true,latitude:1.55,longitude:110.35,address:'TEST ONLY',area:'TEST',zoneGroup:'TEST',timeRestriction:'—',arrivedAt:null,billCreated:false,paymentProofUploaded:false,arrangementRequests:[],rescheduleHistory:null,deferred:false}))
+ const stops=[1,2,3].map(n=>({id:n,branchId:'TEST-B'+n,branchName:'TEST Branch '+n,nextScheduledDate:n===3?null:addCalendarDays(date,n+2),customerName:'TEST Customer',routeNumber:1,stopSequence:n,status:'locked',gpsAvailable:true,latitude:1.55,longitude:110.35,address:'TEST ONLY',area:'TEST',zoneGroup:'TEST',timeRestriction:'—',arrivedAt:null,billCreated:false,paymentProofUploaded:false,arrangementRequests:[],rescheduleHistory:null,deferred:false}))
  const pending=[],intakes=[],unloading=[],cargo=[];let requestSequence=0
  const bills=new Map(),products=[{productId:1,productCode:'OCC',fullName:'OCC (TEST)',shortForm:'OCC (TEST)',unit:'kg',currentPrice:0.2}]
  const fail=key=>{throw new Error(simulationLabel(language(),key))}
@@ -46,7 +46,7 @@ export function createMobileSimulation({date,paymentMethod='Credit',language=()=
   if(method==='GET'&&url.startsWith('/api/mobile/customer-pickup-search?'))return{items:[]}
   if(method==='POST'&&url==='/api/mobile/customer-intakes'){
    if(execution!=='in_progress'||!payload.name?.trim()||!payload.newConfirmed||payload.customerType!=='new'||payload.searchCheckedName!==payload.name.trim()||payload.searchMatchCount!==0||payload.latitude==null)fail('order')
-   const id=100+intakes.length,stop={...copy(stops[0]),id,branchId:'TEST-NEW-'+id,branchName:payload.name,customerName:'TEST',status:'locked',arrivedAt:null,billCreated:false,paymentProofUploaded:false,completionOutcome:null,arrangementRequests:[],dateRequest:null,deferred:false,temporary:true}
+   const id=100+intakes.length,stop={...copy(stops[0]),id,branchId:'TEST-NEW-'+id,branchName:payload.name,nextScheduledDate:null,customerName:'TEST',status:'locked',arrivedAt:null,billCreated:false,paymentProofUploaded:false,completionOutcome:null,arrangementRequests:[],dateRequest:null,deferred:false,temporary:true}
    const current=stops.findIndex(s=>!['completed','cancelled'].includes(s.status));if(current>=0&&stops[current].arrivedAt)fail('order')
    stops.splice(current<0?stops.length:current,0,stop);stops.forEach((s,n)=>s.stopSequence=n+1);intakes.push({id,stopId:id,name:payload.name});return{id,stopId:id,arrived:false,completed:false}
   }
