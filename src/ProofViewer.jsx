@@ -2,7 +2,7 @@ import CenteredNotice from './CenteredNotice.jsx'
 import {useEffect,useRef,useState} from 'react'
 import {createPortal} from 'react-dom'
 import {useI18n} from './i18n.jsx'
-import {apiErrorMessage,previewReadPath} from './apiClient.js'
+import {apiErrorMessage,previewReadPath,isMobileSimulation} from './apiClient.js'
 import './ProofViewer.css'
 
 export default function ProofViewer({url,children}){
@@ -11,11 +11,15 @@ export default function ProofViewer({url,children}){
 }
 function ProofDialog({url,label,close}){
  const {t}=useI18n(),ref=useRef(null),[src,setSrc]=useState(''),[error,setError]=useState('')
- useEffect(()=>{ref.current.showModal()},[])
+ useEffect(()=>{ref.current.showModal?.()},[])
  useEffect(()=>{
   const controller=new AbortController();let objectUrl='',active=true
   async function load(){
    try{
+    if(isMobileSimulation()){
+     if(!String(url).startsWith('data:image/svg+xml;charset=utf-8,'))throw new Error(t('apiError.invalid_file'))
+     setSrc(url);return
+    }
     const target=new URL(previewReadPath(url),window.location.origin)
     if(target.origin!==window.location.origin)throw new Error(t('apiError.permission_denied'))
     const response=await fetch(target.pathname+target.search,{credentials:'same-origin',cache:'no-store',signal:controller.signal})

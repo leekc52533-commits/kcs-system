@@ -1,7 +1,7 @@
 import CenteredNotice from './CenteredNotice.jsx'
 import {useUi} from './i18n.jsx'
 import {useEffect,useRef,useState} from 'react'
-import {apiRequest as api} from './apiClient.js'
+import {apiRequest as api,isMobileSimulation} from './apiClient.js'
 import {collectHighAccuracyPosition} from './highAccuracyGps.js'
 import GoogleMapPreview from './GoogleMapPreview.jsx'
 import {parseCoordinates,validCoordinatePair,coordinatesFromMapSearch} from './gpsCoordinates.js'
@@ -20,7 +20,7 @@ function SharedGpsInputState({latitude='',longitude='',address='',gpsSource='',o
   const reverse=async(position,source,commit=true)=>{const requestGeneration=++generation.current;setBusy('address');setError('');try{const result=await api(`/api/gps-collection/reverse-geocode?latitude=${encodeURIComponent(position.latitude)}&longitude=${encodeURIComponent(position.longitude)}`);if(requestGeneration!==generation.current)return;const next={...position,address:result.address||'',addressComponents:result,gpsSource:source};setDraft(current=>({...current,...next}));setDraftSource(source);if(commit)onChange(next)}catch(item){if(requestGeneration!==generation.current)return;setError(ui("Coordinates kept; address lookup failed: {0}", {0: item.message}));const next={...position,address:'',addressComponents:{},gpsSource:source};setDraft(current=>({...current,...next}));setDraftSource(source);if(commit)onChange(next)}finally{if(requestGeneration===generation.current)setBusy('')}}
   const commitManual=async()=>{try{const position=parseCoordinates(paste);await reverse(position,'manual_coordinates')}catch(item){setError(item.message)}}
   const updateField=(key,value)=>{setDraft(current=>({...current,[key]:value}));setError('');const next={...draft,[key]:value};if(validCoordinatePair(next.latitude,next.longitude))void reverse({latitude:next.latitude,longitude:next.longitude},'manual_coordinates')}
-  const getDevice=async()=>{setBusy('gps');setError('');try{const reading=await collectHighAccuracyPosition(navigator.geolocation);await reverse({latitude:reading.latitude,longitude:reading.longitude},'device')}catch(item){setError(item.message)}finally{setBusy('')}}
+  const getDevice=async()=>{setBusy('gps');setError('');try{const reading=isMobileSimulation()?{latitude:1.55,longitude:110.35}:await collectHighAccuracyPosition(navigator.geolocation);await reverse({latitude:reading.latitude,longitude:reading.longitude},'device')}catch(item){setError(item.message)}finally{setBusy('')}}
   const select=position=>{setDraft(current=>({...current,...position}));setDraftSource('map_selection');void reverse(position,'map_selection',false)}
   const chooseCandidate=async candidate=>{setCandidates([]);setMapSearch(candidate.name);await reverse({latitude:candidate.latitude,longitude:candidate.longitude},'map_selection',false)}
   const searchMap=async(query=mapSearch)=>{if(!query.trim())return setError(ui("Enter a name, address or coordinates."));const requestGeneration=++generation.current;setBusy('search');setError('');setCandidates([]);try{const position=coordinatesFromMapSearch(query);if(position){setDraft({...position,address:'',gpsSource:'map_selection'});await reverse(position,'map_selection',false);return}const result=await api(`/api/gps-collection/geocode?address=${encodeURIComponent(query.trim())}`),items=result.candidates||[];if(requestGeneration!==generation.current)return;setCandidates(items)}catch(item){if(requestGeneration===generation.current)setError(item.message)}finally{if(requestGeneration===generation.current)setBusy('')}}

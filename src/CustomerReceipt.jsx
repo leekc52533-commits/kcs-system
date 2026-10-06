@@ -1,3 +1,4 @@
+import {isMobileSimulation} from './apiClient.js'
 import {useEffect,useRef,useState} from 'react'
 import {createPortal} from 'react-dom'
 import {useI18n} from './i18n.jsx'
@@ -10,8 +11,8 @@ export default function CustomerReceipt({bill}){
  return <><button type="button" data-preview-safe className="proof-view-link" onClick={e=>{e.stopPropagation();setOpen(true)}}>{l.view}</button>{open&&createPortal(<ReceiptDialog bill={bill} close={()=>setOpen(false)}/>,document.body)}</>
 }
 function ReceiptDialog({bill,close}){
- const {language,t}=useI18n(),l=labels[language]||labels.en,dialog=useRef(null),frame=useRef(null),[ready,setReady]=useState(false),html=customerReceiptHtml(bill)
- useEffect(()=>{dialog.current.showModal()},[])
+ const {language,t}=useI18n(),l=labels[language]||labels.en,dialog=useRef(null),frame=useRef(null),[ready,setReady]=useState(false),html=customerReceiptHtml(bill).replace('<main class="receipt">',isMobileSimulation()?'<main class="receipt"><p class="void">TEST / SIMULASI / 测试 — NOT VALID</p>':'<main class="receipt">')
+ useEffect(()=>{dialog.current.showModal?.()},[])
  const download=()=>{const url=URL.createObjectURL(new Blob([html],{type:'text/html;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download=bill.billNumber.replace(/[^a-zA-Z0-9_-]/g,'_')+'.html';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
- return <dialog ref={dialog} className="proof-view-dialog" onCancel={e=>{e.preventDefault();close()}} onClick={e=>e.stopPropagation()}><header><strong>{l.title} · {bill.billNumber}</strong><button data-preview-safe title={t('common.back')} aria-label={t('common.back')} onClick={close}>×</button></header><div className="expense-toolbar"><button onClick={download} aria-label={l.download} title={l.download}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 15v6h16v-6"/></svg></button><button disabled={!ready} onClick={()=>{frame.current.contentWindow.focus();frame.current.contentWindow.print()}}>{l.print}</button></div><iframe ref={frame} title={l.title} sandbox="allow-same-origin allow-modals" srcDoc={html} onLoad={()=>setReady(true)} style={{width:'100%',height:'65vh',border:0,background:'#fff'}}/></dialog>
+ return <dialog ref={dialog} className="proof-view-dialog" onCancel={e=>{e.preventDefault();close()}} onClick={e=>e.stopPropagation()}><header><strong>{l.title} · {bill.billNumber}</strong><button data-preview-safe title={t('common.back')} aria-label={t('common.back')} onClick={close}>×</button></header><div className="expense-toolbar"><button disabled={isMobileSimulation()} onClick={download} aria-label={l.download} title={l.download}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 15v6h16v-6"/></svg></button><button disabled={!ready||isMobileSimulation()} onClick={()=>{frame.current.contentWindow.focus();frame.current.contentWindow.print()}}>{l.print}</button></div><iframe ref={frame} title={l.title} sandbox="allow-same-origin allow-modals" srcDoc={html} onLoad={()=>setReady(true)} style={{width:'100%',height:'65vh',border:0,background:'#fff'}}/></dialog>
 }

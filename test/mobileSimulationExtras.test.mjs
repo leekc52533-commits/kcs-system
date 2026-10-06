@@ -1,0 +1,33 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import {createMobileSimulation} from '../src/mobileSimulationState.js'
+const make=()=>createMobileSimulation({date:'2026-10-06'})
+const post=(m,path,body={})=>m.request(path,{method:'POST',body:JSON.stringify(body)})
+test('all More adapters use isolated test records: notices, GPS, bills, void review and reissue',async()=>{
+ const m=make()
+ const notices=await m.request('/api/mobile/notices');assert.match(notices.items[0].translations.ms.body,/Latihan/)
+ notices.items.length=0;assert.equal((await m.request('/api/mobile/notices')).items.length,1)
+ const rows=await m.request('/api/mobile/my-bills?from=2026-10-06&to=2026-10-06');assert.equal(rows.items[0].billNumber,'TEST-DEMO-001');assert.equal(rows.items[0].items[0].itemTotalCents,2000)
+ assert.equal((await m.request('/api/mobile/my-bills?from=2026-10-07')).items.length,0)
+ await post(m,'/api/bill-voids/9000/request',{reason:'TEST mistake'})
+ await assert.rejects(()=>post(m,'/api/bill-voids/9000/request',{reason:'again'}))
+ m.review(m.view().pending[0].id,'approved')
+ assert.equal((await m.request('/api/bill-voids?scope=own')).items[0].status,'voided')
+ const bill=await post(m,'/api/bill-voids/9000/replacement',{items:[{productId:1,quantity:150}]});assert.equal(bill.totalCents,3000);assert.match(bill.billNumber,/TEST-/)
+ assert.equal((await m.request('/api/mobile/my-bills?')).items.length,2)
+ const gps=await m.request('/api/gps-collection/branches?search=GPS');assert.equal(gps.items.length,2)
+ await post(m,'/api/gps-collector/branch/TEST-GPS-1',{latitude:1.55,longitude:110.35,photo:{dataUrl:'data:image/png;base64,TEST'}})
+ assert.equal((await m.request('/api/gps-collection/branches')).summary.pendingApproval,1)
+ m.review(m.view().pending[0].id,'approved');assert.equal((await m.request('/api/gps-collection/branches')).summary.officialGps,1)
+ assert.equal((await make().request('/api/gps-collection/branches')).summary.officialGps,0)
+ assert.equal((await make().request('/api/bill-voids?scope=own')).items[0].status,'issued')
+ await assert.rejects(()=>m.request('/api/future-unknown-action',{method:'POST',body:'{}'}))
+})
+test('cargo partial/full/supplement keep history, guard duplicates and prepare next load',async()=>{
+ const m=make();await post(m,'/api/mobile/trips/1/tomorrow-plan/check',{expectedSignature:m.view().trips[0].driverPlan.signature});m.approve();await post(m,'/api/mobile/trips/1/start');await post(m,'/api/mobile/cargo-batches/start')
+ const confirm=mode=>post(m,'/api/mobile/unloading-weights/1/confirm',{weightKg:100,batchId:1,ticketNumber:'TEST-'+mode,unloadMode:mode})
+ await confirm('partial');assert.equal((await m.request('/api/mobile/cargo-batches')).items[0].status,'active');await assert.rejects(()=>confirm('partial'))
+ await confirm('full');let cargo=await m.request('/api/mobile/cargo-batches');assert.equal(cargo.items[0].status,'closed');assert.equal(cargo.items[1].status,'prepared');assert.equal(cargo.items[0].unloads.length,2)
+ await confirm('supplement');await post(m,'/api/mobile/cargo-batches/start');cargo=await m.request('/api/mobile/cargo-batches');assert.equal(cargo.items[1].status,'active');cargo.items.length=0;assert.equal((await m.request('/api/mobile/cargo-batches')).items.length,2)
+ await post(m,'/api/mobile/leave',{startDate:'2026-10-08',endDate:'2026-10-09',reason:'TEST leave'});m.review(m.view().pending[0].id,'rejected');assert.equal((await m.request('/api/mobile/leave')).items[0].status,'rejected')
+})
