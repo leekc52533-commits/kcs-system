@@ -1,7 +1,8 @@
+import {branchAbsenceHistory} from './branchAbsenceHistory.mjs'
 import {dueCustomers} from './dueCustomers.mjs'
 import {driverPlanSummary} from './driverPlanState.mjs'
 import {releaseIdleSundayAssignments} from './sundayIdleAssignments.mjs'
-import {branchRescheduleHistory,mobileRescheduleHistory} from './branchRescheduleHistory.mjs'
+import {mobileRescheduleHistory} from './branchRescheduleHistory.mjs'
 import {dateSystemReleaseNotices} from './dateSystemReleaseNotices.mjs'
 import {nextBranchCollectionDate} from './nextBranchCollectionDate.mjs'
 import {routeSignature,captureApprovedRoutes,retainApprovedRoutes} from './routeApprovalState.mjs'
@@ -1428,7 +1429,7 @@ export function supportCustomerOptions(date,context={},database=defaultDb){
  FROM branches b JOIN customers c ON c.id=b.customer_id JOIN dispatch_stops old ON old.branch_id=b.id
  JOIN driver_date_requests r ON r.dispatch_stop_id=old.id AND r.status='approved'
  WHERE b.is_active=1 AND b.status='active' AND b.lifecycle_status='ACTIVE' AND c.is_active=1 AND c.status='active'`).all()
- .map(b=>{const h=branchRescheduleHistory(database,b.id);return {...b,routeNumbers:byBranch.get(b.id)||[],count:h.count,history:h.history.map(({id,sourceDate,targetDate,reason,employeeName,approvedBy,approvedAt,reviewReason})=>({id,sourceDate,targetDate,reason,employeeName,approvedBy,approvedAt,reviewReason}))}})
+ .map(b=>({...b,routeNumbers:byBranch.get(b.id)||[],...branchAbsenceHistory(database,b.id)}))
  .filter(b=>b.count>0).sort((a,b)=>b.count-a.count||a.branchName.localeCompare(b.branchName,undefined,{numeric:true}))
  const scheduled=database.prepare(`SELECT s.branch_id branchId,s.id stopId,s.route_number routeNumber FROM dispatch_stops s JOIN dispatches d ON d.id=s.dispatch_id WHERE COALESCE(s.service_date,d.dispatch_date)=? AND s.status<>'cancelled'`).all(date)
  const byScheduled=new Map(scheduled.map(s=>[s.branchId,s]))

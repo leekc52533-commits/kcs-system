@@ -7,6 +7,7 @@ import {spawn} from 'node:child_process'
 import {DatabaseSync} from 'node:sqlite'
 import {createHash} from 'node:crypto'
 import net from 'node:net'
+import {ensureV28Schema} from '../server/migrationV28.mjs'
 
 test('HTTP support-customer endpoint is not swallowed by dispatch-day route and enforces management access',async()=>{
  const dir=mkdtempSync(join(tmpdir(),'kcs-preview-http-')),probe=net.createServer();await new Promise(r=>probe.listen(0,'127.0.0.1',r));const port=probe.address().port;await new Promise(r=>probe.close(r));
@@ -15,6 +16,7 @@ test('HTTP support-customer endpoint is not swallowed by dispatch-day route and 
  try{
   let ready=false;for(let i=0;i<80;i++){try{if((await fetch(`http://127.0.0.1:${port}/api/health`)).ok){ready=true;break}}catch{}await new Promise(r=>setTimeout(r,50))}assert(ready,output);
   db=new DatabaseSync(join(dir,'test.db'));
+  ensureV28Schema(db);
   for(const [id,role,job]of [[80001,'supervisor','Supervisor'],[80002,'driver','Driver'],[80003,'driver','Driver']]){
    db.prepare("INSERT INTO employees(id,employee_code,name,job_role,employment_status,is_active) VALUES(?,?,?,?, 'active',1)").run(id,'P'+id,'Preview Test '+id,job);
    db.prepare('INSERT INTO auth_accounts(id,employee_id,username,password_hash,role,system_role,must_change_password,preferred_language) VALUES(?,?,?,?,?,?,0,?)').run(id,id,'preview'+id,'unused',role,role,'ms');
