@@ -1,3 +1,4 @@
+import {customerOperatingSql,branchOperatingSql,branchReviewStatusSql} from './operatingDirectory.mjs'
 import {db as defaultDb} from './database.mjs'
 import {syncInactiveBranchStops} from './dispatchService.mjs'
 
@@ -9,13 +10,13 @@ const activeSql="COALESCE(b.lifecycle_status,'ACTIVE')='ACTIVE'"
 const futureImpact=(database,branchId)=>database.prepare(`SELECT COUNT(*) stopCount,COUNT(DISTINCT d.id) dispatchCount FROM dispatch_stops ds JOIN dispatches d ON d.id=ds.dispatch_id WHERE ds.branch_id=? AND ds.status NOT IN ('completed','cancelled')`).get(branchId)
 
 export function listBranchLifecycleReview(params={},database=defaultDb){
-  const where=["COALESCE(b.lifecycle_status,'ACTIVE')<>'ACTIVE'"],args=[],search=text(params.search)
+  const where=[`NOT ${branchOperatingSql}`],args=[],search=text(params.search)
   if(search){const raw=search.replace(/^B/i,''),like=`%${search}%`,rawLike=`%${raw}%`;where.push('(b.jodoo_branch_id LIKE ? OR b.jodoo_branch_id LIKE ? OR b.branch_name LIKE ? OR c.name LIKE ? OR a.name LIKE ? OR b.address LIKE ?)');args.push(like,rawLike,like,like,like,like)}
-  if(params.status&&BRANCH_LIFECYCLE_STATUSES.includes(params.status)&&params.status!=='ACTIVE'){where.push('b.lifecycle_status=?');args.push(params.status)}
+  if(params.status&&BRANCH_LIFECYCLE_STATUSES.includes(params.status)&&params.status!=='ACTIVE'){where.push(`(${branchReviewStatusSql})=?`);args.push(params.status)}
   if(params.replacement==='with')where.push('b.replaced_by_branch_id IS NOT NULL')
   if(params.replacement==='without')where.push('b.replaced_by_branch_id IS NULL')
-  const rows=database.prepare(`SELECT b.id internalId,b.jodoo_branch_id branchId,b.branch_name branchName,c.jodoo_customer_id customerId,c.name customerName,a.name area,b.address,b.lifecycle_status lifecycleStatus,b.status_reason statusReason,b.status_changed_at statusChangedAt,b.status_changed_by statusChangedBy,rb.jodoo_branch_id replacedByBranchId,rb.branch_name replacedByBranchName,(SELECT MAX(ds.completed_at) FROM dispatch_stops ds WHERE ds.branch_id=b.id AND ds.status='completed') lastCollectionDate,(SELECT COUNT(*) FROM dispatch_stops ds WHERE ds.branch_id=b.id AND ds.status NOT IN ('completed','cancelled')) futureStops,(SELECT COUNT(DISTINCT ds.dispatch_id) FROM dispatch_stops ds WHERE ds.branch_id=b.id AND ds.status NOT IN ('completed','cancelled')) futureDispatches FROM branches b LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN branches rb ON rb.id=b.replaced_by_branch_id WHERE ${where.join(' AND ')} ORDER BY b.status_changed_at DESC,c.name,b.branch_name`).all(...args)
-  const counts=Object.fromEntries(BRANCH_LIFECYCLE_STATUSES.filter(status=>status!=='ACTIVE').map(status=>[status,database.prepare('SELECT COUNT(*) n FROM branches WHERE lifecycle_status=?').get(status).n]))
+  const rows=database.prepare(`SELECT b.id internalId,b.jodoo_branch_id branchId,b.branch_name branchName,c.jodoo_customer_id customerId,c.name customerName,a.name area,b.address,${branchReviewStatusSql} lifecycleStatus,b.lifecycle_status storedLifecycleStatus,NOT ${customerOperatingSql} parentInactive,b.status_reason statusReason,b.status_changed_at statusChangedAt,b.status_changed_by statusChangedBy,rb.jodoo_branch_id replacedByBranchId,rb.branch_name replacedByBranchName,(SELECT MAX(ds.completed_at) FROM dispatch_stops ds WHERE ds.branch_id=b.id AND ds.status='completed') lastCollectionDate,(SELECT COUNT(*) FROM dispatch_stops ds WHERE ds.branch_id=b.id AND ds.status NOT IN ('completed','cancelled')) futureStops,(SELECT COUNT(DISTINCT ds.dispatch_id) FROM dispatch_stops ds WHERE ds.branch_id=b.id AND ds.status NOT IN ('completed','cancelled')) futureDispatches FROM branches b LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN branches rb ON rb.id=b.replaced_by_branch_id WHERE ${where.join(' AND ')} ORDER BY b.status_changed_at DESC,c.name,b.branch_name`).all(...args)
+  const counts=Object.fromEntries(BRANCH_LIFECYCLE_STATUSES.filter(status=>status!=='ACTIVE').map(status=>[status,database.prepare(`SELECT COUNT(*) n FROM branches b LEFT JOIN customers c ON c.id=b.customer_id WHERE NOT ${branchOperatingSql} AND (${branchReviewStatusSql})=?`).get(status).n]))
   return{items:rows,counts,total:rows.length}
 }
 
