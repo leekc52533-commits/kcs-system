@@ -1,3 +1,4 @@
+import {driverArrangementSchemaSql} from '../server/migrationV64.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {DatabaseSync} from 'node:sqlite'
@@ -11,7 +12,7 @@ import {isRouteTrialDate} from '../shared/routeTrial.js'
 const decideDriverDate=(id,decision,payload,...args)=>decideDriverDateRaw(id,decision,{evidenceChecked:true,...payload},...args)
 const today='2026-09-10',context={employeeId:1,role:'driver',today},supervisor={employeeId:3,role:'supervisor',employeeName:'Supervisor',today}
 function fixture(){
- const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON;'+schemaSql);ensureV28Schema(db)
+ const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON;'+schemaSql);ensureV28Schema(db);db.exec(driverArrangementSchemaSql)
  db.exec("INSERT INTO schema_meta(version) VALUES(55);INSERT INTO areas(jodoo_area_id,name) VALUES('A1','North');INSERT INTO customers(jodoo_customer_id,name) VALUES('C1','Alpha');INSERT INTO vehicles(vehicle_code,status,operational_status) VALUES('V1','available','active'),('V2','available','active');INSERT INTO employees(employee_code,name,job_role,employment_status,is_active) VALUES('D1','Driver One','Driver','active',1),('D2','Driver Two','Driver','active',1),('S1','Supervisor','Supervisor','active',1),('C1','Crew One','Crew','active',1)")
  for(let i=1;i<=3;i++){db.prepare("INSERT INTO branches(jodoo_branch_id,customer_id,area_id,branch_name,address,latitude,longitude) VALUES(?,1,1,?,'Address',3.1,101.6)").run('B'+i,'Branch '+i);db.prepare("INSERT INTO branch_schedules(jodoo_schedule_id,branch_id,source_branch_id,frequency,days_of_week) VALUES(?,?,?,'Weekly','Thursday')").run('S'+i,i,'B'+i)}
  generateWeek({startDate:today},db)
@@ -385,4 +386,54 @@ test('legacy first approval can release once without granting the second status 
  reviewDateWithSystemChange(r.id,'approved',{reason:'Second checked',evidenceChecked:true,proposalToken:dateSystemReview(db,r.id).proposalToken},second,db)
  assert.equal(db.prepare('SELECT lifecycle_status FROM branches WHERE id=1').get().lifecycle_status,'CLOSED')
  db.close()
+})
+
+function runningReviewFixture(){
+ const f=fixture(),{db}=f,targetId=existingScheduledTarget(db)
+ const target=db.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(targetId)
+ db.prepare('UPDATE dispatches SET driver_id=2 WHERE id=?').run(target.dispatch_id)
+ db.prepare('UPDATE dispatch_stops SET route_number=1,route_stop_sequence=1 WHERE id=?').run(targetId)
+ db.exec("UPDATE daily_route_assignments SET vehicle_id=2 WHERE dispatch_day_id=(SELECT id FROM dispatch_days WHERE dispatch_date='2026-09-11')")
+ approveDay('2026-09-11',{approvedBy:'Supervisor',reason:'Ready'},db)
+ startDriverTrip(target.dispatch_trip_id,{employeeId:2,role:'driver',today:'2026-09-11'},db)
+ return{...f,targetId,targetTrip:target.dispatch_trip_id}
+}
+test('next-day approval appends to the running trip and preserves current execution and approval',()=>{
+ const{db,ids,targetId,targetTrip}=runningReviewFixture(),r=request(db,ids[1]),ctx={...supervisor,today:'2026-09-11'}
+ db.prepare("UPDATE dispatch_stops SET status='active',arrived_at='2026-09-11T09:00:00+08:00' WHERE id=?").run(targetId)
+ const before=db.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(targetId)
+ const result=decideDriverDate(r.id,'approved',{targetDate:ctx.today,routeNumber:1,reason:'Return after current customers'},ctx,db)
+ assert.deepEqual(db.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(targetId),before)
+ const added=db.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(result.targetStopId)
+ assert.equal(added.dispatch_trip_id,targetTrip);assert.ok(added.stop_sequence>before.stop_sequence)
+ const view=driverToday({employeeId:2,role:'driver',today:ctx.today},db).trips.find(t=>t.id===targetTrip)
+ assert.equal(view.approved,true);assert.equal(view.currentStopId,targetId);assert.equal(view.stops.at(-1).id,added.id)
+ assert.equal(db.prepare('SELECT source_date FROM driver_date_requests WHERE id=?').get(r.id).source_date,today)
+ assert.equal(db.prepare('PRAGMA foreign_key_check').all().length,0);db.close()
+})
+test('next-day approval reuses untouched running task without reordering or duplication',()=>{
+ const{db,ids,targetId}=runningReviewFixture(),r=request(db,ids[0]),ctx={...supervisor,today:'2026-09-11'},before=db.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(targetId)
+ const result=decideDriverDate(r.id,'approved',{routeNumber:1,reason:'Already in today route'},ctx,db)
+ assert.equal(result.targetStopId,targetId);assert.deepEqual(db.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(targetId),before)
+ assert.equal(db.prepare("SELECT COUNT(*) n FROM dispatch_stops WHERE branch_id=1 AND service_date='2026-09-11' AND status<>'cancelled'").get().n,1);db.close()
+})
+test('cross-day approvals reject past target, finished vehicle and executed duplicate; rollback audit failures',()=>{
+ for(const mode of ['past','finished','duplicate','audit']){
+  const{db,ids,targetId,targetTrip}=runningReviewFixture(),r=request(db,ids[mode==='duplicate'?0:1]),ctx={...supervisor,today:'2026-09-11'}
+  if(mode==='finished')db.prepare("UPDATE dispatch_trips SET execution_status='completed' WHERE id=?").run(targetTrip)
+  if(mode==='duplicate')db.prepare("UPDATE dispatch_stops SET status='active',arrived_at='now' WHERE id=?").run(targetId)
+  if(mode==='audit')db.exec("CREATE TRIGGER late_fail BEFORE INSERT ON dispatch_change_logs WHEN NEW.change_type='driver_date_running_trip_appended' BEGIN SELECT RAISE(ABORT,'late audit failure'); END")
+  const before=db.prepare('SELECT * FROM dispatch_stops ORDER BY id').all()
+  assert.throws(()=>decideDriverDate(r.id,'approved',{targetDate:mode==='past'?'2026-09-10':ctx.today,routeNumber:1,reason:'Review'},ctx,db))
+  assert.deepEqual(db.prepare('SELECT * FROM dispatch_stops ORDER BY id').all(),before)
+  assert.equal(db.prepare('SELECT status FROM driver_date_requests WHERE id=?').get(r.id).status,'pending');db.close()
+ }
+})
+test('yesterday pending request can still approve a future day, but an arrived source remains protected',()=>{
+ for(const arrived of [false,true]){
+  const{db,ids}=fixture(),r=request(db,ids[1]),ctx={...supervisor,today:'2026-09-11'},body={routeNumber:1,targetDate:'2026-09-12',reason:'Supervisor reviewed next morning'}
+  if(arrived){db.prepare("UPDATE dispatch_stops SET arrived_at='now',status='active' WHERE id=?").run(ids[1]);assert.throws(()=>decideDriverDate(r.id,'approved',body,ctx,db),/protected/)}
+  else{const result=decideDriverDate(r.id,'approved',body,ctx,db);assert.equal(db.prepare('SELECT service_date FROM dispatch_stops WHERE id=?').get(result.targetStopId).service_date,'2026-09-12');assert.equal(decideDriverDate(r.id,'approved',body,ctx,db).idempotent,true)}
+  db.close()
+ }
 })

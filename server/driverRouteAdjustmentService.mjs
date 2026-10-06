@@ -75,7 +75,7 @@ export function requestDriverDate(id,payload,context={},db=defaultDb,{uploadsRoo
 }
 
 // A route can be planned before its date, vehicle or driver has been prepared.
-export function driverDateReviewOptions(date,db=defaultDb){
+export function driverDateReviewOptions(date,db=defaultDb,{today=kuchingDate()}={}){
  if(!planningDate(date)||planningDate(date)!==date)fail('routeTrial.invalidReviewDate',400)
  const day=db.prepare('SELECT * FROM dispatch_days WHERE dispatch_date=?').get(date)
  const routes=db.prepare(`SELECT r.route_number routeNumber,r.display_name name,a.vehicle_id vehicleId,v.registration_number plate,
@@ -85,7 +85,15 @@ export function driverDateReviewOptions(date,db=defaultDb){
   FROM weekly_route_definitions r JOIN weekly_route_plans p ON p.id=r.plan_id
   LEFT JOIN daily_route_assignments a ON a.route_number=r.route_number AND a.dispatch_day_id=?
   LEFT JOIN vehicles v ON v.id=a.vehicle_id WHERE p.is_active=1 ORDER BY r.route_number`).all(date,day?.id??null)
- return{date,dayReady:!!day,revision:day?.revision??null,routes:routes.map(r=>({...r,vehicleReady:!!r.available,vehicleId:r.available?r.vehicleId:null,plate:r.available?r.plate:null,available:true}))}
+ return{date,dayReady:!!day,revision:day?.revision??null,routes:routes.map(r=>{
+  const running=date===today&&r.vehicleId?db.prepare("SELECT t.id,d.driver_id FROM dispatch_trips t JOIN dispatches d ON d.id=t.dispatch_id JOIN vehicles v ON v.id=d.vehicle_id WHERE t.dispatch_day_id=? AND d.vehicle_id=? AND t.execution_status='in_progress' AND d.status<>'completed' AND v.operational_status IN ('active','available') AND v.status IN ('active','available','assigned') AND (v.is_temporary=0 OR v.temporary_date=?)").all(day.id,r.vehicleId,date):[]
+  const trip=running.length===1?running[0]:null
+  const ready=!!r.available||!!trip
+  // An assigned vehicle that has finished must not silently become an unassigned stop.
+  const finished=r.vehicleId&&!ready&&db.prepare("SELECT 1 FROM dispatch_trips t JOIN dispatches d ON d.id=t.dispatch_id WHERE t.dispatch_day_id=? AND d.vehicle_id=? AND (t.execution_status<>'not_started' OR d.status IN ('released','in_progress','completed'))").get(day.id,r.vehicleId)
+  return{...r,vehicleReady:ready,vehicleId:ready?r.vehicleId:null,plate:r.plate,runningTripId:trip?.id||null,available:!finished}
+ })}
+
 }
 
 export function listDriverDateRequests(db=defaultDb){
@@ -110,14 +118,16 @@ export function decideDriverDate(id,decision,payload,context={},db=defaultDb,{wo
    if(!planningDate(date)||planningDate(date)!==date||date<today)fail('routeTrial.invalidReviewDate',400)
    if(!['once','permanent'].includes(scope))fail('routeTrial.invalidScope',400)
    if(!s||s.dispatch_date!==r.source_date||hasWork(db,s)||pendingDefer(db,s))fail('routeTrial.protected')
-   if(r.source_date<today&&!workClose)fail('routeTrial.stale')
    if(date===s.dispatch_date&&route===s.route_number)fail('routeTrial.noChange',400)
    const approvedBefore=captureApprovedRoutes(db,[r.source_date,date])
-   let options=driverDateReviewOptions(date,db)
+   let options=driverDateReviewOptions(date,db,{today})
    if(!options.routes.some(x=>x.routeNumber===route))fail('routeTrial.chooseRoute')
    if(payload.targetRevision!=null&&Number(payload.targetRevision)!==options.revision)fail('routeTrial.stale')
-   if(!options.dayReady){generateDay({startDate:date,onlyMissing:true,generatedBy:actor},db);options=driverDateReviewOptions(date,db)}
+   if(!options.dayReady){generateDay({startDate:date,onlyMissing:true,generatedBy:actor},db);options=driverDateReviewOptions(date,db,{today})}
    const chosen=options.routes.find(x=>x.routeNumber===route)
+   if(!chosen?.available)fail('routeTrial.targetNotReady')
+   const running=chosen.runningTripId?db.prepare('SELECT t.*,d.driver_id FROM dispatch_trips t JOIN dispatches d ON d.id=t.dispatch_id WHERE t.id=?').get(chosen.runningTripId):null
+   if(running&&!driverToday({employeeId:running.driver_id,role:'driver',today:date},db).trips.some(t=>t.id===running.id&&t.approved&&t.executionStatus==='in_progress'))fail('routeTrial.targetNotReady')
    const target=db.prepare('SELECT * FROM dispatch_days WHERE dispatch_date=?').get(date)
    if(target.status==='completed')fail('routeTrial.protected')
    const existing=findBranchServiceDateStop(db,s.branch_id,date,{excludeStopId:s.id})
@@ -125,7 +135,7 @@ export function decideDriverDate(id,decision,payload,context={},db=defaultDb,{wo
    // Reuse a generated occurrence rather than creating a duplicate on an already due day.
    // Manual/special arrangements and anything with work or pending requests need review.
    if(targetExisting){
-    if(!s.source_schedule_id||targetExisting.source_schedule_id!==s.source_schedule_id||targetExisting.source_special_request_id||targetExisting.override_note||hasWork(db,targetExisting)||pendingDefer(db,targetExisting)||targetExisting.execution_status!=='not_started'||db.prepare("SELECT 1 FROM driver_date_requests WHERE dispatch_stop_id=? AND status='pending'").get(targetExisting.id))fail('routeTrial.existingProtected')
+    if(!s.source_schedule_id||targetExisting.source_schedule_id!==s.source_schedule_id||targetExisting.source_special_request_id||targetExisting.override_note||hasWork(db,targetExisting)||pendingDefer(db,targetExisting)||db.prepare("SELECT 1 FROM driver_arrangement_requests WHERE dispatch_stop_id=? AND status='pending'").get(targetExisting.id)||(targetExisting.execution_status!=='not_started'&&targetExisting.trip_id!==running?.id)||db.prepare("SELECT 1 FROM driver_date_requests WHERE dispatch_stop_id=? AND status='pending'").get(targetExisting.id))fail('routeTrial.existingProtected')
    }else assertBranchServiceDateAvailable(db,s.branch_id,date,{excludeStopId:s.id,entryPoint:'driver_date_approval'})
    let before=null,after=null
    if(scope==='permanent'){
@@ -149,10 +159,18 @@ export function decideDriverDate(id,decision,payload,context={},db=defaultDb,{wo
    db.prepare("UPDATE schedule_occurrences SET status='cancelled',updated_at=CURRENT_TIMESTAMP WHERE dispatch_stop_id=?").run(s.id)
    if(targetExisting){
     targetStop=targetExisting.id
-    placeReviewedScheduledStop({stopId:targetStop,date,vehicleId:chosen.vehicleId,routeNumber:route,changedBy:actor},db)
+    if(running){
+     // A task already on this running trip stays in its current position.
+     if(targetExisting.trip_id!==running.id){
+      const seq=db.prepare('SELECT COALESCE(MAX(stop_sequence),0)+1 n FROM dispatch_stops WHERE dispatch_id=?').get(running.dispatch_id).n
+      const routeSeq=db.prepare('SELECT COALESCE(MAX(route_stop_sequence),0)+1 n FROM dispatch_stops WHERE service_date=? AND route_number=?').get(date,route).n
+      db.prepare('UPDATE dispatch_stops SET dispatch_id=?,dispatch_trip_id=?,stop_sequence=?,route_number=?,route_stop_sequence=? WHERE id=?').run(running.dispatch_id,running.id,seq,route,routeSeq,targetStop)
+     }else if(targetExisting.route_number!==route)fail('routeTrial.existingProtected')
+     invalidateDispatchDay(db,date,'date_review_occurrence_reused','dispatch_stop',targetStop,targetExisting,{tripId:running.id,routeNumber:route},actor)
+    }else placeReviewedScheduledStop({stopId:targetStop,date,vehicleId:chosen.vehicleId,routeNumber:route,changedBy:actor},db)
     audit(db,s,actor,'driver_date_existing_occurrence_reused',targetExisting,{requestId:r.id,targetStopId:targetStop,date,routeNumber:route})
    }else{
-    const created=createStop({date,branchId:s.branch_code,vehicleId:chosen.vehicleId,tripNumber:1,estimatedWeightKg:s.estimated_weight_kg,changedBy:actor},db)
+    const created=createStop({date,branchId:s.branch_code,vehicleId:chosen.vehicleId,tripId:running?.id,tripNumber:1,estimatedWeightKg:s.estimated_weight_kg,changedBy:actor},db)
     const routeSequence=db.prepare('SELECT COALESCE(MAX(s.route_stop_sequence),0)+1 n FROM dispatch_stops s JOIN dispatch_trips t ON t.id=s.dispatch_trip_id WHERE t.dispatch_day_id=? AND s.route_number=?').get(target.id,route).n
     db.prepare('UPDATE dispatch_stops SET source_schedule_id=?,route_number=?,route_stop_sequence=? WHERE id=?').run(s.source_schedule_id,route,routeSequence,created.id)
     targetStop=created.id
@@ -175,6 +193,11 @@ export function decideDriverDate(id,decision,payload,context={},db=defaultDb,{wo
    }
    invalidateDispatchDay(db,r.source_date,'driver_date_approved','dispatch_stop',s.id,{status:s.status},{status:'cancelled',targetStopId:targetStop,targetDate:date,routeNumber:route,scope},actor)
    retainApprovedRoutes(db,approvedBefore,actor,reason)
+   if(running){
+    // Legacy whole-day approvals have no per-route signatures to retain.
+    if(!db.prepare('SELECT 1 FROM daily_route_approvals WHERE dispatch_day_id=?').get(target.id))db.prepare('UPDATE dispatch_days SET status=?,approved_revision=revision WHERE id=?').run(target.status,target.id)
+    audit(db,s,actor,'driver_date_running_trip_appended',null,{requestId:r.id,targetStopId:targetStop,targetTripId:running.id,targetDate:date,reused:!!targetExisting})
+   }
   }
   db.prepare('UPDATE driver_date_requests SET status=?,reviewed_by=?,review_reason=?,reviewed_at=CURRENT_TIMESTAMP,target_stop_id=? WHERE id=?').run(decision,actor,reason,targetStop,r.id)
   audit(db,s,actor,'driver_date_request_'+decision,{requestId:r.id,status:'pending'},{status:decision,targetStopId:targetStop,reason,preservedDates,evidenceChecked:payload.evidenceChecked===true,evidence:dateEvidence(db,r.id)})
