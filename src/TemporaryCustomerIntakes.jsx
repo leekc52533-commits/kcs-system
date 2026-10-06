@@ -8,7 +8,7 @@ import {customerIntakeWords} from '../shared/customerIntakeWords.js'
 import CustomerPickupSearch from './CustomerPickupSearch.jsx'
 import {kuchingDate} from '../shared/kuchingTime.js'
 import {useCallback,useEffect,useState} from 'react'
-import {apiRequest as api,isEmployeePreview} from './apiClient.js'
+import {apiRequest as api,isEmployeePreview,isMobileSimulation} from './apiClient.js'
 import {useI18n} from './i18n.jsx'
 import {collectHighAccuracyPosition} from './highAccuracyGps.js'
 import GoogleMapPreview from './GoogleMapPreview.jsx'
@@ -17,14 +17,14 @@ import './TemporaryCustomerIntakes.css'
 const post=(url,data)=>api(url,{method:'POST',body:JSON.stringify(data)})
 export function TemporaryCustomerMobile({account,BillingPanel,canCollect=true}){
  const{t,language}=useI18n(),w=customerIntakeWords[language]||customerIntakeWords.en,key=`kcs-intake-draft-${account.employeeId||account.id}`
- const[data,setData]=useState({items:[],trips:[]}),[draft,setDraft]=useState(()=>{try{return (!isEmployeePreview()&&JSON.parse(sessionStorage.getItem(key)))||{name:'',phone:'',requestKey:crypto.randomUUID()}}catch{return{name:'',phone:'',requestKey:crypto.randomUUID()}}}),[tripId,setTripId]=useState(''),[mode,setMode]=useState(()=>canCollect&&draft.mode!=='request'?'collect':'request'),[message,setMessage]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[selected,setSelected]=useState(null)
+ const[data,setData]=useState({items:[],trips:[]}),[draft,setDraft]=useState(()=>{try{return (!isEmployeePreview()&&!isMobileSimulation()&&JSON.parse(sessionStorage.getItem(key)))||{name:'',phone:'',requestKey:crypto.randomUUID()}}catch{return{name:'',phone:'',requestKey:crypto.randomUUID()}}}),[tripId,setTripId]=useState(''),[mode,setMode]=useState(()=>canCollect&&draft.mode!=='request'?'collect':'request'),[message,setMessage]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[selected,setSelected]=useState(null)
  const load=useCallback(async()=>{const next=canCollect?await api('/api/mobile/customer-intakes'):{items:[],trips:[]};setData(next);setTripId(id=>next.trips.some(r=>String(r.id)===String(id))?id:next.trips.length===1?String(next.trips[0].id):'')},[canCollect])
  useEffect(()=>{const refresh=()=>load().catch(e=>setError(e.message));void refresh();const timer=setInterval(refresh,10000);return()=>clearInterval(timer)},[load])
- useEffect(()=>{if(!isEmployeePreview())sessionStorage.setItem(key,JSON.stringify(draft))},[key,draft])
+ useEffect(()=>{if(!isEmployeePreview()&&!isMobileSimulation())sessionStorage.setItem(key,JSON.stringify(draft))},[key,draft])
  const gps=draft.gpsReading||null
  const run=async action=>{setBusy(true);setError('');try{await action();await load()}catch(e){setError(e.code==='PICKUP_EXISTING_REQUIRED'?w.blocked:e.message)}finally{setBusy(false)}}
- const capture=()=>run(async()=>{try{const reading=await collectHighAccuracyPosition(navigator.geolocation);setDraft(d=>({...d,latitude:reading.latitude,longitude:reading.longitude,gpsReading:reading}))}catch{throw Error(t('intake.gpsFailed'))}})
- const arrive=async(stopId,reading)=>{const fresh=reading&&Number.isFinite(Date.parse(reading.deviceCapturedAt))&&Math.abs(Date.now()-Date.parse(reading.deviceCapturedAt))<14*60*1000;const p=fresh?reading:await collectHighAccuracyPosition(navigator.geolocation);await post(`/api/mobile/stops/${stopId}/arrive`,{latitude:p.latitude,longitude:p.longitude,accuracy:p.accuracyM,captured_at:p.deviceCapturedAt})}
+ const capture=()=>run(async()=>{try{const reading=await (isMobileSimulation()?Promise.resolve({latitude:1.55,longitude:110.35,accuracyM:5,deviceCapturedAt:new Date().toISOString()}):collectHighAccuracyPosition(navigator.geolocation));setDraft(d=>({...d,latitude:reading.latitude,longitude:reading.longitude,gpsReading:reading}))}catch{throw Error(t('intake.gpsFailed'))}})
+ const arrive=async(stopId,reading)=>{const fresh=reading&&Number.isFinite(Date.parse(reading.deviceCapturedAt))&&Math.abs(Date.now()-Date.parse(reading.deviceCapturedAt))<14*60*1000;const p=fresh?reading:await (isMobileSimulation()?Promise.resolve({latitude:1.55,longitude:110.35,accuracyM:5,deviceCapturedAt:new Date().toISOString()}):collectHighAccuracyPosition(navigator.geolocation));await post(`/api/mobile/stops/${stopId}/arrive`,{latitude:p.latitude,longitude:p.longitude,accuracy:p.accuracyM,captured_at:p.deviceCapturedAt})}
  const create=e=>{e.preventDefault();return run(async()=>{
   setMessage('')
   if(!draft.existingBranchId&&!(draft.customerType==='new'&&draft.newConfirmed&&draft.searchCheckedName===draft.name.trim()&&draft.searchMatchCount===0))throw Error(w.blocked)

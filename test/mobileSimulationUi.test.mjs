@@ -4,7 +4,7 @@ import React,{act} from 'react'
 import {createServer} from 'vite'
 import {JSDOM} from 'jsdom'
 const dom=new JSDOM('<html><body><div id="root"></div></body></html>',{url:'https://localhost/?mobileSimulation=1'})
-for(const k of ['window','document','Node','NodeFilter','HTMLElement','MutationObserver','Event','MouseEvent','localStorage','sessionStorage','XMLHttpRequest'])globalThis[k]=dom.window[k]
+for(const k of ['window','document','Node','NodeFilter','HTMLElement','MutationObserver','Event','MouseEvent','localStorage','sessionStorage','XMLHttpRequest','FileReader','Blob','File'])globalThis[k]=dom.window[k]
 Object.defineProperty(globalThis,'navigator',{value:dom.window.navigator,configurable:true});globalThis.IS_REACT_ACT_ENVIRONMENT=true
 const{createRoot}=await import('react-dom/client'),vite=await createServer({logLevel:'silent',server:{middlewareMode:true},appType:'custom'})
 after(()=>vite.close())
@@ -37,4 +37,46 @@ test('real screens: reorder/check/approve/arrive/bill/complete/reset without liv
 test('failed manager authorization never mounts interactive simulation',async()=>{
  globalThis.fetch=window.fetch=async()=>({ok:false,json:async()=>({})});const root=createRoot(document.getElementById('root'))
  await act(async()=>root.render(React.createElement(Simulation)));assert.ok(!document.querySelector('.driver-route'));assert.match(document.body.textContent,/主管以上/);await act(async()=>root.unmount())
+})
+test('training phone navigation and new customer form use simulated GPS without storage or network writes',async()=>{
+ const calls=[];globalThis.fetch=window.fetch=async(url,options)=>{calls.push([url,options]);return{ok:true,json:async()=>({allowed:true,date:'2026-10-06'})}}
+ let gps=0;navigator.geolocation={getCurrentPosition(){gps++},watchPosition(){gps++}}
+ const before={...sessionStorage},root=createRoot(document.getElementById('root'))
+ await act(async()=>root.render(React.createElement(Simulation)))
+ await click('已检查，提交主管');await click('模拟主管批准')
+ await act(async()=>document.querySelector('.simulation-phone .primary-mobile').click())
+ assert.ok(document.querySelector('.driver-route-tools'))
+ await act(async()=>document.querySelector('.no-goods-action button').click())
+ const ngReason=document.querySelector('.no-goods-action textarea')
+ await act(async()=>{Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,'value').set.call(ngReason,'TEST no goods');ngReason.dispatchEvent(new Event('input',{bubbles:true}))})
+ await click('模拟照片')
+ await act(async()=>{document.querySelector('.no-goods-action form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));await new Promise(r=>setTimeout(r,50))})
+ assert.ok(document.querySelector('.simulation-reviews button'))
+ await act(async()=>document.querySelector('.simulation-reviews button').click())
+
+ const nav=async index=>act(async()=>document.querySelectorAll('.simulation-phone>nav button')[index].click())
+ await nav(1);assert.ok(document.querySelector('.weight-capture'))
+ await act(async()=>document.querySelector('.weight-capture button').click())
+ await click('模拟照片')
+ const readButton=document.querySelector('.weight-capture button.primary-mobile')
+ await act(async()=>{readButton.click();await new Promise(r=>setTimeout(r,50))});assert.ok(document.querySelector('.weight-review'))
+ const ticket=document.querySelector('.cargo-unload-fields input'),mode=document.querySelectorAll('.cargo-unload-fields select')[1]
+ await act(async()=>{Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set.call(ticket,'TEST-TN');ticket.dispatchEvent(new Event('input',{bubbles:true}))})
+ await act(async()=>{mode.value='full';mode.dispatchEvent(new Event('change',{bubbles:true}))})
+ await act(async()=>document.querySelector('.weight-review .primary-mobile').click());assert.ok(document.querySelector('.weight-recent'))
+
+ await nav(3);assert.match(document.body.textContent,/TEST DRIVER/);assert.ok(document.querySelector('.earnings-page'))
+ await nav(2);await act(async()=>document.querySelector('.mobile-more button').click())
+ const name=document.querySelector('input[autocomplete=off]')
+ await act(async()=>{Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set.call(name,'TEST NEW SHOP');name.dispatchEvent(new Event('input',{bubbles:true}))})
+ await act(()=>new Promise(r=>setTimeout(r,300)))
+ await act(async()=>document.querySelector('.pickup-search [role=group] button:nth-child(2)').click())
+ await act(async()=>document.querySelector('.pickup-new-check input').click())
+ const{translate}=await vite.ssrLoadModule('/src/translations.js')
+ await click(translate('zh','intake.capture'))
+ assert.ok(document.querySelector('.simulation-map'))
+ await act(async()=>document.querySelector('.temporary-intakes form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})))
+ assert.ok(document.querySelector('.purchase-bill-panel'));assert.equal(gps,0);assert.deepEqual({...sessionStorage},before);assert.equal(calls.length,1)
+ await click('重置测试');assert.equal(document.querySelector('.temporary-intakes'),null);assert.equal(calls.length,1)
+ await act(async()=>root.unmount())
 })

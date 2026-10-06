@@ -1,3 +1,4 @@
+import {isMobileSimulation} from './apiClient.js'
 import CenteredNotice from './CenteredNotice.jsx'
 import {useEffect,useRef,useState} from 'react'
 import {useI18n} from './i18n.jsx'
@@ -10,6 +11,7 @@ export default function GoogleMapPreview({latitude,longitude,onPositionAdjusted,
   adjustmentHandler.current=onPositionAdjusted
   mapClickHandler.current=onMapClick
   useEffect(()=>{
+    if(isMobileSimulation())return
     const hasPosition=latitude!==''&&latitude!=null&&longitude!==''&&longitude!=null&&Number.isFinite(Number(latitude))&&Number.isFinite(Number(longitude))
     if(!hasPosition&&(initialLatitude==null||initialLongitude==null))return
     const position=hasPosition?{lat:Number(latitude),lng:Number(longitude)}:{lat:initialLatitude,lng:initialLongitude}
@@ -24,5 +26,6 @@ export default function GoogleMapPreview({latitude,longitude,onPositionAdjusted,
     return()=>{current=false}
   },[latitude,longitude,t,initialLatitude,initialLongitude])
   if((!latitude||!longitude)&&!initialCenter)return null
+  if(isMobileSimulation())return <div className="google-map-preview simulation-map" data-i18n-raw>TEST GPS · {latitude}, {longitude}</div>
   return <div className="google-map-preview">{error?<CenteredNotice>{error}</CenteredNotice>:<div ref={container} className="google-map-canvas" aria-label={t('gpsCollection.mapPreview')}/>}</div>
 }

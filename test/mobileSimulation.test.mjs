@@ -4,6 +4,23 @@ import {createMobileSimulation} from '../src/mobileSimulationState.js'
 const setup=(paymentMethod='Credit')=>createMobileSimulation({date:'2026-10-05',paymentMethod})
 const post=(m,path,body={})=>m.request(path,{method:'POST',body:JSON.stringify(body)})
 const check=m=>post(m,'/api/mobile/trips/1/tomorrow-plan/check',{expectedSignature:m.view().trips[0].driverPlan.signature})
+test('training requests need explicit simulated review and new customers bill with entered price',async()=>{
+ const m=setup();await check(m);m.approve();await post(m,'/api/mobile/trips/1/start')
+ await post(m,'/api/mobile/stops/2/trial-reorder',{direction:'up',reason:'TEST'})
+ assert.equal(m.view().trips[0].stops[0].id,1);m.review(m.view().pending[0].id,'approved');assert.equal(m.view().trips[0].stops[0].id,2)
+ await post(m,'/api/mobile/stops/2/request-date',{targetDate:'2026-10-07',reason:'TEST'})
+ await assert.rejects(()=>post(m,'/api/mobile/stops/2/arrive'))
+ m.review(m.view().pending[0].id,'rejected');assert.equal(m.view().trips[0].currentStopId,2)
+ await post(m,'/api/mobile/stops/2/no-goods-notice',{reason:'TEST',photo:{dataUrl:'TEST'}})
+ m.review(m.view().pending[0].id,'approved');assert.equal(m.view().trips[0].currentStopId,1)
+ const intake=await post(m,'/api/mobile/customer-intakes',{name:'NEW TEST SHOP',newConfirmed:true,customerType:'new',searchCheckedName:'NEW TEST SHOP',searchMatchCount:0,latitude:1.55})
+ await post(m,`/api/mobile/stops/${intake.stopId}/arrive`)
+ const bill=await post(m,`/api/mobile/stops/${intake.stopId}/bills`,{items:[{productId:1,quantity:100,unitPrice:0.19}]})
+ assert.equal(bill.totalCents,1900);assert.match(bill.billNumber,/^TEST-/)
+ await post(m,`/api/mobile/stops/${intake.stopId}/complete`)
+ assert.equal((await m.request('/api/mobile/customer-intakes')).items[0].stopStatus,'completed')
+ assert.equal(setup().view().pending.length,0)
+})
 test('order, check invalidation, approval, collection and test-only bill lifecycle',async()=>{
  const m=setup();assert.equal(m.view().date,'2026-10-06');assert.equal(m.view().trips[0].canPlan,true);assert.throws(()=>m.approve())
  await check(m);const signature=m.view().trips[0].driverPlan.signature

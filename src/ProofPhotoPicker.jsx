@@ -1,3 +1,4 @@
+import {isMobileSimulation} from './apiClient.js'
 import CenteredNotice from './CenteredNotice.jsx'
 import {useEffect,useRef,useState} from 'react'
 import {useI18n,useUi} from './i18n.jsx'
@@ -5,7 +6,7 @@ import {processPaymentProof} from './paymentProofImage.js'
 
 // Keep the camera inside the page so launching another Android activity cannot
 // discard the pending stop/bill. A native camera input remains an explicit fallback.
-export default function ProofPhotoPicker({value,onChange,onBusyChange,disabled=false,preserveJpeg=false}){
+function LiveProofPhotoPicker({value,onChange,onBusyChange,disabled=false,preserveJpeg=false}){
   const {t}=useI18n(),ui=useUi()
   const [camera,setCamera]=useState(false),[ready,setReady]=useState(false),[processing,setProcessing]=useState(false),[fallback,setFallback]=useState(false),[error,setError]=useState(''),[preview,setPreview]=useState('')
   const video=useRef(null),stream=useRef(null),generation=useRef(0),busyCallback=useRef(onBusyChange),occupied=useRef(false)
@@ -71,3 +72,9 @@ export default function ProofPhotoPicker({value,onChange,onBusyChange,disabled=f
     {value&&<><p className="proof-selected">✓ {t('purchase.proofSelected')} · {(value.blob.size/1024/1024).toFixed(1)} MB</p><button type="button" className="secondary-mobile proof-remove" disabled={disabled||processing||camera} onClick={()=>{onChange(null);setError('')}}>{t('purchase.removePhoto')}</button></>}
   </div>
 }
+
+function SimulationProofPicker({value,onChange,disabled}){
+ const{language}=useI18n(),words={zh:['模拟照片','移除','照片仅用于测试'],ms:['Foto simulasi','Buang','Foto untuk ujian sahaja'],en:['Simulate photo','Remove','Test photo only']}[language]||['Simulate photo','Remove','Test photo only']
+ return <div className="proof-photo-picker" data-i18n-raw><p>{words[2]}</p>{value?<><strong>✓ TEST PHOTO</strong><button type="button" disabled={disabled} onClick={()=>onChange(null)}>{words[1]}</button></>:<button type="button" disabled={disabled} onClick={()=>{const svg='<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200"><rect width="400" height="200" fill="#e8f5f0"/><text x="30" y="100" font-size="28">TEST PHOTO ONLY</text></svg>';onChange({blob:new Blob([svg],{type:'image/svg+xml'}),name:'TEST-photo.svg',type:'image/svg+xml',captureSource:'simulation',capturedAt:new Date().toISOString()})}}>{words[0]}</button>}</div>
+}
+export default function ProofPhotoPicker(props){return isMobileSimulation()?<SimulationProofPicker {...props}/>:<LiveProofPhotoPicker {...props}/>}

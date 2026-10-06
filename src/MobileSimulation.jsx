@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState} from 'react'
 import {I18nProvider,LanguageSelector} from './i18n.jsx'
-import {TodayView} from './AuthPages.jsx'
+import SimulationPhone from './SimulationPhone.jsx'
 import {setSimulationRequest} from './apiClient.js'
 import {createMobileSimulation,simulationLabel} from './mobileSimulationState.js'
 import CenteredNotice from './CenteredNotice.jsx'
@@ -25,16 +25,16 @@ export default function MobileSimulation(){
  const reset=(config=access)=>{
   if(!config)return
   const next=createMobileSimulation({date:config.date,paymentMethod:payment,language:()=>languageRef.current})
-  setSimulationRequest(next.request);setModel(next);setData(next.view());setError('');setGeneration(n=>n+1)
+  setSimulationRequest(async(...args)=>{const result=await next.request(...args);setData(next.view());return result});setModel(next);setData(next.view());setError('');setGeneration(n=>n+1)
  }
  useEffect(()=>{if(access)reset(access)},[access])
  const approve=()=>{try{setData(model.approve());setGeneration(n=>n+1);setError('')}catch(e){setError(e.message)}}
  const exit=()=>{if(window.parent!==window)window.parent.postMessage({type:'KCS_SIMULATION_EXIT'},window.location.origin);else window.location.assign('/')}
  const guard=e=>{if(e.target.closest('a')){e.preventDefault();e.stopPropagation();setError('blocked')}}
- return <I18nProvider language={language} setLanguage={setLanguage}><main className="mobile-app simulation-app" onClickCapture={guard} onAuxClickCapture={guard}>
+ return <I18nProvider language={language} setLanguage={setLanguage}><main className="simulation-app" onClickCapture={guard} onAuxClickCapture={guard}>
   <div className="simulation-banner"><strong>{w('title')}</strong><p>{w('help')}</p><LanguageSelector/><button onClick={exit}>{w('exit')}</button></div>
   {error&&<CenteredNotice onClose={()=>setError('')}>{simulationLabel(language,error)||error}</CenteredNotice>}
   {!access&&!error&&<p>{w('loading')}</p>}
-  {model&&data&&<><div className="simulation-toolbar"><p>{w('scope')}</p><label>{w('cash')}<select value={payment} onChange={e=>setPayment(e.target.value)}><option value="Credit">Credit</option><option value="Cash">Cash</option></select></label><button onClick={()=>reset()}>{w('reset')}</button>{!data.approved&&<button onClick={approve}>{w('approve')}</button>}</div><div className="simulation-route"><TodayView key={generation} data={data} preview={!data.approved}/></div></>}
+  {model&&data&&<><div className="simulation-toolbar"><p>{w('scope')}</p><label>{w('cash')}<select value={payment} onChange={e=>setPayment(e.target.value)}><option value="Credit">Credit</option><option value="Cash">Cash</option></select></label><button onClick={()=>reset()}>{w('reset')}</button>{!data.approved&&<button onClick={approve}>{w('approve')}</button>}</div><div className="simulation-reviews">{(data.pending||[]).map(r=><div key={r.id}><b>{w(r.kind==='order'?'orderRequest':r.kind)} · {r.branchName}</b><p>{r.reason} {r.targetDate||''}</p>{['approved','rejected'].map(decision=><button key={decision} onClick={()=>{try{setData(model.review(r.id,decision));setGeneration(n=>n+1)}catch(e){setError(e.message)}}}>{w(decision)}</button>)}</div>)}</div><SimulationPhone key={model.instanceKey} generation={generation} data={data}/></>}
  </main></I18nProvider>
 }
