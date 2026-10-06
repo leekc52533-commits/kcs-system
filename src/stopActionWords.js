@@ -1,0 +1,1 @@
+export const stopActionWords={zh:{back:'倒回收货',date:'改期',noGoods:'无货'},ms:{back:'Kutip kemudian',date:'Tukar tarikh',noGoods:'Tiada barang'},en:{back:'Collect later',date:'Reschedule',noGoods:'No goods'}}
