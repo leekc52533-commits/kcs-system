@@ -10,7 +10,7 @@ import EmployeeAccountCard,{NewEmployeeAccountFields} from './EmployeeAccountCar
 import TableBottomScroll from './TableBottomScroll.jsx'
 import './CompactDataTable.css'
 import {PhotoUpload} from './PhotoAttachment.jsx'
-import {Fragment,useCallback,useEffect,useMemo,useRef,useState} from 'react'
+import {Fragment,useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react'
 import {downloadSpreadsheet,readSpreadsheet} from './spreadsheetFiles.js'
 import {createEmployeeSelectionGuard,employeeDetailDraft,employeeMatchesDirectory,employeeDirectoryValue,employeeDirectoryPeriod,sortEmployeeDirectory,terminalEmploymentStatuses} from './employeeMasterState.js'
 import {kuchingDate} from '../shared/kuchingTime.js'
@@ -28,7 +28,7 @@ const dataUrl=file=>new Promise((resolve,reject)=>{const reader=new FileReader()
 const labelStatus=value=>({active:'Active',on_leave:'On Leave',inactive:'Inactive',resigned:'Resigned',terminated:'Terminated',contract_end:'Contract End',suspended:'Suspended',rehired:'Rehired'})[value]||value||'—'
 const currentPeriod=employeeDirectoryPeriod
 
-export default function EmployeeMasterPage({resources,currentUser,account,reload,onBack}){
+export default function EmployeeMasterPage({resources,currentUser,account,reload,onBack,onDetailBackChange}){
   const ui=useUi()
   const{t}=useI18n()
   const canImportEmployees=['owner_admin','operations_admin'].includes(currentUser.systemRole)||currentUser.permissions?.includes('employee_manage')
@@ -37,6 +37,9 @@ export default function EmployeeMasterPage({resources,currentUser,account,reload
   const[detailLoading,setDetailLoading]=useState(false),[saving,setSaving]=useState(false),[dirty,setDirty]=useState(false),[loadError,setLoadError]=useState('')
   const[filters,setFilters]=useState({search:'',columns:{}}),[sort,setSort]=useState({column:'employeeCode',direction:'asc'}),[preview,setPreview]=useState(null),[message,setMessage]=useState(''),[error,setError]=useState(''),[showCreate,setShowCreate]=useState(false),[showTools,setShowTools]=useState(false)
   const pendingSections=useRef({}),profilePending=useRef(false)
+  const listPosition=useRef(null),backAction=useRef(null)
+  useLayoutEffect(()=>{if(selectedId||!listPosition.current)return;const p=listPosition.current;listPosition.current=null;const table=document.querySelector(".employee-directory-table");if(table){table.scrollLeft=p.left;table.scrollTop=p.top}for(const [node,x,y] of p.parents)if(node.isConnected){node.scrollLeft=x;node.scrollTop=y}window.scrollTo(p.x,p.y)},[selectedId])
+  useEffect(()=>{onDetailBackChange?.(selectedId||showCreate?()=>()=>backAction.current?.():null);return()=>onDetailBackChange?.(null)},[selectedId,showCreate,onDetailBackChange])
   const stageSection=(key,operation)=>{pendingSections.current[key]=operation;setDirty(true)}
   const guard=useRef(createEmployeeSelectionGuard()),abortRef=useRef(null)
   const bases=resources.locations.filter(item=>item.isActive&&['Company Yard','Employee Base'].includes(item.operationalType||({'depot':'Company Yard','employee_home':'Employee Base'})[item.locationType]))
@@ -59,18 +62,18 @@ export default function EmployeeMasterPage({resources,currentUser,account,reload
     finally{if(guard.current.isCurrent(ticket,id))setDetailLoading(false)}
   },[])
 
-  const openEmployee=id=>{if(dirty&&!confirm(ui("The current employee has unsaved changes. Discard them and switch employee?")))return;loadEmployee(id)}
-  const closeDetail=()=>{if(dirty&&!confirm(ui("The current employee has unsaved changes. Discard them and close?")))return;abortRef.current?.abort();guard.current.cancel();setSelectedId(null);setDetail(null);setDraft(null);setDirty(false);setLoadError('')}
+  const openEmployee=id=>{if(dirty&&!confirm(ui("The current employee has unsaved changes. Discard them and switch employee?")))return;const table=document.querySelector(".employee-directory-table"),parents=[];for(let node=table?.parentElement;node;node=node.parentElement)parents.push([node,node.scrollLeft,node.scrollTop]);listPosition.current={x:window.scrollX,y:window.scrollY,left:table?.scrollLeft||0,top:table?.scrollTop||0,parents};loadEmployee(id)}
+  const closeDetail=()=>{if(saving)return;if(dirty&&!confirm(ui("The current employee has unsaved changes. Discard them and close?")))return;abortRef.current?.abort();guard.current.cancel();setSelectedId(null);setDetail(null);setDraft(null);setDirty(false);setLoadError('')}
   const outsidePanelRef=useEmployeeOutsideClose({open:Boolean(selectedId),saving,dirty,onClose:closeDetail,confirmDiscard:()=>confirm(ui("The current employee has unsaved changes. Discard them and close?")),resetKey:detail})
   const changeDraft=changes=>{profilePending.current=true;setDraft(value=>({...value,...changes}));setDirty(true)}
   const refreshCurrent=async id=>{await reload();await loadEmployee(id)}
   const saveDetail=async()=>{
     if(!detail||!draft||detailLoading||saving)return
     if(Number(draft.employeeId)!==Number(selectedId)||Number(detail.id)!==Number(selectedId)){setError(ui("Employee ID mismatch. Save blocked. Close the details and open them again."));return}
-    const enteredReason=prompt(ui('Editing {name} ({code}). Enter the reason for this change',{name:detail.name,code:detail.employeeCode}));if(!enteredReason)return
+    const enteredReason=prompt(ui('Editing {name} ({code}). Enter the reason for this change',{name:detail.name,code:detail.employeeCode}));if(!enteredReason?.trim())return
     const reason=`${enteredReason}${draft.homeGpsSource?` · GPS source: ${draft.homeGpsSource}`:''}`
     const id=Number(selectedId);setSaving(true);setError('')
-    try{if(profilePending.current){await api(`/api/employees/${id}`,{method:'PATCH',body:JSON.stringify({...draft,employeeId:id,reason})});profilePending.current=false}await saveEmployeeSections(pendingSections.current);setMessage(ui('Saved: {name}',{name:detail.name}));setDirty(false);await refreshCurrent(id)}catch(item){setError(ui(item.message))}finally{setSaving(false)}
+    try{if(profilePending.current){await api(`/api/employees/${id}`,{method:'PATCH',body:JSON.stringify({...draft,employeeId:id,reason})});profilePending.current=false}await saveEmployeeSections(pendingSections.current);setMessage(ui('Saved: {name}',{name:detail.name}));await reload();setDirty(false);abortRef.current?.abort();guard.current.cancel();setSelectedId(null);setDetail(null);setDraft(null);setLoadError('')}catch(item){setError(ui(item.message))}finally{setSaving(false)}
   }
   const create=async()=>{setError('');if(form.loginAccount&&passwordMessage(form.loginAccount.password,t)){setError(passwordMessage(form.loginAccount.password,t));return}if(!form.name.trim()||!form.jobRole||!form.employmentType||!form.employmentStatus||!form.employmentStartDate){setError(ui("Employee Name, Primary Job Role, Employment Type, Employment Status and Employment Start Date are required."));return}setSaving(true);try{await api('/api/employees',{method:'POST',body:JSON.stringify({...form,reason:'Employee creation'})});setMessage(ui("Employee created."));setDirty(false);setShowCreate(false);await reload();setForm({...empty,loginAccount:null,employeeCode:(await api('/api/employees/next-code')).employeeCode})}catch(item){setError(ui(item.message))}finally{setSaving(false)}}
   const template=async format=>downloadSpreadsheet(await api('/api/master-transfer/employee/template'),format)
@@ -91,7 +94,8 @@ export default function EmployeeMasterPage({resources,currentUser,account,reload
   const commit=async()=>{try{await api('/api/master-transfer/commit',{method:'POST',body:JSON.stringify({batchId:preview.batchId,changedBy:currentUser.name})});setMessage(ui("Employee import committed."));setPreview(null);await reload()}catch(item){setError(ui(item.message))}}
 
   const openCreate=()=>{if(dirty&&!confirm(t('branchEditor.unsavedLeave')))return;abortRef.current?.abort();guard.current.cancel();setSelectedId(null);setDetail(null);setDraft(null);setDirty(false);setError('');setShowCreate(true)}
-  const closeCreate=()=>{if(dirty&&!confirm(ui("You have unsaved changes. Leave without saving?")))return;setShowCreate(false);setDirty(false)}
+  const closeCreate=()=>{if(saving)return;if(dirty&&!confirm(ui("You have unsaved changes. Leave without saving?")))return;setShowCreate(false);setDirty(false)}
+  backAction.current=selectedId?closeDetail:showCreate?closeCreate:null
   const chooseGroup=value=>{if(dirty&&!confirm(t('branchEditor.unsavedLeave')))return;abortRef.current?.abort();guard.current.cancel();setSelectedId(null);setDetail(null);setDraft(null);setDirty(false);setShowCreate(false);setShowTools(false);setGroup(value);setFilters(current=>({...current,columns:{...current.columns,employmentStatus:null}}))}
   const toggleTools=()=>setShowTools(value=>!value)
   const activeView=showCreate?'create':showTools?'tools':group
