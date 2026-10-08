@@ -71,3 +71,26 @@ test('only owner capability offers exemption; other managers cannot cancel exist
  }finally{await act(async()=>root.unmount())}
  }
 })
+
+test('attendance columns hide, reorder, persist and render automatic status',async()=>{
+ const{AttendanceDaily}=await vite.ssrLoadModule('/src/Attendance.jsx'),{kuchingDate}=await vite.ssrLoadModule('/shared/kuchingTime.js')
+ localStorage.removeItem('kcs.attendance-columns.v1')
+ globalThis.fetch=async()=>({ok:true,json:async()=>({date:kuchingDate(),items:[{employeeId:2,name:'Driver A',work_date:kuchingDate(),mode:'company',clocked_at:null,attendanceStatus:'leave'}]})})
+ let root=createRoot(document.getElementById('root'))
+ const render=()=>act(async()=>root.render(React.createElement(I18nProvider,{language:'zh'},React.createElement(AttendanceDaily))))
+ try{
+ await render();assert.ok(document.querySelector('tbody').textContent.includes('请假'))
+ await act(async()=>document.querySelector('.attendance-edit-columns').click())
+ const rows=[...document.querySelectorAll('.expense-column-row')]
+ await act(async()=>rows.find(r=>r.textContent.includes('GPS')).querySelector('input').click())
+ await act(async()=>document.querySelector('[aria-label="上移: 考勤状态"]').click())
+ await act(async()=>document.querySelector('.expense-column-modal form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})))
+ let labels=[...document.querySelectorAll('thead th')].map(n=>n.textContent)
+ assert.equal(labels.some(v=>v.includes('GPS')),false)
+ assert.ok(labels.findIndex(v=>v.includes('考勤状态'))<labels.findIndex(v=>v.includes('打卡时间')))
+ await act(async()=>root.unmount());root=createRoot(document.getElementById('root'));await render()
+ labels=[...document.querySelectorAll('thead th')].map(n=>n.textContent)
+ assert.equal(labels.some(v=>v.includes('GPS')),false)
+ assert.ok(document.querySelector('tbody').textContent.includes('请假'))
+ }finally{await act(async()=>root.unmount());localStorage.removeItem('kcs.attendance-columns.v1')}
+})

@@ -144,3 +144,27 @@ test('exemption bypasses GPS without fake records, hides historical archive rows
  assert.equal(attendanceStatus(db,b,now).exempt,true)
  assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(),[])
  }finally{db.close()}})
+
+test('attendance status uses Kuching cutoff, approved leave/rest and positive work-day evidence',()=>{const db=fixture();try{
+ const later=new Date('2026-09-19T00:00:00Z')
+ db.exec(`INSERT INTO route_employee_availability(employee_id,availability_date,status,reason,changed_by) VALUES(2,'2026-09-18','available','Work','KC'),(3,'2026-09-18','off_duty','Rest','KC');`)
+ let rows=attendanceDaily(db,manager,'2026-09-18',now).items
+ assert.equal(rows.find(r=>r.employeeId===2).attendanceStatus,'not_clocked')
+ rows=attendanceDaily(db,manager,'2026-09-18',later).items
+ assert.equal(rows.find(r=>r.employeeId===2).attendanceStatus,'absent')
+ assert.equal(rows.find(r=>r.employeeId===3).attendanceStatus,'rest')
+ assert.equal(rows.find(r=>r.employeeId===1).attendanceStatus,'review')
+ assert.ok(attendanceDaily(db,manager,'all',later).items.some(r=>r.employeeId===2&&r.work_date==='2026-09-18'&&r.attendanceStatus==='absent'))
+ db.exec(`INSERT INTO leave_requests(employee_id,account_id,start_date,end_date,reason,requested_at,status) VALUES(2,20,'2026-09-17','2026-09-18','Leave','2026-09-16','pending')`)
+ assert.equal(attendanceDaily(db,manager,'2026-09-18',later).items.find(r=>r.employeeId===2).attendanceStatus,'review')
+ db.exec("UPDATE leave_requests SET status='approved'")
+ assert.equal(attendanceDaily(db,manager,'2026-09-18',later).items.find(r=>r.employeeId===2).attendanceStatus,'leave')
+ assert.ok(attendanceDaily(db,manager,'all',later).items.some(r=>r.employeeId===2&&r.work_date==='2026-09-17'&&r.attendanceStatus==='leave'))
+ clockIn(db,a,gps,now)
+ assert.equal(attendanceDaily(db,manager,'2026-09-18',later).items.find(r=>r.employeeId===2).attendanceStatus,'on_time')
+ const late=new Date(now.getTime()+1000);clockIn(db,b,{...gps,deviceCapturedAt:late.toISOString()},late)
+ assert.equal(attendanceDaily(db,manager,'2026-09-18',later).items.find(r=>r.employeeId===3).attendanceStatus,'late')
+ db.exec("UPDATE route_employee_availability SET status='available',start_time='09:00',end_time='17:00' WHERE employee_id=3")
+ assert.equal(attendanceDaily(db,manager,'2026-09-18',later).items.find(r=>r.employeeId===3).attendanceStatus,'on_time')
+ assert.equal(db.prepare('SELECT COUNT(*) n FROM attendance_records').get().n,2)
+ }finally{db.close()}})

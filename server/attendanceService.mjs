@@ -1,3 +1,5 @@
+import {attendanceEvidence} from './attendanceClassification.mjs'
+import {addCalendarDays} from '../shared/kuchingTime.js'
 import {canDirectApproveDate as canSetExemption} from './ownerDateApprovalAccess.mjs'
 import {kuchingDate} from '../shared/kuchingTime.js'
 import {withImmediateTransaction} from './branchServiceDateGuard.mjs'
@@ -48,7 +50,27 @@ export function clockIn(db,ctx,p,now=new Date()){return withImmediateTransaction
  db.prepare(`INSERT INTO attendance_records(employee_id,work_date,clocked_at,mode,latitude,longitude,accuracy_m,device_captured_at,location_id,location_name,center_latitude,center_longitude,radius_m,distance_m,account_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(ctx.employeeId,state.date,now.toISOString(),config.mode,p.latitude,p.longitude,p.accuracyM,p.deviceCapturedAt,location?.id||null,location?.name||null,location?.latitude??null,location?.longitude??null,location?config.radiusM:null,meters,ctx.id)
  return attendanceStatus(db,ctx,now)
 })}
-export function attendanceDaily(db,ctx,date=kuchingDate()){manager(ctx);if(date==='all'){const today=kuchingDate();return{date:today,items:[...db.prepare(`SELECT e.id employeeId,e.name,r.mode,r.work_date,r.clocked_at,r.latitude,r.longitude,r.accuracy_m FROM attendance_records r JOIN employees e ON e.id=r.employee_id WHERE NOT EXISTS (SELECT 1 FROM attendance_exemptions x WHERE x.employee_id=e.id) ORDER BY r.work_date DESC,e.name`).all(),...attendanceDaily(db,ctx,today).items.filter(r=>!r.clocked_at).map(r=>({...r,work_date:today}))]}}if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date+'T00:00:00Z'))||new Date(date+'T00:00:00Z').toISOString().slice(0,10)!==date)fail('ATTENDANCE_INVALID',400);return{date,items:db.prepare(`SELECT e.id employeeId,e.name,COALESCE(r.mode,s.mode,'company') mode,r.clocked_at,r.latitude,r.longitude,r.accuracy_m FROM employees e LEFT JOIN attendance_settings s ON s.employee_id=e.id LEFT JOIN attendance_records r ON r.employee_id=e.id AND r.work_date=? WHERE ((e.is_active=1 AND e.employment_status='active') OR r.id IS NOT NULL) AND NOT EXISTS (SELECT 1 FROM attendance_exemptions x WHERE x.employee_id=e.id) ORDER BY e.name`).all(date)}}
+export function attendanceDaily(db,ctx,date=kuchingDate(),now=new Date()){
+ manager(ctx)
+ if(date!=='all'&&(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date+'T00:00:00Z'))||new Date(date+'T00:00:00Z').toISOString().slice(0,10)!==date))fail('ATTENDANCE_INVALID',400)
+ const evidence=attendanceEvidence(db,now),today=evidence.today
+ const staff=db.prepare(`SELECT e.id employeeId,e.name,e.is_active,e.employment_status,COALESCE(s.mode,'company') mode FROM employees e LEFT JOIN attendance_settings s ON s.employee_id=e.id WHERE NOT EXISTS (SELECT 1 FROM attendance_exemptions x WHERE x.employee_id=e.id)`).all()
+ const byId=new Map(staff.map(e=>[e.employeeId,e])),rows=new Map(),key=(id,d)=>id+':'+d
+ const add=(id,d,record={})=>{const e=byId.get(id);if(!e)return;const k=key(id,d);if(!rows.has(k))rows.set(k,{employeeId:id,name:e.name,mode:e.mode,work_date:d,clocked_at:null,latitude:null,longitude:null,accuracy_m:null,...record})}
+ const records=db.prepare(`SELECT r.employee_id employeeId,r.mode,r.work_date,r.clocked_at,r.latitude,r.longitude,r.accuracy_m FROM attendance_records r WHERE (?='all' OR r.work_date=?)`).all(date,date)
+ for(const r of records)add(r.employeeId,r.work_date,r)
+ const selected=date==='all'?today:date
+ for(const e of staff)if(e.is_active&&e.employment_status==='active')add(e.employeeId,selected)
+ const addEvidence=(id,d)=>{if(date==='all'?d<=today:d===date)add(id,d)}
+ for(const r of evidence.availability.values())addEvidence(r.employee_id,r.availability_date)
+ for(const k of evidence.assigned){const [id,d]=k.split(':');addEvidence(Number(id),d)}
+ for(const leave of evidence.leaves){
+  if(date!=='all'){if(leave.start_date<=date&&leave.end_date>=date)addEvidence(leave.employee_id,date);continue}
+  for(let d=leave.start_date;d<=leave.end_date&&d<=today;d=addCalendarDays(d,1))addEvidence(leave.employee_id,d)
+ }
+ const items=[...rows.values()].map(r=>({...r,attendanceStatus:evidence.classify(r,r.work_date)})).sort((a,b)=>b.work_date.localeCompare(a.work_date)||a.name.localeCompare(b.name))
+ return {date:selected,items}
+}
 
 const canReview=ctx=>['owner_admin','operations_admin','supervisor'].includes(ctx?.role)
 export function requestAttendance(db,ctx,p,now=new Date()){return withImmediateTransaction(db,()=>{
