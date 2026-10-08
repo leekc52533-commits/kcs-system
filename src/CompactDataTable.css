@@ -55,3 +55,5 @@
 .table-bottom-scroll input[type=range]{flex:1;min-width:0;height:24px;margin:0;accent-color:#176b5b;cursor:ew-resize}
 .account-management{padding-bottom:50px}.account-management .entity-name-link{min-width:180px;text-align:left;word-break:normal;overflow-wrap:normal}.account-management .copy-value{white-space:nowrap}
 .account-inline-panel{position:sticky;left:12px;width:calc(var(--compact-viewport-width, 100vw) - 48px);max-width:100%;box-sizing:border-box}.account-inline-panel .account-editor-compact{margin:0 0 16px}.account-inline-panel header h2{overflow-wrap:anywhere}.account-inline-panel input,.account-inline-panel select{box-sizing:border-box}
+
+.compact-data-table th>.expense-filter-trigger{display:flex;align-items:center;justify-content:space-between;gap:6px;width:100%;min-height:42px;padding:0 10px;white-space:nowrap}

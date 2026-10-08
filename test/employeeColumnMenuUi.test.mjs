@@ -34,7 +34,7 @@ test('all eleven employee menus share archive layout; one at a time, search, mul
   await open(2);await click(boxes()[0]);await choose('Office');assert.deepEqual(ids(),['EMP-2'])
   const input=document.querySelector('.expense-filter-menu input:not([type=checkbox])')
   await act(async()=>{Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set.call(input,'zzzz');input.dispatchEvent(new Event('input',{bubbles:true}))})
-  assert.equal(document.querySelectorAll('.archive-check-options label').length,0)
+  assert.equal(document.querySelectorAll('.archive-check-options label:not(.archive-select-all)').length,0)
   assert.deepEqual(ids(),['EMP-2']) // Searching options does not change selection.
   await click(document.querySelector('.expense-filter-menu').lastElementChild.firstElementChild)
   assert.deepEqual(ids(),['EMP-2','EMP-10'])
@@ -44,4 +44,26 @@ test('all eleven employee menus share archive layout; one at a time, search, mul
   await click(document.querySelector('.expense-filter-menu').lastElementChild.lastElementChild);assert.equal(document.querySelector('[role=dialog]'),null)
   await act(async()=>root.unmount())
  }
+})
+
+
+test('compact master tables use the shared menu and preserve none/all/clear selection',async()=>{
+ const {default:CompactDataTable}=await vite.ssrLoadModule('/src/CompactDataTable.jsx')
+ const root=createRoot(document.getElementById('root'))
+ const columns=[{key:'name',label:'Name',filterable:true}]
+ try{
+  await act(async()=>root.render(React.createElement(I18nProvider,{language:'en'},React.createElement(CompactDataTable,{items:rows,rowKey:r=>r.id,columns,labels:{selected:'{count}',selectAll:'Select all',selectRow:'Select',details:'Details',columns:'Columns'},emptyLabel:'Empty'}))))
+  await open(0)
+  const panel=document.querySelector('.expense-filter-menu')
+  assert.equal(panel.querySelector(':scope>b'),null)
+  assert.equal(panel.querySelectorAll('.archive-sort-actions button').length,2)
+  assert.ok(panel.querySelector('.archive-check-options').firstElementChild.classList.contains('archive-select-all'))
+  assert.deepEqual([...panel.querySelectorAll('.archive-filter-footer button')].map(b=>b.textContent),['Clear','OK'])
+  await click(boxes()[0]);assert.equal(document.querySelectorAll('.compact-data-row').length,0)
+  await choose('Alpha');assert.equal(document.querySelectorAll('.compact-data-row').length,1)
+  assert.equal(document.querySelector('th[data-filtered=true]')?.textContent,'Name ▼')
+  await click(panel.querySelector('.archive-filter-footer button'));assert.equal(document.querySelectorAll('.compact-data-row').length,3)
+  assert.equal(document.querySelector('th[data-filtered=true]'),null)
+  await click(panel.querySelector('.archive-filter-footer button:last-child'));assert.equal(document.querySelector('.expense-filter-menu'),null)
+ }finally{await act(async()=>root.unmount())}
 })

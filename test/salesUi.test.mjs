@@ -83,7 +83,7 @@ test('declining an old settlement date keeps the draft, accepting submits the ex
  await act(async()=>document.querySelector('input[type=checkbox]').click())
  window.confirm=message=>{messages.push(message);return false}
  await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})))
- assert.equal(saved.length,0);assert.match(messages[0],/28\/09\/2006/);assert.match(messages[0],/7/)
+ assert.equal(saved.length,0);assert.match(messages[0],/28-Sep-06/);assert.match(messages[0],/7/)
  assert.equal(document.querySelector('.sales-fields input[type=date]').value,'2006-09-28')
  window.confirm=()=>true
  await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})))
@@ -108,7 +108,7 @@ test('history header search matches ISO years and keeps checkbox multi-selection
  try{
  await act(async()=>root.render(React.createElement(I18nProvider,{language:'en'},React.createElement('table',null,React.createElement('thead',null,React.createElement('tr',null,React.createElement(FilterHeader,{label:'Settlement date',open:true,onClose:()=>{},onChange:v=>changes.push(v),onSort:()=>{},value:[],matchOptionValue:true,options:[{value:'2006-09-28',label:'28-09-06'},{value:'2026-09-28',label:'28-09-26'}]})))))))
  await change(document.querySelector('.expense-filter-menu input:not([type=checkbox])'),'2006')
- const options=document.querySelectorAll('.archive-check-options input');assert.equal(options.length,1);assert.equal(options[0].value,'2006-09-28')
+ const options=document.querySelectorAll('.archive-check-options input[value]');assert.equal(options.length,1);assert.equal(options[0].value,'2006-09-28')
  await act(async()=>options[0].click());assert.deepEqual(changes,[['2006-09-28']])
  }finally{await act(async()=>root.unmount())}
 })
