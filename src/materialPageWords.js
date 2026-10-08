@@ -1,0 +1,26 @@
+const words={
+ 'Add Category':['新增分类','Tambah Kategori'],
+ 'Edit Category':['编辑分类','Edit Kategori'],
+ 'Delete Category':['删除分类','Padam Kategori'],
+ 'Move Products':['移动货物','Pindahkan Barangan'],
+ 'Products':['货物','Barangan'],
+ 'Price Groups':['价格组','Kumpulan Harga'],
+ 'Branches':['分店','Cawangan'],
+ 'Loading…':['加载中…','Memuatkan…'],
+ 'This account can view the catalogue but cannot change pricing.':['此账号可以查看目录，但不能修改价格。','Akaun ini boleh melihat katalog tetapi tidak boleh mengubah harga.'],
+ 'Category:':['分类：','Kategori:'],
+ 'This Category has related Products or is system reserved and cannot be deleted.':['此分类有关联货物或属于系统保留分类，不能删除。','Kategori ini mempunyai barangan berkaitan atau dikhaskan oleh sistem dan tidak boleh dipadam.'],
+ 'Reason':['原因','Sebab'],
+ 'Category Name':['分类名称','Nama Kategori'],
+ 'Sort Order':['排列顺序','Susunan'],
+ 'Target Category':['目标分类','Kategori Sasaran'],
+ 'Select Category':['选择分类','Pilih Kategori'],
+ 'Move Products to Another Category':['移动货物至其他分类','Pindahkan Barangan ke Kategori Lain'],
+ 'Confirm Delete':['确认删除','Sahkan Pemadaman'],
+ 'Confirm':['确认','Sahkan'],
+ 'Preview':['预览','Pratonton'],
+ 'Cancel':['取消','Batal'],
+ 'Confirm Move':['确认移动','Sahkan Pemindahan'],
+ 'Preview Move':['预览移动','Pratonton Pemindahan']
+}
+export const materialText=(language,text)=>words[text]?.[language==='zh'?0:language==='ms'?1:-1]||text
