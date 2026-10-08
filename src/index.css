@@ -22,3 +22,54 @@
 #root table thead th[data-filtered="true"]>.compact-column-control>summary>span{background:transparent!important;color:#fff!important}
 #root table thead th[data-filtered="true"]>.expense-filter-trigger:focus-visible,
 #root table thead th[data-filtered="true"]>.compact-column-control>summary:focus-visible{outline:2px solid #fff;outline-offset:2px}
+
+/* One screen-only header standard for every KCS table, including dialogs.
+   Preserve numeric alignment, sticky positioning and grouped header spans. */
+@media screen {
+  #root table>thead>tr>th {
+    font-family:inherit!important;
+    font-size:1rem!important;
+    font-weight:700!important;
+    line-height:1.2!important;
+    padding:4px 8px!important;
+    vertical-align:middle;
+    border-bottom:1px solid #dce5ea;
+  }
+  #root table>thead>tr>th:not([data-filtered="true"]) {
+    background:#f1f5f7!important;
+    color:#536575!important;
+  }
+  #root table>thead>tr>th>.expense-filter-trigger {
+    display:inline-flex!important;
+    align-items:center;
+    gap:4px!important;
+    min-height:24px!important;
+    height:auto!important;
+    padding:0!important;
+    margin:0!important;
+    border:0!important;
+    border-radius:0!important;
+    box-shadow:none!important;
+    background:transparent!important;
+    font-family:inherit!important;
+    font-size:inherit!important;
+    font-weight:inherit!important;
+    line-height:inherit!important;
+    color:inherit!important;
+  }
+  #root table>thead>tr>th>.expense-filter-trigger>span {
+    font-size:inherit!important;
+    font-weight:inherit!important;
+    line-height:inherit!important;
+  }
+  #root table>thead>tr>th>.expense-filter-trigger>span[aria-hidden] {
+    flex-shrink:0;
+    white-space:nowrap;
+  }
+  /* These menus are portalled to body, outside #root. Override the global
+     readability control rule only for the confirmed compact filter UI. */
+  .expense-filter-menu .archive-sort-actions button,
+  .expense-filter-menu .archive-filter-footer button {font-size:.8125rem!important}
+  .expense-filter-menu .archive-option-search,
+  .expense-filter-menu .archive-check {font-size:.875rem!important}
+}
