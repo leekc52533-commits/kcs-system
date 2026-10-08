@@ -12,3 +12,13 @@
 }
 #root td[data-numeric] > button { text-align: right; }
 #root th[data-numeric] .compact-column-menu { text-align: left; }
+
+/* Active filters stay visible even when their intersection produces no rows.
+   Sort-only columns retain their ordinary header appearance. */
+#root table thead th[data-filtered="true"]{background:#176f60!important;color:#fff!important}
+#root table thead th[data-filtered="true"]>.expense-filter-trigger,
+#root table thead th[data-filtered="true"]>.expense-filter-trigger>span,
+#root table thead th[data-filtered="true"]>.compact-column-control>summary,
+#root table thead th[data-filtered="true"]>.compact-column-control>summary>span{background:transparent!important;color:#fff!important}
+#root table thead th[data-filtered="true"]>.expense-filter-trigger:focus-visible,
+#root table thead th[data-filtered="true"]>.compact-column-control>summary:focus-visible{outline:2px solid #fff;outline-offset:2px}
