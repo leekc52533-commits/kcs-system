@@ -18,6 +18,9 @@ CREATE TABLE IF NOT EXISTS attendance_settings(
  location_id INTEGER REFERENCES operational_locations(id),radius_m INTEGER NOT NULL DEFAULT 200 CHECK(radius_m BETWEEN 20 AND 5000),
  revision INTEGER NOT NULL DEFAULT 1,changed_by INTEGER NOT NULL,changed_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS attendance_exemptions(
+ employee_id INTEGER PRIMARY KEY REFERENCES employees(id),changed_by INTEGER NOT NULL,changed_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS attendance_settings_history(
  id INTEGER PRIMARY KEY,employee_id INTEGER NOT NULL REFERENCES employees(id),payload_json TEXT NOT NULL,changed_by INTEGER NOT NULL,changed_at TEXT NOT NULL
 );

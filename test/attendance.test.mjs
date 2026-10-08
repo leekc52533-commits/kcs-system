@@ -102,3 +102,45 @@ test('standalone archive includes historical records and today missing employees
  assert.throws(()=>attendanceDaily(db,a,'all'),e=>e.statusCode===403)
  assert.equal(attendanceDaily(db,manager,'2026-09-18').items.find(r=>r.employeeId===2).clocked_at,now.toISOString())
  }finally{db.close()}})
+
+function pinOwner(db){db.exec(`INSERT INTO auth_accounts(id,employee_id,username,password_hash,role) VALUES(10,1,'kcadmin','test','admin');CREATE TABLE IF NOT EXISTS company_menu(id INTEGER PRIMARY KEY,owner_account_id INTEGER REFERENCES auth_accounts(id));INSERT INTO company_menu(id,owner_account_id) VALUES(1,10);`)}
+test('only pinned owner can grant or cancel exemption, with revision and audit',()=>{const db=fixture();try{
+ pinOwner(db)
+ for(const role of ['owner_admin','operations_admin']){
+  const other={id:99,role,permissions:['employee_manage'],canSetExemption:true}
+  assert.equal(attendanceSetup(db,other,2).canSetExemption,false)
+  assert.throws(()=>saveAttendanceSetup(db,other,2,{...home,mode:'none'}),{code:'ATTENDANCE_DENIED'})
+ }
+ assert.equal(attendanceSetup(db,manager,2).canSetExemption,true)
+ db.exec('UPDATE operational_locations SET latitude=NULL')
+ const saved=saveAttendanceSetup(db,manager,2,{...home,mode:'none'},now)
+ assert.equal(saved.mode,'none');assert.equal(saved.revision,1)
+ assert.throws(()=>saveAttendanceSetup(db,{id:99,role:'owner_admin'},2,{...home,revision:1}),{code:'ATTENDANCE_DENIED'})
+ assert.throws(()=>saveAttendanceSetup(db,manager,2,home),{code:'ATTENDANCE_STALE'})
+ const audit=JSON.parse(db.prepare('SELECT payload_json FROM attendance_settings_history').get().payload_json)
+ assert.equal(audit.after.mode,'none');assert.equal(audit.before.mode,'company')
+ saveAttendanceSetup(db,manager,1,{...home,mode:'none'},now)
+ assert.equal(attendanceStatus(db,manager,now).exempt,true)
+ saveAttendanceSetup(db,manager,2,{...home,revision:1},now)
+ assert.equal(attendanceStatus(db,a,now).exempt,false)
+ }finally{db.close()}})
+test('exemption bypasses GPS without fake records, hides historical archive rows, restores on cancellation',()=>{const db=fixture();try{
+ pinOwner(db);clockIn(db,a,gps,now)
+ const request=requestAttendance(db,b,{...gps,reason:'Forgot'},now).request
+ for(const id of [2,3])saveAttendanceSetup(db,manager,id,{...home,mode:'none'},now)
+ assert.equal(clockIn(db,b,{},now).exempt,true)
+ assert.equal(requestAttendance(db,b,{},now).exempt,true)
+ assert.equal(attendanceStatus(db,b,now).record,null)
+ assert.equal(attendanceRequests(db,manager).items.length,0)
+ assert.throws(()=>reviewAttendance(db,manager,request.id,{decision:'approved'},now),{code:'ATTENDANCE_STALE'})
+ assert.equal(db.prepare('SELECT status FROM attendance_requests WHERE id=?').get(request.id).status,'superseded')
+ for(const date of ['all','2026-09-18'])assert.deepEqual(attendanceDaily(db,manager,date).items.map(r=>r.employeeId),[1])
+ assert.equal(db.prepare('SELECT COUNT(*) n FROM attendance_records').get().n,1)
+ assert.equal(attendanceSetup(db,manager,2).records.length,1)
+ saveAttendanceSetup(db,manager,2,{...home,revision:1},now)
+ assert.ok(attendanceDaily(db,manager,'all').items.some(r=>r.employeeId===2&&r.work_date==='2026-09-18'))
+ assert.equal(attendanceDaily(db,manager,'2026-09-18').items.find(r=>r.employeeId===2).clocked_at,now.toISOString())
+ db.exec('INSERT INTO schema_meta(version) VALUES(75)');applyV75Migration(db);applyV75Migration(db)
+ assert.equal(attendanceStatus(db,b,now).exempt,true)
+ assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(),[])
+ }finally{db.close()}})

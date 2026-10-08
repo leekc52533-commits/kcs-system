@@ -18,7 +18,7 @@ test('first entry waits for explicit GPS click; outside/error stays gated; serve
    await act(async()=>root.render(React.createElement(I18nProvider,{language},React.createElement(AttendanceGate,{account:{employeeId:2,role:'driver'}},React.createElement('div',{id:'homepage'},'Home')))))
    assert.equal(geo,0);assert.equal(document.querySelector('#homepage'),null)
    await act(async()=>document.querySelector('.attendance-clock').click())
-   assert.equal(geo,1);assert.equal(posts,1);assert.equal(document.querySelector('#homepage'),null);assert.equal(document.querySelector('[role=alert]').textContent,attendanceWords[language].ATTENDANCE_OUTSIDE)
+   assert.equal(geo,1);assert.equal(posts,1);assert.equal(document.querySelector('#homepage'),null);assert.equal(document.querySelector('[role=alertdialog] .kcs-notice-body').textContent,attendanceWords[language].ATTENDANCE_OUTSIDE)
    outside=false;await act(async()=>document.querySelector('.attendance-clock').click());assert.ok(document.querySelector('#homepage'))
    await act(async()=>window.dispatchEvent(new Event('focus')));assert.equal(geo,2);assert.ok(document.querySelector('#homepage'))
    date='2026-09-19';record=null;await act(async()=>window.dispatchEvent(new Event('focus')));assert.equal(document.querySelector('#homepage'),null);assert.equal(geo,2)
@@ -46,4 +46,28 @@ test('employee setup saves explicit company site/radius then home without changi
  await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='保存打卡设置').click())
  assert.equal(saved.mode,'home');assert.equal(saved.revision,1)
  }finally{await act(async()=>root.unmount())}
+})
+
+test('exempt employee enters without GPS and returns to clock-in after exemption is removed',async()=>{
+ const root=createRoot(document.getElementById('root'));let exempt=true,geo=0
+ navigator.geolocation={getCurrentPosition:()=>{geo++}}
+ globalThis.fetch=async()=>({ok:true,json:async()=>({configured:true,exempt,mode:exempt?'none':'company',record:null,date:'2026-10-08'})})
+ try{
+ await act(async()=>root.render(React.createElement(I18nProvider,{language:'zh'},React.createElement(AttendanceGate,{account:{employeeId:2,role:'driver'}},React.createElement('div',{id:'homepage'},'Home')))))
+ assert.ok(document.querySelector('#homepage'));assert.equal(document.querySelector('.attendance-clock'),null);assert.equal(geo,0)
+ exempt=false;await act(async()=>window.dispatchEvent(new Event('focus')))
+ assert.equal(document.querySelector('#homepage'),null);assert.ok(document.querySelector('.attendance-clock'));assert.equal(geo,0)
+ }finally{await act(async()=>root.unmount())}
+})
+test('only owner capability offers exemption; other managers cannot cancel existing exemption',async()=>{
+ const{AttendanceSettings}=await vite.ssrLoadModule('/src/Attendance.jsx')
+ for(const [canSetExemption,mode] of [[true,'company'],[false,'company'],[false,'none']]){
+ const root=createRoot(document.getElementById('root'))
+ globalThis.fetch=async()=>({ok:true,json:async()=>({mode,canSetExemption,locationId:1,radiusM:200,revision:0,locations:[{id:1,name:'Company'}],records:[]})})
+ try{
+ await act(async()=>root.render(React.createElement(I18nProvider,{language:'zh'},React.createElement(AttendanceSettings,{employeeId:2}))))
+ assert.equal(Boolean(document.querySelector('option[value=none]')),canSetExemption||mode==='none')
+ assert.equal(document.querySelector('fieldset').disabled,mode==='none'&&!canSetExemption)
+ }finally{await act(async()=>root.unmount())}
+ }
 })
