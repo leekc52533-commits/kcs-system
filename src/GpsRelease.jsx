@@ -1,3 +1,4 @@
+import ApprovalCustomerLink from './ApprovalCustomerLink.jsx'
 import {useEffect,useState} from 'react'
 import {useI18n} from './i18n.jsx'
 import {apiRequest as api} from './apiClient.js'
@@ -19,7 +20,7 @@ function Review({item,reload,w}){
  const[reason,setReason]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('')
  const decide=async decision=>{setBusy(true);setError('');try{await api(`/api/gps-releases/${item.id}/review`,{method:'POST',body:JSON.stringify({decision,reason})});await reload()}catch(e){setError(e.code?.startsWith('GPS_RELEASE_')?w.problem:e.message)}finally{setBusy(false)}}
  const expired=kuchingDate()!=='2026-10-05'
- return <article><h3 data-i18n-raw>{item.branchName}</h3><p data-i18n-raw>{item.employeeName} · {item.plate} · {formatDateDisplay(item.service_date)}</p><p data-i18n-raw>{item.reason}</p>{expired&&<p>{w.expired}</p>}<label>{w.review}<textarea required maxLength={1000} value={reason} disabled={busy} onChange={e=>setReason(e.target.value)}/></label><button disabled={busy||expired||!reason.trim()} onClick={()=>decide('approved')}>{w.approve}</button><button disabled={busy||!reason.trim()} onClick={()=>decide('rejected')}>{w.reject}</button>{error&&<CenteredNotice onClose={()=>setError('')}>{error}</CenteredNotice>}</article>
+ return <article><h3><ApprovalCustomerLink branchCode={item.branchCode} disabled={busy}>{item.branchName}</ApprovalCustomerLink></h3><p data-i18n-raw>{item.employeeName} · {item.plate} · {formatDateDisplay(item.service_date)}</p><p data-i18n-raw>{item.reason}</p>{expired&&<p>{w.expired}</p>}<label>{w.review}<textarea required maxLength={1000} value={reason} disabled={busy} onChange={e=>setReason(e.target.value)}/></label><button disabled={busy||expired||!reason.trim()} onClick={()=>decide('approved')}>{w.approve}</button><button disabled={busy||!reason.trim()} onClick={()=>decide('rejected')}>{w.reject}</button>{error&&<CenteredNotice onClose={()=>setError('')}>{error}</CenteredNotice>}</article>
 }
 export function GpsReleaseApprovals(){
  const{language}=useI18n(),w=labels[language]||labels.en,[items,setItems]=useState([]),[error,setError]=useState('')

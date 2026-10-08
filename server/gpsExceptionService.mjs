@@ -32,7 +32,7 @@ export function requestGpsRelease(id,payload,ctx,db=defaultDb){return withImmedi
  audit(db,s,ctx.employeeId,'gps_release_requested',{requestId,reason})
  return{id:requestId,status:'pending'}
 })}
-export function listGpsReleases(ctx,db=defaultDb){manager(ctx);return db.prepare(`SELECT r.*,b.branch_name branchName,e.name employeeName,v.registration_number plate
+export function listGpsReleases(ctx,db=defaultDb){manager(ctx);return db.prepare(`SELECT r.*,b.jodoo_branch_id branchCode,b.branch_name branchName,e.name employeeName,v.registration_number plate
  FROM gps_arrival_requests r JOIN dispatch_stops s ON s.id=r.stop_id JOIN branches b ON b.id=s.branch_id
  JOIN employees e ON e.id=r.employee_id JOIN vehicles v ON v.id=r.vehicle_id WHERE r.status='pending' ORDER BY r.id`).all()}
 export function reviewGpsRelease(id,payload,ctx,db=defaultDb){manager(ctx);return withImmediateTransaction(db,()=>{

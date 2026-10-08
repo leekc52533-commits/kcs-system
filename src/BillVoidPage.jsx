@@ -1,3 +1,4 @@
+import ApprovalCustomerLink from './ApprovalCustomerLink.jsx'
 import {formatDateDisplay} from './dateDisplay.js'
 import CenteredNotice from './CenteredNotice.jsx'
 import DataExportButton from './DataExportButton.jsx'
@@ -88,5 +89,5 @@ function VoidArchive({items,canReview,run,busy,showOrder,onCloseOrder}){
  <div className="archive-table" ref={ref}><table><thead><tr>{order.map(k=><FilterHeader numeric={isNumericColumn(k)} key={k} label={voidLabels[lang][voidKeys.indexOf(k)]} open={open===k} onOpen={()=>setOpen(k)} onClose={()=>setOpen(null)} value={filters[k]??null} options={[...new Set(rows.map(r=>String(r[k]??'')))].sort((a,b)=>k==='date'?(a===''?(b===''?0:1):b===''?-1:b.localeCompare(a)):0).map(v=>({value:v,label:display(k,v)}))} onChange={v=>setFilters({...filters,[k]:v})} sortDirection={sort.key===k?sort.direction:null} onSort={direction=>setSort(direction?{key:k,direction}:{})}/>)}</tr></thead><tbody>{visible.map(r=><VoidRow key={r.id} row={r} order={order} display={display} expanded={expanded===r.id} onToggle={()=>setExpanded(expanded===r.id?null:r.id)} canReview={canReview} run={run} busy={busy}/>)}</tbody></table>{!visible.length&&<p className="archive-empty">{t('void.empty')}</p>}</div><TableBottomScroll scrollRef={ref}/></>
 }
 function VoidRow({row:r,order,display,expanded,onToggle,canReview,run,busy}){
- return <><tr>{order.map(k=><td data-numeric={isNumericColumn(k) || undefined} key={k} data-i18n-raw>{k==='billNumber'?<button className="bill-number" aria-expanded={expanded} onClick={onToggle}>{r[k]}</button>:display(k,r[k])}</td>)}</tr>{expanded&&<tr className="bill-detail"><td colSpan={order.length}><BillCard bill={r.bill} canReview={canReview} run={run} busy={busy}/></td></tr>}</>
+ return <><tr>{order.map(k=><td data-numeric={isNumericColumn(k) || undefined} key={k} data-i18n-raw>{k==='billNumber'?<button className="bill-number" aria-expanded={expanded} onClick={onToggle}>{r[k]}</button>:['customer','branch'].includes(k)?<ApprovalCustomerLink branchCode={r.bill.branch_code_snapshot} disabled={busy}>{display(k,r[k])}</ApprovalCustomerLink>:display(k,r[k])}</td>)}</tr>{expanded&&<tr className="bill-detail"><td colSpan={order.length}><BillCard bill={r.bill} canReview={canReview} run={run} busy={busy}/></td></tr>}</>
 }

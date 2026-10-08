@@ -9,8 +9,8 @@ const fail=code=>{throw Object.assign(Error(code),{code,statusCode:409})}
 const manager=ctx=>{if(!canManageDispatch(ctx))throw Object.assign(Error('NG_ACCESS'),{code:'NG_ACCESS',statusCode:403})}
 export function listArrangementRequests(ctx,db=defaultDb){
  manager(ctx)
- return db.prepare(`SELECT r.*,b.branch_name branchName,c.name customerName,e.name employeeName,v.registration_number plate,
- json_extract(r.payload_json,'$.direction') direction,ob.branch_name otherBranchName
+ return db.prepare(`SELECT r.*,b.jodoo_branch_id branchCode,b.branch_name branchName,c.name customerName,e.name employeeName,v.registration_number plate,
+ json_extract(r.payload_json,'$.direction') direction,ob.jodoo_branch_id otherBranchCode,ob.branch_name otherBranchName
  FROM driver_arrangement_requests r JOIN dispatch_stops s ON s.id=r.dispatch_stop_id JOIN branches b ON b.id=s.branch_id JOIN customers c ON c.id=b.customer_id JOIN employees e ON e.id=r.employee_id LEFT JOIN vehicles v ON v.id=r.vehicle_id
  LEFT JOIN dispatch_stops os ON os.id=json_extract(r.payload_json,'$.otherStopId') LEFT JOIN branches ob ON ob.id=os.branch_id
  WHERE r.status='pending' ORDER BY r.id`).all().map(({payload_json,...r})=>r)

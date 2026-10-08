@@ -1,0 +1,4 @@
+#root button.approval-customer-link{display:inline;padding:0!important;margin:0;border:0!important;border-radius:0;background:transparent!important;color:#176f60!important;font:inherit!important;text-align:inherit;white-space:normal;text-decoration:none;cursor:pointer}
+#root button.approval-customer-link:focus-visible{outline:2px solid #176f60;outline-offset:3px}
+#root button.approval-customer-link:disabled{opacity:.55;cursor:default}
+#root .date-request-customer-name{margin:0 0 10px;padding:0 10px;font-weight:700}
