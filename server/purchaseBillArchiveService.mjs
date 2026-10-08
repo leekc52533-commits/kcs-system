@@ -9,7 +9,7 @@ const monthPattern=/^\d{4}-(0[1-9]|1[0-2])$/
 const safeMonth=value=>monthPattern.test(String(value||''))?String(value):new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuching',year:'numeric',month:'2-digit'}).format(new Date())
 const datePattern=/^\d{4}-\d{2}-\d{2}$/
 const nextDate=value=>{const date=new Date(`${value}T00:00:00Z`);date.setUTCDate(date.getUTCDate()+1);return date.toISOString().slice(0,10)}
-const dateRange=filters=>{if(datePattern.test(String(filters.from||''))&&datePattern.test(String(filters.to||''))&&filters.from<=filters.to)return{label:`${filters.from}_to_${filters.to}`,from:String(filters.from),to:nextDate(String(filters.to))};const month=safeMonth(filters.month),[year,number]=month.split('-').map(Number),next=number===12?`${year+1}-01`:`${year}-${String(number+1).padStart(2,'0')}`;return{label:month,from:`${month}-01`,to:`${next}-01`}}
+const dateRange=filters=>{if(!filters.from&&!filters.to&&!filters.month)return{label:'all-dates',from:null,to:null};if(datePattern.test(String(filters.from||''))&&datePattern.test(String(filters.to||''))&&filters.from<=filters.to)return{label:`${filters.from}_to_${filters.to}`,from:String(filters.from),to:nextDate(String(filters.to))};const month=safeMonth(filters.month),[year,number]=month.split('-').map(Number),next=number===12?`${year+1}-01`:`${year}-${String(number+1).padStart(2,'0')}`;return{label:month,from:`${month}-01`,to:`${next}-01`}}
 const excelDate=value=>{const match=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(value||''));return match?new Date(Date.UTC(Number(match[1]),Number(match[2])-1,Number(match[3]))):null}
 const safeFile=value=>String(value||'').replace(/[^A-Za-z0-9._-]+/g,'_').replace(/^\.+/,'')||'file'
 
@@ -33,7 +33,7 @@ export function listPurchaseBillArchive(filters={},database=defaultDb){
   const itemStatement=database.prepare(`SELECT product_name_snapshot item,short_form_snapshot shortForm,unit_snapshot unit,quantity,unit_price_cents unitPriceCents,unit_price_mills unitPriceMills,COALESCE(unit_price_mills,unit_price_cents*10)/1000.0 unitPrice,line_total_cents itemTotalCents FROM purchase_bill_items WHERE purchase_bill_id=? ORDER BY id`)
   const table=applyArchiveColumns('purchase',headers,{...filters,_rangeFrom:query.from,_rangeToExclusive:query.to})
   const items=table.items.map(row=>({...row,totalCents:Number(row.totalCents),proofId:row.proofId?Number(row.proofId):null,items:itemStatement.all(row.id).map(item=>({...item,quantity:Number(item.quantity),unitPriceCents:Number(item.unitPriceCents),itemTotalCents:Number(item.itemTotalCents)}))}))
-  const employees=database.prepare(`SELECT DISTINCT pb.driver_employee_id id,pb.driver_name_snapshot name FROM purchase_bills pb WHERE pb.service_date>=? AND pb.service_date<? ORDER BY name`).all(query.from,query.to)
+  const employees=database.prepare(`SELECT DISTINCT pb.driver_employee_id id,pb.driver_name_snapshot name FROM purchase_bills pb WHERE (? IS NULL OR pb.service_date>=?) AND (? IS NULL OR pb.service_date<?) ORDER BY name`).all(query.from,query.from,query.to,query.to)
   return{rangeLabel:query.label,from:query.from,to:query.to,items,employees,filterOptions:table.filterOptions}
 }
 

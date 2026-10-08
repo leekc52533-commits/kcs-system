@@ -29,7 +29,7 @@ export default function ExpenseRecordsPage({onBack}){
   const [columnOrder,setColumnOrder]=useState(()=>readExpenseOrder(columns.map(c=>c[0]))),[showColumns,setShowColumns]=useState(false),[historyItem,setHistoryItem]=useState(null)
   const [correction,setCorrection]=useState(false),[showExport,setShowExport]=useState(false)
   const ui=useUi(),tableRef=useRef(null),[openFilter,setOpenFilter]=useState(null)
-  const[filters,setFilters]=useState({from:today(),to:today(),search:'',expenseType:'',category:'',employeeId:''}),[columnFilters,setColumnFilters]=useState({}),[sort,setSort]=useState({}),[data,setData]=useState(null),[error,setError]=useState(''),[message,setMessage]=useState(''),[loading,setLoading]=useState(false),[showForm,setShowForm]=useState(false),[busy,setBusy]=useState(false)
+  const[filters,setFilters]=useState({from:'',to:'',search:'',expenseType:'',category:'',employeeId:''}),[columnFilters,setColumnFilters]=useState({}),[sort,setSort]=useState({}),[data,setData]=useState(null),[error,setError]=useState(''),[message,setMessage]=useState(''),[loading,setLoading]=useState(false),[showForm,setShowForm]=useState(false),[busy,setBusy]=useState(false)
   const [exportTarget,setExportTarget]=useState(null)
   useEffect(()=>{setExportTarget(document.getElementById('expense-header-export'))},[])
   const query=useMemo(()=>new URLSearchParams(Object.entries({...filters,columns:JSON.stringify(columnFilters),sortKey:sort.key,sortDirection:sort.direction}).filter(([,value])=>value)).toString(),[filters,columnFilters,sort])

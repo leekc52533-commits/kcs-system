@@ -131,3 +131,13 @@ test('four historical header filters find old records and exports match selected
  assert.equal(listSales({...range,columns:JSON.stringify({deliveryDate:null})},office,db).items.length,0)
  assert.deepEqual(base.filterOptions.deliveryDate,['2006-09-27','2006-09-26',''])
 })
+
+
+test('sales opens across all dates while explicit ranges and export validation remain',t=>{
+ const {db,uploadsRoot}=setup(t);saveSales(payload(),office,db,{uploadsRoot})
+ db.prepare("UPDATE sales_settlements SET settlement_date='2020-01-01'").run()
+ assert.equal(listSales({},office,db).items.length,2)
+ assert.equal(listSales({from:'2026-09-01',to:'2026-09-30'},office,db).items.length,0)
+ assert.throws(()=>listSales({exportRange:'1'},office,db),/SALES_DATE/)
+ assert.throws(()=>listSales({from:'bad',to:'2026-09-30'},office,db),/SALES_DATE/)
+})

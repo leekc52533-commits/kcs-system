@@ -25,7 +25,7 @@ export default function UnloadingArchivePage({onBack}){
  const [filters,setFilters]=useState({}),[sort,setSort]=useState({}),[open,setOpen]=useState(null),[data,setData]=useState(null),[error,setError]=useState(''),[refresh,setRefresh]=useState(0),[download,setDownload]=useState(false),[exportRange,setExportRange]=useState({from:today(),to:today()})
  const [headerTarget,setHeaderTarget]=useState(null)
  useEffect(()=>{setHeaderTarget(document.getElementById('unloading-header-export')||document.getElementById('purchase-header-export'))},[])
- const query=new URLSearchParams({defaultDate:today(),columns:JSON.stringify(filters),sortKey:sort.key||'',sortDirection:sort.direction||''}).toString()
+ const query=new URLSearchParams({columns:JSON.stringify(filters),sortKey:sort.key||'',sortDirection:sort.direction||''}).toString()
  useEffect(()=>{let active=true;setError('');setData(null);apiRequest('/api/unloading-archive?'+query).then(d=>{if(active)setData(d)}).catch(e=>{if(active)setError(e.message)});return()=>{active=false}},[query,refresh])
  const display=(key,value)=>value==null||value===''?'—':key==='status'?unloadingStatus[lang][value]:key==='date'?value.slice(8)+'/'+value.slice(5,7)+'/'+value.slice(0,4):key==='confirmedWeightKg'?formatWeight(value):value
  return <div className="page purchase-archive expense-records unloading-archive">

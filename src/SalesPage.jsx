@@ -39,7 +39,7 @@ function findLineIssue(lines,settlementDate,t){
 export default function SalesPage({onBack}){
  const [showExport,setShowExport]=useState(false),[exportTarget,setExportTarget]=useState(null)
  useEffect(()=>{setExportTarget(document.getElementById('sales-header-export'))},[])
- const{t,language}=useI18n(),numberLabel=({zh:'卖货单号',en:'Sales No.',ms:'No. jualan'})[language]||'Sales No.',ref=useRef(null),request=useRef(0),[range]=useState(()=>({from:today(),to:today()})),[filters,setFilters]=useState({}),[sort,setSort]=useState({}),[open,setOpen]=useState(null),[data,setData]=useState(null),[form,setForm]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false)
+ const{t,language}=useI18n(),numberLabel=({zh:'卖货单号',en:'Sales No.',ms:'No. jualan'})[language]||'Sales No.',ref=useRef(null),request=useRef(0),[range]=useState(()=>({from:'',to:''})),[filters,setFilters]=useState({}),[sort,setSort]=useState({}),[open,setOpen]=useState(null),[data,setData]=useState(null),[form,setForm]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false)
  const safety=salesSafetyText[language]||salesSafetyText.en
  const [duplicate,setDuplicate]=useState(null)
  const historyKeys=['documentNumber','billNumber','settlementDate','deliveryDate','slipNumber']

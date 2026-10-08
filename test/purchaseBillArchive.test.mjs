@@ -50,3 +50,15 @@ test('HNL linked statement names preserve original bill snapshots',()=>{
  assert.deepEqual(db.prepare('SELECT * FROM purchase_bills WHERE id=1').get(),before)
  }finally{db.close();fs.rmSync(root,{recursive:true,force:true})}
 })
+
+
+test('default archive includes records across months; explicit ranges still restrict results',()=>{
+ const {db,root}=fixture()
+ try{
+  db.prepare("UPDATE purchase_bills SET service_date='2025-01-15' WHERE id=1").run()
+  const all=listPurchaseBillArchive({},db)
+  assert.equal(all.items.length,2);assert.equal(all.employees.length,2);assert.equal(all.rangeLabel,'all-dates')
+  assert.equal(listPurchaseBillArchive({month:'2026-09'},db).items.length,1)
+  assert.equal(listPurchaseBillArchive({from:'2025-01-15',to:'2025-01-15'},db).items[0].id,1)
+ }finally{db.close();fs.rmSync(root,{recursive:true,force:true})}
+})

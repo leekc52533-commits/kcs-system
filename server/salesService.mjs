@@ -64,7 +64,7 @@ export function listSales(query,context,db=defaultDb){
  assertSalesAccess(context)
  const historyKeys=['documentNumber','billNumber','settlementDate','deliveryDate','slipNumber']
  let columns={};try{columns=typeof query.columns==='string'?JSON.parse(query.columns):query.columns||{}}catch{}
- const lookup=billKey(query.lookup),allDates=query.exportRange!=='1'&&historyKeys.some(key=>Array.isArray(columns?.[key]))
+ const lookup=billKey(query.lookup),allDates=query.exportRange!=='1'&&((!query.from&&!query.to)||historyKeys.some(key=>Array.isArray(columns?.[key])))
  if(!lookup&&!allDates&&(!validSalesDate(query.from)||!validSalesDate(query.to)||query.from>query.to))throw fail('SALES_DATE')
  const numbers=documentNumberMap(db)
  const records=db.prepare('SELECT * FROM sales_settlements ORDER BY settlement_date DESC,id DESC').all().map(decode)
