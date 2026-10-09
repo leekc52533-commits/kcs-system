@@ -48,7 +48,7 @@ export default function OccCurrentPrices({canManage,onBack,notify,fail}){
  const members=(group?.members.filter(m=>`${m.customerCode} ${m.customerName} ${m.branches.map(b=>b.branchName).join(' ')}`.toLowerCase().includes(search.toLowerCase())&&Object.entries(filters).every(([key,values])=>values==null||values.includes(memberValue(m,key))))||[]).sort((a,b)=>sort.direction?memberValue(a,sort.key).localeCompare(memberValue(b,sort.key),undefined,{numeric:true})*(sort.direction==='desc'?-1:1):a.customerName.localeCompare(b.customerName,undefined,{numeric:true}))
  const all=members.length>0&&members.every(m=>keys.includes(m.key))
  return <div className="material-page-level occ-current-prices">{headerTarget?createPortal(back,headerTarget):back}<section className="occ-price-groups">
- <header><div><h3>{w.title}{group&&<> · {canManage?<OccGroupName group={group} onSaved={load} notify={notify}/>:<span data-i18n-raw>{group.code}</span>}</>}</h3><p>{w.help}</p></div><button onClick={load}>{w.refresh}</button></header>
+ <header><div><h3>{w.title}{group&&<> · {canManage?<OccGroupName group={group} onSaved={load} notify={notify}/>:<span data-i18n-raw>{group.code}</span>}</>}</h3></div></header>
  {!dialog&&error&&<p role="alert">{error}</p>}
  {group?<><h3>{money(group.price)} · {group.customerCount} {w.companies} · {group.branchCount} {w.branches}</h3><p>{w.scope}</p>{group.pending&&<p>{w.pending}: {money(group.pending.price)} · {formatDateDisplay(group.pending.date)}</p>}
  {canManage&&<div className="occ-current-actions"><button disabled={Boolean(group.pending)||group.status!=='active'||group.visibility!=='active'} onClick={()=>start('price')}>{w.edit}</button><button disabled={!keys.length} onClick={()=>start('move')}>{w.move} ({keys.length})</button></div>}

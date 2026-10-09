@@ -368,3 +368,5 @@ These requirements were confirmed by KC on 2026-09-09. Carry them forward for la
 - KC confirmed 2026-10-09: OCC price groups support user-defined display names (1–80 characters) through Rename price group. Use the saved name throughout current group lists, detail headings, target selectors and same-price grouping previews; retain stable underlying level IDs and default OCC-ID labels when unnamed. Renaming never changes prices or customer memberships. Enforce price_manage server-side, reject conflicting names/stale previews, record actor and old/new names, and support zh/ms/en UI without translating the authored name.
 
 - KC confirmed 2026-10-09: Rename an OCC price group by clicking its displayed name in the detail heading. Do not show a separate Rename price group action button. Preserve permission checks and the existing rename dialog.
+
+- KC requested 2026-10-09: keep the current OCC price-group page header compact; remove the explanatory current-price sentence and standalone Refresh button. Retain the heading, clickable group-name editor and unused-group toggle. Saved changes continue reloading data automatically.
