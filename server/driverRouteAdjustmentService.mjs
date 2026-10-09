@@ -1,3 +1,5 @@
+import {ensureCustomerDatePromiseSchema,assertCustomerDateUnlocked} from './customerDatePromise.mjs'
+import {dateRequestReasonChoices} from '../shared/customerDatePromise.js'
 import {isDirectDateApproval} from './ownerDateApprovalAccess.mjs'
 import {branchRescheduleHistory} from './branchRescheduleHistory.mjs'
 import {recordRepeatDateApproval} from './repeatDateGuard.mjs'
@@ -63,10 +65,13 @@ export function requestDriverDate(id,payload,context={},db=defaultDb,{uploadsRoo
  try{return withImmediateTransaction(db,()=>{
   const{s,today}=owned(db,id,context),target=String(payload.targetDate||''),reason=String(payload.reason||'').trim()
   if(!/^\d{4}-\d{2}-\d{2}$/.test(target)||!Number.isFinite(Date.parse(target+'T00:00:00Z'))||new Date(target+'T00:00:00Z').toISOString().slice(0,10)!==target||target<=today||!reason||reason.length>1000)fail('routeTrial.dateReason',400)
+  assertCustomerDateUnlocked(db,s.id)
+  if(!dateRequestReasonChoices.some(r=>r.id===payload.reasonCode))fail('DATE_REASON_CHOICE',400)
   if(hasWork(db,s)||pendingDefer(db,s))fail('routeTrial.protected')
   const existing=db.prepare("SELECT * FROM driver_date_requests WHERE dispatch_stop_id=? AND status='pending'").get(s.id)
   if(existing){if(existing.target_date===target&&existing.reason===reason)return{id:existing.id,status:'pending'};fail('routeTrial.pending')}
   const evidence=prepareDateEvidence(db,s,payload,context)
+  if(payload.reasonCode==='customer')evidence.detail.customerDateCommitted=true
   const result=db.prepare('INSERT INTO driver_date_requests(dispatch_stop_id,employee_id,source_date,target_date,reason) VALUES(?,?,?,?,?)').run(s.id,context.employeeId,today,target,reason)
   written=writeDateEvidence(db,Number(result.lastInsertRowid),evidence,uploadsRoot)
   audit(db,s,context.employeeId,'driver_date_requested',null,{requestId:Number(result.lastInsertRowid),targetDate:target,reason,evidence:dateEvidence(db,Number(result.lastInsertRowid))})
@@ -111,6 +116,10 @@ export function decideDriverDate(id,decision,payload,context={},db=defaultDb,{wo
   const s=lookup(db,r.dispatch_stop_id),actor=context.employeeName||String(context.employeeId),reason=String(payload.reason).trim()
   let targetStop=null,preservedDates=[]
   if(decision==='approved'){
+   assertCustomerDateUnlocked(db,s.id)
+   const committed=dateEvidence(db,r.id)?.customerDateCommitted===true
+   if(committed&&(payload.targetDate||r.target_date)!==r.target_date)fail('CUSTOMER_DATE_LOCKED')
+   if(committed&&(!['once','permanent'].includes(payload.scope)||payload.customerPromiseConfirmed!==true))fail('CUSTOMER_DATE_SCOPE',400)
    const eligibility=db.prepare('SELECT b.lifecycle_status,b.is_active,b.status,c.is_active customer_active,c.status customer_status FROM branches b JOIN customers c ON c.id=b.customer_id WHERE b.id=?').get(s?.branch_id)
    if(!eligibility||eligibility.lifecycle_status!=='ACTIVE'||!eligibility.is_active||eligibility.status!=='active'||!eligibility.customer_active||eligibility.customer_status!=='active')fail('DATE_BRANCH_INACTIVE')
    recordRepeatDateApproval(db,r,s,payload,context)
@@ -180,6 +189,10 @@ export function decideDriverDate(id,decision,payload,context={},db=defaultDb,{wo
     db.prepare("INSERT INTO schedule_occurrences(schedule_id,branch_id,planned_date,occurrence_source,status,dispatch_stop_id) VALUES(?,?,?,'exception','planned',?) ON CONFLICT(schedule_id,planned_date) DO UPDATE SET status='planned',dispatch_stop_id=excluded.dispatch_stop_id,occurrence_source='exception',updated_at=CURRENT_TIMESTAMP").run(s.source_schedule_id,s.branch_id,date,targetStop)
    }
    db.prepare('INSERT INTO driver_date_reviews(request_id,branch_id,approved_date,route_number,scope,schedule_before_json,schedule_after_json) VALUES(?,?,?,?,?,?,?)').run(r.id,s.branch_id,date,route,scope,JSON.stringify(before),JSON.stringify(after))
+   if(committed){
+    ensureCustomerDatePromiseSchema(db)
+    db.prepare('INSERT INTO customer_date_promises(request_id,stop_id,branch_id,promised_date,scope,approved_by) VALUES(?,?,?,?,?,?)').run(r.id,targetStop,s.branch_id,date,scope,actor)
+   }
    if(scope==='permanent'){
     preservedDates=syncReviewedBranchSchedule({branchId:s.branch_id,scheduleId:s.source_schedule_id,startDate:s.dispatch_date,excludeStopId:targetStop,changedBy:actor},db)
     after.nextCollectionDate=db.prepare('SELECT next_collection_date date FROM branch_schedules WHERE id=?').get(s.source_schedule_id).date
@@ -216,6 +229,7 @@ export function changePlannedCustomer(id,payload,context={},db=defaultDb,interna
  return withImmediateTransaction(db,()=>{
   const s=lookup(db,id)
   if(!s||hasWork(db,s))fail('routeTrial.protected')
+  assertCustomerDateUnlocked(db,s.id)
   let r=db.prepare("SELECT id FROM driver_date_requests WHERE dispatch_stop_id=? AND status='pending'").get(s.id)
   if(!r){
    const insert=db.prepare('INSERT INTO driver_date_requests(dispatch_stop_id,employee_id,source_date,target_date,reason) VALUES(?,?,?,?,?)').run(s.id,context.employeeId,s.dispatch_date,String(payload.targetDate||''),String(payload.reason||''))

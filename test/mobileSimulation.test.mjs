@@ -8,7 +8,7 @@ test('training requests need explicit simulated review and new customers bill wi
  const m=setup();await check(m);m.approve();await post(m,'/api/mobile/trips/1/start')
  await post(m,'/api/mobile/stops/2/trial-reorder',{direction:'up',reason:'TEST'})
  assert.equal(m.view().trips[0].stops[0].id,1);m.review(m.view().pending[0].id,'approved');assert.equal(m.view().trips[0].stops[0].id,2)
- await post(m,'/api/mobile/stops/2/request-date',{targetDate:'2026-10-07',reason:'TEST'})
+ await post(m,'/api/mobile/stops/2/request-date',{targetDate:'2026-10-07',reason:'TEST',reasonCode:'time',evidence:{}})
  await assert.rejects(()=>post(m,'/api/mobile/stops/2/arrive'))
  m.review(m.view().pending[0].id,'rejected');assert.equal(m.view().trips[0].currentStopId,2)
  await post(m,'/api/mobile/stops/2/no-goods-notice',{reason:'TEST',photo:{dataUrl:'TEST'}})
@@ -39,4 +39,22 @@ test('cash proof, invalid inputs, unsupported writes and detached snapshots',asy
  await post(m,'/api/mobile/stops/1/payment-proof',{photo:{dataUrl:'data:image/png;base64,TEST'}});await post(m,'/api/mobile/stops/1/complete')
  const copy=m.view();copy.trips[0].stops=[];assert.equal(m.view().trips[0].stops.length,3)
  for(const path of ['/api/mobile/stops/1/request-date','/api/sales','/api/auth/logout'])await assert.rejects(()=>post(m,path))
+})
+test('customer commitment training requires scope, previews promised day and blocks rescheduling without real writes',async()=>{
+ const m=setup();await check(m);m.approve();await post(m,'/api/mobile/trips/1/start')
+ const payload={targetDate:'2026-10-07',reason:'Customer requested rescheduling',reasonCode:'customer',evidence:{contactMethod:'phone',contactName:'TEST',contactAt:'2026-10-05T01:00:00Z'}}
+ await assert.rejects(()=>post(m,'/api/mobile/stops/1/request-date',{...payload,reasonCode:'other'}))
+ await post(m,'/api/mobile/stops/1/request-date',payload)
+ const id=m.view().pending[0].id
+ assert.throws(()=>m.review(id,'approved'));assert.equal(m.view().pending.length,1)
+ m.review(id,'approved',{scope:'permanent',customerPromiseConfirmed:true})
+ assert.deepEqual(m.view().promisedDates,['2026-10-07'])
+ m.openPromisedDate('2026-10-07')
+ const stop=m.view().trips[0].stops[0]
+ assert.equal(stop.customerDatePromise.date,'2026-10-07');assert.equal(stop.fixedSchedule.weekday,3)
+ await post(m,'/api/mobile/trips/1/start')
+ await assert.rejects(()=>post(m,`/api/mobile/stops/${stop.id}/request-date`,{...payload,targetDate:'2026-10-08'}),/promised/)
+ await post(m,`/api/mobile/stops/${stop.id}/arrive`)
+ assert.ok(m.view().trips[0].stops[0].arrivedAt)
+ assert.deepEqual(setup().view().promisedDates,[])
 })

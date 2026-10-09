@@ -1,3 +1,4 @@
+import {ensureCustomerDatePromiseSchema} from './customerDatePromise.mjs'
 import {ensureOccSharedPrices} from './occSharedPriceMigration.mjs'
 import {ensureDriverPlanSchema} from './driverPlanSchema.mjs'
 import {ensureRepeatDateSchema} from './repeatDateSchema.mjs'
@@ -437,6 +438,7 @@ ensureDriverPlanSchema(db)
 ensureRepeatDateSchema(db)
 
 ensureOccSharedPrices(db)
+ensureCustomerDatePromiseSchema(db)
 
 const integrityResult = db.prepare('PRAGMA integrity_check').get()
 if (integrityResult.integrity_check !== 'ok') throw new Error(`Database integrity check failed: ${integrityResult.integrity_check}`)

@@ -201,7 +201,7 @@ test('dispatch access is shared by office and management, never driver/crew even
  for(const role of ['driver','crew','unknown',''])assert.equal(canManageDispatch({role,permissions:['schedule_manage']}),false)
 })
 
-for(const reasonCode of ['closed','business_closed'])test(reasonCode+': date requests enforce proof server-side, preserve route until review, restrict viewing and clean files on rollback',async()=>{
+for(const reasonCode of ['full'])test(reasonCode+': date requests enforce proof server-side, preserve route until review, restrict viewing and clean files on rollback',async()=>{
  const {mkdtempSync,rmSync,readdirSync}=await import('node:fs'),{tmpdir}=await import('node:os'),{join}=await import('node:path')
  const {dateEvidence,dateEvidenceForViewer}=await import('../server/dateRequestEvidenceService.mjs')
  const root=mkdtempSync(join(tmpdir(),'date-evidence-')),{db,ids}=fixture(),before=db.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(ids[0])
@@ -236,7 +236,7 @@ test('contact evidence and original-bill references cannot be replaced by arbitr
  {reasonCode:'customer',evidence:{details:'Call',contactMethod:'phone'}},
  {reasonCode:'customer',evidence:{details:'Message',contactMethod:'message',contactName:'Manager',contactAt:new Date().toISOString()}},
  {reasonCode:'collected',evidence:{billNumber:'NOT-A-BILL'}},
- {reasonCode:'other',evidence:{details:'Unknown'}}])assert.throws(()=>requestDriverDate(ids[0],{targetDate:'2026-09-11',reason:'Request',...payload},context,db),/DATE_EVIDENCE_REQUIRED/)
+ {reasonCode:'other',evidence:{details:'Unknown'}}])assert.throws(()=>requestDriverDate(ids[0],{targetDate:'2026-09-11',reason:'Request',...payload},context,db),payload.reasonCode==='customer'?/DATE_EVIDENCE_REQUIRED/:/DATE_REASON_CHOICE/)
  const r=requestDriverDate(ids[0],{targetDate:'2026-09-11',reason:'Customer called',reasonCode:'customer',evidence:{contactMethod:'phone',contactName:'Manager',contactAt:new Date().toISOString()}},context,db)
  assert.equal(r.status,'pending');assert.equal(listDriverDateRequests(db)[0].evidence.contactName,'Manager')
  }finally{db.close()}
@@ -263,21 +263,28 @@ test('next date suggestion follows recurrence, approved exceptions and actual fu
  assert.equal(nextBranchCollectionDate(db,ids[0],today),null)
  db.close()
 })
-test('staff reason needs no notes but retains snapshot and supervisor approval',()=>{
+test('time reason needs no notes but retains snapshot and supervisor approval',()=>{
  const {db,ids}=fixture()
- const r=requestDriverDate(ids[0],{targetDate:'2026-09-11',reason:'Tak cukup pekerja',reasonCode:'staff',evidence:{}},context,db)
+ const r=requestDriverDate(ids[0],{targetDate:'2026-09-11',reason:'Tak sempat',reasonCode:'time',evidence:{}},context,db)
  assert.equal(r.status,'pending')
  assert.ok(listDriverDateRequests(db)[0].evidence.operations)
  db.close()
 })
 
+// Existing requests made before the three-choice policy remain reviewable.
+function legacyDateRequest(id,payload,context,db){
+ const result=db.prepare('INSERT INTO driver_date_requests(dispatch_stop_id,employee_id,source_date,target_date,reason) VALUES(?,?,?,?,?)').run(id,context.employeeId,context.today,payload.targetDate,payload.reason)
+ const requestId=Number(result.lastInsertRowid)
+ db.prepare('INSERT INTO driver_date_evidence(request_id,reason_code,details_json) VALUES(?,?,?)').run(requestId,payload.reasonCode,JSON.stringify({...payload.evidence,reasonCode:payload.reasonCode}))
+ return{id:requestId,status:'pending'}
+}
 test('system status draft needs two distinct supervisors, releases route after first vote and commits atomically',async()=>{
  const {reviewDateWithSystemChange,dateSystemReview}=await import('../server/dateSystemReviewService.mjs')
  const {customerWorkspace}=await import('../server/customerWorkspaceService.mjs')
  const {applyBranchLifecycle}=await import('../server/branchLifecycleService.mjs')
  const {db,ids}=fixture()
  const first={...supervisor,id:31},second={...supervisor,id:32,employeeId:4,employeeName:'Second supervisor'}
- const r=requestDriverDate(ids[0],{targetDate:'2026-09-11',reason:'No longer sells',reasonCode:'stopped',evidence:{contactMethod:'phone',contactName:'Manager',contactAt:new Date().toISOString()}},context,db)
+ const r=legacyDateRequest(ids[0],{targetDate:'2026-09-11',reason:'No longer sells',reasonCode:'stopped',evidence:{contactMethod:'phone',contactName:'Manager',contactAt:new Date().toISOString()}},context,db)
  const current=customerWorkspace({branchId:'B1'},first,db)
  const payload={targetDate:'2026-09-11',routeNumber:1,scope:'once',reason:'Checked',evidenceChecked:true,systemChange:'workspace',workspaceDraft:{branchId:'B1',revision:current.revision,reason:'Confirmed closure',branch:{lifecycleStatus:'CLOSED'}}}
  const before=db.prepare('SELECT * FROM dispatch_stops WHERE id=?').get(ids[0])
@@ -328,7 +335,7 @@ test('stale system drafts remain pending and rejection discards the proposed cha
  const {reviewDateWithSystemChange,dateSystemReview}=await import('../server/dateSystemReviewService.mjs')
  const {customerWorkspace}=await import('../server/customerWorkspaceService.mjs')
  const {db,ids}=fixture(),first={...supervisor,id:31},second={...supervisor,id:32,employeeId:4}
- const r=requestDriverDate(ids[0],{targetDate:'2026-09-11',reason:'No longer sells',reasonCode:'stopped',evidence:{contactMethod:'phone',contactName:'Manager',contactAt:new Date().toISOString()}},context,db)
+ const r=legacyDateRequest(ids[0],{targetDate:'2026-09-11',reason:'No longer sells',reasonCode:'stopped',evidence:{contactMethod:'phone',contactName:'Manager',contactAt:new Date().toISOString()}},context,db)
  const current=customerWorkspace({branchId:'B1'},first,db),payload={targetDate:'2026-09-11',routeNumber:1,reason:'Checked',evidenceChecked:true,systemChange:'workspace',workspaceDraft:{branchId:'B1',revision:current.revision,reason:'Pause',branch:{lifecycleStatus:'TEMPORARILY_PAUSED'}}}
  reviewDateWithSystemChange(r.id,'approved',payload,first,db)
  payload.proposalToken=dateSystemReview(db,r.id).proposalToken
@@ -349,7 +356,7 @@ test('ordinary system edits commit with approval, invalid edits roll back the da
  const {reviewDateWithSystemChange}=await import('../server/dateSystemReviewService.mjs')
  const {customerWorkspace}=await import('../server/customerWorkspaceService.mjs')
  const {db,ids}=fixture(),actor={...supervisor,id:31}
- const r=requestDriverDate(ids[0],{targetDate:'2026-09-11',reason:'Customer request',reasonCode:'customer',evidence:{contactMethod:'phone',contactName:'Manager',contactAt:new Date().toISOString()}},context,db)
+ const r=legacyDateRequest(ids[0],{targetDate:'2026-09-11',reason:'Customer request',reasonCode:'customer',evidence:{contactMethod:'phone',contactName:'Manager',contactAt:new Date().toISOString()}},context,db)
  const current=customerWorkspace({branchId:'B1'},actor,db)
  const payload={targetDate:'2026-09-11',routeNumber:1,scope:'once',reason:'Checked',evidenceChecked:true,systemChange:'workspace',workspaceDraft:{requestId:'ordinary-system-review-001',branchId:'B1',revision:current.revision,reason:'Contact corrected',customer:{customerName:current.customer.customerName,status:current.customer.status},branch:{...current.branch,phone:'555'}}}
  assert.throws(()=>reviewDateWithSystemChange(r.id,'approved',{...payload,systemChange:undefined},actor,db),/SYSTEM_REVIEW_CHOOSE/)
@@ -374,7 +381,7 @@ test('legacy first approval can release once without granting the second status 
  const {reviewDateWithSystemChange,dateSystemReview}=await import('../server/dateSystemReviewService.mjs')
  const {customerWorkspace}=await import('../server/customerWorkspaceService.mjs')
  const {db,ids}=fixture(),first={...supervisor,id:31},second={...supervisor,id:32,employeeId:4}
- const r=requestDriverDate(ids[0],{targetDate:'2026-09-11',reason:'Stopped',reasonCode:'stopped',evidence:{contactMethod:'phone',contactName:'Manager',contactAt:new Date().toISOString()}},context,db)
+ const r=legacyDateRequest(ids[0],{targetDate:'2026-09-11',reason:'Stopped',reasonCode:'stopped',evidence:{contactMethod:'phone',contactName:'Manager',contactAt:new Date().toISOString()}},context,db)
  const current=customerWorkspace({branchId:'B1'},first,db)
  const proposal={targetDate:'2026-09-11',routeNumber:1,scope:'once',reason:'First checked',evidenceChecked:true,systemChange:'workspace',workspaceDraft:{branchId:'B1',revision:current.revision,reason:'Closed',branch:{lifecycleStatus:'CLOSED'}}}
  db.prepare('INSERT INTO driver_date_system_reviews(request_id,branch_id,proposal_json,first_account_id,first_employee_id,first_name) VALUES(?,1,?,?,?,?)').run(r.id,JSON.stringify(proposal),first.id,first.employeeId,first.employeeName)

@@ -1,3 +1,5 @@
+import {dateRequestReasonChoices,customerDateWords} from '../shared/customerDatePromise.js'
+import {evidenceProblem} from '../shared/dateRequestEvidence.js'
 import {createSimulationExtras} from './mobileSimulationExtras.js'
 import {addCalendarDays} from '../shared/kuchingTime.js'
 export const simulationWords={
@@ -10,6 +12,7 @@ const copy=value=>structuredClone(value)
 export function createMobileSimulation({date,paymentMethod='Credit',language=()=> 'en'}={}){
  let revision=1,checked=false,checkedAt=null,approved=false,execution='not_started',sequence=0
  const stops=[1,2,3].map(n=>({id:n,branchId:'TEST-B'+n,branchName:'TEST Branch '+n,nextScheduledDate:n===3?null:addCalendarDays(date,n+2),customerName:'TEST Customer',routeNumber:1,stopSequence:n,status:'locked',gpsAvailable:true,latitude:1.55,longitude:110.35,address:'TEST ONLY',area:'TEST',zoneGroup:'TEST',timeRestriction:'—',arrivedAt:null,billCreated:false,paymentProofUploaded:false,arrangementRequests:[],rescheduleHistory:null,deferred:false}))
+ const promisedStops=[]
  const pending=[],intakes=[],unloading=[],cargo=[];let requestSequence=0
  const bills=new Map(),products=[{productId:1,productCode:'OCC',fullName:'OCC (TEST)',shortForm:'OCC (TEST)',unit:'kg',currentPrice:0.2}]
  const fail=key=>{throw new Error(simulationLabel(language(),key))}
@@ -18,17 +21,25 @@ export function createMobileSimulation({date,paymentMethod='Credit',language=()=
  function view(){
   const current=execution==='in_progress'?stops.find(s=>!['completed','cancelled'].includes(s.status)):null
   const trip={id:1,tripNumber:1,registrationNumber:'TEST VEHICLE',vehicleCode:'TEST',vehicleId:1,executionStatus:execution,approved,canPlan:!approved,canStart:approved&&execution==='not_started',canAttemptComplete:execution==='in_progress',canComplete:execution==='in_progress'&&stops.every(s=>['completed','cancelled'].includes(s.status)),currentStopId:current?.id||null,totalCount:stops.length,completedCount:stops.filter(s=>s.status==='completed').length,noGoodsCount:stops.filter(s=>s.completionOutcome==='no_goods_notice').length,driverPlan:{tripId:1,tripNumber:1,driverName:'TEST DRIVER',signature:String(revision),checked,checkedBy:checked?'TEST DRIVER':null,checkedAt},stops:stops.filter(s=>s.status!=='cancelled').map(s=>({...s,canArrive:current===s&&!s.arrivedAt,canFinish:current===s&&Boolean(s.arrivedAt),canReportNoGoods:approved&&!s.billCreated&&!['completed','cancelled'].includes(s.status),verifiedArrival:Boolean(s.arrivedAt),noGoodsApprovalRequired:!s.arrivedAt,billPaymentMethod:paymentMethod}))}
-  return copy({date:approved?date:addCalendarDays(date,1),weekday:new Date((approved?date:addCalendarDays(date,1))+'T00:00:00Z').toLocaleDateString('en-US',{weekday:'long',timeZone:'UTC'}),routeAvailable:true,approved,status:approved?'approved':'draft',trips:[trip],pending,systemReviewNotices:[],driverApprovalRequired:true,trialOrderEnabled:false})
+  return copy({date:approved?date:addCalendarDays(date,1),weekday:new Date((approved?date:addCalendarDays(date,1))+'T00:00:00Z').toLocaleDateString('en-US',{weekday:'long',timeZone:'UTC'}),routeAvailable:true,approved,status:approved?'approved':'draft',trips:[trip],pending,promisedDates:[...new Set(promisedStops.map(s=>s.customerDatePromise.date))],systemReviewNotices:[],driverApprovalRequired:true,trialOrderEnabled:false})
  }
  const approve=()=>{if(!checked)fail('check');approved=true;return view()}
- function review(id,decision){
+ function review(id,decision,details={}){
   const index=pending.findIndex(r=>r.id===id);if(index<0||!['approved','rejected'].includes(decision))fail('blocked')
   const r=pending[index],stop=stops.find(s=>s.id===r.stopId)
   if(extras.review(r,decision)){pending.splice(index,1);return view()}
   if(!stop||stop.billCreated||stop.status==='completed')fail('order')
   if(decision==='approved'){
    if(r.kind==='order'){const i=stops.indexOf(stop),j=i+(r.direction==='up'?-1:1);if(!stops[j]||stops[j].arrivedAt||stop.arrivedAt)fail('order');[stops[i],stops[j]]=[stops[j],stops[i]];stops.forEach((s,n)=>s.stopSequence=n+1)}
-   if(r.kind==='date'){stop.status='cancelled';stop.dateRequest={status:decision,targetDate:r.targetDate}}
+   if(r.kind==='date'){
+    if(r.reasonCode==='customer'){
+     if(!['once','permanent'].includes(details.scope)||details.customerPromiseConfirmed!==true)throw new Error((customerDateWords[language()]||customerDateWords.en).scope)
+     const promised={...copy(stop),id:1000+r.id,status:'locked',dateRequest:null,arrangementRequests:[],customerDatePromise:{date:r.targetDate,scope:details.scope},nextScheduledDate:null}
+     if(details.scope==='permanent')promised.fixedSchedule={weekday:new Date(r.targetDate+'T00:00:00Z').getUTCDay(),anchorDate:r.targetDate}
+     promisedStops.push(promised)
+    }
+    stop.status='cancelled';stop.dateRequest={status:decision,targetDate:r.targetDate}
+   }
    if(r.kind==='no_goods'){stop.status='completed';stop.completionOutcome='no_goods_notice'}
    if(r.kind==='defer'){stop.deferred=true;stop.deferApprovalStatus='approved';stops.splice(stops.indexOf(stop),1);stops.push(stop)}
   }
@@ -73,7 +84,10 @@ export function createMobileSimulation({date,paymentMethod='Credit',language=()=
    const stop=stops.find(s=>s.id===Number(parts[4])),action=parts[5]
    if(!approved||!stop||stop.billCreated||['completed','cancelled'].includes(stop.status)||!payload.reason?.trim()||pending.some(r=>r.stopId===stop.id))fail('order')
    const kind={'trial-reorder':'order','request-date':'date','no-goods-notice':'no_goods',defer:'defer'}[action]
-   if(kind==='date'&&(!payload.targetDate||payload.targetDate<=date))fail('order')
+   if(kind==='date'){
+    if(stop.customerDatePromise)throw new Error((customerDateWords[language()]||customerDateWords.en).warning)
+    if(!dateRequestReasonChoices.some(r=>r.id===payload.reasonCode)||evidenceProblem(payload.reasonCode,payload.evidence)||!/^\d{4}-\d{2}-\d{2}$/.test(payload.targetDate||'')||!Number.isFinite(Date.parse(payload.targetDate+'T00:00:00Z'))||new Date(payload.targetDate+'T00:00:00Z').toISOString().slice(0,10)!==payload.targetDate||payload.targetDate<=date)fail('order')
+   }
    if(kind==='order'&&!['up','down'].includes(payload.direction))fail('order')
    if(kind==='no_goods'&&!payload.photo?.dataUrl)fail('bill')
    if(kind==='no_goods'&&stop.arrivedAt){stop.status='completed';stop.completionOutcome='no_goods_notice';return{ok:true}}
@@ -110,5 +124,11 @@ export function createMobileSimulation({date,paymentMethod='Credit',language=()=
   }
   fail('blocked')
  }
- return{view,approve,request,review,instanceKey:Math.random().toString(36)}
+ function openPromisedDate(target){
+  const selected=promisedStops.filter(s=>s.customerDatePromise.date===target)
+  if(!selected.length||pending.length)fail('order')
+  stops.splice(0,stops.length,...copy(selected));date=target;execution='not_started';approved=true;checked=true
+  return view()
+ }
+ return{view,approve,request,review,openPromisedDate,instanceKey:Math.random().toString(36)}
 }

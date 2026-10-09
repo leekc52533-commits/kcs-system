@@ -134,3 +134,48 @@ test('direct button is visible only with server owner capability and submits wit
  await click(button);assert.equal(calls.at(-1).url,'/api/dispatch/date-requests/1/owner-approve');assert.equal(calls.at(-1).init.body,undefined)
  await act(async()=>root.unmount())
 })
+test('customer promised date is locked in all languages and requires explicit once/permanent choice before approval',async()=>{
+ for(const language of ['zh','ms','en']){
+  const calls=[]
+  globalThis.fetch=async(url,init={})=>{calls.push({url,init});return new Response(JSON.stringify(String(url).includes('/options')?{dayReady:true,revision:3,routes:[{routeNumber:1,name:'ROUTE 1',available:true}]}:{id:1,status:'approved'}),{status:200,headers:{'content-type':'application/json'}})}
+  const root=createRoot(document.getElementById('root'))
+  const committed={...item,canDirectApprove:true,evidence:{reasonCode:'customer',customerDateCommitted:true,contactMethod:'phone',contactName:'Manager'}}
+  await act(async()=>root.render(React.createElement(I18nProvider,{language},React.createElement(DateRequestReview,{item:committed,onSaved:()=>{}}))))
+  assert.equal(document.querySelector('.owner-date-direct-approve'),null)
+  assert.equal(document.querySelector('input[type=date]').disabled,true)
+  const selects=document.querySelectorAll('select'),approve=document.querySelector('.date-review-actions .primary')
+  assert.equal(selects[1].value,'')
+  await change(selects[0],'1');await change(document.querySelector('textarea'),'Confirmed')
+  await click(document.querySelector('input[type=checkbox]'))
+  assert.equal(approve.disabled,true)
+  await change(selects[1],'permanent')
+  assert.equal(approve.disabled,true)
+  await click([...document.querySelectorAll('input[type=checkbox]')].at(-1))
+  assert.equal(approve.disabled,false);await click(approve)
+  const posted=JSON.parse(calls.at(-1).init.body)
+  assert.equal(posted.scope,'permanent');assert.equal(posted.customerPromiseConfirmed,true);assert.equal(posted.targetDate,item.targetDate)
+  assert.equal(document.querySelector('.master-modal'),null)
+  await act(async()=>root.unmount())
+ }
+})
+test('mobile form offers exactly three reasons, requires customer date entry and hides reschedule on promised stops',async()=>{
+ const {default:Tools}=await vite.ssrLoadModule('/src/DriverRouteTools.jsx'),{default:PromiseLabel}=await vite.ssrLoadModule('/src/CustomerDatePromise.jsx')
+ for(const language of ['zh','ms','en']){
+  const stop={id:1,status:'locked',nextScheduledDate:'2026-10-12'},trip={stops:[stop],executionStatus:'in_progress'},route={date:'2026-10-09'}
+  const root=createRoot(document.getElementById('root'))
+  const render=async stop=>act(async()=>root.render(React.createElement(I18nProvider,{language},React.createElement(React.Fragment,null,React.createElement(PromiseLabel,{value:stop.customerDatePromise}),React.createElement(Tools,{stop,trip,route,run:()=>{throw Error('must not submit incomplete form')},busy:false})))))
+  await render(stop);await click(document.querySelector('.stop-action-date'))
+  const select=document.querySelector('select')
+  assert.deepEqual([...select.options].map(o=>o.value),['','time','full','customer'])
+  await change(select,'customer')
+  assert.equal(document.querySelector('input[type=date]').value,'')
+  assert.ok([...document.querySelectorAll('button')].at(-1).disabled)
+  assert.ok(document.querySelector('[role=alert]'))
+  // Remount to mirror a fresh promised-day route.
+  await act(async()=>root.render(null))
+  await render({...stop,customerDatePromise:{date:'2026-10-12',scope:'once'}})
+  assert.equal(document.querySelector('.stop-action-date'),null)
+  assert.match(document.querySelector('[role=note]').textContent,/12-Oct-26/)
+  await act(async()=>root.unmount())
+ }
+})

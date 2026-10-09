@@ -40,7 +40,7 @@ export function reviewDateWithSystemChange(id,decision,payload,actor,db=defaultD
    return result
   }
   if(request.status!=='pending'&&!(released&&pending.status==='pending'))return decideDriverDate(id,decision,payload,actor,db)
-  if(!systemReviewReasons.includes(code))return decideDriverDate(id,decision,payload,actor,db)
+  if(dateEvidence(db,id)?.customerDateCommitted===true||!systemReviewReasons.includes(code))return decideDriverDate(id,decision,payload,actor,db)
   if(!payload.evidenceChecked||!String(payload.reason||'').trim())fail('SYSTEM_REVIEW_EVIDENCE',400)
   if(dual&&(!['owner_admin','operations_admin','supervisor'].includes(actor.role)||!Number(actor.id)||!Number(actor.employeeId)))fail('SYSTEM_REVIEW_SUPERVISOR',403)
   let proposal=pending?JSON.parse(pending.proposal_json):payload
