@@ -1,3 +1,4 @@
+import {syncSundayCatchups} from './sundayCatchup.mjs'
 import {customerDatePromise} from './customerDatePromise.mjs'
 import {branchAbsenceHistory} from './branchAbsenceHistory.mjs'
 import {dueCustomers} from './dueCustomers.mjs'
@@ -303,9 +304,11 @@ function generateRange({startDate=iso(),generatedBy='Supervisor',count=7,onlyMis
       applyWeeklyRoutePlanToDay(database,day)
       prepareSundayDay(database,day)
     }
+    const catchupReview=[]
+    for(let offset=0;offset<count;offset++)catchupReview.push(...syncSundayCatchupDay(addDays(start,offset),database).reviews)
     fillRouteVehicleDefaults(database,start,onlyMissing?createdDayIds:null)
     if(ownsTransaction)database.exec('COMMIT')
-    return {weekStart:start,dayCount:count,createdStops,reusedStops,protectedDays,duplicateStops,...(count===1?{day:getDispatchDay(start,database)}:getDispatchWeek({startDate:start},database))}
+    return {weekStart:start,dayCount:count,createdStops,reusedStops,protectedDays,duplicateStops,scheduleReview:catchupReview,...(count===1?{day:getDispatchDay(start,database)}:getDispatchWeek({startDate:start},database))}
   } catch(error){if(ownsTransaction&&database.isTransaction)database.exec('ROLLBACK');throw error}
 }
 // Fill the rolling window without regenerating any existing day or its approvals.
@@ -323,7 +326,8 @@ export function ensureRollingWeek({startDate=iso(),generatedBy='Supervisor'}={},
   if(count!==7)generateRange({startDate:start,generatedBy,count:7,onlyMissing:true},database)
   const sundayReview=withImmediateTransaction(database,()=>{const reviews=[];for(let i=0;i<7;i++){const d=dayByDate(database,addDays(start,i));if(d){const warning=prepareSundayDay(database,d);if(warning)reviews.push(warning)}}fillRouteVehicleDefaults(database,start);return reviews})
   const scheduleReview=reconcileScheduleWindow({startDate:start,changedBy:generatedBy},database)
-  return {...getDispatchWeek({startDate:start},database),scheduleReview:[...sundayReview,...scheduleReview],planningReview:routeScheduleProposals(database,start)}
+  const catchupReview=withImmediateTransaction(database,()=>{const reviews=[];for(let i=0;i<7;i++)reviews.push(...syncSundayCatchupDay(addDays(start,i),database).reviews);fillRouteVehicleDefaults(database,start);return reviews})
+  return {...getDispatchWeek({startDate:start},database),scheduleReview:[...sundayReview,...scheduleReview,...catchupReview],planningReview:routeScheduleProposals(database,start)}
 }
 export function generateWeek(payload={},database=defaultDb){return generateRange({...payload,count:7},database)}
 export function generateDay(payload={},database=defaultDb){return generateRange({...payload,count:1},database)}
@@ -1438,4 +1442,9 @@ export function supportCustomerOptions(date,context={},database=defaultDb){
  const due=dueCustomers(database)
  for(const b of due){const stop=byScheduled.get(b.id);b.stopId=stop?.stopId??null;b.routeNumbers=stop?.routeNumber!=null?[stop.routeNumber]:(byBranch.get(b.id)||b.routeNumbers)}
  return {items,routes,priority,due,asOf:new Date().toISOString()}
+}
+
+// Reconcile only auto-created Sunday catch-ups; regular and manually changed work is preserved.
+export function syncSundayCatchupDay(date,database=defaultDb,options={}){
+ return syncSundayCatchups(database,date,{...options,create:p=>createStop(p,database),place:p=>placeReviewedScheduledStop(p,database),invalidate:(...args)=>invalidateDispatchDay(database,...args)})
 }
