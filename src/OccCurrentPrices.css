@@ -2,7 +2,7 @@
 
 /* Match compact workspace spacing; avoid default heading margins. */
 #root .occ-current-prices>.occ-price-groups>header{margin:0 0 12px;padding:0;min-height:0}
-#root .occ-current-prices>.occ-price-groups>header h3{margin:0;font-size:22px;line-height:1.35}
+#root .occ-current-prices>.occ-price-groups>header h3{margin:0;font-size:24px;line-height:1.35}
 
 /* Shared compact teal actions and bordered search field. */
 #root .occ-current-prices .occ-current-actions{gap:8px;margin:12px 0}
