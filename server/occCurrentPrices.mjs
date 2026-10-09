@@ -122,3 +122,64 @@ export function moveCurrentOccCustomers(db,payload,today=kuchingDate()){
  db.exec('RELEASE move_occ_customers');return {ok:true,changedCount:keys.length}
  }catch(e){db.exec('ROLLBACK TO move_occ_customers; RELEASE move_occ_customers');throw e}
 }
+
+// Explicit, previewed normalization of effective OCC special prices. Never infer
+// assignments from legacy branch archives or silently choose among equal groups.
+export function previewOccPriceGrouping(db,today=kuchingDate()){
+ const data=currentOccGroups(db,today),p=product(db),buckets=new Map(),blocked=[]
+ for(const member of data.special){
+  const price=Number(member.specialPrice)
+  if(!Number.isFinite(price)||price<=0||Math.abs(price*1000-Math.round(price*1000))>0.000001){blocked.push(member);continue}
+  const key=String(price)
+  if(!buckets.has(key)){
+   const options=data.groups.filter(g=>g.status==='active'&&g.visibility==='active'&&!g.pending&&g.date<=today&&Number(g.price)===price).map(g=>({id:g.id,code:g.code,price:g.price,version:g.version,customerCount:g.customerCount}))
+   buckets.set(key,{key,price,options,defaultTarget:options.length===1?String(options[0].id):options.length===0?'new':'',members:[]})
+  }
+  buckets.get(key).members.push(member)
+ }
+ const items=[...buckets.values()].sort((a,b)=>a.price-b.price)
+ const rows=p?db.prepare("SELECT * FROM customer_material_pricing WHERE material_id=? ORDER BY id").all(p.material_id):[]
+ const version=createHash('sha256').update(JSON.stringify({today,items,blocked,rows})).digest('hex')
+ return {version,items,blocked,recordCount:items.reduce((n,g)=>n+g.members.length,0),customerCount:new Set(items.flatMap(g=>g.members.map(m=>m.customerId))).size}
+}
+export function groupOccSpecialPrices(db,payload,today=kuchingDate()){
+ applyDueOccPrices(db,today)
+ db.exec('SAVEPOINT group_occ_special_prices')
+ try{
+  const plan=previewOccPriceGrouping(db,today)
+  if(!payload.version||payload.version!==plan.version)fail('Price or customers changed. Refresh and review again.',409)
+  const p=product(db),actor=String(payload.changedBy||'Administrator'),reason='Group OCC special prices at unchanged current prices',runId=`occ-same-price-${Date.now()}`
+  const choices=payload.choices||{},targets=new Map()
+  for(const bucket of plan.items){
+   const target=String(choices[bucket.key]??bucket.defaultTarget)
+   if(target==='new'&&bucket.options.length===0){targets.set(bucket.key,null);continue}
+   const match=bucket.options.find(g=>String(g.id)===target)
+   if(!match)fail('Select a matching group for every price.')
+   targets.set(bucket.key,match.id)
+  }
+  let changedCount=0,createdGroups=0
+  for(const bucket of plan.items){
+   let targetId=targets.get(bucket.key)
+   if(!targetId){
+    targetId=Number(db.prepare(`INSERT INTO material_price_levels(material_id,product_id,price_amount,price_cents,is_fixed,effective_date,status,reason,created_by,visibility_status) VALUES(?,?,?,?,0,?,'active',?,?,'active')`).run(p.material_id,p.id,bucket.price,Math.round(bucket.price*100),today,reason,actor).lastInsertRowid)
+    db.prepare("INSERT INTO material_master_audit(entity_type,entity_id,action,after_json,reason,changed_by) VALUES('priceGroup',?,'create',?,?,?)").run(targetId,JSON.stringify({productId:p.id,price:bucket.price,runId}),reason,actor);createdGroups++
+   }
+   // Compatible fallback levels become available in the shared product selector too.
+   db.prepare('UPDATE material_price_levels SET product_id=? WHERE id=? AND product_id IS NULL').run(p.id,targetId)
+   for(const member of bucket.members){
+    const row=db.prepare('SELECT * FROM customer_material_pricing WHERE id=?').get(member.rowId)
+    const prefix=member.priceType==='outstation'?'outstation':'standard'
+    if(row[`${prefix}_special_price`]!==bucket.price)fail('Customer assignment changed. Refresh and review again.',409)
+    db.prepare(`UPDATE customer_material_pricing SET ${prefix}_special_price=NULL,${prefix}_price_level_id=?,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(targetId,actor,row.id)
+    const after=db.prepare('SELECT * FROM customer_material_pricing WHERE id=?').get(row.id)
+    // The amount, selected price type, enable flags and dates are unchanged.
+    const level=db.prepare('SELECT price_amount FROM material_price_levels WHERE id=?').get(targetId)
+    if(Number(level.price_amount)!==Number(member.specialPrice)||row.price_type!==after.price_type||row.outstation_enabled!==after.outstation_enabled)fail('Price preservation check failed.',409)
+    db.prepare(`INSERT INTO customer_material_pricing_history(customer_material_pricing_id,customer_id,material_id,before_json,after_json,affected_standard_branch_count,affected_outstation_branch_count,reason,changed_by) VALUES(?,?,?,?,?,?,?,?,?)`).run(row.id,row.customer_id,row.material_id,JSON.stringify(row),JSON.stringify(after),prefix==='standard'?member.branches.length:0,prefix==='outstation'?member.branches.length:0,reason,actor)
+    db.prepare("INSERT INTO material_conversion_audit(run_id,action,entity_type,entity_id,before_json,after_json,changed_by) VALUES(?,'group_same_price','customer_material_pricing',?,?,?,?)").run(runId,`${row.id}:${prefix}`,JSON.stringify(row),JSON.stringify(after),actor)
+    changedCount++
+   }
+  }
+  db.exec('RELEASE group_occ_special_prices');return {ok:true,changedCount,createdGroups,customerCount:plan.customerCount,remaining:plan.blocked.length}
+ }catch(e){db.exec('ROLLBACK TO group_occ_special_prices; RELEASE group_occ_special_prices');throw e}
+}
