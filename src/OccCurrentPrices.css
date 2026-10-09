@@ -12,3 +12,7 @@
 #root .occ-current-prices .occ-current-actions button:not(:disabled):hover{filter:brightness(.95)}
 #root .occ-current-prices .occ-company-search{width:320px;max-width:100%;box-sizing:border-box;min-height:40px;padding:8px 12px;border:1px solid #bfd2cb;border-radius:10px;background:#fff;color:#173c33;font:inherit}
 #root .occ-current-prices :is(.occ-current-actions button,.occ-company-search):focus-visible{outline:3px solid #8dd3c2;outline-offset:2px}
+
+/* Editable group names must match the page heading, including nested text. */
+#root .occ-current-prices>.occ-price-groups>header h3 .entity-name-link,
+#root .occ-current-prices>.occ-price-groups>header h3 .entity-name-link>span{font-size:inherit!important;font-weight:inherit!important;line-height:inherit!important}
