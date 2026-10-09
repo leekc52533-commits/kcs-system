@@ -1,3 +1,4 @@
+import {ensureOccSharedPrices} from './occSharedPriceMigration.mjs'
 import {ensureDriverPlanSchema} from './driverPlanSchema.mjs'
 import {ensureRepeatDateSchema} from './repeatDateSchema.mjs'
 import {ensureGpsExceptionSchema} from './gpsExceptionSchema.mjs'
@@ -434,6 +435,8 @@ db.exec(`CREATE TRIGGER IF NOT EXISTS sold_vehicle_no_delete BEFORE DELETE ON ve
 ensureGpsExceptionSchema(db)
 ensureDriverPlanSchema(db)
 ensureRepeatDateSchema(db)
+
+ensureOccSharedPrices(db)
 
 const integrityResult = db.prepare('PRAGMA integrity_check').get()
 if (integrityResult.integrity_check !== 'ok') throw new Error(`Database integrity check failed: ${integrityResult.integrity_check}`)
