@@ -1,3 +1,4 @@
+import {orderPurchaseProducts} from '../shared/purchaseProductOrder.js'
 import NextCollectionDate from './NextCollectionDate.jsx'
 import {DriverPlanHeader,DriverPlanOrder} from './DriverPlanControls.jsx'
 import RescheduleReminder from './RescheduleReminder.jsx'
@@ -164,14 +165,14 @@ function PurchaseBillPanel({stop,onChanged,readOnly=false}){
 
   const{t}=useI18n()
   const restored=isEmployeePreview()||isMobileSimulation()?null:loadBillDraft(stop.id),[data,setData]=useState(null),[items,setItems]=useState(restored?.items||[]),[printChoice,setPrintChoice]=useState(restored?.printChoice||'print'),[proof,setProof]=useState(null),[busy,setBusy]=useState(''),[error,setError]=useState(''),[message,setMessage]=useState(restored?ui('Draft restored after the page was reopened.'):'')
-  const load=async()=>{try{const next=await api('/api/mobile/stops/'+stop.id+'/billing');setData(next);if(!next.bill&&!items.length){const first=next.products.find(item=>item.productCode==='OCC')||next.products[0];if(first)setItems([{productId:first.productId,quantity:''}])}}catch(item){setError(item.message)}}
+  const load=async()=>{try{const next=await api('/api/mobile/stops/'+stop.id+'/billing');setData(next);if(!next.bill&&!items.length){const first=orderPurchaseProducts(next.products)[0];if(first)setItems([{productId:first.productId,quantity:''}])}}catch(item){setError(item.message)}}
   useEffect(()=>{load()},[stop.id,stop.billCreated,stop.paymentProofUploaded])
   useEffect(()=>{if(!isEmployeePreview()&&!isMobileSimulation()&&!data?.bill)saveBillDraft(stop.id,{items,printChoice})},[stop.id,items,printChoice,data?.bill])
-  const products=data?.products||[],bill=data?.bill
+  const products=orderPurchaseProducts(data?.products||[]),bill=data?.bill
   const changeItem=(index,values)=>setItems(current=>current.map((item,itemIndex)=>itemIndex===index?{...item,...values}:item))
   const addItem=()=>{const available=products.find(product=>!items.some(item=>Number(item.productId)===Number(product.productId)));if(available)setItems(current=>[...current,{productId:available.productId,quantity:''}])}
   const removeItem=index=>setItems(current=>current.length>1?current.filter((_,itemIndex)=>itemIndex!==index):current)
-  const discardDraft=()=>{if(!isMobileSimulation())clearBillDraft(stop.id);const first=products.find(item=>item.productCode==='OCC')||products[0];setItems(first?[{productId:first.productId,quantity:''}]:[]);setPrintChoice('print');setError('');setMessage(ui("Bill draft discarded."))}
+  const discardDraft=()=>{if(!isMobileSimulation())clearBillDraft(stop.id);const first=products[0];setItems(first?[{productId:first.productId,quantity:''}]:[]);setPrintChoice('print');setError('');setMessage(ui("Bill draft discarded."))}
   const selected=id=>products.find(product=>Number(product.productId)===Number(id))
   const total=items.reduce((sum,item)=>sum+Math.round(Math.round(Number(item.quantity||0)*100)*Math.round(Number((data?.temporary?item.unitPrice:selected(item.productId)?.currentPrice)||0)*1000)/1000),0)/100
   const create=async()=>{setBusy('bill');setError('');setMessage('');try{const created=await api('/api/mobile/stops/'+stop.id+'/bills',{method:'POST',body:JSON.stringify({weightMethod:'on_site',printChoice,items:items.map(item=>({productId:Number(item.productId),quantity:Number(item.quantity),...(data?.temporary?{unitPrice:item.unitPrice}:{})}))})});setData(current=>({...current,bill:created,products:[]}));if(!isMobileSimulation())clearBillDraft(stop.id);setMessage(ui('Electronic Bill {0} created.',{0:created.billNumber}));await onChanged();if(!isMobileSimulation()&&created.printChoice==='print')setTimeout(()=>window.print(),150)}catch(item){setError(item.message)}finally{setBusy('')}}
