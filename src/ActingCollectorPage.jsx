@@ -9,9 +9,15 @@ import {useI18n} from './i18n.jsx'
 import {DriverGuide} from './DriverGuide.jsx'
 import './EmployeePreview.css'
 
-export default function ActingCollectorPage({onEnterMobile}){
+export default function ActingCollectorPage({onEnterMobile,onDetailBackChange}){
  const{t,language}=useI18n(),[simulation,setSimulation]=useState(false),simulationFrame=useRef(null),[data,setData]=useState(null),[employees,setEmployees]=useState([]),[employeeId,setEmployeeId]=useState(''),[revision,setRevision]=useState(0),[guide,setGuide]=useState(false),[busy,setBusy]=useState(null),[error,setError]=useState('')
  useEffect(()=>{const close=e=>{if(e.origin===window.location.origin&&e.source===simulationFrame.current?.contentWindow&&e.data?.type==='KCS_SIMULATION_EXIT')setSimulation(false)};window.addEventListener('message',close);return()=>window.removeEventListener('message',close)},[])
+ // Keep the header arrow inside this workspace while a preview or subview is open.
+ useEffect(()=>{
+  if(!onDetailBackChange)return
+  onDetailBackChange(employeeId||simulation||guide?()=>()=>{setEmployeeId('');setSimulation(false);setGuide(false)}:null)
+  return()=>onDetailBackChange(null)
+ },[employeeId,simulation,guide,onDetailBackChange])
  const [headerTarget,setHeaderTarget]=useState(null)
  useEffect(()=>setHeaderTarget(document.getElementById('page-data-exports')),[])
  const load=async()=>{try{const [d,e]=await Promise.all([api('/api/acting-collector/today'),api('/api/acting-collector/preview-employees')]);setData(d);setEmployees(e.items);setEmployeeId(id=>e.items.some(e=>String(e.employeeId)===id)?id:'');setError('')}catch(e){setError(e.message)}}
