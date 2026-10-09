@@ -370,3 +370,5 @@ These requirements were confirmed by KC on 2026-09-09. Carry them forward for la
 - KC confirmed 2026-10-09: Rename an OCC price group by clicking its displayed name in the detail heading. Do not show a separate Rename price group action button. Preserve permission checks and the existing rename dialog.
 
 - KC requested 2026-10-09: keep the current OCC price-group page header compact; remove the explanatory current-price sentence and standalone Refresh button. Retain the heading, clickable group-name editor and unused-group toggle. Saved changes continue reloading data automatically.
+
+- KC requested 2026-10-09: enlarge the OCC price-group heading one size (22px) and use compact, consistent spacing above it; remove browser-default heading margins and header padding without changing other page headers.
