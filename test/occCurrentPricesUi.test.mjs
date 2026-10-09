@@ -4,7 +4,7 @@ import React,{act} from 'react'
 import {createServer} from 'vite'
 import {JSDOM} from 'jsdom'
 const dom=new JSDOM('<html><body><div id="root"></div></body></html>',{url:'https://localhost/'})
-for(const k of ['window','document','Node','NodeFilter','HTMLElement','MutationObserver','Event','MouseEvent','KeyboardEvent','localStorage','sessionStorage'])globalThis[k]=dom.window[k]
+for(const k of ['window','document','Node','NodeFilter','HTMLElement','MutationObserver','Event','MouseEvent','KeyboardEvent','PopStateEvent','localStorage','sessionStorage'])globalThis[k]=dom.window[k]
 Object.defineProperty(globalThis,'navigator',{value:dom.window.navigator,configurable:true});globalThis.IS_REACT_ACT_ENVIRONMENT=true
 const{createRoot}=await import('react-dom/client'),vite=await createServer({logLevel:'silent',server:{middlewareMode:true},appType:'custom'});after(()=>vite.close())
 const{default:Page}=await vite.ssrLoadModule('/src/OccCurrentPrices.jsx'),{I18nProvider}=await vite.ssrLoadModule('/src/i18n.jsx')
@@ -19,6 +19,10 @@ test('all languages show live groups; review required before a price write; read
   await act(async()=>root.render(React.createElement(I18nProvider,{language},React.createElement(Page,{canManage:true,onBack:()=>{},notify:()=>{},fail:()=>{}}))))
   assert.ok(calls.every(c=>c.url==='/api/occ-current-groups'));assert.doesNotMatch(document.body.textContent,/旧档案|Legacy/)
   await click(document.querySelector('article'));assert.match(document.body.textContent,/ALPRO MJC/)
+  let popped=0;const onPop=()=>popped++;window.addEventListener('popstate',onPop)
+  const entry=document.querySelector('a.entity-name-link'),event=new MouseEvent('click',{bubbles:true,cancelable:true});await act(async()=>entry.dispatchEvent(event))
+  assert.equal(event.defaultPrevented,true);assert.equal(popped,1);assert.equal(new URLSearchParams(window.location.search).get('page'),'customers');assert.equal(new URLSearchParams(window.location.search).get('customer'),'C1');window.removeEventListener('popstate',onPop)
+
   assert.equal(document.querySelectorAll('.expense-filter-trigger').length,3)
   await click(document.querySelector('.occ-current-actions button'))
   await change(document.querySelector('input[type=number]'),'.17');await change(document.querySelector('textarea'),'Test reason')

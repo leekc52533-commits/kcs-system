@@ -1,3 +1,4 @@
+import {navigateWithinApp} from './navigation.js'
 import OccPriceGrouping from './OccPriceGrouping.jsx'
 import {FilterHeader} from './ExpenseRecordsPage.jsx'
 import {useEffect,useState} from 'react'
@@ -28,7 +29,7 @@ const errors={
 const money=n=>`RM${Number(n).toFixed(3)}/kg`
 const link=m=>`?page=customers&customer=${encodeURIComponent(formatCustomerId(m.customerCode))}`
 export default function OccCurrentPrices({canManage,onBack,notify,fail}){
- const {language}=useI18n(),w=words[language]||words.en
+ const {language,t}=useI18n(),w=words[language]||words.en
  const [data,setData]=useState(null),[id,setId]=useState(null),[unused,setUnused]=useState(false),[search,setSearch]=useState(''),[keys,setKeys]=useState([]),[dialog,setDialog]=useState(null),[busy,setBusy]=useState(false),[draft,setDraft]=useState({price:'',effectiveDate:'',reason:'',targetId:''}),[preview,setPreview]=useState(false),[error,setError]=useState('')
  const [filters,setFilters]=useState({}),[sort,setSort]=useState({}),[openFilter,setOpenFilter]=useState(null)
  const group=data?.groups.find(g=>g.id===id),target=data?.groups.find(g=>g.id===Number(draft.targetId))
@@ -40,7 +41,7 @@ export default function OccCurrentPrices({canManage,onBack,notify,fail}){
  const back=<BackButton onClick={()=>{if(group){setId(null);setKeys([]);setSearch('');setFilters({});setSort({});setOpenFilter(null)}else onBack()}}/>,headerTarget=document.getElementById('materials-header-back')
  const start=kind=>{setDialog(kind);setDraft({price:'',effectiveDate:kuchingDate(),reason:'',targetId:''});setPreview(false);setError('')}
  const save=async()=>{if(busy)return;setBusy(true);try{if(dialog==='price')await api(`/api/occ-current-groups/${group.id}/price`,{method:'PATCH',body:JSON.stringify({price:draft.price,effectiveDate:draft.effectiveDate,reason:draft.reason,version:group.version})});else await api('/api/occ-current-groups/move',{method:'POST',body:JSON.stringify({sourceId:group.id,targetId:target.id,keys,reason:draft.reason,sourceVersion:group.version,targetVersion:target.version})});setDialog(null);setKeys([]);notify(w.saved);await load()}catch(e){report(e)}finally{setBusy(false)}}
- const customer=m=><a className="entity-name-link" data-i18n-raw href={link(m)}>{formatCustomerId(m.customerCode)} · {m.customerName}</a>
+ const customer=m=><a className="entity-name-link" data-i18n-raw href={link(m)} onClick={event=>{event.preventDefault();navigateWithinApp(link(m),t('common.unsaved'))}}>{formatCustomerId(m.customerCode)} · {m.customerName}</a>
  if(!data)return <div>{w.loading}{error&&<p role="alert">{error}</p>}</div>
  const memberValue=(m,key)=>key==='customer'?m.customerName:key==='type'?w[m.priceType]:m.branches.map(b=>b.branchName).join(' / ')
  const members=(group?.members.filter(m=>`${m.customerCode} ${m.customerName} ${m.branches.map(b=>b.branchName).join(' ')}`.toLowerCase().includes(search.toLowerCase())&&Object.entries(filters).every(([key,values])=>values==null||values.includes(memberValue(m,key))))||[]).sort((a,b)=>sort.direction?memberValue(a,sort.key).localeCompare(memberValue(b,sort.key),undefined,{numeric:true})*(sort.direction==='desc'?-1:1):a.customerName.localeCompare(b.customerName,undefined,{numeric:true}))
