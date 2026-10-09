@@ -363,3 +363,6 @@ These requirements were confirmed by KC on 2026-09-09. Carry them forward for la
 
 
 - 2026-10-09 bug fix: company-name links in current OCC groups (including ungrouped/unpriced records) and other product price groups use navigateWithinApp with the unsaved-change guard. Do not reload the app via plain navigation, because fresh management sessions intentionally enter Overview. Retain the typed customer ID in the query and open the matching Customer Master detail.
+
+
+- KC confirmed 2026-10-09: OCC price groups support user-defined display names (1–80 characters) through Rename price group. Use the saved name throughout current group lists, detail headings, target selectors and same-price grouping previews; retain stable underlying level IDs and default OCC-ID labels when unnamed. Renaming never changes prices or customer memberships. Enforce price_manage server-side, reject conflicting names/stale previews, record actor and old/new names, and support zh/ms/en UI without translating the authored name.

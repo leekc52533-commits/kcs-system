@@ -32,6 +32,10 @@ export function ensureOccCurrentPrices(db){
  BEGIN SELECT RAISE(ABORT,'Duplicate material price level'); END;`)
  // Only OCC permits separate groups at the same price. Other fixed products retain their index.
  db.exec("UPDATE material_price_levels SET is_fixed=0 WHERE material_id IN (SELECT id FROM materials WHERE material_code='OCC') AND is_fixed<>0")
+ db.exec(`CREATE TABLE IF NOT EXISTS occ_price_group_names(
+  price_level_id INTEGER PRIMARY KEY REFERENCES material_price_levels(id),name TEXT NOT NULL,
+  updated_by TEXT NOT NULL,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+ )`)
  db.exec(`CREATE TABLE IF NOT EXISTS occ_current_price_changes(
   id INTEGER PRIMARY KEY,price_level_id INTEGER NOT NULL REFERENCES material_price_levels(id),old_price REAL NOT NULL,new_price REAL NOT NULL,
   effective_date TEXT NOT NULL,reason TEXT NOT NULL,changed_by TEXT NOT NULL,preview_json TEXT NOT NULL,
@@ -66,7 +70,7 @@ function assignments(db,p){
   return {...row,...c,branches,key:`${row.source}:${row.rowId}:${row.priceType}`}
  })
 }
-const signature=group=>createHash('sha256').update(JSON.stringify({id:group.id,price:group.price,date:group.date,status:group.status,visibility:group.visibility,pending:group.pending,members:group.members.map(m=>[m.key,m.levelId,m.specialPrice,m.branches.map(b=>b.id)])})).digest('hex')
+const signature=group=>createHash('sha256').update(JSON.stringify({id:group.id,name:group.code,price:group.price,date:group.date,status:group.status,visibility:group.visibility,pending:group.pending,members:group.members.map(m=>[m.key,m.levelId,m.specialPrice,m.branches.map(b=>b.id)])})).digest('hex')
 export function currentOccGroups(db,today=kuchingDate()){
  applyDueOccPrices(db,today)
  const p=product(db);if(!p)return {groups:[],special:[],unpriced:[]}
@@ -74,7 +78,8 @@ export function currentOccGroups(db,today=kuchingDate()){
  const groups=db.prepare("SELECT * FROM material_price_levels WHERE material_id=? AND (product_id=? OR product_id IS NULL) ORDER BY price_amount,id").all(p.material_id,p.id).map(l=>{
   const members=refs.filter(r=>r.specialPrice==null&&Number(r.levelId)===l.id)
   const pending=db.prepare("SELECT id,new_price price,effective_date date FROM occ_current_price_changes WHERE price_level_id=? AND state='pending'").get(l.id)||null
-  const group={id:l.id,code:`OCC-${l.id}`,price:l.price_amount,date:l.effective_date,status:l.status,visibility:l.visibility_status,members,pending,customerCount:new Set(members.map(m=>m.customerId)).size,branchCount:new Set(members.flatMap(m=>m.branches.map(b=>b.id))).size}
+  const name=db.prepare('SELECT name FROM occ_price_group_names WHERE price_level_id=?').get(l.id)?.name||''
+  const group={id:l.id,name,code:name||`OCC-${l.id}`,systemCode:`OCC-${l.id}`,price:l.price_amount,date:l.effective_date,status:l.status,visibility:l.visibility_status,members,pending,customerCount:new Set(members.map(m=>m.customerId)).size,branchCount:new Set(members.flatMap(m=>m.branches.map(b=>b.id))).size}
   group.version=signature(group);return group
  })
  const special=refs.filter(r=>r.specialPrice!=null),configured=new Set(refs.map(r=>r.customerId))
@@ -182,4 +187,23 @@ export function groupOccSpecialPrices(db,payload,today=kuchingDate()){
   }
   db.exec('RELEASE group_occ_special_prices');return {ok:true,changedCount,createdGroups,customerCount:plan.customerCount,remaining:plan.blocked.length}
  }catch(e){db.exec('ROLLBACK TO group_occ_special_prices; RELEASE group_occ_special_prices');throw e}
+}
+
+export function renameOccPriceGroup(db,id,payload,today=kuchingDate()){
+ applyDueOccPrices(db,today)
+ db.exec('SAVEPOINT rename_occ_group')
+ try{
+  const groups=currentOccGroups(db,today).groups,group=groups.find(g=>g.id===Number(id))
+  if(!group)fail('OCC price group not found.',404)
+  if(group.version!==payload.version)fail('Price or customers changed. Refresh and review again.',409)
+  const name=String(payload.name??'').trim()
+  if(!name||name.length>80||/[\x00-\x1f\x7f]/.test(name))fail('Enter a group name of 1 to 80 characters.')
+  if(groups.some(g=>g.id!==group.id&&[g.code,g.systemCode].some(v=>v.toLowerCase()===name.toLowerCase())))fail('This group name is already used.',409)
+  if(group.code!==name){
+   const actor=payload.changedBy||'Administrator'
+   db.prepare('INSERT INTO occ_price_group_names(price_level_id,name,updated_by) VALUES(?,?,?) ON CONFLICT(price_level_id) DO UPDATE SET name=excluded.name,updated_by=excluded.updated_by,updated_at=CURRENT_TIMESTAMP').run(group.id,name,actor)
+   db.prepare("INSERT INTO material_master_audit(entity_type,entity_id,action,before_json,after_json,reason,changed_by) VALUES('priceGroup',?,'rename',?,?,?,?)").run(group.id,JSON.stringify({name:group.code}),JSON.stringify({name}),'Rename OCC price group',actor)
+  }
+  db.exec('RELEASE rename_occ_group');return {ok:true,name}
+ }catch(e){db.exec('ROLLBACK TO rename_occ_group; RELEASE rename_occ_group');throw e}
 }

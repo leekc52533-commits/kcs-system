@@ -1,3 +1,4 @@
+import OccGroupName from './OccGroupName.jsx'
 import {navigateWithinApp} from './navigation.js'
 import OccPriceGrouping from './OccPriceGrouping.jsx'
 import {FilterHeader} from './ExpenseRecordsPage.jsx'
@@ -50,7 +51,7 @@ export default function OccCurrentPrices({canManage,onBack,notify,fail}){
  <header><div><h3>{w.title}{group?` · ${group.code}`:''}</h3><p>{w.help}</p></div><button onClick={load}>{w.refresh}</button></header>
  {!dialog&&error&&<p role="alert">{error}</p>}
  {group?<><h3>{money(group.price)} · {group.customerCount} {w.companies} · {group.branchCount} {w.branches}</h3><p>{w.scope}</p>{group.pending&&<p>{w.pending}: {money(group.pending.price)} · {formatDateDisplay(group.pending.date)}</p>}
- {canManage&&<div className="occ-current-actions"><button disabled={Boolean(group.pending)||group.status!=='active'||group.visibility!=='active'} onClick={()=>start('price')}>{w.edit}</button><button disabled={!keys.length} onClick={()=>start('move')}>{w.move} ({keys.length})</button></div>}
+ {canManage&&<div className="occ-current-actions"><button disabled={Boolean(group.pending)||group.status!=='active'||group.visibility!=='active'} onClick={()=>start('price')}>{w.edit}</button><OccGroupName group={group} onSaved={load} notify={notify}/><button disabled={!keys.length} onClick={()=>start('move')}>{w.move} ({keys.length})</button></div>}
  <input aria-label={w.search} placeholder={w.search} value={search} onChange={e=>setSearch(e.target.value)}/>
  <div className="table-wrap"><table><thead><tr>{canManage&&<th><label><input type="checkbox" checked={all} onChange={()=>setKeys(all?keys.filter(k=>!members.some(m=>m.key===k)):[...new Set([...keys,...members.map(m=>m.key)])])}/>{w.all}</label></th>}{['customer','type','branches'].map(key=><FilterHeader key={key} label={w[key]} options={[...new Set(group.members.map(m=>memberValue(m,key)))].map(value=>({value,label:value||'—'}))} value={filters[key]??null} onChange={value=>setFilters({...filters,[key]:value})} sortDirection={sort.key===key?sort.direction:null} onSort={direction=>setSort({key,direction})} open={openFilter===key} onOpen={()=>setOpenFilter(key)} onClose={()=>setOpenFilter(null)}/>)}</tr></thead><tbody>{members.map(m=><tr key={m.key}>{canManage&&<td><input type="checkbox" aria-label={m.customerName+' '+w[m.priceType]} checked={keys.includes(m.key)} onChange={()=>setKeys(keys.includes(m.key)?keys.filter(k=>k!==m.key):[...keys,m.key])}/></td>}<td>{customer(m)}</td><td>{w[m.priceType]}</td><td>{m.branches.map(b=><div key={b.id} data-i18n-raw>{b.branchName}</div>)}</td></tr>)}</tbody></table>{!members.length&&<p>{w.empty}</p>}</div></>:<>
  <label><input type="checkbox" checked={unused} onChange={e=>setUnused(e.target.checked)}/>{w.unused}</label>
