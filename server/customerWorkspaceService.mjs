@@ -1,3 +1,4 @@
+import {newCustomerPricing} from './newCustomerPricing.mjs'
 import {collectionScheduleChanged,workspaceFieldsChanged} from '../shared/customerWorkspaceChanges.js'
 import {canDirectEditGps} from '../shared/gpsAccess.js'
 import {applyBranchLifecycle} from './branchLifecycleService.mjs'
@@ -12,7 +13,7 @@ import {kuchingDate} from '../shared/kuchingTime.js'
 const hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex')
 const fail=(message,statusCode=400)=>Object.assign(new Error(message),{statusCode})
 const pick=(value,keys)=>Object.fromEntries(keys.filter(k=>Object.hasOwn(value||{},k)).map(k=>[k,value[k]]))
-const customerFields=['customerName','legalName','registrationNumber','billingAddress','contactPerson','phone','whatsapp','email','defaultPaymentType','creditTerms','status','notes','materialPricing','removedMaterialIds','pricingConfirmed']
+const customerFields=['customerName','legalName','registrationNumber','billingAddress','contactPerson','phone','whatsapp','email','defaultPaymentType','creditTerms','status','notes','materialPricing','removedMaterialIds','pricingConfirmed','newProductPricing']
 const branchFields=['branchName','address','areaId','contactPerson','phone','paymentType','collectionTimeConstraint','proofRequirements','vehicleRestriction','notes']
 export function canUseCustomerWorkspace(actor){return ['owner_admin','operations_admin','supervisor','office'].includes(actor?.role)}
 function assertActor(actor){if(!canUseCustomerWorkspace(actor))throw fail('Customer management permission required.',403)}
@@ -27,7 +28,7 @@ export function customerWorkspace({branchId,customerId}={},actor={},db=defaultDb
  const pending=branch?listGpsCollector({branchId:branch.internalId},db):[]
  const routeOptions=db.prepare('SELECT d.route_number routeNumber,d.display_name name FROM weekly_route_definitions d JOIN weekly_route_plans p ON p.id=d.plan_id WHERE p.is_active=1 ORDER BY d.route_number').all()
  const areas=activeLocationAreas(db),locationReviews=branch?pendingLocationChecks(branch.internalId,db):[]
- return {canDirectEditGps:canDirectEditGps(actor),customer,branch,schedule,pending,routeOptions,areas,locationReviews,canConfirmSchedule:['owner_admin','operations_admin','supervisor'].includes(actor.role),canManagePricing:accountCan(actor,'price_manage',db),canCaptureGps:accountCan(actor,'gps_capture',db),canReviewGps:accountCan(actor,'gps_review',db),revision:hash({customer,branch,schedule,pending,locationReviews})}
+ return {newProductPricing:customer?null:newCustomerPricing(db),canDirectEditGps:canDirectEditGps(actor),customer,branch,schedule,pending,routeOptions,areas,locationReviews,canConfirmSchedule:['owner_admin','operations_admin','supervisor'].includes(actor.role),canManagePricing:accountCan(actor,'price_manage',db),canCaptureGps:accountCan(actor,'gps_capture',db),canReviewGps:accountCan(actor,'gps_review',db),revision:hash({customer,branch,schedule,pending,locationReviews})}
 }
 export function saveCustomerWorkspace(payload,actor={},db=defaultDb){
  assertActor(actor)
@@ -55,7 +56,7 @@ export function saveCustomerWorkspace(payload,actor={},db=defaultDb){
   const locationProof=validateLocationCheck(payload,before,actor)
   const changedBy=actor.employeeName||actor.username||`Account ${actor.id}`
   const c={...pick(payload.customer,customerFields),reason,changedBy}
-  if((Object.hasOwn(c,'materialPricing')||Object.hasOwn(c,'removedMaterialIds'))&&!accountCan(actor,'price_manage',db))throw fail('Pricing permission required.',403)
+  if((Object.hasOwn(c,'materialPricing')||Object.hasOwn(c,'removedMaterialIds')||Object.hasOwn(c,'newProductPricing'))&&!accountCan(actor,'price_manage',db))throw fail('Pricing permission required.',403)
   // Coordinates retain their review workflow; branch status is independently audited.
   const customer=before.customer?updateCustomer(before.customer.customerId,c,db):createCustomer(c,db)
   const bp={...pick(payload.branch,branchFields),customerId:customer.customerId,reason,changedBy}

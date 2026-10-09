@@ -1,3 +1,4 @@
+import {applyNewCustomerPricing} from './newCustomerPricing.mjs'
 import {customerOperatingSql,branchOperatingSql} from './operatingDirectory.mjs'
 import {canDirectEditGps} from '../shared/gpsAccess.js'
 import { db as defaultDb } from './database.mjs'
@@ -84,6 +85,7 @@ export function createCustomer(payload,database=defaultDb){
     database.prepare(`INSERT INTO customers(jodoo_customer_id,name,legal_name,registration_number,billing_address,contact_person,phone,whatsapp,email,default_payment_type,payment_type,credit_terms,status,notes,source_system,created_by,created_at,is_active)
       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'KCS',?,CURRENT_TIMESTAMP,?)`).run(customerId,name,nullable(payload.legalName),nullable(payload.registrationNumber),nullable(payload.billingAddress),nullable(payload.contactPerson),nullable(payload.phone),nullable(payload.whatsapp),nullable(payload.email),payment,payment,nullable(payload.creditTerms),status,nullable(payload.notes),actor,status==='active'?1:0)
     saveCustomerMaterialPricing(customerId,payload.materialPricing,{changedBy:actor,reason:payload.reason,confirmed:Boolean(payload.pricingConfirmed),removedMaterialIds:payload.removedMaterialIds},database)
+    applyNewCustomerPricing(database,customerId,payload.newProductPricing,actor,payload.reason)
     const item=getCustomer(customerId,database);history(database,'customer',customerId,'created',null,item,{changedBy:actor,reason:payload.reason});database.exec('RELEASE create_customer');return item
   }catch(error){database.exec('ROLLBACK TO create_customer; RELEASE create_customer');throw error}
 }
