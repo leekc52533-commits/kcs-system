@@ -339,3 +339,10 @@ These requirements were confirmed by KC on 2026-09-09. Carry them forward for la
 - KC confirmed 2026-10-09: the Collector Page header Back arrow closes the current employee preview and returns to the collector vehicle/employee list instead of navigating to Dashboard. Register and clean up the nested back action with the management shell; closing simulation or guide via this arrow also returns to the collector list. Keep ordinary top-level navigation intact.
 
 - KC confirmed 2026-10-09: include unresolved Monday–Saturday Tak sempat / time-reason customers once per branch in that week's Sunday collection. An issued purchase bill with service_date on or after the latest time miss through Sunday resolves it; voided bills, GPS arrival, recurrence frequency and earlier collections do not. Include pending/approved time reports, exclude rejected and other reasons. Use active branches/customers, current branch Sunday overrides and established Sunday route groups. Reconcile on rolling-week preparation and day/week generation: add audited one-time catch-up stops without changing fixed schedules or source requests; remove only untouched system-created extras after collection or rejection, never normal Sunday tasks. Preserve manual edits/removals, started/published/completed work and promised dates, with localized supervisor review notices. Additions/withdrawals before departure invalidate affected approval via normal revisions/signatures. Repeat runs and bill voids cannot create duplicate branch/date stops.
+
+
+## 2026-10-09 — 员工改期申请独立审核弹窗
+- 用户确认审核／修改只显示当前申请的独立弹窗，不与下一位客户内容相连，保留客户名称编辑入口。
+- 未修改时点击外部空白处、返回或 Escape 可关闭；存在未保存修改时先确认是否放弃。
+- 保存／上传中或子弹窗打开时禁止误关闭；审批成功后返回申请列表，恢复原位置与焦点。
+- 审核期间暂停列表轮询，关闭后恢复，避免刷新覆盖填写中的内容。

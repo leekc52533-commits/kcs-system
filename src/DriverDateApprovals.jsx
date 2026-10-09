@@ -1,3 +1,4 @@
+import {createPortal} from 'react-dom'
 import {customerDateWords} from '../shared/customerDatePromise.js'
 import ApprovalCustomerLink from './ApprovalCustomerLink.jsx'
 import RescheduleReminder,{repeatWords} from './RescheduleReminder.jsx'
@@ -11,14 +12,14 @@ import CustomerWorkspaceEditor from './CustomerWorkspaceEditor.jsx'
 import {dateSystemWords} from './dateSystemReviewWords.js'
 import {systemReviewReasons,dualReviewReasons,systemReviewSection} from '../shared/dateSystemReview.js'
 import {DateEvidenceReview,evidenceWords} from './DateRequestEvidence.jsx'
-import {useCallback,useEffect,useState} from 'react'
+import {useCallback,useEffect,useRef,useState} from 'react'
 import {useI18n,useUi} from './i18n.jsx'
 import {apiRequest} from './apiClient.js'
 import {kuchingDate} from '../shared/kuchingTime.js'
 import {weekdayName} from '../shared/scheduleRecurrence.js'
 import './DriverDateApprovals.css'
 
-export function DateRequestReview({item,onSaved,onPlanner,submitUrl}){
+export function DateRequestReview({item,onSaved,onPlanner,submitUrl,onStateChange}){
  const{t,language}=useI18n(),ui=useUi(),ew=evidenceWords[language]||evidenceWords.en
  const sw=dateSystemWords[language]||dateSystemWords.en,code=item.evidence?.reasonCode,dual=dualReviewReasons.includes(code),pendingSystem=item.systemReview?.status==='pending'?item.systemReview:null
  const committed=item.evidence?.customerDateCommitted===true,cw=customerDateWords[language]||customerDateWords.en
@@ -32,6 +33,9 @@ export function DateRequestReview({item,onSaved,onPlanner,submitUrl}){
   if(date)apiRequest(`/api/dispatch/date-requests/options?date=${encodeURIComponent(date)}`).then(data=>{if(current)setOptions(data)}).catch(e=>{if(current)setError(e.message)})
   return()=>{current=false}
  },[date,reload])
+ const initial=useRef({date:pendingSystem?.proposal.targetDate||item.targetDate,route:String(pendingSystem?.proposal.routeNumber||''),scope:pendingSystem?.proposal.scope||(committed?'':'once'),sunday:Boolean(pendingSystem?.proposal.sundayAuthorized)})
+ const dirty=date!==initial.current.date||route!==initial.current.route||scope!==initial.current.scope||sunday!==initial.current.sunday||Boolean(reason||checked||promiseChecked||contact.name||contact.at||contact.result||contact.photo||repeatPrompt||plannerBeforeRevision!=null)
+ useEffect(()=>{onStateChange?.({dirty,busy:busy||proofBusy,nested:systemPrompt||editingSystem||plannerOpen})},[onStateChange,dirty,busy,proofBusy,systemPrompt,editingSystem,plannerOpen])
  const repeatNumber=pendingSystem?.executionReleased||date===item.sourceDate?1:(item.rescheduleHistory?.count||0)+1
  useEffect(()=>setRepeatPrompt(false),[repeatNumber,date,route])
  const proofReady=contact.name.trim()&&contact.at&&contact.result.trim()&&contact.photo&&!proofBusy
@@ -70,11 +74,53 @@ export function DateRequestReview({item,onSaved,onPlanner,submitUrl}){
   <div className="date-review-actions"><button type="button" className="primary" disabled={busy||proofBusy||(committed&&(!scope||!promiseChecked))||(repeatPrompt&&repeatNumber>=3&&!proofReady)||(!submitUrl&&!checked)||!date||(!pendingSystem&&!chosen?.available)||!reason.trim()} onClick={()=>{if(repeatNumber>=2&&!repeatPrompt){setRepeatPrompt(true);return}if(!committed&&!submitUrl&&systemReviewReasons.includes(code)&&!pendingSystem&&plannerBeforeRevision==null)setSystemPrompt(true);else void decide('approve',plannerBeforeRevision!=null?'planner':undefined).catch(()=>{})}}>{repeatPrompt?rw.proceed:formatDateDisplay(pendingSystem?sw.approve:t('dateReview.approve'))}</button>{!submitUrl&&<button type="button" disabled={busy||!reason.trim()} onClick={()=>void decide('reject').catch(()=>{})}>{ew.reject}</button>}</div>
  </div>
 }
+function DateRequestReviewDialog({item,onClose,onSaved,onPlanner}){
+ const {t}=useI18n(),panel=useRef(null),closeButton=useRef(null),state=useRef({dirty:false,busy:false,nested:false}),[blocked,setBlocked]=useState(false)
+ const updateState=useCallback(value=>{state.current=value;setBlocked(value.busy||value.nested)},[])
+ const close=()=>{
+  if(state.current.busy||state.current.nested||document.querySelector('.master-modal,dialog[open],.kcs-notice-overlay'))return false
+  if(state.current.dirty&&!window.confirm(t('common.unsaved')))return false
+  onClose();return true
+ }
+ const closeRef=useRef(close);closeRef.current=close
+ useEffect(()=>{
+  const origin=document.activeElement,ancestors=[]
+  for(let el=origin;el;el=el.parentElement)ancestors.push({el,top:el.scrollTop,left:el.scrollLeft})
+  const x=window.scrollX,y=window.scrollY,overflow=document.body.style.overflow
+  const siblings=[...document.body.children].filter(el=>!el.classList.contains('date-review-overlay')&&!['SCRIPT','STYLE'].includes(el.tagName)).map(el=>({el,inert:el.inert}))
+  siblings.forEach(({el})=>{el.inert=true});document.body.style.overflow='hidden';closeButton.current?.focus({preventScroll:true})
+  const key=e=>{
+   if(state.current.nested||document.querySelector('.master-modal,dialog[open],.kcs-notice-overlay'))return
+   if(e.key==='Escape'){e.preventDefault();e.stopPropagation();closeRef.current();return}
+   if(e.key==='Tab'){
+    const focusable=[...panel.current.querySelectorAll('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),a[href],[tabindex="0"]')].filter(el=>el.type!=='hidden')
+    const first=focusable[0],last=focusable.at(-1)
+    if(!first){e.preventDefault();panel.current.focus();return}
+    if(e.shiftKey&&(document.activeElement===first||!panel.current.contains(document.activeElement))){e.preventDefault();last.focus()}
+    else if(!e.shiftKey&&(document.activeElement===last||!panel.current.contains(document.activeElement))){e.preventDefault();first.focus()}
+   }
+  }
+  document.addEventListener('keydown',key)
+  return()=>{
+   document.removeEventListener('keydown',key);document.body.style.overflow=overflow
+   siblings.forEach(({el,inert})=>{el.inert=inert})
+   if(origin?.isConnected)origin.focus?.({preventScroll:true})
+   for(const {el,top,left} of ancestors)if(el.isConnected){el.scrollTop=top;el.scrollLeft=left}
+   window.scrollTo(x,y)
+  }
+ },[])
+ return createPortal(<div className="date-review-overlay" onClick={e=>{if(e.target===e.currentTarget)close()}}><section ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="date-review-dialog-title" className="date-review-dialog date-request-approvals">
+  <header className="date-review-dialog-header"><h2 id="date-review-dialog-title">{t('dateReview.open')}</h2><button ref={closeButton} type="button" disabled={blocked} onClick={close}>{t('common.back')}</button></header>
+  <div className="date-review-dialog-content"><ApprovalCustomerLink branchCode={item.branchId} disabled={blocked}>{item.branchId} — {item.branchName}</ApprovalCustomerLink><p data-i18n-raw>{item.employeeName} · {item.plate}</p><p>{formatDateDisplay(item.sourceDate)} → {formatDateDisplay(item.systemReview?.executionReleased?item.systemReview.proposal.targetDate:item.targetDate)}</p><p data-i18n-raw>{item.reason}</p>
+  <DateRequestReview item={item} onStateChange={updateState} onSaved={onSaved} onPlanner={onPlanner?date=>{if(close())onPlanner(date)}:undefined}/></div>
+ </section></div>,document.body)
+}
 export default function DriverDateApprovals({onPlanner}){
  const{t,language}=useI18n(),[items,setItems]=useState([]),[error,setError]=useState(''),[open,setOpen]=useState(null),[message,setMessage]=useState('')
  const load=useCallback(async()=>{try{setItems((await apiRequest('/api/dispatch/date-requests/pending')).items||[]);setError('')}catch(e){setError(e.message)}},[])
- useEffect(()=>{void load();const timer=setInterval(load,10000);return()=>clearInterval(timer)},[load])
- const saved=(result,decision)=>{setOpen(null);setError('');setMessage(result.systemStatus==='rejected'?(dateSystemWords[language]||dateSystemWords.en).systemRejected:result.awaitingSecond?(dateSystemWords[language]||dateSystemWords.en).waiting+' · '+(dateSystemWords[language]||dateSystemWords.en).released:t(decision==='approve'?'routeTrial.approvedHelp':'routeTrial.rejected')+(result.preservedDates?.length?` ${t('dateReview.preserved')} ${result.preservedDates.join(', ')}`:''));void load()}
- if(!error&&!items.length)return null
- return <section className="dashboard-approvals date-request-approvals"><h3>{t('routeTrial.approvals')} ({items.length})</h3>{error&&<CenteredNotice>{error}</CenteredNotice>}{message&&<p role="status">{message}</p>}{items.map(item=><article key={item.id}><div className="date-request-customer-name"><ApprovalCustomerLink branchCode={item.branchId}>{item.branchId} — {item.branchName}</ApprovalCustomerLink></div><button type="button" className="date-request-summary" aria-expanded={open===item.id} onClick={()=>setOpen(open===item.id?null:item.id)}><span data-i18n-raw>{item.employeeName} · {item.plate}</span><span>{formatDateDisplay(item.sourceDate)} → {formatDateDisplay(item.systemReview?.executionReleased?item.systemReview.proposal.targetDate:item.targetDate)}</span><span data-i18n-raw>{item.reason}</span><strong>{formatDateDisplay(t('dateReview.open'))} {open===item.id?'▴':'▾'}</strong></button>{open!==item.id&&<RescheduleReminder value={item.rescheduleHistory} review/>}{open===item.id&&<DateRequestReview key={item.systemReview?.proposalToken||item.id} item={item} onSaved={saved} onPlanner={onPlanner}/>}</article>)}</section>
+ // Freeze the selected request while reviewing, so polling cannot replace the draft.
+ useEffect(()=>{if(open)return;void load();const timer=setInterval(load,10000);return()=>clearInterval(timer)},[load,Boolean(open)])
+ const saved=(result,decision)=>{setOpen(null);setError('');setMessage(result.systemStatus==='rejected'?(dateSystemWords[language]||dateSystemWords.en).systemRejected:result.awaitingSecond?(dateSystemWords[language]||dateSystemWords.en).waiting+' · '+(dateSystemWords[language]||dateSystemWords.en).released:t(decision==='approve'?'routeTrial.approvedHelp':'routeTrial.rejected')+(result.preservedDates?.length?` ${t('dateReview.preserved')} ${result.preservedDates.map(formatDateDisplay).join(', ')}`:''));void load()}
+ if(!error&&!items.length&&!open&&!message)return null
+ return <section className="dashboard-approvals date-request-approvals"><h3>{t('routeTrial.approvals')} ({items.length})</h3>{error&&<CenteredNotice>{error}</CenteredNotice>}{message&&<p role="status">{message}</p>}{items.map(item=><article key={item.id}><div className="date-request-customer-name"><ApprovalCustomerLink branchCode={item.branchId}>{item.branchId} — {item.branchName}</ApprovalCustomerLink></div><button type="button" className="date-request-summary" aria-haspopup="dialog" onClick={()=>setOpen(item)}><span data-i18n-raw>{item.employeeName} · {item.plate}</span><span>{formatDateDisplay(item.sourceDate)} → {formatDateDisplay(item.systemReview?.executionReleased?item.systemReview.proposal.targetDate:item.targetDate)}</span><span data-i18n-raw>{item.reason}</span><strong>{formatDateDisplay(t('dateReview.open'))} →</strong></button><RescheduleReminder value={item.rescheduleHistory} review/></article>)}{open&&<DateRequestReviewDialog key={open.id} item={open} onClose={()=>setOpen(null)} onSaved={saved} onPlanner={onPlanner}/>}</section>
 }

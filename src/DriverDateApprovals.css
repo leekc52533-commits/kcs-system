@@ -10,3 +10,14 @@
 .date-review-actions button:disabled {opacity:.5}
 .date-request-review p {margin:0;overflow-wrap:anywhere}
 .schedule-adjustments {padding:12px;border:1px solid #b7d3cc;border-radius:12px}
+
+.date-review-overlay{position:fixed;inset:0;z-index:79;display:flex;align-items:center;justify-content:center;background:#15251f99;padding:24px;overscroll-behavior:contain}
+.date-review-dialog{box-sizing:border-box;width:min(860px,100%);max-height:calc(100vh - 48px);max-height:calc(100dvh - 48px);overflow-y:auto;overscroll-behavior:contain;background:#fff;border:1px solid #cdded8;border-radius:18px;box-shadow:0 16px 60px #10282033;color:#203b35}
+.date-review-dialog-header{position:sticky;top:0;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:16px;background:#fff;padding:16px 22px;border-bottom:1px solid #dce7e3}
+.date-review-dialog-header h2{margin:0;font-size:22px}
+.date-review-dialog-header button{padding:10px 16px;border:1px solid #b7d3cc;border-radius:10px;background:#fff;color:#176b5d;font:inherit;cursor:pointer}
+.date-review-dialog-header button:disabled{opacity:.5;cursor:wait}
+.date-review-dialog-content{padding:20px 22px 28px;overflow-wrap:anywhere}
+.date-review-dialog .date-request-review{max-width:none}
+.date-review-dialog .date-request-review fieldset{min-width:0}
+@media(max-width:600px){.date-review-overlay{padding:12px}.date-review-dialog{max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px);border-radius:14px}.date-review-dialog-header,.date-review-dialog-content{padding:16px}.date-review-dialog-header h2{font-size:20px}}
