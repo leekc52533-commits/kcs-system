@@ -3,3 +3,12 @@
 /* Match compact workspace spacing; avoid default heading margins. */
 #root .occ-current-prices>.occ-price-groups>header{margin:0 0 12px;padding:0;min-height:0}
 #root .occ-current-prices>.occ-price-groups>header h3{margin:0;font-size:22px;line-height:1.35}
+
+/* Shared compact teal actions and bordered search field. */
+#root .occ-current-prices .occ-current-actions{gap:8px;margin:12px 0}
+#root .occ-current-prices .occ-current-actions button{min-height:40px;padding:8px 14px;border:1px solid #bfd2cb;border-radius:10px;background:#fff;color:#176f60;font:inherit;font-weight:600;cursor:pointer}
+#root .occ-current-prices .occ-current-actions button:first-child{background:#176f60;color:#fff;border-color:#176f60}
+#root .occ-current-prices .occ-current-actions button:disabled{background:#edf1ef;color:#82908a;border-color:#d6dfda;cursor:not-allowed}
+#root .occ-current-prices .occ-current-actions button:not(:disabled):hover{filter:brightness(.95)}
+#root .occ-current-prices .occ-company-search{width:320px;max-width:100%;box-sizing:border-box;min-height:40px;padding:8px 12px;border:1px solid #bfd2cb;border-radius:10px;background:#fff;color:#173c33;font:inherit}
+#root .occ-current-prices :is(.occ-current-actions button,.occ-company-search):focus-visible{outline:3px solid #8dd3c2;outline-offset:2px}

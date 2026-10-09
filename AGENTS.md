@@ -372,3 +372,5 @@ These requirements were confirmed by KC on 2026-09-09. Carry them forward for la
 - KC requested 2026-10-09: keep the current OCC price-group page header compact; remove the explanatory current-price sentence and standalone Refresh button. Retain the heading, clickable group-name editor and unused-group toggle. Saved changes continue reloading data automatically.
 
 - KC requested 2026-10-09: enlarge the OCC price-group heading one size (22px) and use compact, consistent spacing above it; remove browser-default heading margins and header padding without changing other page headers.
+
+- KC confirmed 2026-10-09: OCC group details show only the clickable group display name as heading (unnamed Chinese example OCC-27组), without the repeated OCC Price Groups prefix or company-scope paragraph. Apply to every group, preserve authored names, retain price/company/branch totals, and use compact teal rounded actions and a matching bordered search field.
