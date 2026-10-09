@@ -346,3 +346,6 @@ These requirements were confirmed by KC on 2026-09-09. Carry them forward for la
 - 未修改时点击外部空白处、返回或 Escape 可关闭；存在未保存修改时先确认是否放弃。
 - 保存／上传中或子弹窗打开时禁止误关闭；审批成功后返回申请列表，恢复原位置与焦点。
 - 审核期间暂停列表轮询，关闭后恢复，避免刷新覆盖填写中的内容。
+
+
+- KC confirmed 2026-10-09: remove the pale-green legacy read-only explanation and customer-master shortcut banner from the Old OCC Price Group Archive list. Preserve price groups, unused-group filtering and archive data.
