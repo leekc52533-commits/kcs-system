@@ -1,3 +1,4 @@
+import {ensureOccCurrentPrices,applyDueOccPrices} from './occCurrentPrices.mjs'
 import {ensureCustomerDatePromiseSchema} from './customerDatePromise.mjs'
 import {ensureOccSharedPrices} from './occSharedPriceMigration.mjs'
 import {ensureDriverPlanSchema} from './driverPlanSchema.mjs'
@@ -438,6 +439,8 @@ ensureDriverPlanSchema(db)
 ensureRepeatDateSchema(db)
 
 ensureOccSharedPrices(db)
+ensureOccCurrentPrices(db)
+applyDueOccPrices(db)
 ensureCustomerDatePromiseSchema(db)
 
 const integrityResult = db.prepare('PRAGMA integrity_check').get()

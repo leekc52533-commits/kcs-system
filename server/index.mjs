@@ -1,3 +1,4 @@
+import {currentOccGroups,changeCurrentOccPrice,moveCurrentOccCustomers} from './occCurrentPrices.mjs'
 import {changeTomorrowPlan} from './driverPlanService.mjs'
 import {ownerApproveDate} from './ownerDateApprovalService.mjs'
 import {canDirectApproveDate} from './ownerDateApprovalAccess.mjs'
@@ -393,6 +394,15 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && /^\/api\/materials\/\d+\/price-levels$/.test(url.pathname)) {if(!accountCan(session,'price_manage'))return sendJson(response,403,{error:'没有 Price Level 管理权限'});return sendJson(response,201,createPriceLevel(Number(url.pathname.split('/')[3]),{...(await readJson(request)).payload,changedBy:session.employeeName||session.username}))}
     if (request.method === 'PATCH' && /^\/api\/price-levels\/\d+\/status$/.test(url.pathname)) {if(!accountCan(session,'price_manage'))return sendJson(response,403,{error:'没有 Price Level 管理权限'});const payload=(await readJson(request)).payload;return sendJson(response,200,setPriceLevelStatus(Number(url.pathname.split('/')[3]),payload.status,{...payload,changedBy:session.employeeName||session.username}))}
     if (request.method === 'POST' && /^\/api\/price-levels\/\d+\/bulk-update$/.test(url.pathname)) {if(!accountCan(session,'price_manage'))return sendJson(response,403,{error:'没有批量调价权限'});return sendJson(response,200,bulkUpdatePriceLevel(Number(url.pathname.split('/')[3]),{...(await readJson(request)).payload,changedBy:session.employeeName||session.username}))}
+    if(request.method==='GET'&&url.pathname==='/api/occ-current-groups')return sendJson(response,200,currentOccGroups(db))
+    if(request.method==='POST'&&url.pathname==='/api/occ-current-groups/move'){
+      if(!accountCan(session,'price_manage'))return sendJson(response,403,{error:'没有价格管理权限'})
+      return sendJson(response,200,moveCurrentOccCustomers(db,{...((await readJson(request)).payload),changedBy:session.employeeName||session.username}))
+    }
+    if(request.method==='PATCH'&&/^\/api\/occ-current-groups\/\d+\/price$/.test(url.pathname)){
+      if(!accountCan(session,'price_manage'))return sendJson(response,403,{error:'没有价格管理权限'})
+      return sendJson(response,200,changeCurrentOccPrice(db,Number(url.pathname.split('/')[3]),{...((await readJson(request)).payload),changedBy:session.employeeName||session.username}))
+    }
     if (request.method === 'GET' && url.pathname === '/api/occ-price-groups') return sendJson(response,200,listOccPriceGroups())
     if (request.method === 'POST' && url.pathname === '/api/occ-price-groups') {if(!accountCan(session,'price_manage'))return sendJson(response,403,{error:'没有OCC价格组管理权限'});return sendJson(response,201,createOccPriceGroup({...((await readJson(request)).payload),changedBy:session.employeeName}))}
     if (request.method === 'PATCH' && /^\/api\/occ-price-groups\/\d+\/status$/.test(url.pathname)) {if(!accountCan(session,'price_manage'))return sendJson(response,403,{error:'没有OCC价格组管理权限'});const payload=(await readJson(request)).payload;return sendJson(response,200,setOccPriceGroupStatus(Number(url.pathname.split('/')[3]),payload.status,payload))}

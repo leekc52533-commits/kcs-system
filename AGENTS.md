@@ -349,3 +349,11 @@ These requirements were confirmed by KC on 2026-09-09. Carry them forward for la
 
 
 - KC confirmed 2026-10-09: remove the pale-green legacy read-only explanation and customer-master shortcut banner from the Old OCC Price Group Archive list. Preserve price groups, unused-group filtering and archive data.
+
+
+## 2026-10-09 — current OCC company price groups
+- KC confirmed that Materials & Prices > OCC must manage the same current company pricing used by Customer Master and purchase billing, not legacy branch assignments. Show real product-pricing assignments with material-pricing fallback, company/branch details and standard/outstation types. Special-price customers remain explicitly separate with customer editor links; do not silently replace their agreements.
+- Whole-group repricing retains the level ID and all company memberships. Allow separate OCC groups to have the same amount without merging. Require new positive three-decimal price, valid today/future effective date, reason, affected-company preview and confirmation; enforce price_manage on the server and record the session actor. Reject stale previews and duplicate pending changes.
+- Future prices take effect lazily on price reads/startup at the Kuching calendar date, including authoritative billing reads. Existing issued bill snapshots never change. Customer/master/catalog/new-customer selectors use the same updated levels. Prevent other price editors from overwriting pending OCC changes.
+- Selected-company price-type moves use current assignments, atomic validation, source/target versions and audit. Preserve the other price type, other products and historical data.
+- Schema preparation backs up on-disk databases before removing price-as-identity uniqueness, preserves all level IDs/FKs and retains non-OCC uniqueness. Keep historical OCC archive rows unchanged. New UI uses zh/ms/en, shared header filters and dd-mmm-yy dates.

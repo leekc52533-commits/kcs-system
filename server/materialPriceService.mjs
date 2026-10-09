@@ -1,3 +1,4 @@
+import {applyDueOccPrices,assertNoPendingOccPrice} from './occCurrentPrices.mjs'
 import {db as defaultDb} from './database.mjs'
 import {
   COLLECTION_FREQUENCIES,
@@ -19,6 +20,7 @@ const specialPriceAmount=value=>{
 }
 
 export function listBranchMaterials(branchId,database=defaultDb){
+  applyDueOccPrices(database)
   const branch=database.prepare('SELECT id,customer_id FROM branches WHERE id=?').get(branchId)
   if(!branch?.customer_id)return[]
   const items=database.prepare(`SELECT cmp.id,? branchInternalId,m.id materialId,m.material_code materialCode,m.material_name materialName,m.unit,
@@ -36,8 +38,11 @@ export function listBranchMaterials(branchId,database=defaultDb){
 }
 
 export function resolveCustomerOccPrice(customerId,database=defaultDb){
+  applyDueOccPrices(database)
   const customer=database.prepare('SELECT id,occ_price occPrice FROM customers WHERE id=? OR jodoo_customer_id=?').get(Number(customerId)||-1,String(customerId))
   if(!customer)return null
+  const productPrice=tableExists(database,'customer_product_pricing')&&database.prepare(`SELECT pl.price_amount price FROM customer_product_pricing cpp JOIN material_products p ON p.id=cpp.product_id AND p.product_code='OCC' AND p.status='active' JOIN material_price_levels pl ON pl.id=cpp.standard_price_level_id AND pl.product_id=p.id WHERE cpp.customer_id=? AND cpp.status='active'`).get(customer.id)
+  if(productPrice)return productPrice.price
   return database.prepare(`SELECT CASE WHEN cmp.price_type='outstation' THEN COALESCE(cmp.outstation_special_price,opl.price_amount) ELSE COALESCE(cmp.standard_special_price,spl.price_amount) END price
     FROM customer_material_pricing cmp JOIN materials m ON m.id=cmp.material_id AND m.material_code='OCC'
     LEFT JOIN material_price_levels spl ON spl.id=cmp.standard_price_level_id LEFT JOIN material_price_levels opl ON opl.id=cmp.outstation_price_level_id
@@ -65,6 +70,7 @@ export function previewLegacyBranchPricing(customerId,database=defaultDb){
 }
 
 export function listCustomerMaterialPricing(customerId,database=defaultDb){
+  applyDueOccPrices(database)
   const customer=database.prepare('SELECT id,jodoo_customer_id customerId,name customerName FROM customers WHERE id=? OR jodoo_customer_id=?').get(Number(customerId)||-1,String(customerId))
   if(!customer)return null
   const items=database.prepare(`SELECT cmp.id,m.id materialId,m.material_code materialCode,m.material_name materialName,m.unit,cmp.status,cmp.price_type priceType,cmp.resolution_state resolutionState,
@@ -157,6 +163,7 @@ export function listMaterials({includeInactive=false}={},database=defaultDb){
 }
 
 export function getMaterial(materialId,database=defaultDb){
+  applyDueOccPrices(database)
   const names=materialNameColumns(database)
   const material=database.prepare(`SELECT m.id,m.material_code materialCode,m.material_name materialName,${names.full} fullName,${names.short} shortForm,m.unit,m.status,m.created_by createdBy,m.created_at createdAt,m.updated_at updatedAt FROM materials m WHERE m.id=?`).get(materialId)
   if(!material)return null
@@ -193,6 +200,7 @@ export function setPriceLevelStatus(priceLevelId,status,payload={},database=defa
 }
 
 export function bulkUpdatePriceLevel(priceLevelId,payload,database=defaultDb){
+  applyDueOccPrices(database);assertNoPendingOccPrice(database,priceLevelId)
   if(payload.confirmed!==true)throw new Error('Second confirmation is required before bulk price update')
   const reason=text(payload.reason),effectiveDate=text(payload.effectiveDate),newPrice=amount(payload.newPrice)
   if(!reason||!effectiveDate)throw new Error('Effective Date and modification reason are required')

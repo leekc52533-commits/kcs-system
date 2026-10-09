@@ -1,3 +1,4 @@
+import {applyDueOccPrices,assertNoPendingOccPrice} from './occCurrentPrices.mjs'
 import {db as defaultDb} from './database.mjs'
 import {saveCustomerProductPricing} from './materialProductService.mjs'
 
@@ -54,6 +55,7 @@ export function createProduct(categoryId,payload={},database=defaultDb){
   }catch(error){database.exec('ROLLBACK');if(String(error.message).includes('UNIQUE'))fail('MATERIAL_PRODUCT_DUPLICATE','A Product with this name or code already exists.',409);throw error}
 }
 export function getProduct(id,database=defaultDb){
+  applyDueOccPrices(database)
   const product=productRow(database,id);if(!product)fail('MATERIAL_PRODUCT_NOT_FOUND','Product was not found.',404)
   product.priceGroups=database.prepare(`SELECT l.*,COUNT(DISTINCT cpp.customer_id) customer_count,COUNT(DISTINCT b.id) branch_count
     FROM material_price_levels l
@@ -64,6 +66,7 @@ export function getProduct(id,database=defaultDb){
   return product
 }
 export function getPriceGroup(id,database=defaultDb){
+  applyDueOccPrices(database)
   const group=levelRow(database,id);if(!group)fail('MATERIAL_PRICE_GROUP_NOT_FOUND','Price Group was not found.',404)
   group.customers=database.prepare(`SELECT c.id customer_internal_id,c.jodoo_customer_id customer_id,c.name customer_name,c.status,
       COUNT(DISTINCT b.id) branch_count,'standard' price_type
@@ -143,6 +146,7 @@ export function assignProductBranches(targetId,branchIds,payload={},database=def
   try{let changed=0;for(const branchId of ids){const available=database.prepare('SELECT 1 FROM branch_product_availability WHERE branch_id=? AND product_id=? AND is_selectable=1').get(branchId,target.product_id);if(!available)fail('MATERIAL_PRODUCT_NOT_AVAILABLE','One or more Branches cannot select this Product.',409);const old=database.prepare('SELECT price_level_id FROM branch_product_price_assignments WHERE branch_id=? AND product_id=?').get(branchId,target.product_id);if(Number(old?.price_level_id)===target.id)continue;database.prepare(`INSERT INTO branch_product_price_assignments(branch_id,product_id,price_level_id,assigned_by) VALUES(?,?,?,?) ON CONFLICT(branch_id,product_id) DO UPDATE SET price_level_id=excluded.price_level_id,assigned_by=excluded.assigned_by,updated_at=CURRENT_TIMESTAMP`).run(branchId,target.product_id,target.id,who);database.prepare(`INSERT INTO branch_product_price_assignment_history(branch_id,product_id,old_price_level_id,new_price_level_id,reason,changed_by,action) VALUES(?,?,?,?,?,?,'assign')`).run(branchId,target.product_id,old?.price_level_id||null,target.id,why,who);changed++}database.exec('COMMIT');return{changedCount:changed,target:getPriceGroup(target.id,database)}}catch(error){database.exec('ROLLBACK');throw error}
 }
 export function changeProductGroupPrice(id,payload={},database=defaultDb){
+  applyDueOccPrices(database);assertNoPendingOccPrice(database,id)
   const group=levelRow(database,Number(id));if(!group)fail('MATERIAL_PRICE_GROUP_NOT_FOUND','Price Group was not found.',404)
   const amount=Number(payload.newPrice),cents=Math.round(amount*100),date=clean(payload.effectiveDate),why=reason(payload),who=actor(payload)
   if(!Number.isFinite(amount)||amount<0||Math.abs(amount*1000-Math.round(amount*1000))>.00001)fail('MATERIAL_INVALID_PRICE','Price must be a non-negative amount with at most three decimal places.')

@@ -1,3 +1,4 @@
+import {applyDueOccPrices} from './occCurrentPrices.mjs'
 import {BASE_PRODUCT_CODES} from './migrationV22.mjs'
 
 const clean=value=>String(value??'').trim()
@@ -43,6 +44,7 @@ export function saveCustomerProductPricing(customerId,items,{changedBy='Administ
 }
 
 export function listCustomerProductPricing(customerId,database){
+  applyDueOccPrices(database)
   if(!database)throw new Error('Database connection is required')
   if(!database.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='material_products'").get())return{items:[]}
   const customer=database.prepare('SELECT id FROM customers WHERE id=? OR jodoo_customer_id=?').get(Number(customerId)||-1,String(customerId))
@@ -89,6 +91,7 @@ export function seedBranchBaseProducts(branchId,{actor='Branch base products'}={
 }
 
 export function listBranchProducts(branchId,database){
+  applyDueOccPrices(database)
   if(!database)throw new Error('Database connection is required')
   return database.prepare(`
     WITH target_branch AS (
