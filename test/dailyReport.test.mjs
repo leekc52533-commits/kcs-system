@@ -52,3 +52,21 @@ test('vehicle matrix includes unstarted assignments and attributes branch counts
  assert.equal(first.quantity,150);assert.equal(first.detail.plannedBranches,2);assert.equal(first.detail.collectedBranches,1);assert.equal(first.detail.noGoodsBranches,1);assert.equal(first.detail.cancelledBranches,0);assert.equal(first.detail.trips,1);
  assert.equal(idle.status,'not_started');assert.equal(idle.quantity,0);assert.equal(idle.detail.plannedBranches,0);assert.equal(r.summary.vehicles,1);assert.equal(r.sections.stops[0].detail.vehicleId,1);db.close();
 })
+
+test('lifecycle cleanup is excluded from operational cancellations while manual cancellations and history remain',()=>{
+ const db=fixture();
+ db.exec(`UPDATE dispatch_stops SET status='cancelled',completion_outcome=NULL,superseded_reason='branch_lifecycle_sync' WHERE id=2;
+ INSERT INTO dispatch_stops(id,dispatch_id,branch_id,stop_sequence,service_date,dispatch_trip_id,status,override_reason) VALUES(4,2,1,1,'2026-09-15',2,'cancelled','Manual cancellation');
+ INSERT INTO dispatch_change_logs(dispatch_day_id,actor,change_type,entity_type,entity_id,created_at) VALUES(1,'Boss','branch_lifecycle_synced','dispatch_stop','2','2026-09-15T09:00:00+08:00');`);
+ const before=db.prepare('SELECT total_changes() n').get().n;
+ const r=dailyReport(db,owner,'2026-09-15');
+ assert.equal(r.summary.cancelledBranches,1);
+ assert.equal(r.sections.vehicles.find(v=>v.id==='1').detail.cancelledBranches,0);
+ assert.equal(r.sections.vehicles.find(v=>v.id==='2').detail.cancelledBranches,1);
+ assert.deepEqual(r.sections.stops.filter(s=>s.status==='cancelled').map(s=>s.id),['4']);
+ assert.ok(r.sections.changes.some(s=>s.detail.change_type==='branch_lifecycle_synced'));
+ assert.equal(db.prepare('SELECT superseded_reason FROM dispatch_stops WHERE id=2').get().superseded_reason,'branch_lifecycle_sync');
+ assert.equal(db.prepare('SELECT total_changes() n').get().n,before);
+ assert.equal(r.summary.weightKg,150);
+ db.close();
+});
