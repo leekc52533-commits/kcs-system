@@ -1,3 +1,4 @@
+import {usableDefaultVehicle} from '../server/defaultVehicleService.mjs'
 import {dateEvidenceSchema} from '../server/migrationV78.mjs'
 import {driverArrangementSchemaSql} from '../server/migrationV64.mjs'
 import {ensureGpsExceptionSchema} from '../server/gpsExceptionSchema.mjs'
@@ -135,5 +136,17 @@ test('absence priority includes confirmed missed visits, sorts by count, links d
  assert.equal(data.priority[0].stopId,null);assert.ok(data.items.some(b=>b.id===2))
  db.exec("UPDATE branches SET is_active=0 WHERE id=2")
  assert.deepEqual(supportCustomerOptions(date,manager,db).priority.map(b=>b.id),[1])
+ }finally{db.close()}
+})
+
+test('external support remains manually assignable but cannot be a recurring default',()=>{
+ const db=supportSetup();try{
+  db.exec("UPDATE vehicles SET is_external_support=1,is_common=0,registration_number='QTW2704' WHERE id=3")
+  assert.equal(usableDefaultVehicle(db,3),null)
+  assert.ok(usableDefaultVehicle(db,1))
+  addSupportVehicle(date,1,payload(db),manager,db)
+  assert.ok(db.prepare('SELECT 1 FROM dispatches WHERE vehicle_id=3').get())
+  generateDay({startDate:'2026-09-14'},db)
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM dispatches WHERE vehicle_id=3 AND dispatch_date='2026-09-14'").get().n,0)
  }finally{db.close()}
 })

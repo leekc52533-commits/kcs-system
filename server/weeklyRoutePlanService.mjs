@@ -43,7 +43,7 @@ function branchMap(database){
 
 function availablePlates(database){
   const result=new Set()
-  for(const vehicle of database.prepare("SELECT vehicle_code,registration_number FROM vehicles WHERE is_temporary=0 AND operational_status IN ('available','active') AND status IN ('available','assigned')").all()){
+  for(const vehicle of database.prepare("SELECT vehicle_code,registration_number FROM vehicles WHERE is_temporary=0 AND is_external_support=0 AND operational_status IN ('available','active') AND status IN ('available','assigned')").all()){
     result.add(normalizePlate(vehicle.registration_number||vehicle.vehicle_code))
   }
   return result

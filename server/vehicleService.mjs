@@ -46,7 +46,7 @@ export function getVehicleDetail(id,database=defaultDb,options={}){
   const preferredZones=database.prepare(`SELECT DISTINCT z.id,z.code,z.name FROM zone_default_vehicles zdv JOIN zone_groups z ON z.id=zdv.zone_group_id WHERE zdv.vehicle_id=? ORDER BY z.sort_order,z.id`).all(id)
   const preferredAreas=database.prepare(`SELECT a.id,a.name FROM vehicle_preferred_areas vpa JOIN areas a ON a.id=vpa.area_id WHERE vpa.vehicle_id=? ORDER BY a.name`).all(id)
   const currentDriver=database.prepare(`SELECT e.id,e.employee_code employeeCode,e.name,d.dispatch_date dispatchDate FROM dispatches d JOIN employees e ON e.id=d.driver_id WHERE d.vehicle_id=? ORDER BY d.dispatch_date DESC,d.updated_at DESC LIMIT 1`).get(id)||null
-  const compliance=row.operational_status==='sold'?null:camelRow(database.prepare('SELECT * FROM vehicle_compliance_reminders WHERE vehicle_id=?').get(id)||{})
+  const compliance=(row.operational_status==='sold'||row.is_external_support)?null:camelRow(database.prepare('SELECT * FROM vehicle_compliance_reminders WHERE vehicle_id=?').get(id)||{})
   if(compliance)for(const key of ['puspakomDueDate','roadTaxDueDate','insuranceDueDate','loanPaymentDueDate','nextServiceDate'])compliance[`${key}Alert`]=reminderLevel(compliance[key])
   return{...camelRow(row),status:row.operational_status,capacityKg:row.capacity_kg,operationalCapacityKg:row.capacity_kg,assignedZones:preferredZones,preferredZones,preferredAreas,currentDriver,compliance,
     maintenanceRecords:recordRows(database,'vehicle_maintenance_records',id,'maintenance_date DESC,id DESC'),fuelRecords:recordRows(database,'vehicle_fuel_records',id,'fuel_at DESC,id DESC'),

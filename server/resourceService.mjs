@@ -24,7 +24,7 @@ function assignedZones(database,vehicleId){
 
 function vehicleRows(database) {
   return database.prepare(`SELECT v.id,v.vehicle_code vehicleCode,v.vehicle_name vehicleName,v.registration_number registrationNumber,
-    v.capacity_kg capacityKg,v.operational_status status,v.official_sequence officialSequence,v.is_common isCommon,v.brand,v.model,v.vehicle_type vehicleType,v.is_temporary isTemporary,v.temporary_date temporaryDate,
+    v.capacity_kg capacityKg,v.operational_status status,v.official_sequence officialSequence,v.is_common isCommon,v.is_external_support isExternalSupport,v.brand,v.model,v.vehicle_type vehicleType,v.is_temporary isTemporary,v.temporary_date temporaryDate,
     v.default_base_location_id defaultBaseLocationId,base.name defaultBase,
     GROUP_CONCAT(a.id) preferredAreaIds,GROUP_CONCAT(a.name,'|') preferredAreaNames
     FROM vehicles v LEFT JOIN operational_locations base ON base.id=v.default_base_location_id
@@ -121,7 +121,7 @@ const zoneStatsSql=`SELECT z.id,z.code,z.name,z.sort_order sortOrder,z.is_active
   (SELECT COUNT(DISTINCT b.id) FROM branches b JOIN areas a ON a.id=b.area_id WHERE a.zone_group_id=z.id AND b.lifecycle_status='ACTIVE' AND EXISTS(SELECT 1 FROM branch_schedules s WHERE s.branch_id=b.id AND s.is_active=1)) scheduledCustomerCount,
   (SELECT COUNT(DISTINCT b.id) FROM branches b JOIN areas a ON a.id=b.area_id WHERE a.zone_group_id=z.id AND b.lifecycle_status='ACTIVE' AND EXISTS(SELECT 1 FROM branch_schedules s WHERE s.branch_id=b.id AND s.is_active=1)) scheduledBranchCount
   FROM zone_groups z LEFT JOIN vehicles dv ON dv.id=z.default_vehicle_id`
-const zoneDefaults=(database,id)=>database.prepare(`SELECT v.id,v.vehicle_code vehicleCode,v.vehicle_name vehicleName,v.registration_number registrationNumber,v.operational_status status,v.status masterStatus,zdv.position,CASE WHEN v.is_temporary=0 AND v.operational_status IN ('available','active') AND v.status IN ('available','assigned') THEN 1 ELSE 0 END isAvailable FROM zone_default_vehicles zdv JOIN vehicles v ON v.id=zdv.vehicle_id WHERE zdv.zone_group_id=? ORDER BY zdv.position`).all(id)
+const zoneDefaults=(database,id)=>database.prepare(`SELECT v.id,v.vehicle_code vehicleCode,v.vehicle_name vehicleName,v.registration_number registrationNumber,v.operational_status status,v.status masterStatus,zdv.position,CASE WHEN v.is_temporary=0 AND v.is_external_support=0 AND v.operational_status IN ('available','active') AND v.status IN ('available','assigned') THEN 1 ELSE 0 END isAvailable FROM zone_default_vehicles zdv JOIN vehicles v ON v.id=zdv.vehicle_id WHERE zdv.zone_group_id=? ORDER BY zdv.position`).all(id)
 const withZoneDefaults=(database,row)=>{const defaultVehicles=zoneDefaults(database,row.id);return{...row,defaultVehicles,defaultVehicleIds:defaultVehicles.map(item=>item.id),defaultVehicleId:defaultVehicles.length===1?defaultVehicles[0].id:null}}
 const zoneRow=(database,id)=>withZoneDefaults(database,database.prepare(`${zoneStatsSql} WHERE z.id=?`).get(id))
 const zoneRows=database=>database.prepare(`${zoneStatsSql} ORDER BY z.sort_order,z.id`).all().map(row=>withZoneDefaults(database,row))

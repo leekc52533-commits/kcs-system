@@ -456,6 +456,7 @@ CREATE TABLE IF NOT EXISTS vehicles (
   vehicle_class TEXT,
   operational_status TEXT NOT NULL DEFAULT 'active',
   is_common INTEGER NOT NULL DEFAULT 1,
+  is_external_support INTEGER NOT NULL DEFAULT 0,
   remark TEXT,
   sold_at TEXT,
   default_base_location_id INTEGER REFERENCES operational_locations(id),

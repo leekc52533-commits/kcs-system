@@ -1,3 +1,4 @@
+import {enableQtw2704Support} from '../server/externalSupportVehicle.mjs'
 import {applyV85Migration} from '../server/migrationV85.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -140,4 +141,24 @@ test('sales opens across all dates while explicit ranges and export validation r
  assert.equal(listSales({from:'2026-09-01',to:'2026-09-30'},office,db).items.length,0)
  assert.throws(()=>listSales({exportRange:'1'},office,db),/SALES_DATE/)
  assert.throws(()=>listSales({from:'bad',to:'2026-09-30'},office,db),/SALES_DATE/)
+})
+
+test('QTW2704 external support enables sales once and preserves other vehicles and sold history',t=>{
+ const {db,uploadsRoot}=setup(t)
+ db.exec("INSERT INTO vehicles(vehicle_code,registration_number,status,operational_status,sold_at) VALUES('Former Vehicle','QTW2704','inactive','sold','2026-08-01'); INSERT INTO vehicles(vehicle_code,registration_number,status,operational_status) VALUES('Other sold','OTHER','inactive','sold')")
+ const before=db.prepare("SELECT * FROM vehicles WHERE registration_number='OTHER'").get()
+ const id=db.prepare("SELECT id FROM vehicles WHERE registration_number='QTW2704'").get().id
+ assert.ok(!salesMasters(db).vehicles.some(v=>v.id===id))
+ enableQtw2704Support(db)
+ const v=db.prepare('SELECT * FROM vehicles WHERE id=?').get(id)
+ assert.equal(v.is_external_support,1);assert.equal(v.is_common,0);assert.equal(v.sold_at,'2026-08-01')
+ assert.ok(salesMasters(db).vehicles.some(v=>v.id===id))
+ const bill=saveSales({...payload(),vehicleId:id},office,db,{uploadsRoot})
+ assert.equal(bill.vehiclePlate,'QTW2704')
+ assert.deepEqual(db.prepare("SELECT * FROM vehicles WHERE registration_number='OTHER'").get(),before)
+ const audits=db.prepare('SELECT COUNT(*) n FROM vehicle_status_history').get().n
+ db.prepare("UPDATE vehicles SET operational_status='maintenance',status='maintenance' WHERE id=?").run(id)
+ assert.equal(enableQtw2704Support(db).noOp,true)
+ assert.equal(db.prepare('SELECT status FROM vehicles WHERE id=?').get(id).status,'maintenance')
+ assert.equal(db.prepare('SELECT COUNT(*) n FROM vehicle_status_history').get().n,audits)
 })

@@ -1,3 +1,4 @@
+import {enableQtw2704Support} from './externalSupportVehicle.mjs'
 import {ensureOccCurrentPrices,applyDueOccPrices} from './occCurrentPrices.mjs'
 import {ensureCustomerDatePromiseSchema} from './customerDatePromise.mjs'
 import {ensureOccSharedPrices} from './occSharedPriceMigration.mjs'
@@ -152,6 +153,7 @@ ensureColumn('vehicles', 'gross_vehicle_weight_kg', 'REAL')
 ensureColumn('vehicles', 'unladen_weight_kg', 'REAL')
 ensureColumn('vehicles', 'operational_status', "TEXT NOT NULL DEFAULT 'active'")
 ensureColumn('vehicles', 'is_common', 'INTEGER NOT NULL DEFAULT 1')
+ensureColumn('vehicles', 'is_external_support', 'INTEGER NOT NULL DEFAULT 0')
 ensureColumn('vehicles', 'remark', 'TEXT')
 ensureColumn('vehicles', 'sold_at', 'TEXT')
 ensureColumn('employees', 'employment_status', "TEXT NOT NULL DEFAULT 'active'")
@@ -421,11 +423,12 @@ function normalizeOfficialVehicles() {
     }
     let sold=db.prepare("SELECT * FROM vehicles WHERE REPLACE(REPLACE(UPPER(COALESCE(registration_number,'')),' ',''),'-','')='QTW2704'").get()
     if(!sold){const result=db.prepare("INSERT INTO vehicles(vehicle_code,registration_number,status,operational_status,is_common,sold_at,remark) VALUES('Former Vehicle','QTW2704','inactive','sold',0,CURRENT_TIMESTAMP,'Vehicle sold; retained for history only')").run();sold={id:Number(result.lastInsertRowid)}}
-    db.prepare("UPDATE vehicles SET operational_status='sold',status='inactive',official_sequence=NULL,is_common=0,sold_at=COALESCE(sold_at,CURRENT_TIMESTAMP),updated_at=CURRENT_TIMESTAMP WHERE id=? AND (operational_status IS NOT 'sold' OR status IS NOT 'inactive' OR official_sequence IS NOT NULL OR is_common IS NOT 0 OR sold_at IS NULL)").run(sold.id)
+    db.prepare("UPDATE vehicles SET operational_status='sold',status='inactive',official_sequence=NULL,is_common=0,sold_at=COALESCE(sold_at,CURRENT_TIMESTAMP),updated_at=CURRENT_TIMESTAMP WHERE id=? AND is_external_support=0 AND (operational_status IS NOT 'sold' OR status IS NOT 'inactive' OR official_sequence IS NOT NULL OR is_common IS NOT 0 OR sold_at IS NULL)").run(sold.id)
     db.exec('COMMIT')
   } catch(error){db.exec('ROLLBACK');throw error}
 }
 normalizeOfficialVehicles()
+enableQtw2704Support(db)
 db.exec(`
   INSERT OR IGNORE INTO employee_job_roles(employee_id,role,is_primary,created_by)
   SELECT id,
@@ -452,3 +455,5 @@ export function getSystemStatus() {
   const counts = Object.fromEntries(tableNames.map((table) => [table, db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get().count]))
   return { database: 'connected', schemaVersion: SCHEMA_VERSION, counts }
 }
+
+db.exec("CREATE TRIGGER IF NOT EXISTS external_support_vehicle_no_delete BEFORE DELETE ON vehicles WHEN OLD.is_external_support=1 BEGIN SELECT RAISE(ABORT,'External support vehicle history cannot be deleted'); END;")

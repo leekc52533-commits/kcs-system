@@ -29,7 +29,7 @@ function loadSnapshot(db,row){
     LEFT JOIN operational_locations base ON base.id=v.default_base_location_id
     LEFT JOIN route_vehicle_availability va ON va.vehicle_id=v.id AND va.availability_date=?
     LEFT JOIN route_employee_availability ea ON ea.employee_id=route.driver_id AND ea.availability_date=?
-    WHERE v.operational_status IN ('available','active') AND v.status IN ('available','assigned') AND (v.is_temporary=0 OR v.temporary_date=?) AND COALESCE(va.status,'available')='available' AND COALESCE(ea.status,'available')='available'
+    WHERE (v.is_external_support=0 OR route.trip_id IS NOT NULL) AND v.operational_status IN ('available','active') AND v.status IN ('available','assigned') AND (v.is_temporary=0 OR v.temporary_date=?) AND COALESCE(va.status,'available')='available' AND COALESCE(ea.status,'available')='available'
     AND NOT EXISTS(SELECT 1 FROM dispatch_vehicle_assistants dva JOIN route_employee_availability ca ON ca.employee_id=dva.employee_id AND ca.availability_date=? WHERE dva.dispatch_day_id=? AND dva.vehicle_id=v.id AND ca.status<>'available') ORDER BY v.id`).all(row.id,row.dispatch_date,row.id,row.dispatch_date,row.id,row.dispatch_date,row.dispatch_date,row.dispatch_date,row.dispatch_date,row.id).map(item=>({...item,capacityKg:item.capacityKg==null?null:Number(item.capacityKg)}))
   return{date:row.dispatch_date,revision:row.revision,stops,vehicles}
 }
