@@ -70,3 +70,16 @@ test('lifecycle cleanup is excluded from operational cancellations while manual 
  assert.equal(r.summary.weightKg,150);
  db.close();
 });
+
+test('branch drill-down groups actual branches and excludes unrelated IDs; decisions share summary rows across midnight',()=>{
+ const db=fixture();db.exec(`INSERT INTO dispatch_change_logs(dispatch_day_id,actor,change_type,entity_type,entity_id,created_at) VALUES(1,'Boss','route_approved','daily_route','67','2026-09-14 16:00:00'),(1,'Boss','route_approved','daily_route','66','2026-09-15T23:59:59+08:00'),(1,'Boss','route_approved','daily_route','68','2026-09-15T16:00:00Z');`)
+ const r=dailyReport(db,owner,'2026-09-15')
+ assert.equal(r.summary.changedBranches,1)
+ assert.equal(r.sections.changedBranches.length,1)
+ assert.equal(r.sections.changedBranches[0].name,'Branch One')
+ assert.equal(r.sections.changedBranches[0].detail.changes.length,2)
+ assert.equal(r.summary.approvals,2)
+ assert.equal(r.sections.decisions.length,2)
+ assert.deepEqual(r.sections.decisions.map(r=>r.name),['67','66'])
+ db.close()
+})

@@ -59,7 +59,7 @@ function buildReport(db,access,date){
  sections.vehicles=[...new Set([...byDay('dispatches','dispatch_date').map(r=>r.vehicle_id),...stops.map(r=>r.vehicle_id),...trips.map(r=>r.vehicle_id),...issued.map(r=>r.vehicle_id)].filter(v=>v!=null))].map(id=>row(id,vehicles.get(id),'vehicle',runVehicleIds.has(id)?'running':'not_started',sum(kg.filter(r=>r.vehicle_id===id),'quantity'),null,'','',{routeNames:routeNamesByVehicle.get(id)||[],trips:activeTrips.filter(t=>t.vehicle_id===id).length,collectedBranches:unique(issued.filter(b=>b.vehicle_id===id),'branch_id'),plannedBranches:unique(currentStops.filter(s=>s.vehicle_id===id),'branch_id'),pendingBranches:unique(pendingStops.filter(s=>s.vehicle_id===id),'branch_id'),noGoodsBranches:unique(noGoods.filter(s=>s.vehicle_id===id),'branch_id'),cancelledBranches:unique(cancelledStops.filter(s=>s.vehicle_id===id),'branch_id'),targetKg:null,achievement:null}))
  const stopDateRequest=tables.has('driver_date_requests')?db.prepare("SELECT * FROM driver_date_requests WHERE dispatch_stop_id=? AND status='approved' ORDER BY reviewed_at DESC,id DESC LIMIT 1"):null
  const stopDateReview=tables.has('driver_date_reviews')?db.prepare('SELECT approved_date FROM driver_date_reviews WHERE request_id=?'):null
- sections.stops=operationalStops.map(s=>{const request=s.status==='cancelled'&&s.override_note==='driver_date_approved'?stopDateRequest?.get(s.id):null;const review=request?stopDateReview?.get(request.id):null;return row(s.id,s.branch_name,'branch',s.superseded_by_stop_id?'superseded':s.status==='completed'&&['no_goods','no_goods_notice'].includes(s.completion_outcome)?'no_goods':s.status,null,null,employees.get(s.driver_id)||'',s.completed_at||s.arrived_at||'',{branchCode:s.jodoo_branch_id,vehicleId:s.vehicle_id,vehicle:vehicles.get(s.vehicle_id),tripId:s.dispatch_trip_id,serviceDate:date,reason:s.override_reason||s.superseded_reason||(tables.has('driver_no_goods_proofs')?db.prepare('SELECT reason FROM driver_no_goods_proofs WHERE dispatch_stop_id=?').get(s.id)?.reason:null)||(tables.has('no_goods_notices')?db.prepare('SELECT reason FROM no_goods_notices WHERE dispatch_stop_id=? AND restored_at IS NULL').get(s.id)?.reason:null)||'',hasIssuedBill:issued.some(b=>b.dispatch_stop_id===s.id),...(request?{reason:request.reason,reviewReason:request.review_reason,requestedAt:request.requested_at,reviewedAt:request.reviewed_at,sourceDate:request.source_date,targetDate:request.target_date,approvedDate:review?.approved_date}:{} )})})
+ sections.stops=operationalStops.map(s=>{const request=s.status==='cancelled'&&s.override_note==='driver_date_approved'?stopDateRequest?.get(s.id):null;const review=request?stopDateReview?.get(request.id):null;return row(s.id,s.branch_name,'branch',s.superseded_by_stop_id?'superseded':s.status==='completed'&&['no_goods','no_goods_notice'].includes(s.completion_outcome)?'no_goods':s.status,null,null,employees.get(s.driver_id)||'',s.completed_at||s.arrived_at||'',{...(s.superseded_reason==='schedule_sync_removed'?{cancelledAt:s.superseded_at,cancelledBy:s.superseded_by,sourceScheduleId:s.source_schedule_id}:{}),branchCode:s.jodoo_branch_id,vehicleId:s.vehicle_id,vehicle:vehicles.get(s.vehicle_id),tripId:s.dispatch_trip_id,serviceDate:date,reason:s.override_reason||s.superseded_reason||(tables.has('driver_no_goods_proofs')?db.prepare('SELECT reason FROM driver_no_goods_proofs WHERE dispatch_stop_id=?').get(s.id)?.reason:null)||(tables.has('no_goods_notices')?db.prepare('SELECT reason FROM no_goods_notices WHERE dispatch_stop_id=? AND restored_at IS NULL').get(s.id)?.reason:null)||'',hasIssuedBill:issued.some(b=>b.dispatch_stop_id===s.id),...(request?{reason:request.reason,reviewReason:request.review_reason,requestedAt:request.requested_at,reviewedAt:request.reviewed_at,sourceDate:request.source_date,targetDate:request.target_date,approvedDate:review?.approved_date}:{} )})})
  const productGroups=new Map()
  for(const i of items){const key=`${i.product_id}:${i.unit_snapshot}`,group=productGroups.get(key)||{name:i.product_name_snapshot,unit:i.unit_snapshot,quantity:0,amount:0};group.quantity+=i.quantity;group.amount+=i.line_total_cents;productGroups.set(key,group)}
  sections.goods=[...productGroups].map(([id,g])=>row(id,g.name,g.unit,'issued',g.quantity,access.finance?g.amount:null))
@@ -98,9 +98,10 @@ function buildReport(db,access,date){
    const parsed=Object.fromEntries(Object.entries(r).map(([k,v])=>[k,k.endsWith('_json')?json(v):v]));
    if(!access.full){delete parsed.before_json;delete parsed.after_json}
    if((privateKey.test(r.field_name||'')||/^(home_|bank_)/.test(r.field_name||''))){parsed.old_value='protected';parsed.new_value='protected'}
-   const branch=r.branch_id||(r.entity_type==='branch'?Number(r.entity_id):r.entity_type==='dispatch_stop'?db.prepare('SELECT branch_id FROM dispatch_stops WHERE id=?').get(Number(r.entity_id))?.branch_id:null)
+   const branch=r.branch_id||(r.entity_type==='branch'?Number(r.entity_id):r.entity_type==='dispatch_stop'?db.prepare('SELECT branch_id FROM dispatch_stops WHERE id=?').get(Number(r.entity_id))?.branch_id:r.entity_type==='branch_schedule'?db.prepare('SELECT branch_id FROM branch_schedules WHERE id=?').get(Number(r.entity_id))?.branch_id:null)
    const affectedDate=r.dispatch_day_id?db.prepare('SELECT dispatch_date FROM dispatch_days WHERE id=?').get(r.dispatch_day_id)?.dispatch_date:null
    parsed.serviceDate=affectedDate
+   parsed.branchId=branch ? Number(branch) : null
    if(table==='dispatch_change_logs'&&['route_approved','route_approval_withdrawn','day_approved','approval_withdrawn'].includes(r.change_type))sections.approvals.push(row(`decision-${r.id}`,String(r.entity_id),r.change_type,r.change_type.includes('withdraw')?'withdrawn':'approved',null,null,r.actor,r[time],{serviceDate:affectedDate,reviewedAt:r[time],reason:json(r.after_json)?.reason}))
    sections.changes.push(row(`${table}-${r.id}`,branches.get(branch)?.branch_name||String(r.entity_id||r.settlement_id||r.record_id||r.id),table,'changed',null,null,r.actor_name||employees.get(Number(r.actor))||r.actor||r.changed_by||'',r[time],{source:table,...parsed}))
   }
@@ -109,8 +110,19 @@ function buildReport(db,access,date){
  for(const r of sections.approvals.filter(r=>r.kind==='driver_date_requests'&&r.status==='approved'&&r.detail.sourceDate!==(r.detail.approvedDate||r.detail.targetDate)&&r.detail.reviewedAt&&db.prepare("SELECT date(?,'+8 hours') d").get(r.detail.reviewedAt).d===date))sections.reschedules.push({...r,id:`reschedule-${r.id}`})
  report.summary.rescheduledBranches=unique(sections.reschedules.map(r=>r.detail),'branchId')
  report.summary.changes=sections.changes.length
- report.summary.changedBranches=new Set(sections.changes.map(r=>r.detail.branch_id||(r.detail.entity_type==='branch'?r.detail.entity_id:r.detail.entity_type==='dispatch_stop'?db.prepare('SELECT branch_id FROM dispatch_stops WHERE id=?').get(Number(r.detail.entity_id))?.branch_id:null)).filter(Boolean).map(String)).size
- report.summary.approvals=sections.approvals.filter(r=>r.detail.reviewedAt&&db.prepare("SELECT date(?,'+8 hours') d").get(r.detail.reviewedAt).d===date).length
+ // Summary and drill-down use the same rows, including the same business date.
+ const changed=new Map()
+ for(const change of sections.changes){
+  const id=change.detail.branchId
+  if(!id||!branches.has(id))continue
+  let group=changed.get(id)
+  if(!group){const branch=branches.get(id);group=row(id,branch.branch_name,'branch','changed',null,null,'','',{branchId:id,branchCode:branch.jodoo_branch_id,changes:[]});changed.set(id,group)}
+  group.detail.changes.push(change)
+ }
+ sections.changedBranches=[...changed.values()].sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}))
+ report.summary.changedBranches=sections.changedBranches.length
+ sections.decisions=sections.approvals.filter(r=>r.detail.reviewedAt&&db.prepare("SELECT date(?,'+8 hours') d").get(r.detail.reviewedAt).d===date)
+ report.summary.approvals=sections.decisions.length
  report.summary.pendingApprovals=sections.approvals.filter(r=>r.status==='pending').length
  return report
 }
