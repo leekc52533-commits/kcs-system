@@ -13,3 +13,5 @@ sudo node scripts/inspect-daily-report-issues.mjs /var/lib/kcs/data/kcs-dispatch
 The script opens SQLite read-only without application startup or migrations. Current schedule values are explicitly labelled as current, not historical evidence. Review cancellation logs and the preceding schedule history to establish each cause.
 
 Verification: dailyReport backend and UI tests, including timezone boundaries, branch grouping and summary drill-down selection; Vite production build.
+
+Follow-up: confirmed the public JavaScript bundle already contained the updated branch/decision drill-down mappings. General audit rows still used bare identifiers for non-branch entities. Resolve declared route, vehicle, trip, day and cargo-batch records, retaining each audit event and its typed reference. Missing relationships use a labelled record reference, never guessed branch names. Backend/UI regression suite: 18 tests passing; production build passes.

@@ -80,6 +80,6 @@ test('branch drill-down groups actual branches and excludes unrelated IDs; decis
  assert.equal(r.sections.changedBranches[0].detail.changes.length,2)
  assert.equal(r.summary.approvals,2)
  assert.equal(r.sections.decisions.length,2)
- assert.deepEqual(r.sections.decisions.map(r=>r.name),['67','66'])
+ assert.deepEqual(r.sections.decisions.map(r=>r.name),['67','66']);assert.ok(r.sections.decisions.every(r=>r.detail.nameType==='route'))
  db.close()
 })

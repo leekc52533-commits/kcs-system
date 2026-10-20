@@ -1,3 +1,4 @@
+import {reportRecordName} from './reportRecordName.mjs'
 import {validSalesDate} from '../shared/sales.js'
 const management=['owner_admin','operations_admin','supervisor','office']
 export const reportPermissions=['daily_report_full','daily_report_finance']
@@ -102,8 +103,10 @@ function buildReport(db,access,date){
    const affectedDate=r.dispatch_day_id?db.prepare('SELECT dispatch_date FROM dispatch_days WHERE id=?').get(r.dispatch_day_id)?.dispatch_date:null
    parsed.serviceDate=affectedDate
    parsed.branchId=branch ? Number(branch) : null
-   if(table==='dispatch_change_logs'&&['route_approved','route_approval_withdrawn','day_approved','approval_withdrawn'].includes(r.change_type))sections.approvals.push(row(`decision-${r.id}`,String(r.entity_id),r.change_type,r.change_type.includes('withdraw')?'withdrawn':'approved',null,null,r.actor,r[time],{serviceDate:affectedDate,reviewedAt:r[time],reason:json(r.after_json)?.reason}))
-   sections.changes.push(row(`${table}-${r.id}`,branches.get(branch)?.branch_name||String(r.entity_id||r.settlement_id||r.record_id||r.id),table,'changed',null,null,r.actor_name||employees.get(Number(r.actor))||r.actor||r.changed_by||'',r[time],{source:table,...parsed}))
+   const display=reportRecordName(db,r,branches.get(branch)?.branch_name)
+   if(display.nameType)parsed.nameType=display.nameType
+   if(table==='dispatch_change_logs'&&['route_approved','route_approval_withdrawn','day_approved','approval_withdrawn'].includes(r.change_type))sections.approvals.push(row(`decision-${r.id}`,display.name,r.change_type,r.change_type.includes('withdraw')?'withdrawn':'approved',null,null,r.actor,r[time],{nameType:display.nameType,serviceDate:affectedDate,reviewedAt:r[time],reason:json(r.after_json)?.reason}))
+   sections.changes.push(row(`${table}-${r.id}`,display.name,table,'changed',null,null,r.actor_name||employees.get(Number(r.actor))||r.actor||r.changed_by||'',r[time],{source:table,...parsed}))
   }
  }
  sections.reschedules=onDay('schedule_exceptions','created_at').filter(r=>r.target_date&&r.original_date&&r.target_date!==r.original_date).map(r=>row(`exception-${r.id}`,branches.get(r.branch_id)?.branch_name||String(r.branch_id),'reschedule','changed',null,null,r.created_by,r.created_at,{branchId:r.branch_id,sourceDate:r.original_date,targetDate:r.target_date,reason:r.reason,scope:r.permanent?'permanent':'once'}))
