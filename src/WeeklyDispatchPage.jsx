@@ -1,3 +1,4 @@
+import {requestWithTimeout} from './requestWithTimeout.js'
 import {DriverCheckStatus,DriverCheckCount} from './DriverPlanControls.jsx'
 import RescheduledCustomers from './RescheduledCustomers.jsx'
 import SupportVehicle from './SupportVehicle.jsx'
@@ -46,14 +47,32 @@ export default function WeeklyDispatchPage({currentUser}){
   const[displayMode,setDisplayMode]=useState('dispatch'),[selectedWeekDate,setSelectedWeekDate]=useState(reviewDate||localDate()),[selectedRouteNumber,setSelectedRouteNumber]=useState(1),[data,setData]=useState(null),[error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false)
   const canEditDispatch=canManageDispatch(currentUser)
   const canApproveDefer=canManageDispatch(currentUser)
-  const loadSequence=useRef(0)
-  const load=useCallback(async()=>{const sequence=++loadSequence.current;try{
-    const result=await request(reviewDate?`/api/dispatch/week?startDate=${reviewDate}`:canEditDispatch?'/api/dispatch/ensure-rolling-week':`/api/dispatch/week?startDate=${localDate()}`,!reviewDate&&canEditDispatch?{method:'POST'}:undefined)
-    if(sequence===loadSequence.current)setData(result)
-  }catch(e){if(sequence===loadSequence.current)setError(e.message)}},[canEditDispatch,reviewDate])
-  useEffect(()=>{load()},[load])
+  const[loadError,setLoadError]=useState(null),[loading,setLoading]=useState(false)
+  const loadSequence=useRef(0),inFlight=useRef(null),loadFailed=useRef(false),reloadQueued=useRef(false),latestLoad=useRef(null)
+  const load=useCallback(({background=false}={})=>{
+    if(background&&loadFailed.current)return Promise.resolve()
+    if(inFlight.current){if(!background)reloadQueued.current=true;return inFlight.current}
+    const sequence=++loadSequence.current
+    setLoading(true);setLoadError(null)
+    const operation=(async()=>{try{
+      const result=await requestWithTimeout(request,reviewDate?`/api/dispatch/week?startDate=${reviewDate}`:canEditDispatch?'/api/dispatch/ensure-rolling-week':`/api/dispatch/week?startDate=${localDate()}`,!reviewDate&&canEditDispatch?{method:'POST'}:{})
+      if(sequence===loadSequence.current){setData(result);loadFailed.current=false}
+    }catch(e){if(sequence===loadSequence.current){loadFailed.current=true;setLoadError(e)}}
+    finally{
+      if(inFlight.current===operation)inFlight.current=null
+      if(sequence===loadSequence.current)setLoading(false)
+      // Date changes or saved edits request one trailing refresh, never a queue
+      // of polling requests. After failure only explicit Retry starts a request.
+      if(reloadQueued.current&&!loadFailed.current){reloadQueued.current=false;latestLoad.current?.()}
+      else reloadQueued.current=false
+    }})()
+    inFlight.current=operation
+    return operation
+  },[canEditDispatch,reviewDate])
+  latestLoad.current=load
+  useEffect(()=>{latestLoad.current=load;setData(null);loadFailed.current=false;load();return()=>{++loadSequence.current;reloadQueued.current=false;latestLoad.current=null}},[load])
   useEffect(()=>{const refresh=()=>load();window.addEventListener('kcs-handover-saved',refresh);window.addEventListener('kcs-customer-transferred',refresh);return()=>{window.removeEventListener('kcs-handover-saved',refresh);window.removeEventListener('kcs-customer-transferred',refresh)}},[load])
-  useEffect(()=>{const wake=()=>{if(document.visibilityState==='visible')load()};const timer=setInterval(load,10000);window.addEventListener('focus',load);document.addEventListener('visibilitychange',wake);return()=>{clearInterval(timer);window.removeEventListener('focus',load);document.removeEventListener('visibilitychange',wake)}},[load])
+  useEffect(()=>{const refresh=()=>{if(document.visibilityState==='visible')load({background:true})};const timer=setInterval(refresh,10000);window.addEventListener('focus',refresh);document.addEventListener('visibilitychange',refresh);return()=>{clearInterval(timer);window.removeEventListener('focus',refresh);document.removeEventListener('visibilitychange',refresh)}},[load])
   const act=async(date,action,reason='')=>{setBusy(true);setMessage('');try{await request(`/api/dispatch/day/${date}/${action}`,{method:'POST',body:JSON.stringify({[action==='approve'?'approvedBy':'reopenedBy']:currentUser.name,reason})});setMessage(`${date} ${action==='approve'?'approved':'approval withdrawn'}.`);await load()}catch(e){setError(e.message);await load();throw e}finally{setBusy(false)}}
   const patchStop=async(id,body)=>{try{await request(`/api/dispatch/stops/${id}`,{method:'PATCH',body:JSON.stringify({...body,changedBy:currentUser.name})});await load()}catch(e){setError(e.message)}}
   const patchTrip=async(id,body)=>{try{await request(`/api/dispatch/trips/${id}`,{method:'PATCH',body:JSON.stringify(body)});setMessage(ui("Start Location updated."));await load()}catch(e){setError(e.message);throw e}}
@@ -75,7 +94,8 @@ export default function WeeklyDispatchPage({currentUser}){
     <div className="planner-navigation"><div className="planner-toolbar planner-view-toolbar"><div><button className={displayMode==='dispatch'?'active':''} onClick={()=>setDisplayMode('dispatch')}>{ui("派车")}</button><button className={displayMode==='route'?'active':''} onClick={()=>setDisplayMode('route')}>{ui("Route")}</button></div></div>{data?.days?.length>0&&(displayMode==='dispatch'?<WeekDayTabs days={data.days} selectedDate={activeWeekDate} onSelect={setSelectedWeekDate}/>:<RouteWeekTabs days={data.days} selectedRouteNumber={selectedRouteNumber} onSelect={setSelectedRouteNumber}/>)}</div>
     {message&&<div className="planner-message">✓ {ui(message)}</div>}{error&&<CenteredNotice>{ui(error)}</CenteredNotice>}
     {data&&canEditDispatch&&<DispatchPlanningReview data={data}/>}
-    {!data?<div className="data-loading">{t('planner.loading')}</div>:<div className={displayMode==='route'?'route-week-board':'week-board week-board--single-day'}>{data.days.length===0?<div className="empty-week"><h2>{t('planner.empty')}</h2><p>{t('planner.emptyHelp')}</p></div>:visibleDays.map(day=><DayColumn onCombined={load} days={data.days} canHandover={canManageDispatch(currentUser)} key={day.id} day={day} displayMode={displayMode} selectedRouteNumber={selectedRouteNumber} vehicles={data.vehicles||[]} employees={data.employees||[]} buyers={data.buyers||[]} endLocations={data.endLocations||[]} busy={busy} hasUnsavedChanges={false} patchStop={patchStop} patchTrip={patchTrip} assignStopsToRoute={assignStopsToRoute} assignRoute={assignRoute} reorderRouteCustomer={reorderRouteCustomer} approveSingleRoute={approveSingleRoute} withdrawDayApproval={withdrawDayApproval} assignVehicle={assignVehicle} moveStop={moveStop} decideDefer={decideDefer} canApproveDefer={canApproveDefer} canEditDispatch={canEditDispatch}/>)}</div>}
+    {loadError&&<div className="planner-message" role="alert"><p>{t(loadError.code==='REQUEST_TIMEOUT'?'planner.timeout':'planner.loadFailed')}</p>{loadError.code!=='REQUEST_TIMEOUT'&&<p>{loadError.message}</p>}{data&&<p>{t('planner.stale')}</p>}<button type="button" disabled={loading} onClick={()=>load()}>{t('planner.retry')}</button></div>}
+    {!data?<div className="data-loading">{!loadError&&t('planner.loading')}</div>:<div className={displayMode==='route'?'route-week-board':'week-board week-board--single-day'}>{data.days.length===0?<div className="empty-week"><h2>{t('planner.empty')}</h2><p>{t('planner.emptyHelp')}</p></div>:visibleDays.map(day=><DayColumn onCombined={load} days={data.days} canHandover={canManageDispatch(currentUser)} key={day.id} day={day} displayMode={displayMode} selectedRouteNumber={selectedRouteNumber} vehicles={data.vehicles||[]} employees={data.employees||[]} buyers={data.buyers||[]} endLocations={data.endLocations||[]} busy={busy} hasUnsavedChanges={false} patchStop={patchStop} patchTrip={patchTrip} assignStopsToRoute={assignStopsToRoute} assignRoute={assignRoute} reorderRouteCustomer={reorderRouteCustomer} approveSingleRoute={approveSingleRoute} withdrawDayApproval={withdrawDayApproval} assignVehicle={assignVehicle} moveStop={moveStop} decideDefer={decideDefer} canApproveDefer={canApproveDefer} canEditDispatch={canEditDispatch}/>)}</div>}
   </div>
 }
 

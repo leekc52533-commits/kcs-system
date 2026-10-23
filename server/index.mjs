@@ -1,3 +1,4 @@
+import {trackApiRequest} from './requestTiming.mjs'
 import {currentOccGroups,changeCurrentOccPrice,moveCurrentOccCustomers,previewOccPriceGrouping,groupOccSpecialPrices,renameOccPriceGroup} from './occCurrentPrices.mjs'
 import {changeTomorrowPlan} from './driverPlanService.mjs'
 import {ownerApproveDate} from './ownerDateApprovalService.mjs'
@@ -137,6 +138,7 @@ async function readJson(request, maxBytes = 15_000_000) {
 const server = http.createServer(async (request, response) => {
   const requestId=crypto.randomUUID()
   response.setHeader('X-Request-ID',requestId)
+  trackApiRequest(request,response,requestId)
   try {
     const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`)
     if (request.method === 'OPTIONS') {
