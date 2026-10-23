@@ -998,6 +998,15 @@ CREATE TABLE IF NOT EXISTS dispatch_change_logs (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Executed on every startup for both existing and newly created databases.
+-- Keep names aligned with the production recovery indexes (23-Oct-26).
+CREATE INDEX IF NOT EXISTS idx_dispatch_logs_day_type_entity
+  ON dispatch_change_logs(dispatch_day_id,change_type,entity_id);
+CREATE INDEX IF NOT EXISTS idx_dispatch_logs_type_id
+  ON dispatch_change_logs(change_type,id);
+CREATE INDEX IF NOT EXISTS idx_dispatch_logs_entity_type
+  ON dispatch_change_logs(entity_type,entity_id,change_type);
+
 CREATE TABLE IF NOT EXISTS special_collection_requests (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   request_type TEXT NOT NULL CHECK (request_type IN ('existing','potential_new')),
