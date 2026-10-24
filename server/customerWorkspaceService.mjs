@@ -41,6 +41,20 @@ export function saveCustomerWorkspace(payload,actor={},db=defaultDb){
   if(previous){const saved=JSON.parse(previous.after_json);if(saved.signature!==signature)throw fail('Request ID already used with different data.',409);if(ownsTransaction)db.exec('COMMIT');return saved.result}
   const before=customerWorkspace(payload,actor,db)
   if((payload.branchId||payload.customerId)&&before.revision!==payload.revision)throw fail('Customer data changed. Reload before saving.',409)
+  const keepIds=payload.gpsKeepIds??[]
+  if(!Array.isArray(keepIds)||keepIds.some(id=>!Number.isSafeInteger(id)||id<=0))throw fail('Invalid GPS review selection.')
+  if(keepIds.length){
+   if(!accountCan(actor,'gps_review',db))throw fail('GPS review permission required.',403)
+   if(!before.branch||before.branch.officialLatitude==null||before.branch.officialLongitude==null)throw fail('Official GPS is required.',409)
+   if(payload.gps)throw fail('Cannot keep and replace official GPS in the same save.',409)
+   for(const id of new Set(keepIds)){
+    const g=db.prepare('SELECT * FROM temporary_locations WHERE id=?').get(id)
+    if(!g||g.branch_id!==before.branch.internalId||g.verification_status!=='pending_supervisor')throw fail('GPS review changed. Reload before saving.',409)
+    const reviewer=actor.employeeName||actor.username||`Account ${actor.id}`
+    db.prepare("UPDATE temporary_locations SET verification_status='kept_official',review_decision='keep_official',review_reason=?,reviewed_by_account_id=?,reviewed_by=?,reviewed_at=CURRENT_TIMESTAMP WHERE id=?").run(reason,actor.id||null,reviewer,id)
+    db.prepare("INSERT INTO audit_logs(action,entity_type,entity_id,before_json,after_json) VALUES('temporary_gps_reviewed','branch',?,?,?)").run(String(g.branch_id),JSON.stringify({gpsRequestId:id,status:g.verification_status,officialGps:{latitude:before.branch.officialLatitude,longitude:before.branch.officialLongitude}}),JSON.stringify({gpsRequestId:id,decision:'keep_official',decidedBy:reviewer,reason}))
+   }
+  }
   const scheduleChanged=collectionScheduleChanged(payload.schedule,before.schedule)
   const gpsOnly=Boolean(before.branch&&payload.gps&&!scheduleChanged&&!payload.locationCheck
    &&!workspaceFieldsChanged(payload.customer,before.customer,customerFields)

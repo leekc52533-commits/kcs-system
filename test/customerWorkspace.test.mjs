@@ -101,3 +101,22 @@ test('GPS-only saves preserve approved dispatch and schedules even when the old 
  db.close()
  }
 })
+
+test('staged keep-official review commits with final save and rolls back on invalid schedule',()=>{
+ const db=fixture(),seed=saveCustomerWorkspace(payload(),owner,db)
+ db.exec('PRAGMA foreign_keys=OFF')
+ db.prepare("INSERT INTO temporary_locations(id,branch_id,latitude,longitude,location_source,verification_status) VALUES(256,?,2,111,'device','pending_supervisor')").run(seed.branch.internalId)
+ const fresh=customerWorkspace({branchId:seed.branch.branchId},owner,db)
+ const p={requestId:randomUUID(),branchId:seed.branch.branchId,revision:fresh.revision,customer:{customerName:'Updated'},branch:{branchName:seed.branch.branchName},gpsKeepIds:[256],reason:'Keep correct existing GPS'}
+ assert.throws(()=>saveCustomerWorkspace({...p,reason:''},owner,db),/Reason/)
+ assert.throws(()=>saveCustomerWorkspace({...p,schedule:{frequency:'Once a week',weekdays:[],effectiveDate:kuchingDate()}},owner,db))
+ assert.equal(db.prepare('SELECT verification_status FROM temporary_locations WHERE id=256').get().verification_status,'pending_supervisor')
+ const saved=saveCustomerWorkspace(p,owner,db)
+ assert.equal(saved.pending.length,0)
+ assert.equal(saved.branch.officialLatitude,seed.branch.officialLatitude)
+ const gps=db.prepare('SELECT * FROM temporary_locations WHERE id=256').get()
+ assert.equal(gps.review_reason,p.reason);assert.equal(gps.verification_status,'kept_official')
+ saveCustomerWorkspace(p,owner,db)
+ assert.equal(db.prepare("SELECT count(*) n FROM audit_logs WHERE action='temporary_gps_reviewed'").get().n,1)
+ db.close()
+})
