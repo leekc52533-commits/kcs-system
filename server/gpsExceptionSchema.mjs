@@ -6,4 +6,6 @@ export function ensureGpsExceptionSchema(db){
  reason TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),
  requested_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, reviewed_at TEXT, reviewed_by TEXT, review_reason TEXT);
  CREATE UNIQUE INDEX IF NOT EXISTS gps_arrival_one_pending ON gps_arrival_requests(stop_id) WHERE status='pending';`)
+ const columns=new Set(db.prepare('PRAGMA table_info(gps_arrival_requests)').all().map(r=>r.name))
+ for(const [name,type] of [['correction_required','INTEGER NOT NULL DEFAULT 0'],['reported_latitude','REAL'],['reported_longitude','REAL'],['reported_accuracy','REAL']])if(!columns.has(name))db.exec(`ALTER TABLE gps_arrival_requests ADD COLUMN ${name} ${type}`)
 }

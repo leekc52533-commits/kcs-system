@@ -62,3 +62,34 @@ test('reject preserves stop and reasons; requests blocked outside trial and for 
  assert.equal(db.prepare('SELECT arrived_at FROM dispatch_stops WHERE id=?').get(ids[0]).arrived_at,null)
  assert.throws(()=>approve(db,r.id),{code:'GPS_RELEASE_STALE'})
 })
+
+import {customerWorkspace,saveCustomerWorkspace} from '../server/customerWorkspaceService.mjs'
+import {randomUUID} from 'node:crypto'
+test('correction request requires saved official GPS, rejects standalone approval and releases atomically',t=>{
+ const{db,ids}=setup(t),actor={id:1,employeeId:3,role:'owner_admin',employeeName:'Owner',now}
+ const r=requestGpsRelease(ids[0],{reason:'Incorrect GPS',correctionRequired:true,latitude:1.5,longitude:110.3,accuracy:12},driver,db)
+ assert.throws(()=>approve(db,r.id),{code:'GPS_RELEASE_CORRECTION_REQUIRED'})
+ assert.equal(db.prepare('SELECT arrived_at FROM dispatch_stops WHERE id=?').get(ids[0]).arrived_at,null)
+ const b=customerWorkspace({branchId:'B1'},actor,db)
+ const p={requestId:randomUUID(),branchId:'B1',revision:b.revision,customer:b.customer,branch:b.branch,reason:'Verified correct position',gpsReleaseRequestId:r.id,gps:{latitude:1.5,longitude:110.3,locationSource:'map_selection'}}
+ assert.throws(()=>saveCustomerWorkspace({...p,gps:null},actor,db),/GPS correction/)
+ db.exec('UPDATE dispatches SET driver_id=2 WHERE vehicle_id=1')
+ assert.throws(()=>saveCustomerWorkspace(p,actor,db),{code:'GPS_RELEASE_ACCESS'})
+ assert.equal(db.prepare('SELECT latitude FROM branches WHERE id=1').get().latitude,3.1)
+ db.exec('UPDATE dispatches SET driver_id=1 WHERE vehicle_id=1')
+ saveCustomerWorkspace(p,actor,db)
+ assert.equal(db.prepare('SELECT latitude FROM branches WHERE id=1').get().latitude,1.5)
+ assert.equal(db.prepare('SELECT status FROM gps_arrival_requests WHERE id=?').get(r.id).status,'approved')
+ assert.equal(db.prepare('SELECT status FROM dispatch_stops WHERE id=?').get(ids[0]).status,'active')
+ saveCustomerWorkspace(p,actor,db)
+ assert.equal(db.prepare("SELECT count(*) n FROM dispatch_change_logs WHERE change_type='gps_correction_saved_and_released'").get().n,1)
+})
+
+test('GPS correction remains available after legacy trial while enforcing current service date',t=>{
+ const{db,ids}=setup(t),later=new Date('2026-10-24T02:00:00Z')
+ db.exec("UPDATE dispatch_days SET dispatch_date='2026-10-24' WHERE dispatch_date='2026-10-05';UPDATE dispatches SET dispatch_date='2026-10-24' WHERE dispatch_date='2026-10-05';UPDATE dispatch_stops SET service_date='2026-10-24' WHERE service_date='2026-10-05'")
+ const r=requestGpsRelease(ids[0],{reason:'Wrong customer GPS',correctionRequired:true},{...driver,now:later},db)
+ assert.equal(r.status,'pending')
+ assert.equal(db.prepare('SELECT reported_latitude FROM gps_arrival_requests WHERE id=?').get(r.id).reported_latitude,null)
+ assert.throws(()=>requestGpsRelease(ids[1],{reason:'Wrong GPS',correctionRequired:true},{...driver,now:later},db),{code:'GPS_RELEASE_ORDER'})
+})

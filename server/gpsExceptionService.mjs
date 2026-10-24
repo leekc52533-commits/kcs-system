@@ -9,8 +9,8 @@ const lookup=(db,id)=>db.prepare(`SELECT s.*,t.execution_status,t.completed_at t
  d.driver_id,d.vehicle_id,dd.dispatch_date,dd.status day_status,b.status branch_status
  FROM dispatch_stops s JOIN dispatch_trips t ON t.id=s.dispatch_trip_id JOIN dispatches d ON d.id=t.dispatch_id
  JOIN dispatch_days dd ON dd.id=t.dispatch_day_id JOIN branches b ON b.id=s.branch_id WHERE s.id=?`).get(Number(id))
-function eligible(db,id,employeeId,role,now){
- if(!gpsTrialOpen(now))fail('GPS_RELEASE_EXPIRED')
+function eligible(db,id,employeeId,role,now,correction=false){
+ if(!correction&&!gpsTrialOpen(now))fail('GPS_RELEASE_EXPIRED')
  if(!activeRouteDriver(db,employeeId,role))fail('GPS_RELEASE_ACCESS',403)
  const s=lookup(db,id)
  if(!s||s.driver_id!==Number(employeeId)||s.dispatch_date!==kuchingDate(now))fail('GPS_RELEASE_ACCESS',403)
@@ -25,10 +25,14 @@ function eligible(db,id,employeeId,role,now){
 const audit=(db,s,actor,type,details)=>db.prepare("INSERT INTO dispatch_change_logs(dispatch_day_id,actor,change_type,entity_type,entity_id,after_json,requires_reapproval) VALUES(?,?,?,'dispatch_stop',?,?,0)").run(s.day_id,String(actor),type,String(s.id),JSON.stringify(details))
 export function requestGpsRelease(id,payload,ctx,db=defaultDb){return withImmediateTransaction(db,()=>{
  const reason=String(payload.reason||'').trim();if(!reason||reason.length>1000)fail('GPS_RELEASE_REASON',400)
- const s=eligible(db,id,ctx.employeeId,ctx.role,ctx.now||new Date())
+ const correction=payload.correctionRequired===true
+ const s=eligible(db,id,ctx.employeeId,ctx.role,ctx.now||new Date(),correction)
  const previous=db.prepare("SELECT * FROM gps_arrival_requests WHERE stop_id=? AND status='pending'").get(s.id)
  if(previous){if(previous.employee_id!==Number(ctx.employeeId)||previous.trip_id!==s.dispatch_trip_id||previous.vehicle_id!==s.vehicle_id)fail('GPS_RELEASE_STALE');return{id:previous.id,status:'pending',idempotent:true}}
  const requestId=Number(db.prepare('INSERT INTO gps_arrival_requests(stop_id,service_date,employee_id,employee_role,trip_id,vehicle_id,reason) VALUES(?,?,?,?,?,?,?)').run(s.id,s.dispatch_date,ctx.employeeId,ctx.role,s.dispatch_trip_id,s.vehicle_id,reason).lastInsertRowid)
+ const lat=payload.latitude,lng=payload.longitude,accuracy=payload.accuracy
+ if(lat!=null||lng!=null){if(!Number.isFinite(lat)||!Number.isFinite(lng)||lat < -90||lat>90||lng < -180||lng>180)fail('GPS_RELEASE_COORDINATES',400)}
+ db.prepare('UPDATE gps_arrival_requests SET correction_required=?,reported_latitude=?,reported_longitude=?,reported_accuracy=? WHERE id=?').run(correction?1:0,lat??null,lng??null,Number.isFinite(accuracy)&&accuracy>=0?accuracy:null,requestId)
  audit(db,s,ctx.employeeId,'gps_release_requested',{requestId,reason})
  return{id:requestId,status:'pending'}
 })}
@@ -43,6 +47,7 @@ export function reviewGpsRelease(id,payload,ctx,db=defaultDb){manager(ctx);retur
  const now=ctx.now||new Date(),actor=ctx.employeeName||String(ctx.employeeId)
  let s=lookup(db,r.stop_id)
  if(decision==='approved'){
+  if(r.correction_required)fail('GPS_RELEASE_CORRECTION_REQUIRED')
   s=eligible(db,r.stop_id,r.employee_id,r.employee_role,now)
   if(s.dispatch_trip_id!==r.trip_id||s.vehicle_id!==r.vehicle_id||s.dispatch_date!==r.service_date)fail('GPS_RELEASE_STALE')
   // Explicit supervisor release, not fabricated verified GPS. No coordinates are invented.
@@ -52,4 +57,17 @@ export function reviewGpsRelease(id,payload,ctx,db=defaultDb){manager(ctx);retur
  audit(db,s,actor,'gps_release_'+decision,{requestId:r.id,reason,employeeId:r.employee_id,gpsVerified:false})
  return{ok:true}
 })}
-export function withGpsReleaseState(view,db=defaultDb){return{...view,gpsReleaseAvailable:gpsTrialOpen(),trips:view.trips?.map(trip=>({...trip,stops:trip.stops.map(stop=>({...stop,gpsRelease:db.prepare('SELECT status,reason,review_reason reviewReason FROM gps_arrival_requests WHERE stop_id=? ORDER BY id DESC LIMIT 1').get(stop.id)||null}))}))}}
+export function withGpsReleaseState(view,db=defaultDb){return{...view,gpsReleaseAvailable:true,trips:view.trips?.map(trip=>({...trip,stops:trip.stops.map(stop=>({...stop,gpsRelease:db.prepare('SELECT status,reason,review_reason reviewReason FROM gps_arrival_requests WHERE stop_id=? ORDER BY id DESC LIMIT 1').get(stop.id)||null}))}))}}
+
+// Called only from the atomic customer GPS save; opening the editor never releases a stop.
+export function releaseAfterGpsCorrection(id,branchId,ctx,db=defaultDb){
+ manager(ctx)
+ const r=db.prepare('SELECT * FROM gps_arrival_requests WHERE id=?').get(Number(id))
+ if(!r||r.status!=='pending'||!r.correction_required)fail('GPS_RELEASE_STALE')
+ const s=eligible(db,r.stop_id,r.employee_id,r.employee_role,ctx.now||new Date(),true)
+ if(s.branch_id!==branchId||s.dispatch_trip_id!==r.trip_id||s.vehicle_id!==r.vehicle_id||s.dispatch_date!==r.service_date)fail('GPS_RELEASE_STALE')
+ const now=new Date(ctx.now||Date.now()).toISOString(),actor=ctx.employeeName||ctx.username||String(ctx.id)
+ db.prepare("UPDATE dispatch_stops SET status='active',arrived_at=?,arrived_by_employee_id=? WHERE id=?").run(now,r.employee_id,s.id)
+ db.prepare("UPDATE gps_arrival_requests SET status='approved',reviewed_at=?,reviewed_by=?,review_reason=? WHERE id=?").run(now,actor,ctx.reason,r.id)
+ audit(db,s,actor,'gps_correction_saved_and_released',{requestId:r.id,reason:ctx.reason,employeeId:r.employee_id,gpsVerified:false})
+}

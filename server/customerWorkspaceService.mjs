@@ -1,3 +1,4 @@
+import {releaseAfterGpsCorrection} from './gpsExceptionService.mjs'
 import {newCustomerPricing} from './newCustomerPricing.mjs'
 import {collectionScheduleChanged,workspaceFieldsChanged} from '../shared/customerWorkspaceChanges.js'
 import {canDirectEditGps} from '../shared/gpsAccess.js'
@@ -55,6 +56,7 @@ export function saveCustomerWorkspace(payload,actor={},db=defaultDb){
     db.prepare("INSERT INTO audit_logs(action,entity_type,entity_id,before_json,after_json) VALUES('temporary_gps_reviewed','branch',?,?,?)").run(String(g.branch_id),JSON.stringify({gpsRequestId:id,status:g.verification_status,officialGps:{latitude:before.branch.officialLatitude,longitude:before.branch.officialLongitude}}),JSON.stringify({gpsRequestId:id,decision:'keep_official',decidedBy:reviewer,reason}))
    }
   }
+  if(payload.gpsReleaseRequestId&&(!payload.gps||!canDirectEditGps(actor)))throw fail('GPS correction is required before release.',409)
   const scheduleChanged=collectionScheduleChanged(payload.schedule,before.schedule)
   const gpsOnly=Boolean(before.branch&&payload.gps&&!scheduleChanged&&!payload.locationCheck
    &&!workspaceFieldsChanged(payload.customer,before.customer,customerFields)
@@ -63,6 +65,7 @@ export function saveCustomerWorkspace(payload,actor={},db=defaultDb){
    if(!accountCan(actor,'gps_capture',db))throw fail('GPS capture permission required.',403)
    const changedBy=actor.employeeName||actor.username||`Account ${actor.id}`
    captureBranchGps(before.branch.branchId,{...pick(payload.gps,['latitude','longitude','accuracyM','capturedLatitude','capturedLongitude','capturedAccuracyM','deviceCapturedAt','manuallyAdjusted','adjustmentReason','address','state','street','city','streetNumber','postalCode','reverseGeocodeProvider','locationSource']),remark:reason,capturedBy:changedBy,changedBy,employeeId:actor.employeeId},db,actor)
+   if(payload.gpsReleaseRequestId)releaseAfterGpsCorrection(payload.gpsReleaseRequestId,before.branch.internalId,{...actor,reason},db)
    const result={...customerWorkspace({branchId:before.branch.branchId},actor,db),gpsOnly:true,review:[]}
    db.prepare("INSERT INTO audit_logs(action,entity_type,entity_id,before_json,after_json) VALUES('customer_workspace_saved','branch',?,?,?)").run(key,JSON.stringify({branchId:before.branch.branchId,revision:before.revision}),JSON.stringify({signature,result}))
    if(ownsTransaction)db.exec('COMMIT');return result
@@ -91,6 +94,7 @@ export function saveCustomerWorkspace(payload,actor={},db=defaultDb){
    if(!accountCan(actor,'gps_capture',db))throw fail('GPS capture permission required.',403)
    captureBranchGps(branch.branchId,{...pick(payload.gps,['latitude','longitude','accuracyM','capturedLatitude','capturedLongitude','capturedAccuracyM','deviceCapturedAt','manuallyAdjusted','adjustmentReason','address','state','street','city','streetNumber','postalCode','reverseGeocodeProvider','locationSource']),remark:reason,capturedBy:changedBy,changedBy,employeeId:actor.employeeId},db,actor)
   }
+  if(payload.gpsReleaseRequestId)releaseAfterGpsCorrection(payload.gpsReleaseRequestId,branch.internalId,{...actor,reason},db)
   saveLocationCheck(payload,locationProof,getBranch(branch.branchId,db),actor,db)
   let review=(lifecycleSync?.scheduleSync?.preserved||[]).map(item=>({...item,kind:'lifecycle_protected',branchId:branch.branchId,branchName:branch.branchName}))
   if(scheduleChanged&&payload.schedule&&branch.lifecycleStatus==='ACTIVE'&&!['paused','closed'].includes(customer.status)){
