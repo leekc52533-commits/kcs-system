@@ -83,3 +83,13 @@ test('branch drill-down groups actual branches and excludes unrelated IDs; decis
  assert.deepEqual(r.sections.decisions.map(r=>r.name),['67','66']);assert.ok(r.sections.decisions.every(r=>r.detail.nameType==='route'))
  db.close()
 })
+
+test('orphan special GPS uses temporary customer name and linked GPS exposes public branch code',()=>{
+ const db=fixture()
+ db.exec(`INSERT INTO special_collection_requests(id,request_type,temporary_customer_name,requested_collection_date,created_by,dedupe_key) VALUES(100,'potential_new','Temporary Shop','2026-09-15','Driver','gps-test');
+ INSERT INTO temporary_locations(special_request_id,branch_id,latitude,longitude,location_source,verification_status,captured_at) VALUES(100,NULL,1,110,'device','pending_supervisor','2026-09-14 01:00:00'),(100,1,1,110,'device','pending_supervisor','2026-09-14 01:00:00');`)
+ const gps=dailyReport(db,{id:1,role:'owner_admin'},'2026-09-15').sections.approvals.filter(r=>r.kind==='gps')
+ assert.ok(gps.some(r=>r.name==='Temporary Shop'))
+ assert.ok(gps.some(r=>r.name==='Branch One'&&r.detail.branchCode==='B1'))
+ db.close()
+})

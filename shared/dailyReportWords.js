@@ -17,4 +17,5 @@ Object.assign(rows,{
  decisions:['Decisions today','Keputusan hari ini','当天审批处理'],
  schedule_sync_removed:['Removed from this date during schedule synchronization; review the schedule change history for the specific cause.','Dikeluarkan daripada tarikh ini semasa penyegerakan jadual; semak sejarah perubahan untuk sebab khusus.','排程同步时移出本日；具体原因请核对排程变更记录。'],
 })
+Object.assign(rows,{openGpsReview:['Open customer GPS review','Buka semakan GPS pelanggan','前往客户 GPS 审核']})
 export function reportWord(language,key){return rows[key]?.[language==='zh'?2:language==='ms'?1:0]||key}

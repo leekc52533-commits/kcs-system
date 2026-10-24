@@ -1,3 +1,4 @@
+import {repairGpsRequestLinks} from './gpsRequestLinks.mjs'
 import {enableQtw2704Support} from './externalSupportVehicle.mjs'
 import {ensureOccCurrentPrices,applyDueOccPrices} from './occCurrentPrices.mjs'
 import {ensureCustomerDatePromiseSchema} from './customerDatePromise.mjs'
@@ -457,3 +458,5 @@ export function getSystemStatus() {
 }
 
 db.exec("CREATE TRIGGER IF NOT EXISTS external_support_vehicle_no_delete BEFORE DELETE ON vehicles WHEN OLD.is_external_support=1 BEGIN SELECT RAISE(ABORT,'External support vehicle history cannot be deleted'); END;")
+
+repairGpsRequestLinks(db)

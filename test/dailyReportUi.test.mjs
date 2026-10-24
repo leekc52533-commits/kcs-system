@@ -77,3 +77,20 @@ test('overview hides change counts and branch changes without dropping other met
   assert.ok(document.querySelector('[data-summary-metric="approvals"]'))
  }finally{await act(async()=>root.unmount())}
 })
+
+test('pending GPS customer opens branch review through in-app navigation',async()=>{
+ const root=createRoot(document.getElementById('root'))
+ globalThis.PopStateEvent=window.PopStateEvent
+ globalThis.fetch=async url=>({ok:true,json:async()=>{const d=result(new URL(url,'https://localhost').searchParams.get('date'));d.summary={pendingApprovals:1};d.sections.approvals=[{id:'gps-256',name:'HARI-HARI MTG',kind:'gps',status:'pending',detail:{branchCode:'10495'}}];return d}})
+ try{
+  await act(async()=>root.render(React.createElement(I18nProvider,{language:'en'},React.createElement(Report,{account:{id:1}}))))
+  await act(async()=>click(w('en','open')))
+  await act(async()=>document.querySelector('[data-summary-metric="pendingApprovals"] button').click())
+  await act(async()=>document.querySelector('.daily-report-name').click())
+  const button=[...document.querySelectorAll('button')].find(b=>b.textContent===w('en','openGpsReview'))
+  assert.ok(button)
+  await act(async()=>button.click())
+  const q=new URLSearchParams(window.location.search)
+  assert.equal(q.get('page'),'customers');assert.equal(q.get('tab'),'branches');assert.equal(q.get('branch'),'10495')
+ }finally{await act(async()=>root.unmount());window.history.replaceState({},'','/')}
+})
