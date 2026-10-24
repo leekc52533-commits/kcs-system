@@ -63,3 +63,20 @@ test('approval and affected-branch summary entries open their exact server rows'
  const {reportWord}=await import('../shared/dailyReportWords.js')
  assert.match(reportWord('zh','schedule_sync_removed'),/排程同步/)
 })
+
+test('change summary labels, counts and row whitespace open their own details',async()=>{
+ const root=createRoot(document.getElementById('root'))
+ globalThis.fetch=async url=>({ok:true,json:async()=>{const d=result(new URL(url,'https://localhost').searchParams.get('date'));d.summary={changes:2,changedBranches:1};d.sections.changes=[{id:'a',name:'Audit one',kind:'dispatch_change_logs',status:'changed',detail:{}},{id:'b',name:'Audit two',kind:'dispatch_change_logs',status:'changed',detail:{}}];d.sections.changedBranches=[{id:'1',name:'Branch one',kind:'branch',status:'changed',detail:{}}];return d}})
+ try{
+  await act(async()=>root.render(React.createElement(I18nProvider,{language:'en'},React.createElement(Report,{account:{id:1}}))))
+  await act(async()=>click(w('en','open')))
+  for(const key of ['changes','changedBranches'])for(const target of ['dt button','dd button',null]){
+   const row=document.querySelector(`[data-summary-metric="${key}"]`)
+   await act(async()=>(target?row.querySelector(target):row).click())
+   const dialog=document.querySelector('.daily-report-dialog');assert.ok(dialog)
+   assert.match(dialog.textContent,key==='changes'?/Audit one/:/Branch one/)
+   assert.doesNotMatch(dialog.textContent,key==='changes'?/Branch one/:/Audit two/)
+   await act(async()=>click(w('en','close')))
+  }
+ }finally{await act(async()=>root.unmount())}
+})

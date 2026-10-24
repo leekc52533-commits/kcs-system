@@ -60,3 +60,5 @@
 .daily-report a,.daily-report button,.daily-report a:hover,.daily-report button:hover,.daily-report a:focus,.daily-report button:focus{ text-decoration:none!important }
 
 .daily-report-collapsed{cursor:pointer}.daily-report-collapsed:focus-visible{outline:3px solid #176f60;outline-offset:3px}
+
+.daily-report-summary-entry{cursor:pointer}.daily-report-summary-entry:hover{background:#eaf5f1}.daily-report .daily-report-summary .daily-report-summary-label{border:0;background:transparent;padding:0;min-height:44px;color:inherit;font:inherit;text-align:left;border-radius:0}
