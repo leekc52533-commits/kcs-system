@@ -94,3 +94,18 @@ test('pending GPS customer opens branch review through in-app navigation',async(
   assert.equal(q.get('page'),'customers');assert.equal(q.get('tab'),'branches');assert.equal(q.get('branch'),'10495')
  }finally{await act(async()=>root.unmount());window.history.replaceState({},'','/')}
 })
+
+test('GPS correction opens location confirmation without submitting; explicit submit sends captured coordinates',async()=>{
+ const {GpsReleaseRequest}=await vite.ssrLoadModule('/src/GpsRelease.jsx')
+ const root=createRoot(document.getElementById('root')),posts=[]
+ Object.defineProperty(navigator,'geolocation',{configurable:true,value:{getCurrentPosition:success=>success({coords:{latitude:1.5,longitude:110.3,accuracy:8}})}})
+ globalThis.fetch=async(url,options)=>{posts.push({url,body:JSON.parse(options.body)});return{ok:true,json:async()=>({id:1,status:'pending'})}}
+ try{
+  await act(async()=>root.render(React.createElement(I18nProvider,{language:'en'},React.createElement(GpsReleaseRequest,{stop:{id:42},available:true,onChanged:async()=>{}}))))
+  await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='At customer, GPS is incorrect').click())
+  assert.ok(document.querySelector('[aria-label="Confirm current location"]'));assert.equal(posts.length,0)
+  assert.match(document.body.textContent,/1.5, 110.3/)
+  await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Send location to supervisor').click())
+  assert.equal(posts.length,1);assert.equal(posts[0].body.latitude,1.5);assert.equal(posts[0].body.longitude,110.3);assert.equal(posts[0].body.correctionRequired,true)
+ }finally{await act(async()=>root.unmount());delete navigator.geolocation}
+})
