@@ -62,12 +62,23 @@ export function withGpsReleaseState(view,db=defaultDb){return{...view,gpsRelease
 // Called only from the atomic customer GPS save; opening the editor never releases a stop.
 export function releaseAfterGpsCorrection(id,branchId,ctx,db=defaultDb){
  manager(ctx)
+ return withImmediateTransaction(db,()=>{
  const r=db.prepare('SELECT * FROM gps_arrival_requests WHERE id=?').get(Number(id))
  if(!r||r.status!=='pending'||!r.correction_required)fail('GPS_RELEASE_STALE')
- const s=eligible(db,r.stop_id,r.employee_id,r.employee_role,ctx.now||new Date(),true)
- if(s.branch_id!==branchId||s.dispatch_trip_id!==r.trip_id||s.vehicle_id!==r.vehicle_id||s.dispatch_date!==r.service_date)fail('GPS_RELEASE_STALE')
- const now=new Date(ctx.now||Date.now()).toISOString(),actor=ctx.employeeName||ctx.username||String(ctx.id)
- db.prepare("UPDATE dispatch_stops SET status='active',arrived_at=?,arrived_by_employee_id=? WHERE id=?").run(now,r.employee_id,s.id)
- db.prepare("UPDATE gps_arrival_requests SET status='approved',reviewed_at=?,reviewed_by=?,review_reason=? WHERE id=?").run(now,actor,ctx.reason,r.id)
- audit(db,s,actor,'gps_correction_saved_and_released',{requestId:r.id,reason:ctx.reason,employeeId:r.employee_id,gpsVerified:false})
+ const now=ctx.now||new Date(),today=kuchingDate(now),reason=String(ctx.reason||'').trim()
+ if(!reason)fail('GPS_RELEASE_REASON',400)
+ let s=lookup(db,r.stop_id)
+ if(!s||s.branch_id!==branchId||s.dispatch_date!==r.service_date)fail('GPS_RELEASE_STALE')
+ if(r.service_date>today)fail('GPS_RELEASE_STALE')
+ const historical=r.service_date<today
+ if(!historical){
+  s=eligible(db,r.stop_id,r.employee_id,r.employee_role,now,true)
+  if(s.dispatch_trip_id!==r.trip_id||s.vehicle_id!==r.vehicle_id)fail('GPS_RELEASE_STALE')
+  db.prepare("UPDATE dispatch_stops SET status='active',arrived_at=?,arrived_by_employee_id=? WHERE id=?").run(new Date(now).toISOString(),r.employee_id,s.id)
+ }
+ const actor=ctx.employeeName||ctx.username||String(ctx.id)
+ db.prepare("UPDATE gps_arrival_requests SET status='approved',reviewed_at=?,reviewed_by=?,review_reason=? WHERE id=?").run(new Date(now).toISOString(),actor,reason,r.id)
+ audit(db,s,actor,historical?'gps_correction_saved_without_release':'gps_correction_saved_and_released',{requestId:r.id,reason,employeeId:r.employee_id,gpsVerified:false,released:!historical,serviceDate:r.service_date,processedDate:today})
+ return{requestId:r.id,released:!historical,historical}
+ })
 }

@@ -93,3 +93,32 @@ test('GPS correction remains available after legacy trial while enforcing curren
  assert.equal(db.prepare('SELECT reported_latitude FROM gps_arrival_requests WHERE id=?').get(r.id).reported_latitude,null)
  assert.throws(()=>requestGpsRelease(ids[1],{reason:'Wrong GPS',correctionRequired:true},{...driver,now:later},db),{code:'GPS_RELEASE_ORDER'})
 })
+
+test('past correction saves official GPS and closes pending card without changing any old stop; retry is idempotent',t=>{
+ const{db,ids}=setup(t)
+ const r=requestGpsRelease(ids[0],{reason:'Incorrect GPS',correctionRequired:true,latitude:1.5,longitude:110.3},driver,db)
+ const actor={id:1,employeeId:3,role:'owner_admin',employeeName:'Owner',now:new Date('2026-11-03T12:36:58Z')}
+ // A past assignment or completion must not prevent correcting master GPS.
+ db.exec("UPDATE dispatches SET driver_id=2 WHERE vehicle_id=1;UPDATE dispatch_trips SET execution_status='completed',completed_at='2026-10-05T10:00:00Z'")
+ const stops=db.prepare('SELECT * FROM dispatch_stops ORDER BY id').all(),trips=db.prepare('SELECT * FROM dispatch_trips ORDER BY id').all()
+ const b=customerWorkspace({branchId:'B1'},actor,db),p={requestId:randomUUID(),branchId:'B1',revision:b.revision,reason:'Checked reported location',gpsReleaseRequestId:r.id,gps:{latitude:1.5,longitude:110.3,locationSource:'map_selection'}}
+ saveCustomerWorkspace(p,actor,db)
+ assert.equal(db.prepare('SELECT latitude FROM branches WHERE id=1').get().latitude,1.5)
+ assert.equal(listGpsReleases(actor,db).length,0)
+ assert.deepEqual(db.prepare('SELECT * FROM dispatch_stops ORDER BY id').all(),stops)
+ assert.deepEqual(db.prepare('SELECT * FROM dispatch_trips ORDER BY id').all(),trips)
+ const log=db.prepare("SELECT after_json FROM dispatch_change_logs WHERE change_type='gps_correction_saved_without_release'").get()
+ assert.equal(JSON.parse(log.after_json).released,false)
+ assert.equal(JSON.parse(log.after_json).processedDate,'2026-11-03')
+ saveCustomerWorkspace(p,actor,db)
+ assert.equal(db.prepare("SELECT COUNT(*) n FROM dispatch_change_logs WHERE change_type='gps_correction_saved_without_release'").get().n,1)
+})
+
+test('past correction is scoped to the original branch and rolls back GPS on mismatched request',t=>{
+ const{db,ids}=setup(t),r=requestGpsRelease(ids[0],{reason:'Incorrect GPS',correctionRequired:true},driver,db)
+ const actor={id:1,employeeId:3,role:'owner_admin',employeeName:'Owner',now:new Date('2026-11-03T12:00:00Z')}
+ const b=customerWorkspace({branchId:'B2'},actor,db)
+ assert.throws(()=>saveCustomerWorkspace({requestId:randomUUID(),branchId:'B2',revision:b.revision,reason:'Check',gpsReleaseRequestId:r.id,gps:{latitude:1.5,longitude:110.3}},actor,db),{code:'GPS_RELEASE_STALE'})
+ assert.equal(db.prepare('SELECT latitude FROM branches WHERE id=2').get().latitude,3.1)
+ assert.equal(listGpsReleases(actor,db).length,1)
+})
