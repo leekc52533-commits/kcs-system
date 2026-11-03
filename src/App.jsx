@@ -1,3 +1,4 @@
+import BackgroundExports from './BackgroundExports.jsx'
 import MobileSimulation from './MobileSimulation.jsx'
 import {LeaveApprovals,LeaveRecords,UpcomingLeaveCard} from './LeaveRequests.jsx'
 import {AttendanceApprovals,AttendanceDaily} from './Attendance.jsx'
@@ -73,7 +74,7 @@ function AppContent(){
   else if(account.mustChangePassword||changing)content=<ChangePasswordPage account={account} forced={account.mustChangePassword} onDone={updated=>{setChanging(false);setAccount(updated)}} onCancel={()=>setChanging(false)} onLogout={logout}/>
   else if(['driver','crew'].includes(account.role)||(mobileMode&&['supervisor','operations_admin','owner_admin'].includes(account.role)))content=<MobileApp account={{...account,onExitMobile:mobileMode?()=>setActingMode(false):null}} actingDriver={mobileMode} onLogout={logout} onChangePassword={()=>setChanging(true)}/>
   else content=<DesktopApp account={account} onEnterMobile={()=>setActingMode(true)} onLogout={logout} onChangePassword={()=>setChanging(true)}/>
-  return <I18nProvider language={selectedLanguage} setLanguage={setLanguage}>{content}</I18nProvider>
+  return <I18nProvider language={selectedLanguage} setLanguage={setLanguage}><BackgroundExports key={account?.id||"guest"}>{content}</BackgroundExports></I18nProvider>
 }
 
 function LoadingScreen(){const{t}=useI18n();return <main className="auth-page"><div className="auth-card">{t('app.loading')}</div></main>}

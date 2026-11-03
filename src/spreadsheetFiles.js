@@ -25,9 +25,9 @@ function parseCsv(source){
 }
 
 const csvCell=value=>`"${String(safeCell(value)??'').replace(/"/g,'""')}"`
-export async function downloadSpreadsheet({columns,rows,fileName,label},format='xlsx'){
+export async function downloadSpreadsheet({columns,rows,fileName,label,background=false},format='xlsx'){
   if(format==='csv'){const csv='\uFEFF'+[columns.map(csvCell).join(','),...rows.map(row=>columns.map(column=>csvCell(row[column])).join(','))].join('\r\n');return download(new Blob([csv],{type:'text/csv;charset=utf-8'}),`${fileName}.csv`)}
-  const buffer=await buildWorkbookBuffer({columns,rows,label});download(new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),`${fileName}.xlsx`)
+  const buffer=await buildWorkbookBuffer({columns,rows,label}),blob=new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});if(background)return{blob,fileName:`${fileName}.xlsx`};download(blob,`${fileName}.xlsx`)
 }
 
 export async function buildWorkbookBuffer({columns,rows,label}){const ExcelJS=(await import('exceljs/dist/exceljs.min.js')).default,workbook=new ExcelJS.Workbook();workbook.creator='KCS Dispatch System';workbook.created=new Date();const sheet=workbook.addWorksheet((label||'KCS Data').slice(0,31),{views:[{state:'frozen',ySplit:1,showGridLines:false}]});sheet.columns=columns.map(header=>({header,key:header,width:Math.min(42,Math.max(14,header.length+4))}));for(const source of rows)sheet.addRow(Object.fromEntries(columns.map(column=>[column,safeCell(source[column])])));const header=sheet.getRow(1);header.height=26;header.eachCell(cell=>{cell.font={bold:true,color:{argb:'FFFFFFFF'}};cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF176B5B'}};cell.alignment={vertical:'middle'};cell.border={bottom:{style:'medium',color:{argb:'FF0F4F43'}}}});sheet.autoFilter={from:{row:1,column:1},to:{row:Math.max(1,sheet.rowCount),column:columns.length}};sheet.eachRow((row,index)=>{if(index>1){row.height=21;row.eachCell(cell=>{cell.alignment={vertical:'middle',wrapText:false};cell.border={bottom:{style:'hair',color:{argb:'FFE2E8E6'}}}})}});return formatWorkbook(workbook).xlsx.writeBuffer()}

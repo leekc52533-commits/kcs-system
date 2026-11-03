@@ -1,0 +1,5 @@
+.kcs-background-exports{position:fixed;right:16px;bottom:16px;z-index:1400;width:min(360px,calc(100vw - 32px));max-height:45vh;overflow:auto;pointer-events:none}
+.kcs-background-exports section{pointer-events:auto;background:#fff;color:#173d37;border:1px solid #b9d8d2;border-radius:12px;padding:14px;margin-top:8px;box-shadow:0 4px 18px #0002}
+.kcs-background-exports p{margin:6px 0}.kcs-background-exports small{display:block}
+.kcs-background-exports a{display:block;overflow-wrap:anywhere;margin-top:8px;color:#096b5c;text-decoration:underline}
+.kcs-background-exports button{margin-top:8px;background:white;border:1px solid #b9d8d2;border-radius:6px;padding:5px 12px;color:#173d37}
