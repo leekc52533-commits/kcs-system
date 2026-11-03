@@ -1,3 +1,4 @@
+import {applyV86Migration} from './migrationV86.mjs'
 import {repairGpsRequestLinks} from './gpsRequestLinks.mjs'
 import {enableQtw2704Support} from './externalSupportVehicle.mjs'
 import {ensureOccCurrentPrices,applyDueOccPrices} from './occCurrentPrices.mjs'
@@ -395,6 +396,7 @@ applyV82Migration(db)
 applyV83Migration(db)
 applyV84Migration(db)
 applyV85Migration(db)
+applyV86Migration(db)
 const officialVehicles = [
   ['Lorry 1','QAV3468','available',0,null],
   ['Lorry 2','QAA4293N','active',1,null],

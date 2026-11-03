@@ -1,3 +1,4 @@
+import {routeExists} from './routeCatalog.mjs'
 import {sundaySettings} from './sundayPlanning.mjs'
 import {planningDate} from '../shared/planningDates.js'
 import {existingRouteEvidence} from './routePlanningEvidence.mjs'
@@ -6,24 +7,29 @@ import {addCalendarDays,kuchingDate} from '../shared/kuchingTime.js'
 export const WEEKDAYS=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
 export function branchRouteRows(db,branchId){return db.prepare('SELECT r.* FROM weekly_route_plan_stops r JOIN weekly_route_plans p ON p.id=r.plan_id WHERE p.is_active=1 AND r.branch_id=? ORDER BY r.weekday,r.stop_sequence').all(branchId)}
 
+// Legacy plate column is a grouping key only; a new route has no vehicle until assigned daily.
+function emptyRouteReference(db,branchId,route){
+ if(!routeExists(db,route))throw Error('Invalid Route')
+ const branch=db.prepare('SELECT a.name area,z.name zone FROM branches b LEFT JOIN areas a ON a.id=b.area_id LEFT JOIN zone_groups z ON z.id=a.zone_group_id WHERE b.id=?').get(branchId)
+ return{vehicle_registration_number:`ROUTE-${route}`,zone_name_snapshot:branch?.zone||null,area_name_snapshot:branch?.area||null}
+}
 // Used inside the schedule transaction: schedule and fixed Route membership commit together.
 function syncScheduleRouteRowsInternal(db,branchId,after,routeNumber){
  const plan=db.prepare('SELECT id FROM weekly_route_plans WHERE is_active=1').get();if(!plan)return
  const rows=branchRouteRows(db,branchId),routes=[...new Set(rows.map(r=>r.route_number))]
  const requested=routeNumber==null?null:Number(routeNumber)
  const special=after.sundayRouteNumber
- if(special!=null&&(!Number.isInteger(special)||special<1||special>5))throw Object.assign(new Error('请选择有效的星期日执行路线'),{statusCode:400})
- if(requested!=null&&(!Number.isInteger(requested)||requested<1||requested>5))throw new Error('Invalid Route')
+ if(special!=null&&!routeExists(db,special))throw Object.assign(new Error('请选择有效的星期日执行路线'),{statusCode:400})
+ if(requested!=null&&!routeExists(db,requested))throw new Error('Invalid Route')
  const weekdays=after.weekdays.map(d=>WEEKDAYS.indexOf(d))
  if(weekdays.some(d=>d<0))throw new Error('Invalid weekday')
- if(requested){for(const row of rows){if(row.route_number===requested)continue;const ref=db.prepare('SELECT * FROM weekly_route_plan_stops WHERE plan_id=? AND route_number=? ORDER BY weekday LIMIT 1').get(plan.id,requested);if(!ref)throw Object.assign(new Error('所选 ROUTE 尚无基础路线'),{statusCode:400});const seq=db.prepare('SELECT COALESCE(MAX(stop_sequence),0)+1 n FROM weekly_route_plan_stops WHERE plan_id=? AND weekday=? AND (route_number=? OR vehicle_registration_number=?)').get(plan.id,row.weekday,requested,ref.vehicle_registration_number).n;db.prepare('UPDATE weekly_route_plan_stops SET route_number=?,vehicle_registration_number=?,stop_sequence=? WHERE plan_id=? AND weekday=? AND branch_id=?').run(requested,ref.vehicle_registration_number,seq,plan.id,row.weekday,branchId)}}
+ if(requested){for(const row of rows){if(row.route_number===requested)continue;const ref=db.prepare('SELECT * FROM weekly_route_plan_stops WHERE plan_id=? AND route_number=? ORDER BY weekday LIMIT 1').get(plan.id,requested)||emptyRouteReference(db,branchId,requested);const seq=db.prepare('SELECT COALESCE(MAX(stop_sequence),0)+1 n FROM weekly_route_plan_stops WHERE plan_id=? AND weekday=? AND (route_number=? OR vehicle_registration_number=?)').get(plan.id,row.weekday,requested,ref.vehicle_registration_number).n;db.prepare('UPDATE weekly_route_plan_stops SET route_number=?,vehicle_registration_number=?,stop_sequence=? WHERE plan_id=? AND weekday=? AND branch_id=?').run(requested,ref.vehicle_registration_number,seq,plan.id,row.weekday,branchId)}}
  const missing=weekdays.filter(d=>!rows.some(r=>r.weekday===d))
  if(missing.length&&routes.length>1&&!requested)throw new Error('此客户属于多条 ROUTE，请在派车中指定新增星期的 ROUTE。')
  const route=requested||routes[0]
  if(missing.length&&!route)throw Object.assign(new Error('请选择客户所属 ROUTE，当前没有可沿用的固定路线。'),{statusCode:400})
  for(const weekday of missing){
-  const ref=rows.find(r=>r.route_number===route)||db.prepare('SELECT * FROM weekly_route_plan_stops WHERE plan_id=? AND route_number=? ORDER BY weekday,stop_sequence LIMIT 1').get(plan.id,route)
-  if(!ref)throw new Error('所选 ROUTE 尚无基础路线，请先确认路线资料。')
+  const ref=rows.find(r=>r.route_number===route)||db.prepare('SELECT * FROM weekly_route_plan_stops WHERE plan_id=? AND route_number=? ORDER BY weekday,stop_sequence LIMIT 1').get(plan.id,route)||emptyRouteReference(db,branchId,route)
   const seq=db.prepare('SELECT COALESCE(MAX(stop_sequence),0)+1 n FROM weekly_route_plan_stops WHERE plan_id=? AND weekday=? AND (route_number=? OR vehicle_registration_number=?)').get(plan.id,weekday,route,ref.vehicle_registration_number).n
   db.prepare('INSERT INTO weekly_route_plan_stops(plan_id,weekday,branch_id,vehicle_registration_number,trip_number,stop_sequence,zone_name_snapshot,area_name_snapshot,route_number) VALUES(?,?,?,?,?,?,?,?,?)').run(plan.id,weekday,branchId,ref.vehicle_registration_number,1,seq,ref.zone_name_snapshot,ref.area_name_snapshot,route)
  }

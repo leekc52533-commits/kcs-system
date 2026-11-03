@@ -164,7 +164,7 @@ CREATE TABLE IF NOT EXISTS weekly_route_plan_stops (
   stop_sequence INTEGER NOT NULL CHECK(stop_sequence>0),
   zone_name_snapshot TEXT,
   area_name_snapshot TEXT,
-  route_number INTEGER NOT NULL CHECK(route_number BETWEEN 1 AND 5),
+  route_number INTEGER NOT NULL CHECK(route_number >= 1),
   PRIMARY KEY(plan_id,weekday,branch_id),
   UNIQUE(plan_id,weekday,vehicle_registration_number,trip_number,stop_sequence)
 );
@@ -536,14 +536,14 @@ CREATE TABLE IF NOT EXISTS dispatch_stops (
   zone_group_id_snapshot INTEGER,
   zone_group_name_snapshot TEXT,
   area_name_snapshot TEXT,
-  route_number INTEGER CHECK(route_number BETWEEN 1 AND 5),
+  route_number INTEGER CHECK(route_number >= 1),
   route_stop_sequence INTEGER CHECK(route_stop_sequence>0),
   UNIQUE(dispatch_id, stop_sequence)
 );
 
 CREATE TABLE IF NOT EXISTS daily_route_assignments (
   dispatch_day_id INTEGER NOT NULL REFERENCES dispatch_days(id) ON DELETE CASCADE,
-  route_number INTEGER NOT NULL CHECK(route_number BETWEEN 1 AND 5),
+  route_number INTEGER NOT NULL CHECK(route_number >= 1),
   vehicle_id INTEGER REFERENCES vehicles(id),
   assigned_by TEXT,
   assigned_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -554,7 +554,7 @@ CREATE TABLE IF NOT EXISTS daily_route_assignments (
 
 CREATE TABLE IF NOT EXISTS weekly_route_definitions (
   plan_id INTEGER NOT NULL REFERENCES weekly_route_plans(id) ON DELETE CASCADE,
-  route_number INTEGER NOT NULL CHECK(route_number BETWEEN 1 AND 5),
+  route_number INTEGER NOT NULL CHECK(route_number >= 1),
   display_name TEXT NOT NULL,
   updated_by TEXT,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -563,7 +563,7 @@ CREATE TABLE IF NOT EXISTS weekly_route_definitions (
 
 CREATE TABLE IF NOT EXISTS daily_route_approvals (
   dispatch_day_id INTEGER NOT NULL REFERENCES dispatch_days(id) ON DELETE CASCADE,
-  route_number INTEGER NOT NULL CHECK(route_number BETWEEN 1 AND 5),
+  route_number INTEGER NOT NULL CHECK(route_number >= 1),
   route_signature TEXT NOT NULL,
   actor TEXT NOT NULL,
   reason TEXT,

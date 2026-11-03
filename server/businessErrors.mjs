@@ -1,5 +1,8 @@
 // Explicit public business messages only. Never expose arbitrary exceptions or SQL.
 const rules=[
+ ['ROUTE_NAME_INVALID',400,/^ROUTE_NAME_INVALID$/,()=>({zh:'请输入路线名称，最多60个字符。',en:'Enter a route name of up to 60 characters.',ms:'Masukkan nama laluan sehingga 60 aksara.'})],
+ ['ROUTE_NAME_EXISTS',409,/^ROUTE_NAME_EXISTS$/,()=>({zh:'路线名称已存在，请使用现有路线或填写不同的名称。',en:'This route name already exists. Use that route or enter a different name.',ms:'Nama laluan sudah wujud. Gunakan laluan itu atau masukkan nama lain.'})],
+ ['ROUTE_INVALID',400,/^Select an existing Route$/,()=>({zh:'请选择已建立的路线，刷新页面后重试。',en:'Select an existing route. Refresh and try again.',ms:'Pilih laluan sedia ada. Muat semula dan cuba lagi.'})],
  ['ZONE_GROUP_NAME_EXISTS',409,/^ZONE_GROUP_NAME_EXISTS$/,()=>({zh:'分区名称已存在，请使用现有分区，或填写不同的名称。若列表中找不到，请检查已停用的分区。',en:'This zone name already exists. Use the existing zone or enter a different name. Check inactive zones if it is not listed.',ms:'Nama zon ini sudah wujud. Gunakan zon sedia ada atau masukkan nama lain. Semak zon tidak aktif jika tiada dalam senarai.'})],
  ['ZONE_GROUP_CODE_EXISTS',409,/^ZONE_GROUP_CODE_EXISTS$/,()=>({zh:'分区代码已存在，请填写不同的代码，或留空由系统生成。',en:'This zone code already exists. Enter a different code or leave it empty to generate one.',ms:'Kod zon ini sudah wujud. Masukkan kod lain atau biarkan kosong untuk dijana secara automatik.'})],
  ['ZONE_GROUP_NAME_REQUIRED',400,/^Zone Group Name is required$/,()=>({zh:'请输入分区名称。',en:'Enter a zone name.',ms:'Masukkan nama zon.'})],

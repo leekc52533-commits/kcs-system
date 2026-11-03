@@ -1,3 +1,4 @@
+import {routeNumbers,routeExists} from './routeCatalog.mjs'
 import {readMenu} from './menuLayoutService.mjs'
 import {canManageDispatch} from '../shared/dispatchAccess.js'
 import {withImmediateTransaction} from './branchServiceDateGuard.mjs'
@@ -6,10 +7,10 @@ import {branchCollectionOpen} from './flexibleCollectionPolicy.mjs'
 import {collectExistingCustomer} from './existingCustomerPickupService.mjs'
 const fail=(code,statusCode=409)=>{throw Object.assign(Error(code),{code,statusCode})}
 function manager(ctx){if(!canManageDispatch(ctx))fail('INTAKE_PERMISSION',403)}
-export function collectionAccess(db,ctx){manager(ctx);return {canEdit:readMenu(db,ctx).canEdit,items:[1,2,3,4,5].map(id=>({id,active:1,name:db.prepare('SELECT d.display_name name FROM weekly_route_definitions d JOIN weekly_route_plans p ON p.id=d.plan_id WHERE p.is_active=1 AND d.route_number=?').get(id)?.name||`Route ${id}`,...(db.prepare('SELECT is_open isOpen,revision,changed_at changedAt FROM route_collection_access WHERE route_number=?').get(id)||{isOpen:0,revision:0})}))}}
+export function collectionAccess(db,ctx){manager(ctx);return {canEdit:readMenu(db,ctx).canEdit,items:routeNumbers(db).map(id=>({id,active:1,name:db.prepare('SELECT d.display_name name FROM weekly_route_definitions d JOIN weekly_route_plans p ON p.id=d.plan_id WHERE p.is_active=1 AND d.route_number=?').get(id)?.name||`Route ${id}`,...(db.prepare('SELECT is_open isOpen,revision,changed_at changedAt FROM route_collection_access WHERE route_number=?').get(id)||{isOpen:0,revision:0})}))}}
 export function setCollectionAccess(db,ctx,id,payload){return withImmediateTransaction(db,()=>{
  if(!readMenu(db,ctx).canEdit)fail('MENU_OWNER_ONLY',403)
- if(typeof payload.isOpen!=='boolean'||!Number.isInteger(payload.revision)||![1,2,3,4,5].includes(Number(id)))fail('INVALID_STATUS',400)
+ if(typeof payload.isOpen!=='boolean'||!Number.isInteger(payload.revision)||!routeExists(db,id))fail('INVALID_STATUS',400)
  const x=db.prepare('SELECT * FROM route_collection_access WHERE route_number=?').get(Number(id))
  if((x?.revision||0)!==payload.revision)fail('MENU_STALE')
  db.prepare(`INSERT INTO route_collection_access(route_number,is_open,revision,changed_by) VALUES(?,?,1,?) ON CONFLICT(route_number) DO UPDATE SET is_open=excluded.is_open,revision=revision+1,changed_by=excluded.changed_by,changed_at=CURRENT_TIMESTAMP`).run(Number(id),Number(payload.isOpen),ctx.id)

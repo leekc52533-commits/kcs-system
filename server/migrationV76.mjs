@@ -1,6 +1,6 @@
 export const routeCollectionSchema=`
 CREATE TABLE IF NOT EXISTS route_collection_access(
- route_number INTEGER PRIMARY KEY CHECK(route_number BETWEEN 1 AND 5),
+ route_number INTEGER PRIMARY KEY CHECK(route_number >= 1),
  is_open INTEGER NOT NULL DEFAULT 0 CHECK(is_open IN (0,1)),revision INTEGER NOT NULL DEFAULT 0,
  changed_by INTEGER,changed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

@@ -12,8 +12,8 @@ export function executionRoute(db,branchId,date,fallback){
 export const sundaySchemaSql=`
 CREATE TABLE IF NOT EXISTS branch_sunday_settings (
  branch_id INTEGER PRIMARY KEY REFERENCES branches(id),
- home_route_number INTEGER CHECK(home_route_number BETWEEN 1 AND 5),
- sunday_route_number INTEGER CHECK(sunday_route_number BETWEEN 1 AND 5),
+ home_route_number INTEGER CHECK(home_route_number >= 1),
+ sunday_route_number INTEGER CHECK(sunday_route_number >= 1),
  sunday_confirmed INTEGER NOT NULL DEFAULT 0 CHECK(sunday_confirmed IN(0,1)),
  effective_date TEXT, updated_by TEXT NOT NULL, reason TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

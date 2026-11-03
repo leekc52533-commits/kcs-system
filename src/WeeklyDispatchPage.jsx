@@ -111,7 +111,7 @@ function RouteWeekTabs({days,selectedRouteNumber,onSelect}){
   const ui=useUi()
 
   const routes=days[0]?.routeBoards||[]
-  return <nav className="week-day-tabs route-week-tabs" aria-label={ui("Route 1 至 5")}>{routes.map(route=>{const number=route.routeNumber;return <button type="button" key={number} className={number===selectedRouteNumber?'active':''} aria-pressed={number===selectedRouteNumber} onClick={()=>onSelect(number)}><strong><span data-i18n-raw>{route?.name||ui("Route {0}", {0: number})}</span></strong><small>{ui("查看七天")}</small></button>})}</nav>
+  return <nav className="week-day-tabs route-week-tabs" aria-label={ui("Route")}>{routes.map(route=>{const number=route.routeNumber;return <button type="button" key={number} className={number===selectedRouteNumber?'active':''} aria-pressed={number===selectedRouteNumber} onClick={()=>onSelect(number)}><strong><span data-i18n-raw>{route?.name||ui("Route {0}", {0: number})}</span></strong><small>{ui("查看七天")}</small></button>})}</nav>
 }
 
 function DayColumn({onCombined,days,canHandover,day,displayMode,selectedRouteNumber,vehicles,employees,buyers,endLocations,busy,hasUnsavedChanges,patchStop,patchTrip,assignStopsToRoute,assignRoute,reorderRouteCustomer,approveSingleRoute,withdrawDayApproval,assignVehicle,moveStop,decideDefer,canApproveDefer,canEditDispatch}){

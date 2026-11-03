@@ -1,3 +1,4 @@
+import {routeNumbers,routeExists} from './routeCatalog.mjs'
 import {syncSundayCatchups} from './sundayCatchup.mjs'
 import {customerDatePromise} from './customerDatePromise.mjs'
 import {branchAbsenceHistory} from './branchAbsenceHistory.mjs'
@@ -381,7 +382,7 @@ function dayView(database, day) {
   const definitionRows=database.prepare(`SELECT d.route_number routeNumber,d.display_name displayName FROM weekly_route_definitions d JOIN weekly_route_plans p ON p.id=d.plan_id WHERE p.is_active=1`).all(),definitionByRoute=new Map(definitionRows.map(row=>[row.routeNumber,row.displayName]))
   const approvalRows=database.prepare('SELECT route_number routeNumber,route_signature routeSignature,actor approvedBy,reason approvalReason,approved_at approvedAt FROM daily_route_approvals WHERE dispatch_day_id=?').all(day.id),approvalByRoute=new Map(approvalRows.map(row=>[row.routeNumber,row]))
   const supportRoutes=new Map(database.prepare("SELECT entity_id,after_json FROM dispatch_change_logs WHERE dispatch_day_id=? AND change_type='support_vehicle_added' ORDER BY id").all(day.id).map(r=>[Number(r.entity_id),(JSON.parse(r.after_json).sourceRouteNumbers||[JSON.parse(r.after_json).sourceRouteNumber])]))
-  const routeBoards=[1,2,3,4,5].map(routeNumber=>{const assignment=assignmentByRoute.get(routeNumber)||{},vehicle=vehicles.find(item=>item.id===assignment.vehicleId),routeStops=stops.filter(stop=>stop.routeNumber===routeNumber).sort((a,b)=>(a.routeStopSequence??999999)-(b.routeStopSequence??999999)||a.id-b.id),approval=approvalByRoute.get(routeNumber),approved=Boolean(routeStops.length&&approval&&approval.routeSignature===routeSignature(database,day.id,routeNumber));return{routeNumber,isSupportRoute:supportRoutes.has(routeNumber),supportSourceRoute:supportRoutes.get(routeNumber)?.[0]||null,supportSourceRoutes:supportRoutes.get(routeNumber)||[],name:isSunday(day.dispatch_date)&&database.prepare('SELECT 1 FROM sunday_dispatch_setup WHERE dispatch_day_id=?').get(day.id)&&SUNDAY_GROUPS.find(g=>g.routeNumber===routeNumber)?SUNDAY_GROUPS.find(g=>g.routeNumber===routeNumber).name:definitionByRoute.get(routeNumber)||`Route ${routeNumber}`,vehicleId:assignment.vehicleId??null,vehicle:vehicle?.vehicle??null,registrationNumber:vehicle?.registrationNumber??null,assignedBy:assignment.assignedBy??null,updatedAt:assignment.updatedAt??null,customerCount:routeStops.length,stops:routeStops,driverChecks:[...new Set(routeStops.map(s=>s.tripId))].map(id=>driverPlanSummary(database,id)).filter(Boolean),approvalStatus:routeStops.length?(approved?'approved':approval?'reapproval_required':'pending'):'empty',approvedBy:approved?approval.approvedBy:null,approvedAt:approved?approval.approvedAt:null,approvalReason:approved?approval.approvalReason:null}})
+  const routeBoards=routeNumbers(database).map(routeNumber=>{const assignment=assignmentByRoute.get(routeNumber)||{},vehicle=vehicles.find(item=>item.id===assignment.vehicleId),routeStops=stops.filter(stop=>stop.routeNumber===routeNumber).sort((a,b)=>(a.routeStopSequence??999999)-(b.routeStopSequence??999999)||a.id-b.id),approval=approvalByRoute.get(routeNumber),approved=Boolean(routeStops.length&&approval&&approval.routeSignature===routeSignature(database,day.id,routeNumber));return{routeNumber,isSupportRoute:supportRoutes.has(routeNumber),supportSourceRoute:supportRoutes.get(routeNumber)?.[0]||null,supportSourceRoutes:supportRoutes.get(routeNumber)||[],name:isSunday(day.dispatch_date)&&database.prepare('SELECT 1 FROM sunday_dispatch_setup WHERE dispatch_day_id=?').get(day.id)&&SUNDAY_GROUPS.find(g=>g.routeNumber===routeNumber)?SUNDAY_GROUPS.find(g=>g.routeNumber===routeNumber).name:definitionByRoute.get(routeNumber)||`Route ${routeNumber}`,vehicleId:assignment.vehicleId??null,vehicle:vehicle?.vehicle??null,registrationNumber:vehicle?.registrationNumber??null,assignedBy:assignment.assignedBy??null,updatedAt:assignment.updatedAt??null,customerCount:routeStops.length,stops:routeStops,driverChecks:[...new Set(routeStops.map(s=>s.tripId))].map(id=>driverPlanSummary(database,id)).filter(Boolean),approvalStatus:routeStops.length?(approved?'approved':approval?'reapproval_required':'pending'):'empty',approvedBy:approved?approval.approvedBy:null,approvedAt:approved?approval.approvedAt:null,approvalReason:approved?approval.approvalReason:null}})
   const routeNames=new Map(routeBoards.map(r=>[r.routeNumber,r.name]))
   for(const route of routeBoards)if(route.supportSourceRoutes.length)route.name=[...new Set(route.supportSourceRoutes.map(n=>routeNames.get(n)).filter(Boolean))].join(' + ')||route.name
   const extraUnassignedStops=unassignedStops.filter(stop=>stop.routeNumber==null)
@@ -491,7 +492,7 @@ export function dailyApprovalCheck(date,database=defaultDb){
 export function routeApprovalCheck(date,routeNumber,database=defaultDb){
   const serviceDate=iso(date),route=Number(routeNumber),day=dayByDate(database,serviceDate)
   if(!day)return{ok:false,date:serviceDate,routeNumber:route,issues:[{code:'DAY_NOT_FOUND',message:'Dispatch day not found.'}],warnings:[]}
-  if(!Number.isInteger(route)||route<1||route>5)return{ok:false,date:serviceDate,routeNumber:route,issues:[{code:'ROUTE_INVALID',message:'Route must be between 1 and 5.'}],warnings:[]}
+  if(!routeExists(database,route))return{ok:false,date:serviceDate,routeNumber:route,issues:[{code:'ROUTE_INVALID',message:'Select an existing Route.'}],warnings:[]}
   const rows=database.prepare(`SELECT ds.id stopId,ds.branch_id branchId,ds.status stopStatus,ds.estimated_weight_kg estimatedWeightKg,ds.route_stop_sequence routeSequence,
     ds.source_schedule_id sourceScheduleId,b.jodoo_branch_id branchCode,b.branch_name branchName,b.is_active branchActive,b.status branchStatus,b.latitude,b.longitude,b.time_restriction timeRestriction,
     dt.id tripId,dt.trip_number tripNumber,d.id dispatchId,d.status dispatchStatus,d.vehicle_id vehicleId,v.vehicle_code vehicleCode,v.operational_status vehicleOperationalStatus,v.status vehicleStatus,COALESCE(s.is_active,1) scheduleActive
@@ -557,7 +558,7 @@ export function publishDay(date,{publishedBy='Supervisor',promisedExceptionReaso
 export function reopenRoute(date,routeNumber,{reopenedBy='Supervisor',reason=''}={},database=defaultDb){
   const withdrawalReason=String(reason||'').trim(),route=Number(routeNumber)
   if(!withdrawalReason)throw new Error('Withdrawal reason is required.')
-  if(!Number.isInteger(route)||route<1||route>5)throw new Error('Route must be between 1 and 5')
+  if(!routeExists(database,route))throw new Error('Select an existing Route')
   return withImmediateTransaction(database,()=>{
     const day=dayByDate(database,iso(date));if(!day)throw new Error('Dispatch day not found')
     const approval=database.prepare('SELECT * FROM daily_route_approvals WHERE dispatch_day_id=? AND route_number=?').get(day.id,route)
@@ -642,7 +643,7 @@ export function adjustRouteCustomer(id,payload={},context={},database=defaultDb)
   const fail=(message,statusCode=409)=>{throw Object.assign(new Error(message),{statusCode})}
   if(!canManageDispatch(context))fail('只有主管可以调整路线客户。',403)
   const date=payload.date,route=Number(payload.routeNumber),reason=String(payload.reason||'').trim()
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(date||'')||!Number.isInteger(route)||route<1||route>5||!reason)fail('请选择日期、ROUTE，并填写原因。',400)
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date||'')||!routeExists(database,route)||!reason)fail('请选择日期、ROUTE，并填写原因。',400)
   return withImmediateTransaction(database,()=>{
     const before=draftStopById(database,id);if(!before)fail('找不到收货记录。',404)
     const source=dayByDate(database,before.dispatch_date),targetDay=dayByDate(database,date)
@@ -704,7 +705,7 @@ export function getStartLocationOptions(payload={},database=defaultDb){return st
 
 export function renameRoute(routeNumber,payload={},database=defaultDb){
   const route=Number(routeNumber),name=String(payload.name||'').trim(),changedBy=actor(payload.changedBy)
-  if(!Number.isInteger(route)||route<1||route>5)throw new Error('Route must be between 1 and 5')
+  if(!routeExists(database,route))throw new Error('Select an existing Route')
   if(!name)throw new Error('Route name is required')
   if(name.length>60)throw new Error('Route name must not exceed 60 characters')
   const plan=database.prepare('SELECT id FROM weekly_route_plans WHERE is_active=1 ORDER BY id DESC LIMIT 1').get()
@@ -721,7 +722,7 @@ export function renameRoute(routeNumber,payload={},database=defaultDb){
 
 export function reorderRouteStop(date,routeNumber,payload={},database=defaultDb){
   const serviceDate=iso(date),route=Number(routeNumber),stopId=Number(payload.stopId),direction=payload.direction,changedBy=actor(payload.changedBy)
-  if(!Number.isInteger(route)||route<1||route>5)throw new Error('Route must be between 1 and 5')
+  if(!routeExists(database,route))throw new Error('Select an existing Route')
   if(!Number.isInteger(stopId)||stopId<1)throw new Error('Stop is required')
   if(!['up','down'].includes(direction))throw new Error('Direction must be up or down')
   const day=dayByDate(database,serviceDate)
@@ -753,7 +754,7 @@ export function reorderRouteStop(date,routeNumber,payload={},database=defaultDb)
 export function assignRouteVehicle(date,routeNumber,payload={},database=defaultDb){
   const day=dayByDate(database,iso(date)),route=Number(routeNumber),vehicleId=payload.vehicleId==null?null:Number(payload.vehicleId)
   if(!day)throw new Error('Dispatch day not found')
-  if(!Number.isInteger(route)||route<1||route>5)throw new Error('Route must be between 1 and 5')
+  if(!routeExists(database,route))throw new Error('Select an existing Route')
   const protection=protectedDayReason(database,day);if(protection||!['draft','reapproval_required'].includes(day.status))throw new Error(`Route assignment is protected: ${protection||day.status}`)
   if(vehicleId){
     const vehicle=database.prepare("SELECT id FROM vehicles WHERE id=? AND operational_status IN ('available','active') AND status IN ('available','assigned') AND (is_temporary=0 OR temporary_date=?)").get(vehicleId,day.dispatch_date)
@@ -790,7 +791,7 @@ export function combineDayRoutes(date,payload={},context={},database=defaultDb){
   const fail=code=>{throw Object.assign(new Error(code),{code,statusCode:code==='MULTI_PERMISSION'?403:409})}
   if(!canManageDispatch(context))fail('MULTI_PERMISSION')
   const targetRoute=Number(payload.targetRouteNumber),sources=[...new Set((Array.isArray(payload.sourceRouteNumbers)?payload.sourceRouteNumbers:[]).map(Number))]
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(date||'')||![targetRoute,...sources].every(n=>Number.isInteger(n)&&n>=1&&n<=5)||!sources.length||sources.includes(targetRoute)||!String(payload.reason||'').trim())fail('MULTI_SELECTION')
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date||'')||![targetRoute,...sources].every(n=>routeExists(database,n))||!sources.length||sources.includes(targetRoute)||!String(payload.reason||'').trim())fail('MULTI_SELECTION')
   return withImmediateTransaction(database,()=>{
     const day=dayByDate(database,date)
     if(!day||Number(payload.expectedRevision)!==day.revision)fail('MULTI_STALE')
@@ -900,7 +901,7 @@ export function handoverRoute(date,routeNumber,payload={},context={},database=de
   if(date!==(context.today||iso()))throw fail('只能调整当天；其他日期请使用正常派车安排')
   const reason=String(payload.reason||'').trim(),vehicleId=Number(payload.vehicleId),driverId=Number(payload.driverId),route=Number(routeNumber)
   if(!reason)throw fail('请填写调整原因')
-  if(!Number.isInteger(route)||route<1||route>5)throw fail('Invalid Route')
+  if(!routeExists(database,route))throw fail('Invalid Route')
   return withImmediateTransaction(database,()=>{
     const day=dayByDate(database,date)
     if(!day||Number(payload.expectedRevision)!==day.revision)throw fail('安排已更新，请刷新后再试')
@@ -970,7 +971,7 @@ export function assignAreaStops(date,payload,database=defaultDb){
 export function assignStopsToRoute(date,payload={},database=defaultDb){
   const serviceDate=iso(date),day=dayByDate(database,serviceDate),route=Number(payload.routeNumber)
   if(!day)throw new Error('Dispatch day not found')
-  if(!Number.isInteger(route)||route<1||route>5)throw new Error('Route must be between 1 and 5')
+  if(!routeExists(database,route))throw new Error('Select an existing Route')
   if(!['draft','reapproval_required','approved','in_progress'].includes(day.status))throw new Error(`当天已经是 ${day.status}，不能再分配客户`)
   const protectedRoute=database.prepare(`SELECT d.id,d.status FROM dispatch_stops ds JOIN dispatch_trips dt ON dt.id=ds.dispatch_trip_id JOIN dispatches d ON d.id=dt.dispatch_id
     WHERE dt.dispatch_day_id=? AND ds.route_number=? AND ds.status<>'cancelled' AND d.status IN ('released','in_progress','completed') ORDER BY d.id LIMIT 1`).get(day.id,route)
@@ -1363,16 +1364,16 @@ export function addSupportVehicle(date,sourceRoute,payload={},context={},databas
  if(!canManageDispatch(context))fail('SUPPORT_PERMISSION')
  const source=sourceRoute==null?0:Number(sourceRoute),vehicleId=Number(payload.vehicleId),driverId=Number(payload.driverId),ids=[...new Set((Array.isArray(payload.stopIds)?payload.stopIds:[]).map(Number))],crew=(Array.isArray(payload.assistantIds)?payload.assistantIds:[]).map(Number)
  const extraIds=[...new Set((Array.isArray(payload.branchIds)?payload.branchIds:[]).map(Number))]
- if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||![vehicleId,driverId,...ids,...crew,...extraIds].every(n=>Number.isSafeInteger(n)&&n>0)||(!Number.isInteger(source)||source<0||source>5)||(!ids.length&&!extraIds.length)||crew.length>MAX_ASSIGNED_CREW||new Set([driverId,...crew]).size!==crew.length+1)fail('SUPPORT_SELECTION')
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||![vehicleId,driverId,...ids,...crew,...extraIds].every(n=>Number.isSafeInteger(n)&&n>0)||(source!==0&&!routeExists(database,source))||(!ids.length&&!extraIds.length)||crew.length>MAX_ASSIGNED_CREW||new Set([driverId,...crew]).size!==crew.length+1)fail('SUPPORT_SELECTION')
  return withImmediateTransaction(database,()=>{
   const day=dayByDate(database,date)
   if(!day||Number(payload.expectedRevision)!==day.revision)fail('SUPPORT_STALE')
   if(!['draft','reapproval_required','approved','published','in_progress'].includes(day.status))fail('SUPPORT_PROTECTED')
   const eligibleExtras=new Map(supportCustomerOptions(date,context,database).items.map(b=>[b.id,b]))
   if(extraIds.some(id=>!eligibleExtras.has(id)))fail('SUPPORT_CUSTOMER_STALE')
-  const targetRoute=[1,2,3,4,5].find(n=>n!==source&&!database.prepare("SELECT 1 FROM dispatch_stops s JOIN dispatch_trips t ON t.id=s.dispatch_trip_id WHERE t.dispatch_day_id=? AND s.route_number=? AND s.status<>'cancelled'").get(day.id,n))
+  const targetRoute=routeNumbers(database).find(n=>n!==source&&!database.prepare("SELECT 1 FROM dispatch_stops s JOIN dispatch_trips t ON t.id=s.dispatch_trip_id WHERE t.dispatch_day_id=? AND s.route_number=? AND s.status<>'cancelled'").get(day.id,n))
   if(!targetRoute)fail('SUPPORT_CAPACITY')
-  const rows=database.prepare("SELECT s.*,d.vehicle_id,d.status dispatch_status,t.execution_status,t.completed_at trip_completed_at FROM dispatch_stops s JOIN dispatch_trips t ON t.id=s.dispatch_trip_id JOIN dispatches d ON d.id=s.dispatch_id WHERE t.dispatch_day_id=? AND s.route_number BETWEEN 1 AND 5 AND s.status<>'cancelled' ORDER BY s.route_number,s.route_stop_sequence,s.id").all(day.id),selected=rows.filter(s=>ids.includes(s.id))
+  const rows=database.prepare("SELECT s.*,d.vehicle_id,d.status dispatch_status,t.execution_status,t.completed_at trip_completed_at FROM dispatch_stops s JOIN dispatch_trips t ON t.id=s.dispatch_trip_id JOIN dispatches d ON d.id=s.dispatch_id WHERE t.dispatch_day_id=? AND s.route_number>=1 AND s.status<>'cancelled' ORDER BY s.route_number,s.route_stop_sequence,s.id").all(day.id),selected=rows.filter(s=>ids.includes(s.id))
   const sources=[...new Set(selected.map(s=>s.route_number))]
   if(selected.length!==ids.length||sources.some(n=>selected.filter(s=>s.route_number===n).length>=rows.filter(s=>s.route_number===n).length))fail('SUPPORT_SELECTION')
   for(const s of selected){

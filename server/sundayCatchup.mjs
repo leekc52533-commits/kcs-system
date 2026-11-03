@@ -1,3 +1,4 @@
+import {routeExists} from './routeCatalog.mjs'
 import {addCalendarDays,kuchingDate} from '../shared/kuchingTime.js'
 import {scheduleMatchesDate} from '../shared/scheduleRecurrence.js'
 import {isSunday,executionRoute} from './sundayPlanning.mjs'
@@ -79,7 +80,7 @@ export function syncSundayCatchups(db,date,{create,place,invalidate,today=kuchin
    if(findBranchServiceDateStop(db,row.branchId,date))continue
    if(promised(row.branchId)){warn(row,'promise');continue}
    if(protectedDay){warn(row,'protected');continue}
-   if(!Number.isInteger(row.routeNumber)||row.routeNumber<1||row.routeNumber>5){warn(row,'route');continue}
+   if(!routeExists(db,row.routeNumber)){warn(row,'route');continue}
    const old=db.prepare('SELECT * FROM sunday_catchup_tasks WHERE sunday_date=? AND branch_id=?').get(date,row.branchId)
    // A manually removed or rescheduled Sunday occurrence must never be recreated on refresh.
    const cancelled=db.prepare("SELECT id,superseded_reason FROM dispatch_stops WHERE branch_id=? AND service_date=? AND status='cancelled'").all(row.branchId,date)

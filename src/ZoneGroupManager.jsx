@@ -42,17 +42,33 @@ function ZoneRenameModal({group,name,error,saving,onNameChange,onCancel,onSave})
 }
 
 const routeNameWords={
- zh:{title:'派车路线名称',help:'点击名称修改派车表格显示的路线；区域名称仍在下方管理。',save:'保存',cancel:'取消',loading:'正在读取路线…',failed:'无法读取路线名称。',empty:'请输入路线名称。'},
- en:{title:'Dispatch route names',help:'Click a name to edit the route shown in dispatch. Manage area names below.',save:'Save',cancel:'Cancel',loading:'Loading routes…',failed:'Could not load route names.',empty:'Enter a route name.'},
- ms:{title:'Nama laluan penghantaran',help:'Klik nama untuk mengubah laluan pada jadual penghantaran. Urus nama kawasan di bawah.',save:'Simpan',cancel:'Batal',loading:'Memuatkan laluan…',failed:'Nama laluan tidak dapat dimuatkan.',empty:'Masukkan nama laluan.'}
+ zh:{add:'新增路线',name:'路线名称',created:'路线已新增。请在客户的固定收货安排中选择这条路线和收货星期，再到派车页面安排车辆及人员。',title:'派车路线名称',help:'点击名称修改派车表格显示的路线；区域名称仍在下方管理。',save:'保存',cancel:'取消',loading:'正在读取路线…',failed:'无法读取路线名称。',empty:'请输入路线名称。'},
+ en:{add:'Add route',name:'Route name',created:'Route added. Select it and the collection weekdays in the customer schedule, then assign the vehicle and crew in dispatch.',title:'Dispatch route names',help:'Click a name to edit the route shown in dispatch. Manage area names below.',save:'Save',cancel:'Cancel',loading:'Loading routes…',failed:'Could not load route names.',empty:'Enter a route name.'},
+ ms:{add:'Tambah laluan',name:'Nama laluan',created:'Laluan ditambah. Pilih laluan dan hari kutipan dalam jadual pelanggan, kemudian tetapkan kenderaan dan pekerja dalam jadual penghantaran.',title:'Nama laluan penghantaran',help:'Klik nama untuk mengubah laluan pada jadual penghantaran. Urus nama kawasan di bawah.',save:'Simpan',cancel:'Batal',loading:'Memuatkan laluan…',failed:'Nama laluan tidak dapat dimuatkan.',empty:'Masukkan nama laluan.'}
 }
 
 function RouteNameManager(){
  const {language}=useI18n(),w=routeNameWords[language]||routeNameWords.en
+ const [creating,setCreating]=useState(false),[newName,setNewName]=useState(''),[created,setCreated]=useState(false)
  const [routes,setRoutes]=useState(null),[editing,setEditing]=useState(null),[name,setName]=useState(''),[saving,setSaving]=useState(false),[error,setError]=useState('')
  useEffect(()=>{let active=true;apiRequest('/api/dispatch/routes').then(data=>{if(active)setRoutes(data.routes)}).catch(err=>{if(active)setError(err.message||w.failed)});return()=>{active=false}},[])
  const submit=async event=>{event.preventDefault();const next=name.trim();if(!next){setError(w.empty);return}if(next===routes.find(route=>route.routeNumber===editing)?.name){setEditing(null);return}setSaving(true);setError('');try{const updated=await apiRequest(`/api/dispatch/routes/${editing}`,{method:'PATCH',body:JSON.stringify({name:next})});setRoutes(current=>current.map(route=>route.routeNumber===editing?{...route,name:updated.name}:route));setEditing(null)}catch(err){setError(err.message||w.failed)}finally{setSaving(false)}}
- return <section className="route-name-manager"><h3>{w.title}</h3><p>{w.help}</p>{!routes&&!error&&<p>{w.loading}</p>}{routes&&<div className="route-name-list">{routes.map(route=><div key={route.routeNumber}><span>Route {route.routeNumber}</span>{editing===route.routeNumber?<form onSubmit={submit}><input autoFocus maxLength={60} aria-label={`${w.title} ${route.routeNumber}`} value={name} disabled={saving} onChange={event=>setName(event.target.value)}/><button disabled={saving||!name.trim()}>{w.save}</button><button type="button" disabled={saving} onClick={()=>{setEditing(null);setError('')}}>{w.cancel}</button></form>:<button type="button" className="route-name-edit" data-i18n-raw onClick={()=>{setEditing(route.routeNumber);setName(route.name);setError('')}}>{route.name}</button>}</div>)}</div>}{error&&<CenteredNotice>{error}</CenteredNotice>}</section>
+ const add=async event=>{
+  event.preventDefault();if(saving)return
+  if(!newName.trim()){setError(w.empty);return}
+  setSaving(true);setError('')
+  try{const route=await apiRequest('/api/dispatch/routes',{method:'POST',body:JSON.stringify({name:newName.trim()})});setRoutes(current=>[...(current||[]),route]);setCreating(false);setNewName('');setCreated(true)}catch(err){setError(err.message||w.failed)}finally{setSaving(false)}
+ }
+ return <section className="route-name-manager"><h3>{w.title}</h3>
+ <button type="button" className="primary" disabled={saving||!routes} onClick={()=>{setCreating(true);setCreated(false);setError('')}}>{w.add}</button>
+ {created&&<p role="status">{w.created}</p>}
+ {creating&&<div className="zone-rename-backdrop" onMouseDown={event=>{if(event.target===event.currentTarget&&!saving)setCreating(false)}}>
+ <section className="zone-rename-modal" role="dialog" aria-modal="true" aria-labelledby="new-route-title" onKeyDown={event=>{if(event.key==='Escape'&&!saving){event.stopPropagation();setCreating(false)}}}>
+ <form onSubmit={add} noValidate><header><h3 id="new-route-title">{w.add}</h3><button type="button" aria-label={w.cancel} disabled={saving} onClick={()=>setCreating(false)}>×</button></header>
+ <label>{w.name}<input autoFocus maxLength={60} value={newName} disabled={saving} onChange={event=>setNewName(event.target.value)}/></label>
+ <FormActionBar><button type="button" disabled={saving} onClick={()=>setCreating(false)}>{w.cancel}</button><button type="submit" disabled={saving}>{w.save}</button></FormActionBar>
+ </form></section></div>}
+<p>{w.help}</p>{!routes&&!error&&<p>{w.loading}</p>}{routes&&<div className="route-name-list">{routes.map(route=><div key={route.routeNumber}><span>Route {route.routeNumber}</span>{editing===route.routeNumber?<form onSubmit={submit}><input autoFocus maxLength={60} aria-label={`${w.title} ${route.routeNumber}`} value={name} disabled={saving} onChange={event=>setName(event.target.value)}/><button disabled={saving||!name.trim()}>{w.save}</button><button type="button" disabled={saving} onClick={()=>{setEditing(null);setError('')}}>{w.cancel}</button></form>:<button type="button" className="route-name-edit" data-i18n-raw onClick={()=>{setEditing(route.routeNumber);setName(route.name);setError('')}}>{route.name}</button>}</div>)}</div>}{error&&<CenteredNotice>{error}</CenteredNotice>}</section>
 }
 
 export default function ZoneGroupManager({groups,areas,vehicles,save,currentUser,pageError,onOpenRoute}){

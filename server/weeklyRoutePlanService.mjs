@@ -12,12 +12,12 @@ export function validateWeeklyRoutePlan(plan){
     if(!Array.isArray(raw)||raw.length<7)throw new Error(`Weekly route row ${index+1} is incomplete`)
     const [weekday,plate,trip,sequence,branchCode,zoneName,areaName]=raw
     const normalizedPlate=normalizePlate(plate)
-    if(!ROUTE_NUMBER_BY_LEGACY_PLATE[normalizedPlate]&&!fallbackRoutes.has(normalizedPlate)){const available=[1,2,3,4,5].find(value=>!reservedRoutes.has(value)&&![...fallbackRoutes.values()].includes(value));fallbackRoutes.set(normalizedPlate,available)}
+    if(!ROUTE_NUMBER_BY_LEGACY_PLATE[normalizedPlate]&&!fallbackRoutes.has(normalizedPlate)){let available=1;while(reservedRoutes.has(available)||[...fallbackRoutes.values()].includes(available))available++;fallbackRoutes.set(normalizedPlate,available)}
     const routeNumber=ROUTE_NUMBER_BY_LEGACY_PLATE[normalizedPlate]??fallbackRoutes.get(normalizedPlate)
     const item={weekday:Number(weekday),plate:normalizedPlate,routeNumber,trip:Number(trip),sequence:Number(sequence),branchCode:normalizeBranch(branchCode),zoneName:clean(zoneName),areaName:clean(areaName)}
     if(!Number.isInteger(item.weekday)||item.weekday<0||item.weekday>6)throw new Error(`Invalid weekday at route row ${index+1}`)
     if(!item.plate)throw new Error(`Missing vehicle plate at route row ${index+1}`)
-    if(!Number.isInteger(item.routeNumber)||item.routeNumber<1||item.routeNumber>5)throw new Error(`Weekly route plan must contain no more than five Routes`)
+    if(!Number.isInteger(item.routeNumber)||item.routeNumber<1)throw new Error(`Invalid weekly Route number`)
     if(!Number.isInteger(item.trip)||item.trip<1||item.trip>3)throw new Error(`Invalid Trip at route row ${index+1}`)
     if(!Number.isInteger(item.sequence)||item.sequence<1)throw new Error(`Invalid sequence at route row ${index+1}`)
     if(!item.branchCode)throw new Error(`Missing Branch ID at route row ${index+1}`)
@@ -85,7 +85,7 @@ export function installWeeklyRoutePlan(plan=KCS_WEEKLY_ROUTE_PLAN_V49,{changedBy
     const planId=Number(created.lastInsertRowid),insert=database.prepare('INSERT INTO weekly_route_plan_stops(plan_id,weekday,branch_id,vehicle_registration_number,trip_number,stop_sequence,zone_name_snapshot,area_name_snapshot,route_number) VALUES(?,?,?,?,?,?,?,?,?)')
     for(const item of resolved)insert.run(planId,item.weekday,item.branchId,item.plate,item.trip,item.sequence,item.zoneName,item.areaName,item.routeNumber)
     const insertDefinition=database.prepare('INSERT INTO weekly_route_definitions(plan_id,route_number,display_name,updated_by) VALUES(?,?,?,?)')
-    for(let routeNumber=1;routeNumber<=5;routeNumber+=1)insertDefinition.run(planId,routeNumber,previousNames.get(routeNumber)||`Route ${routeNumber}`,clean(changedBy)||'Owner Admin')
+    for(const routeNumber of [...new Set([1,2,3,4,5,...previousNames.keys(),...resolved.map(item=>item.routeNumber)])].sort((a,b)=>a-b))insertDefinition.run(planId,routeNumber,previousNames.get(routeNumber)||`Route ${routeNumber}`,clean(changedBy)||'Owner Admin')
     database.prepare("INSERT INTO master_change_history(entity_type,entity_id,change_type,new_value,after_json,reason,changed_by) VALUES('weekly_route_plan',?,'INSTALL',?,?,?,?)").run(String(planId),checked.name,JSON.stringify({sourceName:checked.sourceName,entryCount:resolved.length,branchCount:checked.branchCount,vehiclePlates:checked.vehiclePlates}),'Approved Excel route plan',clean(changedBy)||'Owner Admin')
     if(database.prepare('PRAGMA foreign_key_check').get())throw new Error('Foreign-key validation failed after installing route plan')
     database.exec('COMMIT')
