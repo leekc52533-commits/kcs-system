@@ -387,7 +387,7 @@ These requirements were confirmed by KC on 2026-09-09. Carry them forward for la
 
 - KC confirmed 2026-11-03: supervisors may resolve a past-day employee GPS correction request by saving verified official Branch GPS with a reason. Complete the request and remove it from pending approvals without releasing or changing any historical stop/trip. Audit correction-only completion distinctly from same-day release. Same-day requests still require the original current-driver/date/trip/sequence protections; reject future or mismatched-branch requests atomically. Overview/editor copy must distinguish past requests from current tasks.
 
-- KC confirmed 2026-11-03: Sales, Purchases, Expenses and Void Excel downloads use lowercase English basenames `sales bill`, `purchases bill`, `expenses bill`, `void bill` followed by the explicitly selected export date range: `nov-01-03`, same-day `nov-03-03`, cross-month `oct-30-nov-03`. Do not use download time or change workbook contents, filters, sorting, attachments or displayed date formats.
+- KC confirmed 2026-11-03: Sales, Purchases, Expenses and Void Excel downloads use title-case English basenames `Sales Bill`, `Purchases Bill`, `Expenses Bill`, `Void Bill` followed by the explicitly selected export date range: `Nov 01-03`, same-day `Nov 03-03`, cross-month `Oct 30-Nov 03` (KC revised the earlier lowercase/hyphen format). Do not use download time or change workbook contents, filters, sorting, attachments or displayed date formats.
 
 ## 2026-11-03 — All table exports follow the current page layout
 
