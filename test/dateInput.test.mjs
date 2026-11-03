@@ -32,3 +32,35 @@ test('all languages display DMY, send ISO from typing/calendar, preserve invalid
 })
 
 test('new date notation validates and retains historical reference century',()=>{assert.equal(parseDateInput('04-Oct-26'),'2026-10-04');assert.equal(parseDateInput('29-Feb-26'),null);assert.equal(parseDateInput('28-Sep-06','date','1906-09-28'),'1906-09-28')})
+
+test('numeric shortcuts inherit the field year and reject invalid dates and incomplete years',()=>{
+ assert.equal(parseDateInput('31/10','date','2026-11-03'),'2026-10-31')
+ assert.equal(parseDateInput('1/2','date','2024-12-03'),'2024-02-01')
+ assert.equal(parseDateInput('29/2','date','2024-01-01'),'2024-02-29')
+ assert.equal(parseDateInput('29/2','date','2026-01-01'),null)
+ assert.equal(parseDateInput('31/02','date','2026-01-01'),null)
+ assert.equal(parseDateInput('31/10/2'),null)
+ assert.equal(parseDateInput('31/10/26'),'2026-10-31')
+ assert.equal(parseDateInput('31/10/06','date','1906-01-01'),'1906-10-31')
+ assert.equal(parseDateInput('31/10 08:30','datetime-local','2025-11-01T12:00'),'2025-10-31T08:30')
+ assert.equal(parseDateInput('31/10','datetime-local','2025-11-01T12:00'),null)
+})
+test('Enter normalizes without submitting; blur normalizes; invalid drafts and original year survive',async()=>{
+ for(const language of ['zh','en','ms']){
+  const root=createRoot(document.getElementById('root'));let submits=0,keys=0,lastValue
+  function Form(){const[value,setValue]=React.useState('2024-11-03');return React.createElement('form',{onSubmit:e=>{e.preventDefault();submits++},onKeyDown:()=>keys++},React.createElement(DateInput,{type:'date',value,onChange:e=>{lastValue=e.target.value;setValue(lastValue)}}))}
+  try{
+   await act(async()=>root.render(React.createElement(I18nProvider,{language},React.createElement(Form))))
+   const text=document.querySelector('.kcs-date-text')
+   await change(text,'');await change(text,'31/10')
+   const enter=new window.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true})
+   await act(async()=>text.dispatchEvent(enter))
+   assert.equal(enter.defaultPrevented,true);assert.equal(keys,0);assert.equal(submits,0)
+   assert.equal(lastValue,'2024-10-31');assert.equal(text.value,'31-Oct-24')
+   await change(text,'29/02/24');await act(async()=>text.dispatchEvent(new window.FocusEvent('focusout',{bubbles:true})))
+   assert.equal(text.value,'29-Feb-24');assert.equal(lastValue,'2024-02-29')
+   await change(text,'31/02');await act(async()=>text.dispatchEvent(new window.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true})))
+   assert.equal(text.value,'31/02');assert.equal(text.validity.customError,true);assert.equal(submits,0)
+  }finally{await act(async()=>root.unmount())}
+ }
+})
