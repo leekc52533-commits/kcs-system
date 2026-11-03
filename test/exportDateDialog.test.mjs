@@ -50,7 +50,11 @@ test('background export survives page navigation, retains manual download and re
   await act(async()=>resolveFile({blob:new Blob(['workbook']),fileName:'Expenses Bill Oct 01-31.xlsx'}))
   assert.equal(downloads,1)
   assert.equal(document.querySelector('aside a').download,'Expenses Bill Oct 01-31.xlsx')
-  await act(async()=>document.querySelector('aside button').click())
+  await act(async()=>document.querySelector('aside a').dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})))
+  assert.equal(downloads,2)
+  assert.equal(document.querySelector('aside section'),null)
+  assert.deepEqual(revoked,[])
+  await act(async()=>new Promise(resolve=>setTimeout(resolve,1100)))
   assert.deepEqual(revoked,['blob:test-export'])
   await act(async()=>root.unmount())
   await act(async()=>{
