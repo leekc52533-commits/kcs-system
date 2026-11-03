@@ -64,3 +64,32 @@ test('Enter normalizes without submitting; blur normalizes; invalid drafts and o
   }finally{await act(async()=>root.unmount())}
  }
 })
+
+test('date entry selects existing text without changing values; later clicks allow caret editing',async()=>{
+ const root=createRoot(document.getElementById('root'));let changes=0,focuses=0
+ try{
+  await act(async()=>root.render(React.createElement(I18nProvider,{language:'zh'},React.createElement('div',null,
+   React.createElement(DateInput,{type:'date',autoFocus:true,defaultValue:'2026-11-03',onChange:()=>changes++,onFocus:()=>focuses++}),
+   React.createElement(DateInput,{type:'date',defaultValue:'2026-11-04',onChange:()=>changes++})
+  ))))
+  const [start,end]=document.querySelectorAll('.kcs-date-text')
+  assert.equal(document.activeElement,start)
+  assert.equal(start.selectionStart,0);assert.equal(start.selectionEnd,start.value.length)
+  await act(async()=>end.focus())
+  assert.equal(end.selectionStart,0);assert.equal(end.selectionEnd,end.value.length)
+  await act(async()=>{
+   start.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,button:0,clientX:10,clientY:10}))
+   start.focus()
+   start.setSelectionRange(3,3)
+   start.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,button:0,clientX:10,clientY:10}))
+  })
+  assert.equal(start.selectionStart,0);assert.equal(start.selectionEnd,start.value.length)
+  await act(async()=>{
+   start.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,button:0}))
+   start.setSelectionRange(3,3)
+   start.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,button:0}))
+  })
+  assert.equal(start.selectionStart,3);assert.equal(start.selectionEnd,3)
+  assert.equal(changes,0);assert.equal(start.value,'03-Nov-26');assert.equal(end.value,'04-Nov-26');assert.equal(focuses,2)
+ }finally{await act(async()=>root.unmount())}
+})
