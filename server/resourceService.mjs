@@ -208,7 +208,14 @@ export function createZoneGroup(payload,database=defaultDb){
   assertLocationFields(payload,['name'])
   const name=text(payload.name);if(!name)throw new Error('Zone Group Name is required')
   const next=database.prepare('SELECT COALESCE(MAX(id),0)+1 value FROM zone_groups').get().value,code=text(payload.code)||`ZONE-${next}`,sortOrder=Number(payload.sortOrder??database.prepare('SELECT COALESCE(MAX(sort_order),0)+1 value FROM zone_groups').get().value)
-  const result=database.prepare('INSERT INTO zone_groups(code,name,sort_order,is_active) VALUES(?,?,?,1)').run(code,name,sortOrder)
+  let result
+  try {
+    result=database.prepare('INSERT INTO zone_groups(code,name,sort_order,is_active) VALUES(?,?,?,1)').run(code,name,sortOrder)
+  } catch(error) {
+    if(error.message==='UNIQUE constraint failed: zone_groups.name')throw new Error('ZONE_GROUP_NAME_EXISTS')
+    if(error.message==='UNIQUE constraint failed: zone_groups.code')throw new Error('ZONE_GROUP_CODE_EXISTS')
+    throw error
+  }
   const item=zoneRow(database,Number(result.lastInsertRowid));auditZone(database,'zone_created',item.id,null,item,payload.changedBy);return item
 }
 
