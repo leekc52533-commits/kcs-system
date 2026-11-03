@@ -26,7 +26,7 @@ test('Purchase Bill archive filters Bills and keeps multi-item rows under the sa
 
 test('Purchase Bill archive supports an inclusive custom payroll date range',()=>{const{db,root}=fixture();const archive=listPurchaseBillArchive({from:'2026-09-02',to:'2026-09-02'},db);assert.equal(archive.rangeLabel,'2026-09-02_to_2026-09-02');assert.equal(archive.items.length,1);assert.equal(archive.items[0].billNumber,'P20260902-000001');fs.rmSync(root,{recursive:true,force:true})})
 
-test('one Excel workbook uses the requested order, split crew and car columns, compact dates, embedded photo and proof link',async()=>{const{db,root}=fixture(),file=await purchaseBillsWorkbook({from:'2026-09-02',to:'2026-09-03'},db,{uploadsRoot:root}),workbook=new ExcelJS.Workbook();await workbook.xlsx.load(file.buffer);const sheet=workbook.getWorksheet('Purchase Bills'),proofSheet=workbook.getWorksheet('Payment Proofs');assert.deepEqual(sheet.getRow(1).values.slice(1),['Date','PO No.','Time','Payment Method','Customer Name','Branch','Item','Quantity','Price','Item Total','Total','Issued By','Crew','Car','Payment Gambar','Void No.']);assert.equal(sheet.getCell('A2').numFmt,'dd-mmm-yy');assert.equal(sheet.getCell('B2').value,'P20260903-000002');assert.equal(sheet.getCell('K2').value,22);assert.equal(sheet.getCell('L2').value,'BOBOY');assert.equal(sheet.getCell('M2').value,'CREW MEMBER');assert.equal(sheet.getCell('N2').value,'QAA4293N');assert.equal(sheet.rowCount,4);assert.equal(proofSheet.getCell('A2').value,'P20260902-000001');assert.equal(proofSheet.getCell('C2').numFmt,'dd-mmm-yy');assert.equal(proofSheet.getImages().length,1);assert.equal(sheet.getCell('O3').value.text,'View Payment Proof');assert.equal(sheet.getCell('O3').value.hyperlink,"#'Payment Proofs'!A2");assert.equal(file.proofCount,1);fs.rmSync(root,{recursive:true,force:true})})
+test('one Excel workbook uses the requested order, split crew and car columns, compact dates, embedded photo and proof link',async()=>{const{db,root}=fixture(),file=await purchaseBillsWorkbook({from:'2026-09-02',to:'2026-09-03'},db,{uploadsRoot:root}),workbook=new ExcelJS.Workbook();await workbook.xlsx.load(file.buffer);const sheet=workbook.getWorksheet('Purchase Bills'),proofSheet=workbook.getWorksheet('Payment Proofs');assert.deepEqual(sheet.getRow(1).values.slice(1),['Date','PO No.','Time','Payment Method','Customer Name','Branch','Issued By','Crew','Car','Total','Payment Gambar','Status','Item','Quantity','Price','Item Total','Void No.']);assert.equal(sheet.getCell('A2').numFmt,'dd-mmm-yy');assert.equal(sheet.getCell('B2').value,'P20260903-000002');assert.equal(sheet.getCell('J2').value,22);assert.equal(sheet.getCell('G2').value,'BOBOY');assert.equal(sheet.getCell('H2').value,'CREW MEMBER');assert.equal(sheet.getCell('I2').value,'QAA4293N');assert.equal(sheet.rowCount,4);assert.equal(proofSheet.getCell('A2').value,'P20260902-000001');assert.equal(proofSheet.getCell('C2').numFmt,'dd-mmm-yy');assert.equal(proofSheet.getImages().length,1);assert.equal(sheet.getCell('K3').value.text,'View Payment Proof');assert.equal(sheet.getCell('K3').value.hyperlink,"#'Payment Proofs'!A2");assert.equal(file.proofCount,1);fs.rmSync(root,{recursive:true,force:true})})
 
 test('admin UI uses DD-MM-YY, compact triangle filters, separate crew and car columns, and one combined download',()=>{const source=fs.readFileSync(new URL('../src/PurchaseBillsPage.jsx',import.meta.url),'utf8'),css=fs.readFileSync(new URL('../src/PurchaseBillsPage.css',import.meta.url),'utf8');assert.match(source,/ExportDateDialog/);assert.match(source,/displayDate/);assert.match(source,/\['crew','Crew'\]/);assert.match(source,/\['car','Car'\]/);assert.match(source,/<FilterHeader/);assert.match(source,/Download Excel with Payment Proofs/);assert.match(css,/compact-filter select\{[^}]*opacity:0/);assert.doesNotMatch(source,/Download Monthly Excel|Download Payment Proofs ZIP|Print Choice|Whether Printed|Daily Summary|Employee Summary/);assert.doesNotMatch(css,/archive-summary/)})
 
@@ -60,5 +60,20 @@ test('default archive includes records across months; explicit ranges still rest
   assert.equal(all.items.length,2);assert.equal(all.employees.length,2);assert.equal(all.rangeLabel,'all-dates')
   assert.equal(listPurchaseBillArchive({month:'2026-09'},db).items.length,1)
   assert.equal(listPurchaseBillArchive({from:'2025-01-15',to:'2025-01-15'},db).items[0].id,1)
+ }finally{db.close();fs.rmSync(root,{recursive:true,force:true})}
+})
+
+ test('custom table column order keeps purchase values, precise prices and proof hyperlinks attached',async()=>{
+ const {db,root}=fixture()
+ try {
+  const order=['car','totalLabel','proofLabel','billNumber','serviceDateLabel']
+  const file=await purchaseBillsWorkbook({from:'2026-09-02',to:'2026-09-02',order:JSON.stringify(order)},db,{uploadsRoot:root})
+  const book=new ExcelJS.Workbook();await book.xlsx.load(file.buffer);const sheet=book.getWorksheet('Purchase Bills')
+  assert.deepEqual(sheet.getRow(1).values.slice(1,6),['Car','Total','Payment Gambar','PO No.','Date'])
+  assert.equal(sheet.getCell('A2').value,'QAA4293N');assert.equal(sheet.getCell('B2').value,8)
+  assert.equal(sheet.getCell('C2').value.hyperlink,"#'Payment Proofs'!A2")
+  assert.equal(sheet.getCell('E2').numFmt,'dd-mmm-yy')
+  const priceColumn=sheet.getRow(1).values.indexOf('Price');assert.equal(sheet.getCell(2,priceColumn).numFmt,'0.000')
+  assert.equal(book.getWorksheet('Payment Proofs').getImages().length,1)
  }finally{db.close();fs.rmSync(root,{recursive:true,force:true})}
 })

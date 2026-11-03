@@ -1,3 +1,4 @@
+import ExcelJS from 'exceljs'
 import {kuchingDate} from '../shared/kuchingTime.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -33,3 +34,20 @@ test('Expense Records separates Employee and Admin expenses and only Employee ex
 test('Expense without a receipt is rejected before any employee or Admin record is written',()=>{const db=fixture();configureCashFloat(2,{targetFloat:500,lowBalanceThreshold:100,currentBalance:500,serviceDate:'2026-09-03'},office,db);assert.throws(()=>addCashFloatExpense(2,{amount:10,description:'Fuel',vehicleId:1,odometerKm:123,companyName:'Test Merchant',referenceNumber:'F-1',serviceDate:'2026-09-03'},office,db),/Receipt photo is required/);assert.throws(()=>addAdminExpense({amount:10,category:'Fuel',description:'Fuel',vehicleId:1,odometerKm:123,companyName:'Test Merchant',referenceNumber:'F-1',paymentMethod:'Cash',serviceDate:'2026-09-03'},office,db),/Receipt photo is required/);assert.equal(db.prepare("SELECT COUNT(*) count FROM cash_float_transactions WHERE transaction_type='expense'").get().count,0);assert.equal(db.prepare('SELECT COUNT(*) count FROM admin_expense_records').get().count,0);db.close()})
 
 test('office navigation exposes Employee and Admin Expense entry without summary cards',()=>{const app=fs.readFileSync(new URL('../src/App.jsx',import.meta.url),'utf8'),page=fs.readFileSync(new URL('../src/ExpenseRecordsPage.jsx',import.meta.url),'utf8');assert.match(app,/expense-records/);assert.match(app,/ExpenseRecordsPage/);assert.match(page,/Record Expense/);assert.match(page,/Employee Expense/);assert.match(page,/Admin Expense/);assert.match(page,/Payment Method/);assert.match(page,/employeeId:''/);assert.match(page,/Select employee/);assert.match(page,/Not Set Up/);assert.match(page,/Download Excel with Receipts/);assert.match(page,/View receipt/);assert.doesNotMatch(page,/Total Expenses/);for(const item of ['Fuel','Services','Repair','Spare Parts','Road Tax','Puspakom','Insurance','Other'])assert.match(page,new RegExp(`['"]${item}['"]`))})
+
+test('expense export follows saved page columns and retains amounts, totals and receipt photos',async()=>{
+ const db=fixture(),root=receiptRoot()
+ try {
+  addAdminExpense({amount:60,category:'Road Tax',vehicleId:1,odometerKm:123,companyName:'Merchant',referenceNumber:'INV-60',paymentMethod:'Cash',serviceDate:kuchingDate(),proof},office,db,{uploadsRoot:root})
+  const order=['serviceDateLabel','expenseNumber','description','vehiclePlate','amountLabel','receiptLabel']
+  const book=new ExcelJS.Workbook();await book.xlsx.load(await expenseRecordsWorkbook({order:JSON.stringify(order)},db,{uploadsRoot:root}))
+  const sheet=book.getWorksheet('Expense Records')
+  assert.deepEqual(sheet.getRow(1).values.slice(1,7),['Date','Expense No.','Description','Vehicle','Amount','Receipt'])
+  assert.equal(sheet.getCell('D2').value,'QTEST1');assert.equal(sheet.getCell('E2').value,60)
+  assert.equal(sheet.getCell('E3').value,60);assert.equal(sheet.getCell('C3').value,'TOTAL')
+  assert.match(sheet.getCell('E2').numFmt,/0.00/);assert.equal(sheet.getCell('A2').numFmt,'dd-mmm-yy')
+  assert.equal(book.getWorksheet('Receipt Photos').getImages().length,1)
+  const changed=new ExcelJS.Workbook();await changed.xlsx.load(await expenseRecordsWorkbook({order:JSON.stringify(['amountLabel','description',...order])},db,{uploadsRoot:root}))
+  assert.equal(changed.getWorksheet(1).getCell('A1').value,'Amount');assert.equal(changed.getWorksheet(1).getCell('A2').value,60)
+ }finally{db.close();fs.rmSync(root,{recursive:true,force:true})}
+})

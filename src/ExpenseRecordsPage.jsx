@@ -50,7 +50,7 @@ export default function ExpenseRecordsPage({onBack}){
     </div>
     {showColumns&&<ExpenseColumnOrder order={columnOrder} columns={columns.map(([k,l])=>[k,columnLabel(k,l)])} w={w} onSave={setColumnOrder} onClose={()=>setShowColumns(false)}/>}
     {historyItem&&<ExpenseCorrection readOnly item={historyItem} onClose={()=>setHistoryItem(null)}/>}
-    {showExport&&<ExportDateDialog title={ui("Download Excel with Receipts")} initialFrom={filters.from} initialTo={filters.to} onDownload={range=>downloadArchive(`/api/expenses/export.xlsx?${query}`,range)} onClose={()=>setShowExport(false)}/>}
+    {showExport&&<ExportDateDialog title={ui("Download Excel with Receipts")} initialFrom={filters.from} initialTo={filters.to} onDownload={range=>downloadArchive(`/api/expenses/export.xlsx?${query}&order=${encodeURIComponent(JSON.stringify(columnOrder))}`,range)} onClose={()=>setShowExport(false)}/>}
     {message&&<div className="data-success">{message}</div>}{error&&<CenteredNotice>{error}</CenteredNotice>}{loading&&!data&&<div className="data-loading">{ui("Loading Expense Records\u2026")}</div>}
     <div className="archive-table" ref={tableRef}><table className="expense-table"><thead><tr>{orderedColumns.map(([key,label])=>{
  const translated=['expenseTypeLabel','category','paymentMethod','receiptLabel','proofLabel','statusLabel']

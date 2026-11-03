@@ -18,6 +18,7 @@ test('archive includes pending weights, Malaysia date boundaries, filters and id
   assert.deepEqual(listUnloadingArchive({...query,columns:{crew:['']}},db).items.map(r=>r.id),[1])
   assert.deepEqual(listUnloadingArchive({sortKey:'confirmedWeightKg',sortDirection:'desc',columns:{status:['confirmed']}},db).items.map(r=>r.id),[2,3])
   assert.throws(()=>listUnloadingArchive({from:'2026-02-30'},db),{statusCode:400})
+  const conflicting={...query,columns:JSON.stringify({date:['2026-09-13']})};assert.equal(listUnloadingArchive(conflicting,db).items.length,1);const restricted=new ExcelJS.Workbook();await restricted.xlsx.load(await unloadingArchiveWorkbook(conflicting,db));assert.equal(restricted.worksheets[0].rowCount,1)
   const workbook=new ExcelJS.Workbook();await workbook.xlsx.load(await unloadingArchiveWorkbook({...query,language:'zh'},db))
   const sheet=workbook.worksheets[0];assert.equal(sheet.rowCount,3);assert.equal(sheet.getCell('A1').value,'卸货日期');assert.equal(sheet.getCell('D2').value,'CAR2');assert.equal(sheet.getCell('I2').value,null);assert.equal(sheet.getCell('J2').value,'待确认');assert.equal(sheet.getCell('I3').value,2000)
  }finally{db.close()}

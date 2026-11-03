@@ -388,3 +388,13 @@ These requirements were confirmed by KC on 2026-09-09. Carry them forward for la
 - KC confirmed 2026-11-03: supervisors may resolve a past-day employee GPS correction request by saving verified official Branch GPS with a reason. Complete the request and remove it from pending approvals without releasing or changing any historical stop/trip. Audit correction-only completion distinctly from same-day release. Same-day requests still require the original current-driver/date/trip/sequence protections; reject future or mismatched-branch requests atomically. Overview/editor copy must distinguish past requests from current tasks.
 
 - KC confirmed 2026-11-03: Sales, Purchases, Expenses and Void Excel downloads use lowercase English basenames `sales bill`, `purchases bill`, `expenses bill`, `void bill` followed by the explicitly selected export date range: `nov-01-03`, same-day `nov-03-03`, cross-month `oct-30-nov-03`. Do not use download time or change workbook contents, filters, sorting, attachments or displayed date formats.
+
+## 2026-11-03 — All table exports follow the current page layout
+
+KC confirmed this is a permanent, system-wide requirement, including every new page:
+- Use the SAME ordered/visible column model for screen headers, cells and export. Never maintain an independent fixed export order. A saved column rearrangement takes effect on the next download without a code change.
+- Export the corresponding authorized dataset with current filters and record sorting plus the explicitly selected export dates. Do not limit full exports to a displayed pagination page.
+- Pass stable column keys to server-generated workbooks; validate against the server whitelist. Keep values, numeric/date formats, totals and hyperlinks attached to their keys after rearrangement.
+- Exclude action-only controls. Preserve export-only item detail, audit fields and evidence in supplementary columns/sheets after the screen columns; retain embedded proofs and photos. Do not scrape business values from the DOM.
+- Non-tabular printable bills, account statements, import templates, original receipts/photos and sensitive-data transfer formats retain their dedicated formats. This rule does not change their legal/operational content or access restrictions.
+- For browser-generated exports use DataExportButton with the same `order`/`visibleColumns` as the table; for server exports use `orderedExportColumns`/`exportColumnOrder` and the live page order. Column preferences remain browser-local where that is the current storage model.

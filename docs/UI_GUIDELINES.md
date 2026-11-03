@@ -21,3 +21,13 @@ Use Expense Records as the interaction reference for new and updated business ta
 - Preserve existing saved choices when columns are added: keep known keys in their saved order, remove obsolete/duplicate keys safely, and include newly introduced columns.
 - Retain existing search, column filters, sorting, authorization and readable/touch-friendly controls. Rearranging display columns must never reorder business records or change transaction data.
 - Reuse/adapt the ExpenseColumnOrder interaction rather than introducing conflicting table arrangement patterns. Legacy pages adopt this standard as they are updated; do not claim an all-system rollout from this guideline update alone.
+
+## 2026-11-03 — All table exports follow the current page layout
+
+KC confirmed this is a permanent, system-wide requirement, including every new page:
+- Use the SAME ordered/visible column model for screen headers, cells and export. Never maintain an independent fixed export order. A saved column rearrangement takes effect on the next download without a code change.
+- Export the corresponding authorized dataset with current filters and record sorting plus the explicitly selected export dates. Do not limit full exports to a displayed pagination page.
+- Pass stable column keys to server-generated workbooks; validate against the server whitelist. Keep values, numeric/date formats, totals and hyperlinks attached to their keys after rearrangement.
+- Exclude action-only controls. Preserve export-only item detail, audit fields and evidence in supplementary columns/sheets after the screen columns; retain embedded proofs and photos. Do not scrape business values from the DOM.
+- Non-tabular printable bills, account statements, import templates, original receipts/photos and sensitive-data transfer formats retain their dedicated formats. This rule does not change their legal/operational content or access restrictions.
+- For browser-generated exports use DataExportButton with the same `order`/`visibleColumns` as the table; for server exports use `orderedExportColumns`/`exportColumnOrder` and the live page order. Column preferences remain browser-local where that is the current storage model.

@@ -1,3 +1,4 @@
+import {exportColumnOrder} from '../shared/exportColumnOrder.js'
 import {formatWorkbook} from '../shared/workbookPresentation.js'
 import {allocateDocumentNumber,documentNumber,documentNumberMap} from './documentNumbers.mjs'
 import {db as defaultDb} from './database.mjs'
@@ -118,8 +119,9 @@ export function saveSales(payload,context,db=defaultDb,{uploadsRoot}={}){
 export function salesPhoto(id,context,db=defaultDb){assertSalesAccess(context);const p=db.prepare('SELECT storage_key,content_type FROM sales_settlements WHERE id=?').get(Number(id));if(!p)throw fail('SALES_NOT_FOUND');return p}
 export async function exportSales(query,context,db=defaultDb,{uploadsRoot}={}){
  const{items}=listSales(query,context,db),book=new ExcelJS.Workbook(),sheet=book.addWorksheet('Sales')
- sheet.addRow(salesColumns);items.forEach(r=>sheet.addRow(salesColumns.map(k=>['amount','total','weightKg','unitPrice'].includes(k)?Number(r[k]):String(r[k]??''))))
- for(let row=2;row<=sheet.rowCount;row++){sheet.getCell(row,salesColumns.indexOf('weightKg')+1).numFmt='0.00';sheet.getCell(row,salesColumns.indexOf('unitPrice')+1).numFmt='0.000'}
+ const order=exportColumnOrder(query.order,salesColumns)
+ sheet.addRow(order);items.forEach(r=>sheet.addRow(order.map(k=>['amount','total','weightKg','unitPrice'].includes(k)?Number(r[k]):String(r[k]??''))))
+ for(let row=2;row<=sheet.rowCount;row++){sheet.getCell(row,order.indexOf('weightKg')+1).numFmt='0.00';sheet.getCell(row,order.indexOf('unitPrice')+1).numFmt='0.000'}
  sheet.columns.forEach(c=>c.width=24);sheet.getRow(1).font={bold:true};sheet.views=[{state:'frozen',ySplit:1}]
  const proofs=book.addWorksheet('Bill Photos');proofs.getColumn(1).width=100
  let row=1

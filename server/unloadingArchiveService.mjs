@@ -13,7 +13,7 @@ export function listUnloadingArchive(query={},db=defaultDb){
   return {...r,correctedCount:corrections.get(r.id)||0,code:unloadingCode(r),date:`${p.year}-${p.month}-${p.day}`,time:`${p.hour}:${p.minute}:${p.second}`,vehicle:r.registrationNumber||r.vehicleCode,photoUrl:`/api/unloading-weights/${r.id}/photo`}
  }).sort((a,b)=>b.date.localeCompare(a.date)||b.time.localeCompare(a.time)||b.id-a.id)
  let columns={};try{columns=typeof query.columns==='string'?JSON.parse(query.columns):query.columns||{}}catch{}
- const history=['date','code'],allDates=history.some(k=>Array.isArray(columns?.[k]))
+ const history=['date','code'],allDates=query.exportRange!=='1'&&history.some(k=>Array.isArray(columns?.[k]))
  const result=filterUnloading(allDates?rows:rows.filter(r=>(!query.from||r.date>=query.from)&&(!query.to||r.date<=query.to)),query)
  const all=filterUnloading(rows,{})
  for(const k of history)result.filterOptions[k]=all.filterOptions[k]
@@ -23,7 +23,7 @@ export async function unloadingArchiveWorkbook(query={},db=defaultDb){
  const lang=unloadingLabels[query.language]?query.language:'en',book=new ExcelJS.Workbook(),sheet=book.addWorksheet('Unloading')
  const order=unloadingOrder(query.order)
  sheet.columns=order.map(key=>({key,header:unloadingLabels[lang][unloadingColumns.indexOf(key)],width:key==='code'||key==='driverName'||key==='locationName'?30:20}))
- for(const item of listUnloadingArchive(query,db).items)sheet.addRow({...item,status:unloadingStatus[lang][item.status]})
+ for(const item of listUnloadingArchive({...query,exportRange:'1'},db).items)sheet.addRow({...item,status:unloadingStatus[lang][item.status]})
  sheet.views=[{state:'frozen',ySplit:1}];sheet.autoFilter={from:{row:1,column:1},to:{row:1,column:unloadingColumns.length}}
  sheet.getRow(1).eachCell(c=>{c.font={bold:true,color:{argb:'FF536675'}};c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFEAF0F4'}}})
  return formatWorkbook(book).xlsx.writeBuffer()
