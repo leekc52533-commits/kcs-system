@@ -73,7 +73,7 @@ test('date entry selects existing text without changing values; later clicks all
    React.createElement(DateInput,{type:'date',defaultValue:'2026-11-04',onChange:()=>changes++})
   ))))
   const [start,end]=document.querySelectorAll('.kcs-date-text')
-  assert.equal(document.activeElement,start)
+  assert.ok(document.activeElement===start,'focus remains on start')
   assert.equal(start.selectionStart,0);assert.equal(start.selectionEnd,start.value.length)
   await act(async()=>end.focus())
   assert.equal(end.selectionStart,0);assert.equal(end.selectionEnd,end.value.length)
@@ -91,5 +91,28 @@ test('date entry selects existing text without changing values; later clicks all
   })
   assert.equal(start.selectionStart,3);assert.equal(start.selectionEnd,3)
   assert.equal(changes,0);assert.equal(start.value,'03-Nov-26');assert.equal(end.value,'04-Nov-26');assert.equal(focuses,2)
+ }finally{await act(async()=>root.unmount())}
+})
+
+test('export start Enter advances to selected end only for valid dates; end never submits',async()=>{
+ const root=createRoot(document.getElementById('root'));let submits=0
+ try{
+  await act(async()=>root.render(React.createElement(I18nProvider,{language:'en'},React.createElement('form',{'data-export-date-range':true,onSubmit:e=>{e.preventDefault();submits++}},
+   React.createElement(DateInput,{type:'date',required:true,defaultValue:'2026-10-01',max:'2026-10-31'}),
+   React.createElement(DateInput,{type:'date',required:true,defaultValue:'2026-10-31'})
+  ))))
+  const [start,end]=document.querySelectorAll('.kcs-date-text')
+  const enter=async input=>act(async()=>input.dispatchEvent(new window.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true})))
+  await act(async()=>start.focus())
+  for(const value of ['31/02','01/11','']){
+   await change(start,value);await enter(start)
+   assert.ok(document.activeElement===start,'focus remains on start')
+  }
+  await change(start,'2/10');await enter(start)
+  assert.equal(start.value,'02-Oct-26')
+  assert.ok(document.activeElement===end,'focus moves to end')
+  assert.equal(end.selectionStart,0);assert.equal(end.selectionEnd,end.value.length)
+  await enter(end)
+  assert.ok(document.activeElement===end,'focus moves to end');assert.equal(submits,0)
  }finally{await act(async()=>root.unmount())}
 })

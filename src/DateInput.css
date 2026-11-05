@@ -4,3 +4,5 @@
 .kcs-date-picker>svg{width:22px;height:22px;position:absolute;inset:3px;fill:none;stroke:currentColor;stroke-width:1.7;pointer-events:none}
 .kcs-date-field>.kcs-date-picker>input{position:absolute!important;inset:0!important;width:28px!important;height:28px!important;min-width:0!important;min-height:0!important;margin:0!important;padding:0!important;opacity:0;cursor:pointer;box-sizing:border-box}
 .kcs-date-picker:focus-within{outline:2px solid #176f60;outline-offset:2px;border-radius:4px}
+
+.kcs-date-field:has(.kcs-date-error){flex-wrap:wrap}.kcs-date-error{flex-basis:100%;color:#b42318;font-size:12px}
