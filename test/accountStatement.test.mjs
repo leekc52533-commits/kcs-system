@@ -6,7 +6,7 @@ test('statement groups branches, excludes void/cash/out-of-range and preserves i
  const bill={customerName:'Shop',branchName:'B',status:'issued',paymentMethod:'Credit',serviceDate:'2026-10-04',billNumber:'P1',items:[{quantity:260,unitPrice:0.17,itemTotalCents:4420},{quantity:250,unitPrice:0.19,itemTotalCents:4750}]}
  const rows=[bill,{...bill,branchName:'A',billNumber:'P2'},{...bill,status:'voided'},{...bill,paymentMethod:'Cash'},{...bill,serviceDate:'2026-09-01'}],range={from:'2026-10-01',to:'2026-10-04',paymentMethod:'Credit'}
  const book=new ExcelJS.Workbook();await book.xlsx.load(await accountStatementBuffer(rows,range));assert.equal(book.worksheets.length,1)
- const s=book.worksheets[0];assert.equal(s.name,'Shop');assert.deepEqual(s.getRow(3).values.slice(1),['Outlet','Qty']);assert.equal(s.getCell('A4').value,'A');assert.equal(s.getCell('A5').value,'B');assert.equal(s.getCell('B6').value,1020)
+ const s=book.worksheets[0];assert.equal(s.name,'Shop');assert.deepEqual(s.getRow(3).values.slice(1),['Outlet','Qty','Per/Kg','Amount']);assert.equal(s.getCell('A4').value,'A');assert.equal(s.getCell('A5').value,'B');assert.equal(s.getCell('B6').value,1020);assert.equal(s.getCell('C4').value,'0.17/0.19');assert.equal(s.getCell('D4').value,91.7);assert.equal(s.getCell('D6').value,183.4)
  const last=s.getRow(s.rowCount);assert.equal(last.getCell(3).value,1020);assert.equal(last.getCell(5).value,183.4);assert.ok(s.autoFilter)
  s.eachRow({includeEmpty:true},r=>{assert.equal(r.height,15);r.eachCell(c=>assert.equal(c.font.size,10))})
  assert.ok(s.getColumn(2).width<22);assert.ok((s.getColumn(3).width??9)<14)
@@ -26,4 +26,18 @@ test('statement widths grow with branch names, bill numbers and formatted numeri
  for(const column of [1,2,3,4,5])assert.ok(long.getColumn(column).width>short.getColumn(column).width)
  assert.ok(long.getColumn(3).width>='1,234,567,890'.length+3)
  assert.ok(long.getColumn(5).width>='1,234,567,890.12'.length+3)
+})
+
+test('summary deduplicates and sorts actual prices and sums recorded cents for each branch',async()=>{
+ const bill={customerName:'Shop',branchName:'Outlet',status:'issued',paymentMethod:'Credit',serviceDate:'2026-10-04',billNumber:'P1',items:[{quantity:100,unitPrice:0.19,itemTotalCents:1900},{quantity:100,unitPrice:0.18,itemTotalCents:1800},{quantity:100,unitPrice:0.185,itemTotalCents:1850},{quantity:0.5,unitPrice:0.18,itemTotalCents:9}]}
+ const book=new ExcelJS.Workbook();await book.xlsx.load(await accountStatementBuffer([bill,{...bill,branchName:'Single',billNumber:'P2',items:[{quantity:10,unitPrice:0.18,itemTotalCents:180}]}],{from:'2026-10-01',to:'2026-10-31',paymentMethod:'Credit'}))
+ const s=book.worksheets[0]
+ assert.equal(s.getCell('C4').value,'0.18/0.185/0.19')
+ assert.equal(s.getCell('B4').value,300.5)
+ assert.equal(s.getCell('D4').value,55.59)
+ assert.equal(s.getCell('C5').value,'0.18')
+ assert.equal(s.getCell('D5').value,1.8)
+ assert.equal(s.getCell('D6').value,57.39)
+ assert.equal(s.getCell('D6').numFmt,'#,##0.00')
+ assert.ok(s.getColumn(3).width>='0.18/0.185/0.19'.length+3)
 })

@@ -9,12 +9,12 @@ export async function accountStatementBuffer(bills,{from,to,paymentMethod}){
   const bold=new Set([1,2,3]),branches=new Map();let qty=0,cents=0
   s.mergeCells('A1:E1');s.getCell('A1').value=first.customerName||'Statement'
   s.mergeCells('A2:E2');s.getCell('A2').value=`${formatDateDisplay(from)} – ${formatDateDisplay(to)} · ${paymentMethod}`
-  for(const b of rows){const key=b.branchName||b.customerName;if(!branches.has(key))branches.set(key,{bills:[],qty:0,cents:0});const group=branches.get(key);group.bills.push(b);for(const item of b.items){group.qty+=item.quantity;group.cents+=item.itemTotalCents;qty+=item.quantity;cents+=item.itemTotalCents}}
+  for(const b of rows){const key=b.branchName||b.customerName;if(!branches.has(key))branches.set(key,{bills:[],qty:0,cents:0,prices:new Set()});const group=branches.get(key);group.bills.push(b);for(const item of b.items){group.prices.add(item.unitPrice);group.qty+=item.quantity;group.cents+=item.itemTotalCents;qty+=item.quantity;cents+=item.itemTotalCents}}
   const sortedBranches=[...branches].sort(([a],[b])=>a.localeCompare(b,'en',{numeric:true,sensitivity:'base'}))
-  s.addRow(['Outlet','Qty'])
-  for(const [name,group]of sortedBranches){const r=s.addRow([name,group.qty]);r.getCell(2).numFmt='#,##0'}
-  const summary=s.addRow(['Total',qty]);summary.getCell(2).numFmt='#,##0';bold.add(summary.number)
-  s.autoFilter={from:'A3',to:`B${summary.number-1}`}
+  s.addRow(['Outlet','Qty','Per/Kg','Amount'])
+  for(const [name,group]of sortedBranches){const prices=[...group.prices].sort((a,b)=>a-b).map(price=>Number(price).toLocaleString('en-US',{useGrouping:false,minimumFractionDigits:2,maximumFractionDigits:3})).join('/');const r=s.addRow([name,group.qty,prices,group.cents/100]);r.getCell(2).numFmt='#,##0';r.getCell(3).alignment={horizontal:'right'};r.getCell(4).numFmt='#,##0.00'}
+  const summary=s.addRow(['Total',qty,null,cents/100]);summary.getCell(2).numFmt='#,##0';summary.getCell(4).numFmt='#,##0.00';bold.add(summary.number)
+  s.autoFilter={from:'A3',to:`D${summary.number-1}`}
   for(const [name,group]of sortedBranches){
    s.addRow([]);const title=s.addRow([name]);s.mergeCells(title.number,1,title.number,5);bold.add(title.number)
    bold.add(s.addRow(['Date','Purchase No.','Qty','Per/Kg','Amount']).number)
@@ -22,7 +22,7 @@ export async function accountStatementBuffer(bills,{from,to,paymentMethod}){
    const subtotal=s.addRow(['Subtotal','',group.qty,null,group.cents/100]);bold.add(subtotal.number);subtotal.getCell(3).numFmt='#,##0';subtotal.getCell(5).numFmt='#,##0.00'
   }
   const total=s.addRow(['Grand Total','',qty,null,cents/100]);bold.add(total.number);total.getCell(3).numFmt='#,##0';total.getCell(5).numFmt='#,##0.00'
-  s.eachRow({includeEmpty:true},(row,index)=>{row.height=15;row.eachCell({includeEmpty:true},(cell,col)=>{cell.font={name:'Arial',size:10,bold:bold.has(index)};cell.border={top:{style:'thin'},bottom:{style:bold.has(index)?'medium':'thin'},left:{style:'thin'},right:{style:'thin'}};cell.alignment={vertical:'middle',horizontal:cell.isMerged?'center':typeof cell.value==='number'?'right':'left'}})})
+  s.eachRow({includeEmpty:true},(row,index)=>{row.height=15;row.eachCell({includeEmpty:true},(cell,col)=>{cell.font={name:'Arial',size:10,bold:bold.has(index)};cell.border={top:{style:'thin'},bottom:{style:bold.has(index)?'medium':'thin'},left:{style:'thin'},right:{style:'thin'}};cell.alignment={vertical:'middle',horizontal:cell.isMerged?'center':typeof cell.value==='number'||(index>3&&index<summary.number&&col===3)?'right':'left'}})})
   s.columns.forEach(col=>{
    let width=0
    col.eachCell(cell=>{
