@@ -116,3 +116,35 @@ test('export start Enter advances to selected end only for valid dates; end neve
   assert.ok(document.activeElement===end,'focus moves to end');assert.equal(submits,0)
  }finally{await act(async()=>root.unmount())}
 })
+
+
+test('export and backfill fields advance in order, validate and leave final activation to the button',async()=>{
+ const {enterNextField}=await vite.ssrLoadModule('/src/enterNext.js')
+ const root=createRoot(document.getElementById('root'));let submits=0
+ try{
+ await act(async()=>root.render(React.createElement('form',{'data-export-date-range':true,onKeyDown:enterNextField,onSubmit:e=>{e.preventDefault();submits++}},
+ React.createElement(DateInput,{type:'date',required:true,defaultValue:'2026-10-01'}),
+ React.createElement(DateInput,{type:'date',required:true,defaultValue:'2026-10-31'}),
+ React.createElement('select',null,React.createElement('option',null,'Credit')),
+ React.createElement('input',{required:true,type:'number',min:'0.01',step:'0.01'}),
+ React.createElement('button',{type:'button'},'Remove'),
+ React.createElement('textarea',{required:true,defaultValue:'Reason'}),
+ React.createElement('input',{type:'checkbox',required:true,defaultChecked:true}),
+ React.createElement('button',{type:'submit'},'Export')
+ )))
+ const fields=[...document.querySelectorAll('input.kcs-date-text,select,input[type=number],textarea,input[type=checkbox],button[type=submit]')]
+ const enter=async(el,extra={})=>{let e=new window.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true,...extra});await act(async()=>el.dispatchEvent(e));return e}
+ await act(async()=>fields[0].focus());await change(fields[0],'2/10');await enter(fields[0]);assert.equal(fields[0].value,'02-Oct-26');assert.ok(document.activeElement===fields[1],"focus field 1")
+ await enter(fields[1]);assert.ok(document.activeElement===fields[2],"focus field 2")
+ await enter(fields[2],{isComposing:true});assert.ok(document.activeElement===fields[2],"focus field 2")
+ await enter(fields[2]);assert.ok(document.activeElement===fields[3],"focus field 3")
+ await enter(fields[3]);assert.ok(document.activeElement===fields[3],"focus field 3")
+ await change(fields[3],'12.34');await enter(fields[3]);assert.ok(document.activeElement===fields[4],"focus field 4")
+ await enter(fields[4],{shiftKey:true});assert.ok(document.activeElement===fields[4],"focus field 4")
+ await enter(fields[4]);assert.ok(document.activeElement===fields[5],"focus field 5")
+ await enter(fields[5]);assert.ok(document.activeElement===fields[6],"focus field 6");assert.equal(submits,0)
+ assert.equal((await enter(fields[6],{repeat:true})).defaultPrevented,true)
+ assert.equal((await enter(fields[6])).defaultPrevented,false)
+ await act(async()=>fields[6].click());assert.equal(submits,1)
+ }finally{await act(async()=>root.unmount())}
+})

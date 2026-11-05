@@ -1,3 +1,4 @@
+import {enterNextField} from './enterNext.js'
 import {useEffect,useRef,useState} from 'react'
 import {createPortal} from 'react-dom'
 import {useI18n} from './i18n.jsx'
@@ -30,7 +31,7 @@ export default function PurchaseBackfill({onSaved}){
  if(request.current?.serialized!==serialized)request.current={serialized,key:crypto.randomUUID()}
  try{const b=await apiRequest('/api/purchase-bills/backfill',{method:'POST',body:JSON.stringify({...payload,requestKey:request.current.key})});setSuccess(`${m.success}: ${b.billNumber}`);setOpen(false);setItems([blank()]);setReason('');setConfirm(false);request.current=null;onSaved()}catch(e){setError(message(e))}finally{setBusy(false)}
  }
- return <><button type="button" onClick={()=>{setSuccess('');changeCompany('');setDriver('');setVehicle('');setOpen(true)}}>{m.title}</button>{success&&<p role="status">{success}</p>}{open&&createPortal(<div className="kcs-export-overlay"><form className="kcs-export-dialog purchase-backfill" role="dialog" aria-modal="true" aria-label={m.title} onSubmit={submit}><header><h2>{m.title}</h2><button type="button" disabled={busy} onClick={()=>setOpen(false)} aria-label={m.close}>×</button></header><p>{m.note}</p>
+ return <><button type="button" onClick={()=>{setSuccess('');changeCompany('');setDriver('');setVehicle('');setOpen(true)}}>{m.title}</button>{success&&<p role="status">{success}</p>}{open&&createPortal(<div className="kcs-export-overlay"><form data-enter-next onKeyDown={enterNextField} className="kcs-export-dialog purchase-backfill" role="dialog" aria-modal="true" aria-label={m.title} onSubmit={submit}><header><h2>{m.title}</h2><button type="button" disabled={busy} onClick={()=>setOpen(false)} aria-label={m.close}>×</button></header><p>{m.note}</p>
  <fieldset disabled={busy} style={{border:0,padding:0}}>
  <label>{m.date}<DateInput type="date" required autoFocus value={date} max={kuchingDate()} onChange={e=>{setDate(e.target.value);setConfirm(false);setAdditional(false)}}/></label>
  <BackfillCompanyPicker customers={options.customers} value={customerId} onChange={changeCompany} label={m.search} empty={m.noCompanies} disabled={loading||busy}/>

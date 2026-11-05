@@ -1,3 +1,4 @@
+import {focusNextField} from './enterNext.js'
 import {forwardRef,useEffect,useRef,useState} from 'react'
 import {useI18n} from './i18n.jsx'
 import {dateInputDisplay,parseDateInput} from './dateDisplay.js'
@@ -20,10 +21,6 @@ function DateField({forwardedRef,type='date',value,defaultValue,onChange,onBlur,
  input.setCustomValidity(parsed===null?words.invalid:outOfRange?words.range:'')
  if(!parsed||!input.validity.valid){setEnterError(outOfRange?words.range:words.invalid);return}
  setEnterError('')
- const container=input.closest('[data-export-date-range]')
- const fields=container?.querySelectorAll('input.kcs-date-text')
- if(fields?.[0]===input&&fields[1]&&!fields[1].matches(':disabled')){
-  fields[1].focus();fields[1].select()
- }
+ if(!e.repeat)focusNextField(input)
 }}else onKeyDown?.(e)}} onBlur={e=>{entryClick.current=null;const parsed=commit(e);onBlur?.({...e,target:{...e.target,value:parsed||'',name:rest.name},currentTarget:{...e.currentTarget,value:parsed||'',name:rest.name}})}}/>{!rest.readOnly&&<span className="kcs-date-picker"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3v4m12-4v4M4 10h16M5 5h14a1 1 0 0 1 1 1v14H4V6a1 1 0 0 1 1-1Z"/></svg><input ref={picker} type={type} value={iso||''} min={min} max={max} step={step} disabled={rest.disabled} tabIndex={0} aria-label={words.calendar} onClick={e=>{try{e.currentTarget.showPicker?.()}catch{}}} onChange={e=>{setDraft(dateInputDisplay(e.target.value));emit(e.target.value,e)}}/></span>}{enterError&&<span role="alert" className="kcs-date-error">{enterError}</span>}</span>
 }

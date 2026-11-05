@@ -37,6 +37,7 @@ test('single company picker, all branches, existing bill review and separate col
  // Editing company invalidates the branch and both confirmations.
  await click(picker);await change(picker,'Other');assert.equal(branch().value,'');assert.equal(document.querySelector('button[type=submit]').disabled,true)
  await change(picker,'far');await act(async()=>picker.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true})))
+ await act(async()=>new Promise(resolve=>setTimeout(resolve,5)));assert.ok(document.activeElement===branch(),'Enter selects company and focuses branch')
  await change(branch(),'5');await click(document.querySelectorAll('input[type=checkbox]')[0]);await click(document.querySelectorAll('input[type=checkbox]')[1])
  await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})))
  assert.equal(payload.customerId,1);assert.equal(payload.branchId,5);assert.equal(payload.driverId,1);assert.equal(payload.vehicleId,1);assert.deepEqual(payload.reviewedBillIds,[10]);assert.equal(payload.additionalCollectionConfirmed,true);assert.equal(saved,1)
