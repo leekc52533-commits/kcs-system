@@ -1,3 +1,4 @@
+import {appendFarleyStatement} from './farleyStatement.js'
 import {formatDateDisplay} from '../shared/datePresentation.js'
 export async function accountStatementBuffer(bills,{from,to,paymentMethod}){
  const ExcelJS=(await import('exceljs/dist/exceljs.min.js')).default,book=new ExcelJS.Workbook(),groups=new Map(),used=new Set()
@@ -22,6 +23,7 @@ export async function accountStatementBuffer(bills,{from,to,paymentMethod}){
    const subtotal=s.addRow(['Subtotal','',group.qty,null,group.cents/100]);bold.add(subtotal.number);subtotal.getCell(3).numFmt='#,##0';subtotal.getCell(5).numFmt='#,##0.00'
   }
   const total=s.addRow(['Grand Total','',qty,null,cents/100]);bold.add(total.number);total.getCell(3).numFmt='#,##0';total.getCell(5).numFmt='#,##0.00'
+  appendFarleyStatement(s,rows,{from,to},bold)
   s.eachRow({includeEmpty:true},(row,index)=>{row.height=15;row.eachCell({includeEmpty:true},(cell,col)=>{cell.font={name:'Arial',size:10,bold:bold.has(index)};cell.border={top:{style:'thin'},bottom:{style:bold.has(index)?'medium':'thin'},left:{style:'thin'},right:{style:'thin'}};cell.alignment={vertical:'middle',horizontal:cell.isMerged?'center':typeof cell.value==='number'||(index>3&&index<summary.number&&col===3)?'right':'left'}})})
   s.columns.forEach(col=>{
    let width=0
@@ -38,7 +40,7 @@ export async function accountStatementBuffer(bills,{from,to,paymentMethod}){
    })
    col.width=Math.max(5,width)
   })
-  s.pageSetup.printTitlesRow='1:2';s.pageSetup.printArea=`A1:E${total.number}`
+  s.pageSetup.printTitlesRow='1:2';s.pageSetup.printArea=`A1:E${s.rowCount}`
  }
  if(!groups.size)throw Error('EMPTY_STATEMENT')
  return book.xlsx.writeBuffer()

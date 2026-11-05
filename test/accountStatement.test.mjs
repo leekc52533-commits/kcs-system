@@ -41,3 +41,40 @@ test('summary deduplicates and sorts actual prices and sums recorded cents for e
  assert.equal(s.getCell('D6').numFmt,'#,##0.00')
  assert.ok(s.getColumn(3).width>='0.18/0.185/0.19'.length+3)
 })
+
+test('FARLEY appendix combines daily quantities, splits actual amounts and preserves account numbers',async()=>{
+ const make=(branchName,billNumber,serviceDate,quantity,unitPrice,itemTotalCents)=>({customerName:'FARLEY',branchName,status:'issued',paymentMethod:'Credit',serviceDate,billNumber,items:[{quantity,unitPrice,itemTotalCents}]})
+ const rows=[
+  make('FARLEY MALL','P1','2026-10-01',100,0.18,1800),
+  make('FARLEY MALL GF','P2','2026-10-01',200,0.19,3800),
+  make('FARLEY MALL','P3','2026-10-03',10,0.185,185),
+  make('FARLEY SAMARAHAN','P4','2026-10-02',100,0.23,2300),
+  make('FARLEY OTHER','P5','2026-10-01',100,0.50,5000),
+  {...make('FARLEY MALL','P6','2026-10-01',999,1,99900),status:'voided'},
+  {...make('FARLEY MALL','P7','2026-10-01',999,1,99900),paymentMethod:'Cash'},
+  make('FARLEY MALL','P8','2026-09-30',999,1,99900),
+ ]
+ const book=new ExcelJS.Workbook()
+ await book.xlsx.load(await accountStatementBuffer(rows,{from:'2026-10-01',to:'2026-10-04',paymentMethod:'Credit'}))
+ const s=book.worksheets[0]
+ const find=label=>{let found;s.eachRow(row=>{if(row.getCell(1).value===label)found=row});assert.ok(found,label);return found}
+ const title=find('Farley')
+ assert.ok(title.number>find('Grand Total').number)
+ const first=s.getRow(title.number+3)
+ assert.equal(first.getCell(1).value.toISOString().slice(0,10),'2026-10-01')
+ assert.equal(first.getCell(2).value,null)
+ assert.equal(first.getCell(3).value,300)
+ assert.equal(s.getRow(first.number+1).getCell(2).value,100)
+ assert.equal(s.getRow(first.number+3).getCell(3).value,null)
+ assert.equal(find('Total Qty').getCell(3).value,310)
+ assert.equal(find('Amount (RM)').getCell(2).value,23)
+ assert.equal(find('Amount (RM)').getCell(3).value,57.85)
+ assert.equal(find('Per/Kg').getCell(3).value,'0.18/0.185/0.19')
+ assert.equal(find('F.Mall').getCell(2).value,'3225689676')
+ assert.equal(find('F.Bakery').getCell(2).value,'8881048659504')
+ const allocation=['F.Mall','F.Bakery','F.Cafe','F.H/M','F.App','F.In/Ch','F.Shoe']
+ assert.equal(allocation.reduce((sum,label)=>sum+Math.round(find(label).getCell(3).value*100),0),5785)
+ assert.equal(find('Allocation Total').getCell(3).value,57.85)
+ assert.ok(s.pageSetup.printArea.endsWith('E'+s.rowCount))
+ s.eachRow(row=>{assert.equal(row.height,15);row.eachCell(cell=>assert.equal(cell.font.size,10))})
+})
