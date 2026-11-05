@@ -1,3 +1,4 @@
+import ArchivePager from './ArchivePager.jsx'
 import PurchaseBackfill,{BackfillAudit} from './PurchaseBackfill.jsx'
 import AccountStatement from './AccountStatement.jsx'
 import ExportDateDialog,{downloadArchive} from './ExportDateDialog.jsx'
@@ -14,7 +15,7 @@ import TableBottomScroll from './TableBottomScroll.jsx'
 import {FilterHeader} from './ExpenseRecordsPage.jsx'
 import {useUi,useI18n} from './i18n.jsx'
 import './ExpenseRecordsPage.css'
-import {useEffect,useMemo,useRef,useState} from 'react'
+import {memo,useCallback,useEffect,useMemo,useRef,useState} from 'react'
 import {apiRequest} from './apiClient.js'
 import './PurchaseBillsPage.css'
 import './WeightRecords.css'
@@ -28,13 +29,16 @@ const columns=[['serviceDateLabel','Date'],['billNumber','PO No.'],['issuedTime'
 export default function PurchaseBillsPage({onBack}){
   const {language}=useI18n(),ui=useUi(),tableRef=useRef(null),[openFilter,setOpenFilter]=useState(null)
   const[filters,setFilters]=useState({from:'',to:'',search:'',paymentMethod:'',employeeId:''}),[columnFilters,setColumnFilters]=useState({}),[sort,setSort]=useState({}),[data,setData]=useState(null),[error,setError]=useState(''),[loading,setLoading]=useState(false),[open,setOpen]=useState(null),[showWeights,setShowWeights]=useState(false)
-  const [revision,setRevision]=useState(0)
+  const [revision,setRevision]=useState(0),[page,setPage]=useState(0)
+  const toggleBill=useCallback(id=>setOpen(current=>current===id?null:id),[])
   const [showExport,setShowExport]=useState(false),[exportTarget,setExportTarget]=useState(null)
   useEffect(()=>{setExportTarget(document.getElementById('purchase-header-export'))},[])
   const query=useMemo(()=>new URLSearchParams(Object.entries({...filters,columns:JSON.stringify(columnFilters),sortKey:sort.key,sortDirection:sort.direction}).filter(([,value])=>value)).toString(),[filters,columnFilters,sort])
-  useEffect(()=>{let active=true;setLoading(true);setError('');apiRequest(`/api/purchase-bills?${query}`).then(result=>active&&setData(result)).catch(item=>active&&setError(item.message)).finally(()=>active&&setLoading(false));return()=>{active=false}},[query,revision])
+  useEffect(()=>{let active=true;const controller=new AbortController();setLoading(true);setError('');apiRequest(`/api/purchase-bills?${query}`,{signal:controller.signal}).then(result=>active&&setData(result)).catch(item=>active&&setError(item.message)).finally(()=>active&&setLoading(false));return()=>{active=false;controller.abort()}},[query,revision])
+  useEffect(()=>{setPage(0);setOpen(null)},[query])
   const rows=useMemo(()=>(data?.items||[]).map(bill=>({...bill,issuedTime:purchaseTime(bill.issuedAt),serviceDateLabel:displayDate(bill.serviceDate),car:bill.registrationNumber||bill.vehicleCode||'',totalLabel:money(bill.totalCents),proofLabel:bill.proofId?'Uploaded':bill.paymentMethod==='Credit'?'Not required':'Missing',statusLabel:bill.status==='voided'?'Voided':'Issued'})),[data])
-  const displayed=rows
+  const currentPage=Math.min(page,Math.max(0,Math.ceil(rows.length/100)-1))
+  const displayed=rows.slice(currentPage*100,(currentPage+1)*100)
   const setColumn=(key,value)=>setColumnFilters(current=>({...current,[key]:value}))
   if(showWeights)return <UnloadingArchivePage onBack={()=>setShowWeights(false)}/>
   return <div className="page purchase-archive expense-records">
@@ -46,10 +50,11 @@ export default function PurchaseBillsPage({onBack}){
  const translated=['expenseTypeLabel','category','paymentMethod','receiptLabel','proofLabel','statusLabel']
  const options=(data?.filterOptions?.[key]||['',...new Set(rows.map(row=>String(row[key]??'')).filter(Boolean))]).map(value=>({value,label:value===''?ui('Blank'):translated.includes(key)?ui(value):value}))
  return <FilterHeader numeric={isNumericColumn(key)} key={key} label={key==='issuedTime'?({zh:'时间',ms:'Masa',en:'Time'})[language]:key==='customerReceipt'?(customerReceiptLabels[language]||customerReceiptLabels.en).title:ui(label)} value={columnFilters[key]??null} sortDirection={sort.key===key?sort.direction:null} onSort={direction=>setSort(direction?{key,direction}:{})} options={options} open={openFilter===key} onOpen={()=>setOpenFilter(key)} onClose={()=>setOpenFilter(null)} search={['billNumber','customerName','branchName'].includes(key)?filters.search:undefined} onSearch={['billNumber','customerName','branchName'].includes(key)?value=>setFilters(current=>({...current,search:value})):undefined} searchLabel="Search purchase bills" searchPlaceholder="PO No., Customer, Branch or Branch ID" onChange={value=>setColumn(key,value)}/>
- })}</tr></thead><tbody>{displayed.map(bill=><BillRow key={bill.id} bill={bill} expanded={open===bill.id} toggle={()=>setOpen(open===bill.id?null:bill.id)}/>)}</tbody></table>{!loading&&data&&!displayed.length&&<div className="archive-empty">{ui('No Purchase Bills found for this selection.')}</div>}</div>
+ })}</tr></thead><tbody>{displayed.map(bill=><BillRow key={bill.id} bill={bill} expanded={open===bill.id} toggle={toggleBill}/>)}</tbody></table>{!loading&&data&&!displayed.length&&<div className="archive-empty">{ui('No Purchase Bills found for this selection.')}</div>}</div>
+    <ArchivePager page={currentPage} count={rows.length} size={100} onChange={setPage}/>
     <TableBottomScroll scrollRef={tableRef}/>
   </div>
 }
 
 
-function BillRow({bill,expanded,toggle}){const ui=useUi();return <><tr className="bill-row" onClick={toggle}><td>{formatDateDisplay(bill.serviceDateLabel)}</td><td><button className="bill-number" onClick={event=>{event.stopPropagation();toggle()}}>{bill.billNumber}</button></td><td>{bill.issuedTime||'—'}</td><td><span className={`payment ${bill.paymentMethod.toLowerCase()}`}>{ui(bill.paymentMethod)}</span></td><td data-i18n-raw>{bill.customerName}</td><td data-i18n-raw>{bill.branchName}</td><td data-i18n-raw>{bill.issuedBy}</td><td>{bill.crew||'—'}</td><td data-i18n-raw>{bill.car}</td><td data-numeric>{bill.totalLabel}</td><td>{bill.proofId?<ProofViewer url={`/api/purchase-bills/proofs/${bill.proofId}`}>{ui('View proof')}</ProofViewer>:bill.paymentMethod==='Credit'?'—' :ui('Missing')}</td><td><CustomerReceipt bill={bill}/></td><td>{bill.status==='voided'?<span className="voided">{ui('Voided')}</span>:<span className="issued">{ui('Issued')}</span>}</td></tr>{expanded&&<tr className="bill-detail"><td colSpan="13"><div><b>{ui('Bill Items')}</b><table><thead><tr><th>{ui('Item')}</th><th data-numeric>{ui('Quantity')}</th><th>{ui('Unit')}</th><th data-numeric>{ui('Price')}</th><th data-numeric>{ui('Item Total')}</th></tr></thead><tbody>{bill.items.map((item,index)=><tr key={index}><td>{item.shortForm||item.item}</td><td data-numeric>{/kg|kilogram/i.test(item.unit)?formatWeight(item.quantity):item.quantity}</td><td>{item.unit||'—'}</td><td data-numeric>RM {formatUnitPrice(item.unitPrice??item.unitPriceCents/100)}</td><td data-numeric>{money(item.itemTotalCents)}</td></tr>)}</tbody></table><BackfillAudit bill={bill}/><small>{ui('Issued at')} {formatDateDisplay(displayDateTime(bill.issuedAt))} · {ui('Electronic records cannot be deleted.')}</small></div></td></tr>}</>}
+const BillRow=memo(function BillRow({bill,expanded,toggle}){const ui=useUi();const toggleRow=()=>toggle(bill.id);return <><tr className="bill-row" onClick={toggleRow}><td>{formatDateDisplay(bill.serviceDateLabel)}</td><td><button className="bill-number" onClick={event=>{event.stopPropagation();toggleRow()}}>{bill.billNumber}</button></td><td>{bill.issuedTime||'—'}</td><td><span className={`payment ${bill.paymentMethod.toLowerCase()}`}>{ui(bill.paymentMethod)}</span></td><td data-i18n-raw>{bill.customerName}</td><td data-i18n-raw>{bill.branchName}</td><td data-i18n-raw>{bill.issuedBy}</td><td>{bill.crew||'—'}</td><td data-i18n-raw>{bill.car}</td><td data-numeric>{bill.totalLabel}</td><td>{bill.proofId?<ProofViewer url={`/api/purchase-bills/proofs/${bill.proofId}`}>{ui('View proof')}</ProofViewer>:bill.paymentMethod==='Credit'?'—' :ui('Missing')}</td><td><CustomerReceipt bill={bill}/></td><td>{bill.status==='voided'?<span className="voided">{ui('Voided')}</span>:<span className="issued">{ui('Issued')}</span>}</td></tr>{expanded&&<tr className="bill-detail"><td colSpan="13"><div><b>{ui('Bill Items')}</b><table><thead><tr><th>{ui('Item')}</th><th data-numeric>{ui('Quantity')}</th><th>{ui('Unit')}</th><th data-numeric>{ui('Price')}</th><th data-numeric>{ui('Item Total')}</th></tr></thead><tbody>{bill.items.map((item,index)=><tr key={index}><td>{item.shortForm||item.item}</td><td data-numeric>{/kg|kilogram/i.test(item.unit)?formatWeight(item.quantity):item.quantity}</td><td>{item.unit||'—'}</td><td data-numeric>RM {formatUnitPrice(item.unitPrice??item.unitPriceCents/100)}</td><td data-numeric>{money(item.itemTotalCents)}</td></tr>)}</tbody></table><BackfillAudit bill={bill}/><small>{ui('Issued at')} {formatDateDisplay(displayDateTime(bill.issuedAt))} · {ui('Electronic records cannot be deleted.')}</small></div></td></tr>}</>})

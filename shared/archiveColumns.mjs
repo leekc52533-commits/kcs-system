@@ -1,8 +1,9 @@
+const purchaseTimeFormatter=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kuching',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'})
 export function purchaseTime(value){
  const raw=String(value||'').trim();if(!raw)return ''
  const normalized=/[zZ]$|[+-]\d{2}:?\d{2}$/.test(raw)?raw:raw.replace(' ','T')+'Z'
  const d=new Date(normalized);if(!Number.isFinite(d.getTime()))return ''
- return new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kuching',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).format(d)
+ return purchaseTimeFormatter.format(d)
 }
 const text=value=>value==null?'':String(value).trim()
 const date=value=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(text(value));return m?`${m[3]}/${m[2]}/${m[1]}`:text(value)}
