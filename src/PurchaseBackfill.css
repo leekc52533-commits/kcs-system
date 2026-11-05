@@ -9,3 +9,7 @@
 .backfill-company-list button{display:block;width:100%;text-align:left;border:0;border-radius:0;background:white;min-height:44px}
 .backfill-company-list button:hover,.backfill-company-list button[aria-selected=true]{background:#e0f2ec}
 .backfill-existing{padding:12px;border:1px solid #9fc7bd;border-radius:8px;background:#f4faf8}.backfill-existing ul{padding-left:20px}.backfill-existing li{margin:12px 0}
+/* Manual entry for weight and price; retain native numeric validation. */
+.purchase-backfill input[type=number]{-moz-appearance:textfield;appearance:textfield}
+.purchase-backfill input[type=number]::-webkit-inner-spin-button,
+.purchase-backfill input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
