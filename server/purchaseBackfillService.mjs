@@ -27,7 +27,8 @@ export function purchaseBackfillOptions(date,ctx,db){
  AND NOT EXISTS(SELECT 1 FROM purchase_bills pb WHERE pb.dispatch_stop_id=s.id OR (pb.branch_id=s.branch_id AND pb.service_date=? AND pb.status='issued'))
  AND COALESCE(s.invoice_number,'')='' ORDER BY c.name,b.branch_name,s.id`).all(date,date)
  const products=db.prepare("SELECT id,product_code code,full_name name,short_form shortForm,unit FROM material_products WHERE status='active' ORDER BY full_name").all()
- return {stops,products}
+ const customers=db.prepare('SELECT id,name,jodoo_customer_id code FROM customers ORDER BY name COLLATE NOCASE,id').all()
+ return {stops,products,customers}
 }
 export function createBackfillPurchase(payload,ctx,db){
  return withImmediateTransaction(db,()=>{
@@ -41,7 +42,7 @@ export function createBackfillPurchase(payload,ctx,db){
  const previous=db.prepare('SELECT a.*,b.bill_number billNumber FROM purchase_backfill_audit a JOIN purchase_bills b ON b.id=a.purchase_bill_id WHERE request_key=?').get(token)
  if(previous){if(previous.account_id!==actor.id||previous.payload_hash!==fingerprint)reject('BACKFILL_DUPLICATE',409);return {id:previous.purchase_bill_id,billNumber:previous.billNumber,idempotent:true}}
  const s=db.prepare(stopsSql+' WHERE s.id=?').get(Number(payload.stopId))
- if(!s||s.serviceDate!==date||String(s.paymentMethod).trim().toLowerCase()!=='credit')reject('BACKFILL_TASK',409)
+ if(!s||Number(payload.customerId)!==Number(s.customerId)||s.serviceDate!==date||String(s.paymentMethod).trim().toLowerCase()!=='credit')reject('BACKFILL_TASK',409)
  if(s.invoiceNumber||db.prepare("SELECT id FROM purchase_bills WHERE dispatch_stop_id=? OR (branch_id=? AND service_date=? AND status='issued')").get(s.id,s.branchId,date))reject('BACKFILL_DUPLICATE',409)
  if(!['factory','on_site','estimated'].includes(payload.weightMethod)||!Array.isArray(payload.items)||!payload.items.length||payload.items.length>20)reject('BACKFILL_INVALID')
  const ids=new Set()

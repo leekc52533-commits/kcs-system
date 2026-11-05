@@ -28,7 +28,7 @@ function fixture(){
   return{db,tripId,stops,productId:product.id}
 }
 
-const input=f=>({serviceDate:date,stopId:f.stops[1],weightMethod:'factory',items:[{productId:f.productId,quantity:'35.25',unitPrice:'0.421'}],reason:'Collected, weighed at company; missed bill',confirmCollected:true,requestKey:'backfill-test-00001'})
+const input=f=>({serviceDate:date,customerId:2,stopId:f.stops[1],weightMethod:'factory',items:[{productId:f.productId,quantity:'35.25',unitPrice:'0.421'}],reason:'Collected, weighed at company; missed bill',confirmCollected:true,requestKey:'backfill-test-00001'})
 test('historical Credit correction preserves execution and cash, appears in statement range with audit',()=>{
  const f=fixture(),{db}=f,before=db.prepare('SELECT * FROM dispatch_stops').all(),cash=db.prepare('SELECT * FROM cash_float_transactions').all()
  const b=createBackfillPurchase(input(f),admin,db)
@@ -57,7 +57,7 @@ test('retries return same bill, changed retries and a second request cannot dupl
 })
 test('invalid dates, Cash, missing confirmation, duplicate products and bad precision leave no bills',()=>{
  const f=fixture(),p=input(f)
- const bad=[{serviceDate:'2026-02-30'},{serviceDate:'2999-01-01'},{stopId:f.stops[0]},{confirmCollected:false},{reason:' '},{items:[...p.items,...p.items]},{items:[{...p.items[0],quantity:'1.001'}]},{items:[{...p.items[0],unitPrice:'0.0001'}]}]
+ const bad=[{customerId:1},{serviceDate:'2026-02-30'},{serviceDate:'2999-01-01'},{stopId:f.stops[0]},{confirmCollected:false},{reason:' '},{items:[...p.items,...p.items]},{items:[{...p.items[0],quantity:'1.001'}]},{items:[{...p.items[0],unitPrice:'0.0001'}]}]
  for(const patch of bad)assert.throws(()=>createBackfillPurchase({...p,...patch},admin,f.db))
  assert.equal(f.db.prepare('SELECT COUNT(*) n FROM purchase_bills').get().n,0);assert.equal(f.db.prepare('SELECT COUNT(*) n FROM document_numbers').get().n,0);f.db.close()
 })
@@ -69,4 +69,10 @@ test('audit insertion failure rolls back bill, items and allocated number',()=>{
  const f=fixture();f.db.exec("CREATE TRIGGER fail_audit BEFORE INSERT ON purchase_backfill_audit BEGIN SELECT RAISE(ABORT,'audit unavailable'); END;")
  assert.throws(()=>createBackfillPurchase(input(f),admin,f.db),/audit unavailable/)
  for(const table of ['purchase_bills','purchase_bill_items','document_numbers'])assert.equal(f.db.prepare('SELECT COUNT(*) n FROM '+table).get().n,0);f.db.close()
+})
+
+test('company options include every master, including companies with no eligible tasks and duplicate names',()=>{
+ const f=fixture();f.db.prepare("INSERT INTO customers(jodoo_customer_id,name) VALUES('NO-TASK','Credit Company')").run()
+ const o=purchaseBackfillOptions(date,admin,f.db);assert.equal(o.customers.length,3);assert.equal(o.customers.filter(c=>c.name==='Credit Company').length,2);assert.equal(o.stops.length,1);assert.equal(o.stops[0].customerId,2)
+ f.db.prepare("UPDATE customers SET name='Renamed Company' WHERE id=3").run();assert.equal(purchaseBackfillOptions(date,admin,f.db).customers.find(c=>c.id===3).name,'Renamed Company');f.db.close()
 })
