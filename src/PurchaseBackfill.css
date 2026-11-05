@@ -1,0 +1,6 @@
+.purchase-backfill select,.purchase-backfill textarea{width:100%;min-height:42px;padding:8px;border:1px solid #c5d7dd;border-radius:8px;font:inherit;background:white;color:#17212b}
+.purchase-backfill textarea{min-height:90px;resize:vertical}
+.purchase-backfill input[type=checkbox]{width:22px;height:22px;padding:0}
+.purchase-backfill fieldset fieldset{border:1px solid #c5d7dd;border-radius:10px;margin:16px 0;padding:12px}
+.purchase-backfill button{padding:10px 16px;border:1px solid #aecfc7;border-radius:8px;background:#edf7f4;color:#176b5b;font:inherit;cursor:pointer}
+.purchase-backfill button[type=submit]{background:#176b5b;color:white}

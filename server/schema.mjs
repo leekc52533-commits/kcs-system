@@ -1548,6 +1548,13 @@ CREATE TABLE IF NOT EXISTS purchase_bills (
 CREATE INDEX IF NOT EXISTS purchase_bills_date_idx ON purchase_bills(service_date,driver_employee_id,status);
 CREATE INDEX IF NOT EXISTS purchase_bills_branch_idx ON purchase_bills(branch_id,issued_at DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS purchase_bills_issued_stop ON purchase_bills(dispatch_stop_id) WHERE status='issued';
+CREATE TABLE IF NOT EXISTS purchase_backfill_audit (
+ purchase_bill_id INTEGER PRIMARY KEY REFERENCES purchase_bills(id),
+ account_id INTEGER NOT NULL REFERENCES auth_accounts(id),
+ operator_name TEXT NOT NULL, reason TEXT NOT NULL,
+ request_key TEXT NOT NULL UNIQUE, payload_hash TEXT NOT NULL,
+ original_stop_json TEXT NOT NULL, created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS purchase_bill_items (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   purchase_bill_id INTEGER NOT NULL REFERENCES purchase_bills(id) ON DELETE CASCADE,
