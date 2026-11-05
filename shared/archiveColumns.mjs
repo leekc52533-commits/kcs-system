@@ -14,8 +14,16 @@ export const archiveKeys={
  expense:['expenseNumber','correctionStatus','serviceDateLabel','expenseTypeLabel','employeeName','category','description','amountLabel','paymentMethod','referenceNumber','vehiclePlate','odometerKm','companyName','tinNumber','remarks','createdBy','createdAtLabel','receiptLabel'],
  purchase:['serviceDateLabel','billNumber','issuedTime','paymentMethod','customerName','branchName','issuedBy','crew','car','totalLabel','proofLabel','customerReceipt','statusLabel']
 }
+// Compare legacy PYYYYMMDD and current PYYMMDD numbers on the same date scale.
+// This is a sort key only: stored numbers and exact-match filters stay unchanged.
+function purchaseNumberSortKey(value){
+ const raw=text(value),match=/^P(\d{8}|\d{6})-(\d+)$/i.exec(raw)
+ if(!match)return raw
+ return `P${match[1].length===6?'20':''}${match[1]}-${match[2]}`
+}
 export function archiveValue(kind,row,key,sort=false){
  if(!archiveKeys[kind]?.includes(key))return ''
+ if(kind==='purchase'&&sort&&['billNumber','customerReceipt'].includes(key))return purchaseNumberSortKey(row.billNumber)
  if(key==='expenseNumber')return row.documentNumber||(row.recordKey?`EXP-${row.expenseType==='employee'?'E':'A'}-${String(row.sourceId).padStart(6,'0')}`:'')
  if(key==='correctionStatus')return sort?Number(row.correctionCount||0):row.correctionCount?'Corrected':'Unchanged'
  if(key==='serviceDateLabel')return sort?text(row.serviceDate):date(row.serviceDate)
@@ -44,6 +52,7 @@ export function applyArchiveColumns(kind,rows,query={}){
  const keys=archiveKeys[kind],collator=new Intl.Collator('en',{numeric:true,sensitivity:'base'})
  const filterOptions=Object.fromEntries(keys.map(key=>[key,[...new Set(['',...(historical.includes(key)?allRows:rows).map(row=>text(archiveValue(kind,row,key)))])].sort((a,b)=>collator.compare(a,b))]))
  for(const key of historical.filter(k=>k.endsWith('Label'))){const source=new Map(allRows.map(r=>[text(archiveValue(kind,r,key)),text(archiveValue(kind,r,key,true))]));filterOptions[key].sort((a,b)=>['serviceDateLabel','createdAtLabel'].includes(key)?(a===''?(b===''?0:1):b===''?-1:collator.compare(source.get(b)||'',source.get(a)||'')):collator.compare(source.get(a)||'',source.get(b)||''))}
+ if(kind==='purchase')for(const key of ['billNumber','customerReceipt'])filterOptions[key].sort((a,b)=>collator.compare(purchaseNumberSortKey(a),purchaseNumberSortKey(b)))
  const sets=keys.filter(key=>Array.isArray(selected[key])).map(key=>[key,new Set(selected[key].filter(v=>typeof v==='string'))])
  const items=rows.filter(row=>sets.every(([key,set])=>set.has(text(archiveValue(kind,row,key)))))
  if(keys.includes(query.sortKey)&&['asc','desc'].includes(query.sortDirection)){

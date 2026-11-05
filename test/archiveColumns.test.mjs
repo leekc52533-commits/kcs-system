@@ -43,3 +43,25 @@ test('purchase explicit all dates differs from initial range and keeps other fil
  assert.deepEqual(ids({...q,exportRange:'1',columns:{serviceDateLabel:null}}),[1])
  assert.deepEqual(applyArchiveColumns('expense',rows,{...q,columns:{serviceDateLabel:null}}).items.map(r=>r.id),[1])
 })
+
+test('purchase number sorts globally across old and new formats independently of service date',()=>{
+ const rows=[
+  {id:1,billNumber:'P20260914-00304',serviceDate:'2026-09-14'},
+  {id:2,billNumber:'P261105-064',serviceDate:'2026-10-21'},
+  {id:3,billNumber:'P260914-002',serviceDate:'2026-09-14'},
+  {id:4,billNumber:'P261105-063',serviceDate:'2026-11-05'},
+  {id:5,billNumber:'P260914-001',serviceDate:'2026-09-14'},
+  {id:6,billNumber:'P260915-001',serviceDate:'2026-09-15'},
+  {id:7,billNumber:'P20260914-00003',serviceDate:'2026-09-14'}
+ ],snapshot=structuredClone(rows),ascending=[5,3,7,1,6,4,2]
+ for(const sortKey of ['billNumber','customerReceipt']){
+  const asc=applyArchiveColumns('purchase',rows,{sortKey,sortDirection:'asc'})
+  assert.deepEqual(asc.items.map(x=>x.id),ascending)
+  assert.deepEqual(asc.filterOptions[sortKey],['',...ascending.map(id=>rows.find(x=>x.id===id).billNumber)])
+  assert.deepEqual(applyArchiveColumns('purchase',rows,{sortKey,sortDirection:'desc'}).items.map(x=>x.id),[...ascending].reverse())
+ }
+ assert.equal(applyArchiveColumns('purchase',rows,{sortKey:'serviceDateLabel',sortDirection:'desc'}).items[0].id,4)
+ assert.equal(applyArchiveColumns('purchase',rows,{sortKey:'serviceDateLabel',sortDirection:'asc'}).items.at(-1).id,4)
+ assert.deepEqual(applyArchiveColumns('purchase',rows,{columns:{billNumber:['P20260914-00304']},sortKey:'billNumber',sortDirection:'desc'}).items.map(x=>x.id),[1])
+ assert.deepEqual(rows,snapshot)
+})

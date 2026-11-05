@@ -77,3 +77,20 @@ test('default archive includes records across months; explicit ranges still rest
   assert.equal(book.getWorksheet('Payment Proofs').getImages().length,1)
  }finally{db.close();fs.rmSync(root,{recursive:true,force:true})}
 })
+
+test('mixed legacy/current PO numbers use global number order in API and Excel, date sorting stays separate',async()=>{
+ const {db,root}=fixture()
+ try{
+ db.prepare("UPDATE purchase_bills SET bill_number='P20260914-00304',service_date='2026-11-05' WHERE id=1").run()
+ db.prepare("UPDATE purchase_bills SET bill_number='P261105-064',service_date='2026-10-21' WHERE id=2").run()
+ for(const direction of ['asc','desc']){
+  const query={sortKey:'billNumber',sortDirection:direction},expected=direction==='asc'?['P20260914-00304','P261105-064']:['P261105-064','P20260914-00304']
+  assert.deepEqual(listPurchaseBillArchive(query,db).items.map(x=>x.billNumber),expected)
+  const file=await purchaseBillsWorkbook(query,db,{uploadsRoot:root}),book=new ExcelJS.Workbook();await book.xlsx.load(file.buffer)
+  const sheet=book.getWorksheet('Purchase Bills'),numbers=[]
+  sheet.eachRow((row,n)=>{if(n>1)numbers.push(row.getCell(2).value)})
+  assert.deepEqual([...new Set(numbers)],expected)
+ }
+ assert.deepEqual(listPurchaseBillArchive({sortKey:'serviceDateLabel',sortDirection:'desc'},db).items.map(x=>x.id),[1,2])
+ }finally{db.close();fs.rmSync(root,{recursive:true,force:true})}
+})
