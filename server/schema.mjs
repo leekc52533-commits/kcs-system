@@ -1521,9 +1521,9 @@ CREATE INDEX IF NOT EXISTS area_refinement_suggestions_analysis_idx ON area_refi
 CREATE TABLE IF NOT EXISTS purchase_bills (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   bill_number TEXT NOT NULL UNIQUE,
-  dispatch_stop_id INTEGER NOT NULL REFERENCES dispatch_stops(id),
-  dispatch_trip_id INTEGER NOT NULL REFERENCES dispatch_trips(id),
-  dispatch_day_id INTEGER NOT NULL REFERENCES dispatch_days(id),
+  dispatch_stop_id INTEGER REFERENCES dispatch_stops(id),
+  dispatch_trip_id INTEGER REFERENCES dispatch_trips(id),
+  dispatch_day_id INTEGER REFERENCES dispatch_days(id),
   branch_id INTEGER NOT NULL REFERENCES branches(id),
   customer_id INTEGER REFERENCES customers(id),
   driver_employee_id INTEGER NOT NULL REFERENCES employees(id),

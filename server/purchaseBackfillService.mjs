@@ -14,21 +14,21 @@ function authorize(ctx,db){
  return a
 }
 function validDate(value){return /^\d{4}-\d{2}-\d{2}$/.test(value)&&!Number.isNaN(Date.parse(value+'T00:00:00Z'))&&new Date(value+'T00:00:00Z').toISOString().slice(0,10)===value}
-const stopsSql=`SELECT s.id,s.status,s.invoice_number invoiceNumber,s.branch_id branchId,t.id tripId,t.dispatch_day_id dayId,
- COALESCE(s.service_date,dd.dispatch_date) serviceDate,b.customer_id customerId,b.jodoo_branch_id branchCode,b.branch_name branchName,c.name customerName,
- COALESCE(b.payment_type,c.default_payment_type,c.payment_type) paymentMethod,d.driver_id driverId,e.name driverName,d.vehicle_id vehicleId,v.vehicle_code vehicleCode,v.registration_number registrationNumber
- FROM dispatch_stops s JOIN dispatch_trips t ON t.id=s.dispatch_trip_id JOIN dispatch_days dd ON dd.id=t.dispatch_day_id
- JOIN dispatches d ON d.id=t.dispatch_id JOIN branches b ON b.id=s.branch_id JOIN customers c ON c.id=b.customer_id
- JOIN employees e ON e.id=d.driver_id JOIN vehicles v ON v.id=d.vehicle_id`
+const branchesSql=`SELECT b.id,b.customer_id customerId,b.branch_name name,b.jodoo_branch_id code,c.name customerName,
+ COALESCE(b.payment_type,c.default_payment_type,c.payment_type) paymentMethod FROM branches b JOIN customers c ON c.id=b.customer_id`
+function existingBills(date,branchId,db){return db.prepare(`SELECT pb.id,pb.bill_number billNumber,pb.branch_id branchId,pb.status,pb.total_cents totalCents,
+ pb.driver_name_snapshot driverName,pb.registration_number_snapshot registrationNumber,
+ COALESCE((SELECT SUM(quantity) FROM purchase_bill_items WHERE purchase_bill_id=pb.id),0) quantity
+ FROM purchase_bills pb WHERE pb.service_date=? AND (? IS NULL OR pb.branch_id=?) ORDER BY pb.id`).all(date,branchId,branchId)}
 export function purchaseBackfillOptions(date,ctx,db){
  authorize(ctx,db)
  if(!validDate(date)||date>kuchingDate())reject('BACKFILL_DATE')
- const stops=db.prepare(stopsSql+` WHERE COALESCE(s.service_date,dd.dispatch_date)=? AND lower(trim(COALESCE(b.payment_type,c.default_payment_type,c.payment_type)))='credit'
- AND NOT EXISTS(SELECT 1 FROM purchase_bills pb WHERE pb.dispatch_stop_id=s.id OR (pb.branch_id=s.branch_id AND pb.service_date=? AND pb.status='issued'))
- AND COALESCE(s.invoice_number,'')='' ORDER BY c.name,b.branch_name,s.id`).all(date,date)
+ const branches=db.prepare(branchesSql+' ORDER BY c.name,b.branch_name,b.id').all()
  const products=db.prepare("SELECT id,product_code code,full_name name,short_form shortForm,unit FROM material_products WHERE status='active' ORDER BY full_name").all()
  const customers=db.prepare('SELECT id,name,jodoo_customer_id code FROM customers ORDER BY name COLLATE NOCASE,id').all()
- return {stops,products,customers}
+ const drivers=db.prepare("SELECT id,name,employee_code code FROM employees WHERE is_active=1 AND employment_status='active' ORDER BY name,id").all()
+ const vehicles=db.prepare("SELECT id,vehicle_code code,registration_number name FROM vehicles WHERE operational_status IN ('active','standby') OR is_external_support=1 ORDER BY vehicle_code,id").all()
+ return {branches,products,customers,drivers,vehicles,bills:existingBills(date,null,db)}
 }
 export function createBackfillPurchase(payload,ctx,db){
  return withImmediateTransaction(db,()=>{
@@ -41,9 +41,15 @@ export function createBackfillPurchase(payload,ctx,db){
  const fingerprint=crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex')
  const previous=db.prepare('SELECT a.*,b.bill_number billNumber FROM purchase_backfill_audit a JOIN purchase_bills b ON b.id=a.purchase_bill_id WHERE request_key=?').get(token)
  if(previous){if(previous.account_id!==actor.id||previous.payload_hash!==fingerprint)reject('BACKFILL_DUPLICATE',409);return {id:previous.purchase_bill_id,billNumber:previous.billNumber,idempotent:true}}
- const s=db.prepare(stopsSql+' WHERE s.id=?').get(Number(payload.stopId))
- if(!s||Number(payload.customerId)!==Number(s.customerId)||s.serviceDate!==date||String(s.paymentMethod).trim().toLowerCase()!=='credit')reject('BACKFILL_TASK',409)
- if(s.invoiceNumber||db.prepare("SELECT id FROM purchase_bills WHERE dispatch_stop_id=? OR (branch_id=? AND service_date=? AND status='issued')").get(s.id,s.branchId,date))reject('BACKFILL_DUPLICATE',409)
+ const branch=db.prepare(branchesSql+' WHERE b.id=?').get(Number(payload.branchId))
+ if(!branch||Number(payload.customerId)!==Number(branch.customerId)||String(branch.paymentMethod).trim().toLowerCase()!=='credit')reject('BACKFILL_TASK',409)
+ const driver=db.prepare("SELECT id,name FROM employees WHERE id=? AND is_active=1 AND employment_status='active'").get(Number(payload.driverId))
+ const vehicle=db.prepare("SELECT id,vehicle_code code,registration_number name FROM vehicles WHERE id=? AND (operational_status IN ('active','standby') OR is_external_support=1)").get(Number(payload.vehicleId))
+ if(!driver||!vehicle)reject('BACKFILL_INVALID')
+ const existing=existingBills(date,branch.id,db),reviewed=payload.reviewedBillIds
+ if(!Array.isArray(reviewed)||JSON.stringify(reviewed.map(Number).sort((a,b)=>a-b))!==JSON.stringify(existing.map(b=>b.id)))reject('BACKFILL_REVIEW',409)
+ if(existing.some(b=>b.status==='issued')&&payload.additionalCollectionConfirmed!==true)reject('BACKFILL_ADDITIONAL',409)
+ const s={id:null,tripId:null,dayId:null,branchId:branch.id,customerId:branch.customerId,driverId:driver.id,vehicleId:vehicle.id,customerName:branch.customerName,branchCode:branch.code,branchName:branch.name,driverName:driver.name,vehicleCode:vehicle.code,registrationNumber:vehicle.name,reviewedBillIds:reviewed,additionalCollectionConfirmed:payload.additionalCollectionConfirmed===true}
  if(!['factory','on_site','estimated'].includes(payload.weightMethod)||!Array.isArray(payload.items)||!payload.items.length||payload.items.length>20)reject('BACKFILL_INVALID')
  const ids=new Set()
  const items=payload.items.map(x=>{

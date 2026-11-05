@@ -1,3 +1,4 @@
+import {ensurePurchaseBackfillSchema} from './purchaseBackfillSchema.mjs'
 import {applyV86Migration} from './migrationV86.mjs'
 import {repairGpsRequestLinks} from './gpsRequestLinks.mjs'
 import {enableQtw2704Support} from './externalSupportVehicle.mjs'
@@ -448,6 +449,8 @@ ensureOccSharedPrices(db)
 ensureOccCurrentPrices(db)
 applyDueOccPrices(db)
 ensureCustomerDatePromiseSchema(db)
+
+ensurePurchaseBackfillSchema(db)
 
 const integrityResult = db.prepare('PRAGMA integrity_check').get()
 if (integrityResult.integrity_check !== 'ok') throw new Error(`Database integrity check failed: ${integrityResult.integrity_check}`)

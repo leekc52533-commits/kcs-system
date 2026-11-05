@@ -125,7 +125,7 @@ export function purchasePaymentProofFile(proofId,database=defaultDb){return data
 
 function replacementStop(database,billId,context){
  const actor=voidActor(context,database),b=database.prepare('SELECT * FROM purchase_bills WHERE id=?').get(Number(billId)),r=database.prepare("SELECT * FROM purchase_bill_void_requests WHERE purchase_bill_id=? AND status='approved'").get(Number(billId))
- if(!b||!r||b.status!=='voided')throw fail('Approved void required.','VOID_STATE_CONFLICT')
+ if(!b||!b.dispatch_stop_id||!r||b.status!=='voided')throw fail('Approved void required.','VOID_STATE_CONFLICT')
  if(b.driver_employee_id!==actor.employeeId)throw fail('Only the original issuer can reissue.','PERMISSION_DENIED',403)
  const current=bill(database,b.dispatch_stop_id)
  if(current&&current.id!==r.replacement_bill_id)throw fail('Another bill exists.','VOID_STATE_CONFLICT')

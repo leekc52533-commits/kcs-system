@@ -4,3 +4,8 @@
 .purchase-backfill fieldset fieldset{border:1px solid #c5d7dd;border-radius:10px;margin:16px 0;padding:12px}
 .purchase-backfill button{padding:10px 16px;border:1px solid #aecfc7;border-radius:8px;background:#edf7f4;color:#176b5b;font:inherit;cursor:pointer}
 .purchase-backfill button[type=submit]{background:#176b5b;color:white}
+.backfill-company{position:relative;margin:24px 0}.backfill-company label{margin:0 0 8px}
+.backfill-company-list{max-height:240px;overflow:auto;border:1px solid #9fc7bd;border-radius:8px;background:white;margin-top:4px}
+.backfill-company-list button{display:block;width:100%;text-align:left;border:0;border-radius:0;background:white;min-height:44px}
+.backfill-company-list button:hover,.backfill-company-list button[aria-selected=true]{background:#e0f2ec}
+.backfill-existing{padding:12px;border:1px solid #9fc7bd;border-radius:8px;background:#f4faf8}.backfill-existing ul{padding-left:20px}.backfill-existing li{margin:12px 0}
