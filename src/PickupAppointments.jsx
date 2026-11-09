@@ -20,11 +20,11 @@ export default function PickupAppointments({onRegister,onManage}){
   const refresh=async()=>{const id=++seq;try{const data=await apiRequest('/api/special-requests');if(active&&id===seq){setItems(data.items);setError('')}}catch(e){if(active&&id===seq)setError(e.message)}}
   refresh();window.addEventListener('focus',refresh);return()=>{active=false;window.removeEventListener('focus',refresh)}
  },[attempt])
- const today=kuchingDate(),rows=appointmentList(items||[],today),urgent=rows.filter(x=>x.urgent)
+ const today=kuchingDate(),rows=appointmentList(items||[],today)
  return <section className="pickup-appts"><header><h2><button type="button" aria-expanded={expanded} onClick={()=>setExpanded(v=>!v)}>{t('appts.title')} {expanded?'▴':'▾'}</button></h2><button type="button" onClick={onRegister}>{t('appts.register')}</button></header>
  {error?<p role="alert">{error} <button onClick={()=>retry(n=>n+1)}>{t('appts.retry')}</button></p>:items===null?<p>{t('common.loadingData')}</p>:<>
  <p>{rows.length?({zh:`共 ${rows.length} 个收货预约`,ms:`Jumlah janji temu kutipan: ${rows.length}`,en:`Collection appointments: ${rows.length}`})[language]:t('appts.empty')}</p>
- {rows.length>0&&<ul>{(expanded?rows:urgent.slice(0,1)).map(r=><li key={r.id}><strong data-i18n-raw>{formatDateDisplay(r.collectionDate)} · {[...new Set([r.customerName||r.temporaryCustomerName,r.branchName].filter(Boolean))].join(' / ')}</strong>
+ {rows.length>0&&<ul>{(expanded?rows:rows.slice(0,1)).map(r=><li key={r.id}><strong data-i18n-raw>{formatDateDisplay(r.collectionDate)} · {[...new Set([r.customerName||r.temporaryCustomerName,r.branchName].filter(Boolean))].join(' / ')}</strong>
  <span>{t(r.planned?'appts.planned':'appts.pending')}</span>
  {r.promisedToCustomer&&<b className="promise">{t('specialRequest.promised')}</b>}{r.urgent&&<b>{t('appts.soon')}</b>}
  {(r.specialRequirement||r.remark)&&<small data-i18n-raw>{[r.specialRequirement,r.remark].filter(Boolean).join(' · ')}</small>}</li>)}</ul>}
