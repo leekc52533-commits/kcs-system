@@ -79,6 +79,17 @@ export function createSpecialRequest(payload,database=defaultDb,{appointmentOnly
 }
 
 export function updateSpecialRequest(id,payload,database=defaultDb){
+  if(payload.expectedAppointmentDate!==undefined)return withImmediateTransaction(database,()=>{
+    const row=database.prepare('SELECT * FROM special_collection_requests WHERE id=?').get(id)
+    if(!row)throw new Error('Special request not found')
+    const date=payload.requestedCollectionDate
+    if(typeof date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(date)||database.prepare("SELECT date(?,'+0 days')= ? AS ok").get(date,date).ok!==1)throw new Error('Invalid collection date')
+    if(row.requested_collection_date!==payload.expectedAppointmentDate||row.scheduled_date||row.vehicle_id||['scheduled','published','completed','cancelled','rejected'].includes(row.status)||row.completion_status==='completed'||database.prepare("SELECT 1 FROM dispatch_stops WHERE source_special_request_id=? AND status<>'cancelled'").get(id))throw Object.assign(new Error('Appointment changed or already scheduled'),{status:409})
+    const key=requestDedupeKey({existingBranchId:row.existing_branch_id,requestedCollectionDate:date,phone:row.phone,temporaryCustomerName:row.temporary_customer_name})
+    if(database.prepare('SELECT 1 FROM special_collection_requests WHERE dedupe_key=? AND id<>?').get(key,id))throw Object.assign(new Error('Duplicate appointment'),{status:409})
+    database.prepare('UPDATE special_collection_requests SET requested_collection_date=?,dedupe_key=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(date,key,id)
+    return rowView(database.prepare(`${SELECT} WHERE r.id=?`).get(id))
+  })
   const before=database.prepare('SELECT * FROM special_collection_requests WHERE id=?').get(id);if(!before)throw new Error('Special request not found')
   const fields={temporary_customer_name:'temporaryCustomerName',contact_person:'contactPerson',phone:'phone',whatsapp:'whatsapp',address:'address',location_link:'locationLink',temporary_latitude:'temporaryLatitude',temporary_longitude:'temporaryLongitude',location_source:'locationSource',verification_status:'verificationStatus',requested_collection_date:'requestedCollectionDate',estimated_weight_kg:'estimatedWeightKg',special_requirement:'specialRequirement',promised_to_customer:'promisedToCustomer',remark:'remark',status:'status',occ_price:'occPrice',payment_type:'paymentType'}
   const sets=[],values=[]
