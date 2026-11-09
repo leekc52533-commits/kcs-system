@@ -129,7 +129,9 @@ export function listBranches(params={},database=defaultDb){
   if(params.operating==='inactive')where.push(`NOT ${branchOperatingSql}`)
   if(params.customerId){const raw=text(params.customerId),customerId=database.prepare('SELECT 1 FROM customers WHERE jodoo_customer_id=?').get(raw)?raw:parseTypedId(raw,'customer');where.push('c.jodoo_customer_id=?');args.push(customerId)}if(params.lifecycleStatus){where.push('b.lifecycle_status=?');args.push(params.lifecycleStatus)}else if(params.status){where.push('b.status=?');args.push(params.status)}if(params.areaId){where.push('a.jodoo_area_id=?');args.push(params.areaId)}if(params.zoneGroupId){where.push('COALESCE(a.confirmed_zone_group_id,a.zone_group_id)=?');args.push(Number(params.zoneGroupId))}
   const page=Math.max(1,Number(params.page)||1),pageSize=Math.min(500,Math.max(1,Number(params.pageSize)||25)),total=database.prepare(`SELECT COUNT(*) total FROM branches b LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas a ON a.id=b.area_id WHERE ${where.join(' AND ')}`).get(...args).total
-  const items=database.prepare(`${branchSelect} WHERE ${where.join(' AND ')} GROUP BY b.id ORDER BY c.name,b.branch_name LIMIT ? OFFSET ?`).all(...args,pageSize,(page-1)*pageSize)
+  const term=text(params.search), rank=term?'CASE WHEN c.name = ? COLLATE NOCASE OR b.branch_name = ? COLLATE NOCASE OR c.jodoo_customer_id = ? COLLATE NOCASE OR b.jodoo_branch_id = ? COLLATE NOCASE THEN 0 WHEN c.name LIKE ? OR b.branch_name LIKE ? THEN 1 WHEN c.name LIKE ? OR b.branch_name LIKE ? THEN 2 ELSE 3 END,':''
+  const orderArgs=term?[term,term,term,term,term+'%',term+'%','%'+term+'%','%'+term+'%']:[]
+  const items=database.prepare(`${branchSelect} WHERE ${where.join(' AND ')} GROUP BY b.id ORDER BY ${rank}c.name,b.branch_name,b.id LIMIT ? OFFSET ?`).all(...args,...orderArgs,pageSize,(page-1)*pageSize)
   return{items,pagination:{page,pageSize,total,pages:Math.ceil(total/pageSize)}}
 }
 
