@@ -73,3 +73,51 @@
   .expense-filter-menu .archive-option-search,
   .expense-filter-menu .archive-check {font-size:.875rem!important}
 }
+
+/* Default action buttons; component rules keep links, toolbar icons and
+   navigation controls in their own compact layouts. */
+@media screen {
+  :where(button:not([aria-expanded],[aria-haspopup],[role="tab"],[aria-label],.link-button)) {
+    background:#176f60;
+    border:1px solid transparent;
+    border-radius:8px;
+    color:#fff;
+    padding:.45em .85em;
+    cursor:pointer;
+  }
+  :where(button:not([aria-expanded],[aria-haspopup],[role="tab"],[aria-label],.link-button)):where(:enabled:hover) {
+    background:#105c50;
+  }
+  :where(button):disabled {cursor:not-allowed}
+  :where(button:not([aria-expanded],[aria-haspopup],[role="tab"],[aria-label],.link-button):disabled,fieldset:disabled button) {background:#e5ebe9;color:#566662;border-color:#d3ddda}
+  .pickup-appts header > button,
+  .special-page .request-list > button,
+  .special-page .request-list > form button {
+    min-height:38px;
+    padding:7px 14px;
+    border:1px solid transparent;
+    border-radius:8px;
+    background:#176f60;
+    color:white;
+    font:inherit;
+    font-weight:700;
+    cursor:pointer;
+  }
+  :is(.pickup-appts header > button,.special-page .request-list > button,.special-page .request-list > form button):enabled:hover {
+    background:#105c50;
+  }
+  :is(.pickup-appts header > button,.special-page .request-list > button,.special-page .request-list > form button):disabled {
+    background:#e5ebe9;
+    border-color:#d3ddda;
+    color:#566662;
+    cursor:not-allowed;
+  }
+  .special-page .request-list > form :is(label,fieldset) {
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    gap:8px;
+  }
+  .special-page .request-list > form fieldset {margin:10px 0 0;padding:0;border:0}
+  .special-page .request-list > button {margin-bottom:12px}
+}
