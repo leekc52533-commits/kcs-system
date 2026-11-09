@@ -68,7 +68,11 @@ export function listCustomers(params={},database=defaultDb){
 }
 
 export function getCustomer(customerId,database=defaultDb){
-  const item=database.prepare(`${customerSelect} WHERE c.jodoo_customer_id=? GROUP BY c.id`).get(customerId);if(!item)return null
+  const lookup=database.prepare(`${customerSelect} WHERE c.jodoo_customer_id=? GROUP BY c.id`)
+  let item=lookup.get(customerId)
+  if(!item&&/^C[0-9]+$/i.test(customerId))item=lookup.get(parseTypedId(customerId,'customer'))
+  if(!item)return null
+  customerId=item.customerId
   item.branches=listBranches({customerId,pageSize:500},database).items
   item.materialPricing=listCustomerMaterialPricing(item.customerId,database)?.items||[]
   item.productPricing=listCustomerProductPricing(item.customerId,database).items
