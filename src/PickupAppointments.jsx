@@ -1,8 +1,9 @@
-import {useEffect,useState} from 'react'
+import {useEffect,useRef,useState} from 'react'
 import {apiRequest} from './apiClient.js'
 import {useI18n} from './i18n.jsx'
 import {formatDateDisplay} from './dateDisplay.js'
 import {addCalendarDays,kuchingDate} from '../shared/kuchingTime.js'
+import DateInput from './DateInput.jsx'
 import './PickupAppointments.css'
 
 export function appointmentList(items,today){
@@ -28,15 +29,24 @@ export default function PickupAppointments({onRegister,onManage}){
   const refresh=async()=>{const id=++seq;try{const data=await apiRequest('/api/special-requests');if(active&&id===seq){setItems(data.items);setError('')}}catch(e){if(active&&id===seq)setError(e.message)}}
   refresh();const timer=window.setInterval(()=>{if(!document.hidden)refresh()},60000);window.addEventListener('focus',refresh);return()=>{active=false;window.clearInterval(timer);window.removeEventListener('focus',refresh)}
  },[attempt])
+ const [editing,setEditing]=useState(null),[date,setDate]=useState(''),[saving,setSaving]=useState(false),[editError,setEditError]=useState('')
+ const dialog=useRef(null)
+ useEffect(()=>{if(editing)dialog.current?.showModal()},[editing])
+ const name=r=>[...new Set([r.customerName||r.temporaryCustomerName,r.branchName].filter(Boolean))].join(' / ')
+ const link=r=><button type="button" className="link-button" data-i18n-raw onClick={()=>{setDate(r.requestedCollectionDate);setEditing(r);setEditError('')}}>{formatDateDisplay(r.scheduledDate||r.requestedCollectionDate)} · {name(r)}</button>
+ const saveDate=async e=>{e.preventDefault();if(saving||!date||date===editing.requestedCollectionDate)return;setSaving(true)
+   try{const saved=await apiRequest('/api/special-requests/'+editing.id,{method:'PATCH',body:JSON.stringify({expectedAppointmentDate:editing.requestedCollectionDate,requestedCollectionDate:date})});setItems(old=>old.map(r=>r.id===saved.id?saved:r));retry(n=>n+1);setEditing(null)}
+   catch(err){setEditError(err.message)}finally{setSaving(false)}}
  const today=kuchingDate(),rows=appointmentList(items||[],today),waiting=waitingForVehicle(items||[],today)
  return <section className="pickup-appts"><header><h2><button type="button" aria-expanded={expanded} onClick={()=>setExpanded(v=>!v)}>{t('appts.title')} {expanded?'▴':'▾'}</button></h2><button type="button" onClick={onRegister}>{t('appts.register')}</button></header>
  {error?<p role="alert">{error} <button onClick={()=>retry(n=>n+1)}>{t('appts.retry')}</button></p>:items===null?<p>{t('common.loadingData')}</p>:<>
- {waiting.length>0&&<aside><strong>{({zh:'待安排车辆',en:'Vehicle assignment needed',ms:'Menunggu penugasan kenderaan'})[language]}（{waiting.length}）</strong><ul>{waiting.map(r=><li key={r.id} data-i18n-raw>{formatDateDisplay(r.scheduledDate||r.requestedCollectionDate)} · {[...new Set([r.customerName||r.temporaryCustomerName,r.branchName].filter(Boolean))].join(' / ')}</li>)}</ul><button type="button" onClick={onManage}>{t('appts.manage')}</button></aside>}
+ {waiting.length>0&&<aside><strong>{({zh:'待安排车辆',en:'Vehicle assignment needed',ms:'Menunggu penugasan kenderaan'})[language]}（{waiting.length}）</strong><ul>{waiting.map(r=><li key={r.id}>{link(r)}</li>)}</ul></aside>}
  <p>{rows.length?({zh:`共 ${rows.length} 个收货预约`,ms:`Jumlah janji temu kutipan: ${rows.length}`,en:`Collection appointments: ${rows.length}`})[language]:waiting.length?null:t('appts.empty')}</p>
- {rows.length>0&&<ul>{(expanded?rows:rows.slice(0,1)).map(r=><li key={r.id}><strong data-i18n-raw>{formatDateDisplay(r.collectionDate)} · {[...new Set([r.customerName||r.temporaryCustomerName,r.branchName].filter(Boolean))].join(' / ')}</strong>
+ {rows.length>0&&<ul>{(expanded?rows:rows.slice(0,1)).map(r=><li key={r.id}>{link(r)}
  <span>{t(r.planned?'appts.planned':'appts.pending')}</span>
  {r.promisedToCustomer&&<b className="promise">{t('specialRequest.promised')}</b>}{r.urgent&&<b>{t('appts.soon')}</b>}
  {(r.specialRequirement||r.remark)&&<small data-i18n-raw>{[r.specialRequirement,r.remark].filter(Boolean).join(' · ')}</small>}</li>)}</ul>}
- {expanded&&<button type="button" onClick={onManage}>{t('appts.manage')}</button>}</>}
+ </>}
+ {editing&&<dialog ref={dialog} aria-labelledby="pickup-detail-title" onCancel={e=>{if(saving)e.preventDefault()}} onClose={()=>setEditing(null)}><form onSubmit={saveDate}><h3 id="pickup-detail-title" data-i18n-raw>{name(editing)}</h3><p>{t(editing.scheduledDate||editing.vehicleId||editing.dispatchVehicleId?'appts.planned':'appts.pending')}</p><label>{t('specialRequest.requestedDate')}<DateInput type="date" value={date} min={today} required readOnly={Boolean(editing.scheduledDate||editing.vehicleId||editing.dispatchVehicleId||['scheduled','published'].includes(editing.status))} disabled={saving} onChange={e=>setDate(e.target.value)}/></label>{editError&&<p role="alert">{editError}</p>}<footer><button disabled={saving} type="button" onClick={()=>setEditing(null)}>{t('common.close')}</button> <button disabled={saving||!date||date===editing.requestedCollectionDate} type="submit">{t('common.save')}</button> <button type="button" disabled={saving} onClick={onManage}>{t('appts.manage')}</button></footer></form></dialog>}
  </section>
 }
