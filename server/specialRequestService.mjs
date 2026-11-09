@@ -18,13 +18,16 @@ const rowView = (row) => row ? ({
   verificationStatus:row.verification_status,requestedCollectionDate:row.requested_collection_date,estimatedWeightKg:row.estimated_weight_kg,
   specialRequirement:row.special_requirement,createdBy:row.created_by,promisedToCustomer:Boolean(row.promised_to_customer),remark:row.remark,
   status:row.status,accountStatus:row.account_status,customerId:row.linked_customer_id,branchId:row.linked_branch_id,
-  occPrice:row.occ_price,paymentType:row.payment_type,scheduledDate:row.scheduled_date,vehicleId:row.vehicle_id,tripNumber:row.trip_number,
+  occPrice:row.occ_price,paymentType:row.payment_type,scheduledDate:row.scheduled_date,vehicleId:row.vehicle_id,dispatchVehicleId:row.dispatch_vehicle_id,tripNumber:row.trip_number,
   completionStatus:row.completion_status,approvedBy:row.approved_by,approvedAt:row.approved_at,createdAt:row.created_at,updatedAt:row.updated_at,
   customerName:row.customer_name,branchName:row.branch_name,area:row.area,officialLatitude:row.official_latitude,officialLongitude:row.official_longitude,
   schedules:row.schedules ? JSON.parse(row.schedules) : []
 }) : null
 
-const SELECT = `SELECT r.*,c.name customer_name,b.branch_name,a.name area,b.latitude official_latitude,b.longitude official_longitude,
+const SELECT = `SELECT r.*,
+  (SELECT d.vehicle_id FROM dispatch_stops ds JOIN dispatches d ON d.id=ds.dispatch_id
+   WHERE ds.source_special_request_id=r.id AND ds.status<>'cancelled' AND d.vehicle_id IS NOT NULL
+   AND d.dispatch_date=COALESCE(r.scheduled_date,r.requested_collection_date) LIMIT 1) dispatch_vehicle_id,c.name customer_name,b.branch_name,a.name area,b.latitude official_latitude,b.longitude official_longitude,
   COALESCE((SELECT json_group_array(json_object('scheduleId',s.jodoo_schedule_id,'frequency',s.frequency,'dayOfWeek',s.days_of_week)) FROM branch_schedules s WHERE s.branch_id=b.id),'[]') schedules
   FROM special_collection_requests r LEFT JOIN branches b ON b.id=r.existing_branch_id LEFT JOIN customers c ON c.id=b.customer_id LEFT JOIN areas a ON a.id=b.area_id`
 
