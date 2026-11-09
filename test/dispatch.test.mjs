@@ -73,3 +73,17 @@ test('Area批量移动会拒绝相同目标、无效Area及无效Zone并保持�
 test('永久改期更新固定排程',()=>{const db=fixture();createScheduleException({scheduleId:'S1',type:'move_date',originalDate:'2026-07-20',targetDate:'2026-07-21',dayOfWeek:'Tuesday',permanent:true,createdBy:'Manager'},db);assert.equal(db.prepare("SELECT days_of_week value FROM branch_schedules WHERE jodoo_schedule_id='S1'").get().value,'Tuesday')})
 test('临时 GPS 不会自动覆盖正式 GPS',()=>{const db=fixture();const before=db.prepare('SELECT latitude,longitude FROM branches WHERE id=1').get();addTemporaryLocation({branchId:1,latitude:4,longitude:102,locationSource:'Driver Captured'},db);assert.deepEqual(db.prepare('SELECT latitude,longitude FROM branches WHERE id=1').get(),before);assert.equal(db.prepare('SELECT verification_status status FROM temporary_locations').get().status,'pending_supervisor')})
 test('相同临时请求不会重复建立',()=>{const db=fixture();const payload={existingBranchId:'B1',requestedCollectionDate:'2026-07-20',createdBy:'Office'};const a=createSpecialRequest(payload,db),b=createSpecialRequest(payload,db);assert.equal(a.id,b.id);assert.equal(b.deduplicated,true)})
+
+test('phone appointments reuse the request record without changing an approved day or a fixed schedule',()=>{
+ const db=fixture(),date='2026-12-07';try{
+ prepareDay(db,date);approveDay(date,{reason:'Ready'},db)
+ const state=()=>['dispatch_days','dispatch_stops','branch_schedules'].map(table=>db.prepare('SELECT * FROM '+table+' ORDER BY id').all())
+ const before=state(),payload={existingBranchId:'B1',requestedCollectionDate:date,specialRequirement:'Before 10am',promisedToCustomer:true}
+ const record=createSpecialRequest(payload,db,{appointmentOnly:true})
+ assert.equal(record.scheduledDate,null);assert.equal(record.branchName,'Alpha Branch');assert.equal(record.promisedToCustomer,true);assert.equal(record.specialRequirement,'Before 10am')
+ assert.equal(createSpecialRequest(payload,db,{appointmentOnly:true}).id,record.id)
+ assert.deepEqual(state(),before)
+ scheduleSpecialRequest(record.id,{date,tripNumber:1},db)
+ assert.equal(db.prepare('SELECT COUNT(*) AS n FROM dispatch_stops WHERE source_special_request_id=?').get(record.id).n,1)
+ }finally{db.close()}
+})

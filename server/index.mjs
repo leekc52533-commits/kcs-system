@@ -639,6 +639,10 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && url.pathname === '/api/schedule-exceptions') return sendJson(response,201,createScheduleException((await readJson(request)).payload))
     if (request.method === 'GET' && url.pathname === '/api/special-requests/customer-search') return sendJson(response,200,{items:searchCustomerBranches(Object.fromEntries(url.searchParams))})
     if (request.method === 'GET' && url.pathname === '/api/special-requests') return sendJson(response,200,{items:listSpecialRequests(Object.fromEntries(url.searchParams))})
+    if(request.method==='POST' && url.pathname==='/api/special-requests/appointments'){
+      if(!['owner_admin','operations_admin','supervisor','office'].includes(session?.role))return sendJson(response,403,{code:'FORBIDDEN'})
+      return sendJson(response,201,createSpecialRequest((await readJson(request)).payload,db,{appointmentOnly:true}))
+    }
     if (request.method === 'POST' && url.pathname === '/api/special-requests') return sendJson(response,201,createSpecialRequest((await readJson(request)).payload))
     if (request.method === 'PATCH' && /^\/api\/special-requests\/\d+$/.test(url.pathname)) return sendJson(response,200,updateSpecialRequest(Number(url.pathname.split('/').at(-1)),(await readJson(request)).payload))
     if (request.method === 'POST' && /^\/api\/special-requests\/\d+\/(schedule|convert-to-existing|link-new-account)$/.test(url.pathname)) {

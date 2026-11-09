@@ -56,7 +56,7 @@ function accountStatus(payload,type){
   return 'ready_for_dispatch'
 }
 
-export function createSpecialRequest(payload,database=defaultDb){
+export function createSpecialRequest(payload,database=defaultDb,{appointmentOnly=false}={}){
   if(!payload.requestedCollectionDate)throw new Error('Requested Collection Date is required')
   const branch=payload.existingBranchId?database.prepare(`SELECT b.*,c.jodoo_customer_id customer_id,c.payment_type FROM branches b LEFT JOIN customers c ON c.id=b.customer_id WHERE b.id=? OR b.jodoo_branch_id=?`).get(payload.existingBranchId,payload.existingBranchId):null
   if(branch)branch.occ_price=resolveCustomerOccPrice(branch.customer_id,database)
@@ -71,7 +71,7 @@ export function createSpecialRequest(payload,database=defaultDb){
   const result=database.prepare(`INSERT INTO special_collection_requests(request_type,existing_branch_id,temporary_customer_name,contact_person,phone,whatsapp,address,location_link,temporary_latitude,temporary_longitude,location_source,verification_status,requested_collection_date,estimated_weight_kg,special_requirement,created_by,promised_to_customer,remark,status,account_status,linked_customer_id,linked_branch_id,occ_price,payment_type,dedupe_key)
     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(type,branch?.id||null,normalized.temporaryCustomerName||null,payload.contactPerson||null,payload.phone||null,payload.whatsapp||null,payload.address||branch?.address||null,payload.locationLink||null,payload.temporaryLatitude??null,payload.temporaryLongitude??null,payload.locationSource||null,payload.verificationStatus||'unverified',payload.requestedCollectionDate,payload.estimatedWeightKg??null,payload.specialRequirement||null,payload.createdBy||'Office',payload.promisedToCustomer?1:0,payload.remark||null,status,accountStatus({...payload,customerId:branch?.customer_id,branchId:branch?.jodoo_branch_id,occPrice:branch?.occ_price,paymentType:branch?.payment_type},type),branch?.customer_id||payload.customerId||null,branch?.jodoo_branch_id||payload.branchId||null,branch?.occ_price??payload.occPrice??null,branch?.payment_type||payload.paymentType||null,key)
   if(payload.temporaryLatitude!=null&&payload.temporaryLongitude!=null){const periodId=payload.employeeId?database.prepare('SELECT id FROM employee_employment_history WHERE employee_id=? ORDER BY id DESC LIMIT 1').get(payload.employeeId)?.id||null:null;database.prepare(`INSERT INTO temporary_locations(special_request_id,latitude,longitude,location_source,location_link,verification_status,captured_by,employee_id,employment_period_id,accuracy_m,device_captured_at,server_received_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(result.lastInsertRowid,payload.temporaryLatitude,payload.temporaryLongitude,payload.locationSource||'Manual Entry',payload.locationLink||null,payload.verificationStatus||'pending_supervisor',payload.createdBy||'Office',payload.employeeId||null,periodId,payload.accuracyM??null,payload.deviceCapturedAt||null,new Date().toISOString())}
-  invalidateDispatchDay(database,payload.requestedCollectionDate,'special_request_created','special_request',result.lastInsertRowid,null,payload,payload.createdBy)
+  if(!appointmentOnly)invalidateDispatchDay(database,payload.requestedCollectionDate,'special_request_created','special_request',result.lastInsertRowid,null,payload,payload.createdBy)
   return rowView(database.prepare(`${SELECT} WHERE r.id=?`).get(result.lastInsertRowid))
 }
 
