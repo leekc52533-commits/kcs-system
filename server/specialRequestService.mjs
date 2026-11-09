@@ -6,7 +6,7 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { uploadsDir } from './database.mjs'
 import { recalculateRecommendations } from './gpsRecommendationService.mjs'
-import { createStop, invalidateDispatchDay, requestDedupeKey } from './dispatchService.mjs'
+import { generateDay, updateStop, createStop, invalidateDispatchDay, requestDedupeKey } from './dispatchService.mjs'
 import {DuplicateBranchServiceDateError,findBranchServiceDateStop,withImmediateTransaction} from './branchServiceDateGuard.mjs'
 import {resolveCustomerOccPrice} from './materialPriceService.mjs'
 
@@ -103,7 +103,21 @@ export function updateSpecialRequest(id,payload,database=defaultDb){
 
 export function scheduleSpecialRequest(id,payload,database=defaultDb){
   return withImmediateTransaction(database,()=>{const request=database.prepare('SELECT * FROM special_collection_requests WHERE id=?').get(id);if(!request)throw new Error('Special request not found');const date=payload.date||request.requested_collection_date
-    if(request.existing_branch_id){const branch=database.prepare('SELECT id,jodoo_branch_id FROM branches WHERE id=?').get(request.existing_branch_id),existing=findBranchServiceDateStop(database,branch.id,date);if(existing){if(existing.source_special_request_id!=null&&Number(existing.source_special_request_id)!==Number(id))throw new DuplicateBranchServiceDateError(existing,{branchId:branch.id,serviceDate:date,entryPoint:'special_request'});database.prepare('UPDATE dispatch_stops SET source_special_request_id=COALESCE(source_special_request_id,?),estimated_weight_kg=COALESCE(estimated_weight_kg,?) WHERE id=?').run(Number(id),request.estimated_weight_kg,existing.id)}else createStop({date,branchId:branch.jodoo_branch_id,tripId:payload.tripId,tripNumber:payload.tripNumber||1,specialRequestId:Number(id),estimatedWeightKg:request.estimated_weight_kg,changedBy:payload.scheduledBy},database)}
+    if(payload.expectedDate!==undefined){
+      if(date!==payload.expectedDate||date!==(request.scheduled_date||request.requested_collection_date)||!request.existing_branch_id||request.vehicle_id||['published','completed','cancelled','rejected'].includes(request.status)||request.completion_status==='completed')throw new Error('Appointment changed; reload before scheduling')
+      if(![1,2,3].includes(payload.tripNumber)||!database.prepare("SELECT 1 FROM vehicles WHERE id=? AND operational_status IN ('active','available') AND status IN ('available','assigned') AND (is_temporary=0 OR temporary_date=?)").get(payload.vehicleId,date))throw new Error('Vehicle unavailable for this date')
+      const day=database.prepare('SELECT status FROM dispatch_days WHERE dispatch_date=?').get(date)
+      if(!day)generateDay({startDate:date,generatedBy:payload.scheduledBy,onlyMissing:true},database)
+      else if(!['draft','reapproval_required'].includes(day.status))throw new Error('Dispatch day is already under review or published')
+      const stop=findBranchServiceDateStop(database,request.existing_branch_id,date)
+      if(stop){
+        if(!['locked','available'].includes(stop.status)||(stop.source_special_request_id&&stop.source_special_request_id!==Number(id)))throw new Error('Existing stop cannot be reassigned')
+        const placed=database.prepare('SELECT d.vehicle_id,t.trip_number FROM dispatch_trips t JOIN dispatches d ON d.id=t.dispatch_id WHERE t.id=?').get(stop.dispatch_trip_id)
+        if(placed?.vehicle_id&&stop.source_special_request_id===Number(id))throw new Error('Vehicle already assigned')
+        if(placed?.vehicle_id!==payload.vehicleId||placed?.trip_number!==payload.tripNumber)updateStop(stop.id,{vehicleId:payload.vehicleId,tripNumber:payload.tripNumber,changedBy:payload.scheduledBy},database)
+      }
+    }
+    if(request.existing_branch_id){const branch=database.prepare('SELECT id,jodoo_branch_id FROM branches WHERE id=?').get(request.existing_branch_id),existing=findBranchServiceDateStop(database,branch.id,date);if(existing){if(existing.source_special_request_id!=null&&Number(existing.source_special_request_id)!==Number(id))throw new DuplicateBranchServiceDateError(existing,{branchId:branch.id,serviceDate:date,entryPoint:'special_request'});database.prepare('UPDATE dispatch_stops SET source_special_request_id=COALESCE(source_special_request_id,?),estimated_weight_kg=COALESCE(estimated_weight_kg,?) WHERE id=?').run(Number(id),request.estimated_weight_kg,existing.id)}else createStop({date,branchId:branch.jodoo_branch_id,vehicleId:payload.vehicleId,tripId:payload.tripId,tripNumber:payload.tripNumber||1,specialRequestId:Number(id),estimatedWeightKg:request.estimated_weight_kg,changedBy:payload.scheduledBy},database)}
     database.prepare(`UPDATE special_collection_requests SET scheduled_date=?,vehicle_id=?,trip_number=?,status='scheduled',updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(date,payload.vehicleId??null,payload.tripNumber||1,id)
     if(!request.existing_branch_id)invalidateDispatchDay(database,date,'special_request_scheduled','special_request',id,null,payload,payload.scheduledBy)
     return rowView(database.prepare(`${SELECT} WHERE r.id=?`).get(id))})
