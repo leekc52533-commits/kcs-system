@@ -14,10 +14,12 @@ export function appointmentList(items,today){
   return {...r,collectionDate,planned,urgent}
  }).filter(r=>r.collectionDate>=today).sort((a,b)=>Number(b.urgent)-Number(a.urgent)||a.collectionDate.localeCompare(b.collectionDate)||Number(Boolean(b.promisedToCustomer))-Number(Boolean(a.promisedToCustomer))||a.id-b.id)
 }
+// Do not backfill alerts for pickups already past when reminders launched in Kuching.
+const reminderStartDate="2026-11-09"
 export function waitingForVehicle(items,today){
  const tomorrow=addCalendarDays(today,1)
  return items.filter(r=>{const date=r.scheduledDate||r.requestedCollectionDate
-   return date&&date<=tomorrow&&!r.vehicleId&&!r.dispatchVehicleId&&!['cancelled','completed','rejected'].includes(r.status)&&r.completionStatus!=='completed'
+   return date>=reminderStartDate&&date<=tomorrow&&!r.vehicleId&&!r.dispatchVehicleId&&!['cancelled','completed','rejected'].includes(r.status)&&r.completionStatus!=='completed'
  }).sort((a,b)=>(a.scheduledDate||a.requestedCollectionDate).localeCompare(b.scheduledDate||b.requestedCollectionDate)||a.id-b.id)
 }
 export default function PickupAppointments({onRegister,onManage}){
