@@ -82,3 +82,7 @@
 .employee-picker-panel .crew-choice.is-selected .crew-choice-check{background:#177568;border-color:#177568}
 .employee-picker-panel .crew-choice small{margin-left:34px;font-size:14px;line-height:1.45}
 .employee-picker-panel .crew-choice:focus-visible{outline:3px solid #177568;outline-offset:-3px}
+
+/* Names are on white list rows, unlike primary action buttons. */
+.picker-panel>div>button:enabled{color:#20343c}
+.employee-picker-panel>div>button:not(.crew-choice)>strong{font-size:1rem;line-height:1.4;overflow-wrap:anywhere}
