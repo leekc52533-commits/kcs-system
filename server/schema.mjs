@@ -1,3 +1,4 @@
+import {workMemoSchema} from './workMemos.mjs'
 import {repeatDateSchema} from './repeatDateSchema.mjs'
 import {multiSalePriceSchema} from './migrationV82.mjs'
 import {dateSystemReviewSchema} from './migrationV79.mjs'
@@ -25,7 +26,7 @@ import {routeRequestSchemaSql} from './migrationV55.mjs'
 import {sundaySchemaSql} from './sundayPlanning.mjs'
 export const SCHEMA_VERSION = 66
 
-export const schemaSql = repeatDateSchema + multiSalePriceSchema + dateSystemReviewSchema + dateEvidenceSchema + workCloseSchema + routeCollectionSchema + attendanceSchema + flexibleCollectionSchema + incomeNoticeSchema + earningsSchema + cargoBatchSchema + documentNumberSchema + driverGuideSchemaSql + noticeBoardSchemaSql + customerPickupSchemaSql + temporaryIntakeSchemaSql + menuSchemaSql + salesSchemaSql + noGoodsNoticeSchemaSql + dateReviewSchemaSql + billVoidSchemaSql + expenseDetailsSchemaSql + routeRequestSchemaSql + sundaySchemaSql + `
+export const schemaSql = workMemoSchema + repeatDateSchema + multiSalePriceSchema + dateSystemReviewSchema + dateEvidenceSchema + workCloseSchema + routeCollectionSchema + attendanceSchema + flexibleCollectionSchema + incomeNoticeSchema + earningsSchema + cargoBatchSchema + documentNumberSchema + driverGuideSchemaSql + noticeBoardSchemaSql + customerPickupSchemaSql + temporaryIntakeSchemaSql + menuSchemaSql + salesSchemaSql + noGoodsNoticeSchemaSql + dateReviewSchemaSql + billVoidSchemaSql + expenseDetailsSchemaSql + routeRequestSchemaSql + sundaySchemaSql + `
 CREATE TABLE IF NOT EXISTS schema_meta (
   version INTEGER PRIMARY KEY,
   applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP

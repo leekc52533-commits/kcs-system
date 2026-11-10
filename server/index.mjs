@@ -1,3 +1,4 @@
+import {writeMemo} from './workMemos.mjs'
 import {canBackfillPurchase,purchaseBackfillOptions,createBackfillPurchase} from './purchaseBackfillService.mjs'
 import {billExportFilename} from '../shared/billExportFilename.js'
 import {listRoutes,createRoute} from './routeCatalog.mjs'
@@ -639,6 +640,16 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && url.pathname === '/api/schedule-exceptions') return sendJson(response,201,createScheduleException((await readJson(request)).payload))
     if (request.method === 'GET' && url.pathname === '/api/special-requests/customer-search') return sendJson(response,200,{items:searchCustomerBranches(Object.fromEntries(url.searchParams))})
     if (request.method === 'GET' && url.pathname === '/api/special-requests') return sendJson(response,200,{items:listSpecialRequests(Object.fromEntries(url.searchParams))})
+    if(/^\/api\/work-memos(?:\/[1-9]\d*)?$/.test(url.pathname)){
+      if(!['owner_admin','operations_admin','supervisor','office'].includes(session?.role))return sendJson(response,403,{code:'FORBIDDEN'})
+      const id=Number(url.pathname.split('/')[3])||null
+      if(request.method==='GET'&&!id)return sendJson(response,200,{items:db.prepare('SELECT * FROM work_memos ORDER BY completed_at DESC,due_date IS NULL,due_date,id DESC').all()})
+      if((request.method==='POST'&&!id)||(request.method==='PATCH'&&id)){
+        const body=(await readJson(request)).payload
+        if(body?.complete&&!['owner_admin','operations_admin','supervisor'].includes(session.role))return sendJson(response,403,{code:'FORBIDDEN'})
+        return sendJson(response,id?200:201,writeMemo(db,id,body,session.employeeName||session.username||String(session.id)))
+      }
+    }
     if(request.method==='POST' && url.pathname==='/api/special-requests/appointments'){
       if(!['owner_admin','operations_admin','supervisor','office'].includes(session?.role))return sendJson(response,403,{code:'FORBIDDEN'})
       return sendJson(response,201,createSpecialRequest((await readJson(request)).payload,db,{appointmentOnly:true}))

@@ -3,6 +3,7 @@ import {apiRequest} from './apiClient.js'
 import {useI18n} from './i18n.jsx'
 import {formatDateDisplay} from './dateDisplay.js'
 import {addCalendarDays,kuchingDate} from '../shared/kuchingTime.js'
+import WorkMemoEntries,{words} from './WorkMemoEntries.jsx'
 import './PickupAppointments.css'
 
 export function appointmentList(items,today){
@@ -22,16 +23,17 @@ export function waitingForVehicle(items,today){
    return date>=reminderStartDate&&date<=tomorrow&&!r.vehicleId&&!r.dispatchVehicleId&&!['cancelled','completed','rejected'].includes(r.status)&&r.completionStatus!=='completed'
  }).sort((a,b)=>(a.scheduledDate||a.requestedCollectionDate).localeCompare(b.scheduledDate||b.requestedCollectionDate)||a.id-b.id)
 }
-export default function PickupAppointments({onRegister,onManage}){
+export default function PickupAppointments({onRegister,onManage,canComplete}){
  const {t,language}=useI18n(),[items,setItems]=useState(null),[error,setError]=useState(''),[expanded,setExpanded]=useState(false),[attempt,retry]=useState(0)
  useEffect(()=>{let active=true,seq=0
   const refresh=async()=>{const id=++seq;try{const data=await apiRequest('/api/special-requests');if(active&&id===seq){setItems(data.items);setError('')}}catch(e){if(active&&id===seq)setError(e.message)}}
   refresh();const timer=window.setInterval(()=>{if(!document.hidden)refresh()},60000);window.addEventListener('focus',refresh);return()=>{active=false;window.clearInterval(timer);window.removeEventListener('focus',refresh)}
  },[attempt])
+ const [editor,setEditor]=useState(null),w=words[language]||words.en
  const name=r=>[...new Set([r.customerName||r.temporaryCustomerName,r.branchName].filter(Boolean))].join(' / ')
  const link=r=><button type="button" className="link-button" data-i18n-raw onClick={()=>onManage(r.id)}>{formatDateDisplay(r.scheduledDate||r.requestedCollectionDate)} · {name(r)}</button>
  const today=kuchingDate(),rows=appointmentList(items||[],today),waiting=waitingForVehicle(items||[],today)
- return <section className="pickup-appts"><header><h2><button type="button" aria-expanded={expanded} onClick={()=>setExpanded(v=>!v)}>{t('appts.title')} {expanded?'▴':'▾'}</button></h2><button type="button" onClick={onRegister}>{t('appts.register')}</button></header>
+ return <section className="pickup-appts"><header><h2><button type="button" aria-expanded={expanded} onClick={()=>setExpanded(v=>!v)}>{w.title} {expanded?'▴':'▾'}</button></h2><button type="button" onClick={()=>setEditor({})}>{w.add}</button></header>
  {error?<p role="alert">{error} <button onClick={()=>retry(n=>n+1)}>{t('appts.retry')}</button></p>:items===null?<p>{t('common.loadingData')}</p>:<>
  {waiting.length>0&&<aside><strong>{({zh:'待安排车辆',en:'Vehicle assignment needed',ms:'Menunggu penugasan kenderaan'})[language]}（{waiting.length}）</strong><ul>{waiting.map(r=><li key={r.id}>{link(r)}</li>)}</ul></aside>}
  <p>{rows.length?({zh:`共 ${rows.length} 个收货预约`,ms:`Jumlah janji temu kutipan: ${rows.length}`,en:`Collection appointments: ${rows.length}`})[language]:waiting.length?null:t('appts.empty')}</p>
@@ -40,5 +42,6 @@ export default function PickupAppointments({onRegister,onManage}){
  {r.promisedToCustomer&&<b className="promise">{t('specialRequest.promised')}</b>}{r.urgent&&<b>{t('appts.soon')}</b>}
  {(r.specialRequirement||r.remark)&&<small data-i18n-raw>{[r.specialRequirement,r.remark].filter(Boolean).join(' · ')}</small>}</li>)}</ul>}
  </>}
+ <WorkMemoEntries editor={editor} setEditor={setEditor} onRegister={onRegister} canComplete={canComplete} t={t} w={w}/>
  </section>
 }
