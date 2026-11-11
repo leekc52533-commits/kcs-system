@@ -1,6 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {DatabaseSync} from 'node:sqlite'
+import {driverArrangementSchemaSql} from '../server/migrationV64.mjs'
+import {customerPickupSchemaSql} from '../server/migrationV63.mjs'
+import {driverClosures,submitPriorTrip} from '../server/previousTripClose.mjs'
 import {schemaSql} from '../server/schema.mjs'
 import {applyV28Migration} from '../server/migrationV28.mjs'
 import {seedV22MasterData} from '../server/migrationV22.mjs'
@@ -11,7 +14,7 @@ import {createPurchaseBill} from '../server/purchaseBillingService.mjs'
 const date='2026-09-14',now=new Date('2026-09-14T01:00:00Z'),context={employeeId:1,role:'driver',today:date,now}
 
 function fixture(){
-  const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON;'+schemaSql);applyV28Migration(db);seedV22MasterData(db)
+  const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON;'+schemaSql+driverArrangementSchemaSql+customerPickupSchemaSql);applyV28Migration(db);seedV22MasterData(db)
   db.prepare("INSERT INTO areas(jodoo_area_id,name) VALUES('A','A')").run()
   db.prepare("INSERT INTO customers(jodoo_customer_id,name,payment_type,default_payment_type) VALUES('C1','Cash Company','Cash','Cash'),('C2','Credit Company','Credit','Credit')").run()
   db.prepare("INSERT INTO branches(jodoo_branch_id,customer_id,area_id,branch_name,address,latitude,longitude,payment_type) VALUES('B1',1,1,'Cash Branch','A',3.1,101.6,'Cash'),('B2',2,1,'Credit Branch','B',3.1,101.6,'Credit')").run()
@@ -114,5 +117,56 @@ test('schema 77 is additive and repeat startup preserves pending work requests a
  assert.deepEqual(db.prepare('SELECT * FROM trip_work_close_requests').all(),before)
  assert.deepEqual(db.prepare('SELECT * FROM dispatch_stops').all(),stopsBefore)
  assert.equal(submit(f).id,r.id)
+ }finally{db.close()}
+})
+
+test('overdue trip blocks approved departure until every outstanding stop has a reason; deferral stays actionable',()=>{
+ const f=setup(),{db}=f,today='2026-09-15',ctx={...context,today}
+ try{
+  db.prepare("UPDATE dispatch_stops SET override_note='driver_deferred',status='available' WHERE id=?").run(f.stops[1])
+  const day=db.prepare('SELECT id FROM dispatch_days WHERE dispatch_date=?').get(today).id
+  db.prepare("UPDATE dispatch_days SET status='approved' WHERE id=?").run(day)
+  const d=db.prepare("INSERT INTO dispatches(dispatch_date,vehicle_id,driver_id,status) VALUES(?,1,1,'draft')").run(today).lastInsertRowid
+  const next=Number(db.prepare("INSERT INTO dispatch_trips(dispatch_day_id,dispatch_id,trip_number) VALUES(?,?,1)").run(day,d).lastInsertRowid)
+  db.prepare('INSERT INTO dispatch_stops(dispatch_id,dispatch_trip_id,branch_id,stop_sequence) VALUES(?,?,1,1)').run(d,next)
+  assert.throws(()=>startDriverTrip(next,ctx,db),{code:'PRIOR_TRIP_CLOSE_REQUIRED'})
+  const [old]=driverClosures(ctx,db);assert.equal(old.stops.length,2)
+  const reasons=old.stops.map((s,i)=>({stopId:s.id,reason:['Closed','Could not return'][i]}))
+  assert.throws(()=>submitPriorTrip(f.tripId,{reasons:reasons.slice(1)},ctx,db),{code:'WORK_CLOSE_REASON'})
+  assert.throws(()=>submitPriorTrip(f.tripId,{reasons},other,db),{code:'WORK_CLOSE_STALE'})
+  submitPriorTrip(f.tripId,{reasons},ctx,db)
+  assert.equal(startDriverTrip(next,ctx,db).status,'in_progress')
+  const item=listWorkClose({...manager,today},db)[0];assert.equal(item.reportedStops[1].driverReason,'Could not return');assert.ok(item.stops.every(s=>s.canArrange))
+  reviewWorkClose(item.id,{decision:'approved',reason:'Collect tomorrow',version:item.version,actions:item.stops.map(s=>({stopId:s.id,kind:'reschedule',targetDate:'2026-09-16',routeNumber:s.routeNumber}))},{...manager,today},db)
+  assert.equal(listWorkClose(manager,db).length,0)
+  assert.equal(db.prepare('SELECT completed_at FROM dispatch_stops WHERE id=?').get(f.stops[1]).completed_at,null)
+ }finally{db.close()}
+})
+test('driver can close prior trip with no unfinished stops without rewriting collections',()=>{
+ const f=setup(),{db}=f,ctx={...context,today:'2026-09-16'}
+ try{
+  db.prepare("UPDATE dispatch_stops SET status='completed',completed_at='2026-09-14T08:30:00Z' WHERE dispatch_trip_id=?").run(f.tripId)
+  assert.equal(driverClosures(ctx,db)[0].stops.length,0)
+  assert.equal(submitPriorTrip(f.tripId,{reasons:[]},ctx,db).status,'completed')
+  assert.deepEqual(driverClosures(ctx,db),[])
+  assert.equal(db.prepare('SELECT completed_at FROM dispatch_stops WHERE id=?').get(f.stops[0]).completed_at,'2026-09-14T08:30:00Z')
+ }finally{db.close()}
+})
+test('prior-day deferred stop can be handed to a running vehicle today without fabricating a collection',()=>{
+ const f=setup(),{db}=f,today='2026-09-15',ctx={...context,today}
+ try{
+  const day=db.prepare('SELECT id FROM dispatch_days WHERE dispatch_date=?').get(today).id
+  db.exec("INSERT INTO employees(employee_code,name,job_role,employment_status,is_active) VALUES('D2','Other','Driver','active',1);INSERT INTO vehicles(vehicle_code,registration_number,status,operational_status) VALUES('V2','ABC2','available','active')")
+  db.prepare("UPDATE dispatch_days SET status='in_progress' WHERE id=?").run(day)
+  const d=db.prepare("INSERT INTO dispatches(dispatch_date,vehicle_id,driver_id,status) VALUES(?,2,2,'in_progress')").run(today).lastInsertRowid
+  const target=Number(db.prepare("INSERT INTO dispatch_trips(dispatch_day_id,dispatch_id,trip_number,execution_status) VALUES(?,?,1,'in_progress')").run(day,d).lastInsertRowid)
+  db.prepare('INSERT INTO daily_route_assignments(dispatch_day_id,route_number,vehicle_id) VALUES(?,2,2)').run(day)
+  db.prepare('INSERT INTO dispatch_stops(dispatch_id,dispatch_trip_id,branch_id,stop_sequence,route_number) VALUES(?,?,2,1,2)').run(d,target)
+  db.prepare("UPDATE dispatch_stops SET status='available',override_note='driver_deferred' WHERE id=?").run(f.stops[0])
+  db.prepare("UPDATE dispatch_stops SET status='completed' WHERE id=?").run(f.stops[1])
+  submitPriorTrip(f.tripId,{reasons:[{stopId:f.stops[0],reason:'Could not return'}]},ctx,db)
+  const item=listWorkClose({...manager,today},db)[0]
+  reviewWorkClose(item.id,{decision:'approved',reason:'Other lorry will collect',version:item.version,actions:[{kind:'transfer',stopId:f.stops[0],tripId:target}]},{...manager,today},db)
+  assert.equal(db.prepare("SELECT count(*) n FROM dispatch_stops WHERE dispatch_trip_id=? AND branch_id=1 AND completed_at IS NULL").get(target).n,1)
  }finally{db.close()}
 })

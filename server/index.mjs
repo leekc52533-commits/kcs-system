@@ -1,3 +1,4 @@
+import {driverClosures,submitPriorTrip,outstandingClosures} from './previousTripClose.mjs'
 import {writeMemo} from './workMemos.mjs'
 import {canBackfillPurchase,purchaseBackfillOptions,createBackfillPurchase} from './purchaseBackfillService.mjs'
 import {billExportFilename} from '../shared/billExportFilename.js'
@@ -188,6 +189,11 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'PATCH' && /^\/api\/auth\/accounts\/\d+$/.test(url.pathname)) {const payload=(await readJson(request)).payload;if(Array.isArray(payload.permissions)&&session.role!=='owner_admin')return sendJson(response,403,{error:'只有Owner Admin可以授权敏感资料权限'});return sendJson(response,200,updateAccount(Number(url.pathname.split('/').at(-1)),payload,session,meta(request)))}
     if (request.method === 'GET' && url.pathname === '/api/auth/audit') return sendJson(response,200,{items:listAuthAudit(Object.fromEntries(url.searchParams))})
     if (request.method === 'GET' && url.pathname === '/api/system/network') return sendJson(response,200,{host,apiPort:port,lanUrls:networkUrls(),httpsRequiredForGps:true})
+    if(request.method==='POST'&&/^\/api\/mobile\/trips\/\d+\/previous-close$/.test(url.pathname))return sendJson(response,200,submitPriorTrip(Number(url.pathname.split('/')[4]),(await readJson(request)).payload,session,db))
+    if(request.method==='GET'&&['/api/mobile/today','/api/driver/today'].includes(url.pathname)){
+      const previousTrips=driverClosures(session,db)
+      if(previousTrips.length)return sendJson(response,200,{routeAvailable:false,trips:[],reason:'PRIOR_TRIP_CLOSE_REQUIRED',previousTrips})
+    }
     if (request.method === 'GET' && url.pathname === '/api/mobile/today') return sendJson(response,200,{...withGpsReleaseState(driverToday({employeeId:session.employeeId,role:session.role})),arrivalTestMode:isArrivalTestMode()})
     if (request.method === 'GET' && url.pathname === '/api/mobile/tomorrow') return sendJson(response,200,driverTomorrow({employeeId:session.employeeId,role:session.role}))
     if(url.pathname==='/api/mobile/my-bills'||/^\/api\/mobile\/my-bills\/\d+\/proof$/.test(url.pathname)){
@@ -283,7 +289,7 @@ const server = http.createServer(async (request, response) => {
       if(request.method==='GET')return sendJson(response,200,getWorkClose(id,session))
       if(request.method==='POST')return sendJson(response,200,requestWorkClose(id,(await readJson(request)).payload,session))
     }
-    if(request.method==='GET'&&url.pathname==='/api/dispatch/work-close')return sendJson(response,200,{items:listWorkClose(session),targets:workCloseTargets(session)})
+    if(request.method==='GET'&&url.pathname==='/api/dispatch/work-close')return sendJson(response,200,{items:listWorkClose(session),targets:workCloseTargets(session),unreported:outstandingClosures(db,kuchingDate())})
     if(request.method==='POST'&&/^\/api\/dispatch\/work-close\/\d+$/.test(url.pathname))return sendJson(response,200,reviewWorkClose(Number(url.pathname.split('/')[4]),(await readJson(request)).payload,session))
     if(request.method==='GET'&&url.pathname==='/api/dispatch/trip-exceptions')return sendJson(response,200,listTripExceptions(url.searchParams.get('date'),session))
     if(request.method==='POST'&&/^\/api\/dispatch\/trip-exceptions\/(stops|trips)\/\d+\/(cancel|complete)$/.test(url.pathname)){

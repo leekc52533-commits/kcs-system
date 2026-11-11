@@ -22,7 +22,7 @@ test('employee submits one snapshot, keeps failed draft, and shows protected cus
  assert.match(document.body.textContent,/First area/);assert.match(document.body.textContent,/Cash customer/)
  const input=document.querySelector('textarea');await change(input,'Staff shortage')
  await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})))
- assert.deepEqual(sent,{reason:'Staff shortage',version:'v1'});assert.equal(input.value,'Staff shortage');assert.ok(document.querySelector('[role="alert"]'))
+ assert.deepEqual(sent,{reason:'Staff shortage',version:'v1'});assert.equal(input.value,'Staff shortage');assert.ok(document.querySelector('[role="alertdialog"]'))
  fail=false;data.request={status:'pending'}
  await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})))
  assert.equal(document.querySelector('form'),null);assert.ok(document.querySelector('[role="status"]'))
@@ -51,8 +51,23 @@ test('failed initial read stops loading; preview retry reads records without a s
  try{
  await act(async()=>root.render(React.createElement(I18nProvider,{language:'zh'},React.createElement(PreviewGuard,null,React.createElement(WorkCloseRequest,{tripId:1})))));
  const panel=document.querySelector('details');await act(async()=>{panel.open=true;panel.dispatchEvent(new Event('toggle'))})
- assert.ok(document.querySelector('[role="alert"]'));assert.doesNotMatch(document.body.textContent,/正在读取/)
- failed=false;await act(async()=>document.querySelector('button').click())
- assert.equal(reads,2);assert.match(document.body.textContent,/Pending customer/);assert.equal(document.querySelector('form'),null);assert.equal(document.querySelector('[role="alert"]'),null)
+ assert.ok(document.querySelector('[role="alertdialog"]'));assert.doesNotMatch(document.body.textContent,/正在读取/)
+ failed=false;await act(async()=>document.querySelector('details button').click())
+ assert.equal(reads,2);assert.match(document.body.textContent,/Pending customer/);assert.equal(document.querySelector('form'),null);assert.equal(document.querySelector('[role="alertdialog"]'),null)
  }finally{await act(async()=>root.unmount());setPreviewEmployee(null)}
+})
+
+test('previous-trip screen requires a reason per customer before releasing the driver',async()=>{
+ const {PreviousTripClose}=await vite.ssrLoadModule('/src/WorkClose.jsx')
+ let sent,refreshed=false
+ globalThis.fetch=async(url,o)=>{assert.match(url,/trips\/8\/previous-close$/);sent=JSON.parse(o.body);return reply({status:'pending'})}
+ const root=createRoot(document.getElementById('root'))
+ try{
+  await act(async()=>root.render(React.createElement(I18nProvider,{language:'ms'},React.createElement(PreviousTripClose,{trip:{tripId:8,date:'2026-11-10',plate:'QAA',tripNumber:1,stops:[{id:3,name:'A'},{id:7,name:'B',deferred:1}]},refresh:async()=>{refreshed=true}}))))
+  const [a,b]=document.querySelectorAll('textarea'),button=document.querySelector('form button')
+  assert.match(document.body.textContent,/Kembali kemudian/);await change(a,'Closed');assert.equal(button.disabled,true)
+  await change(b,'Could not return');assert.equal(button.disabled,false)
+  await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})))
+  assert.deepEqual(sent.reasons,[{stopId:3,reason:'Closed'},{stopId:7,reason:'Could not return'}]);assert.equal(refreshed,true)
+ }finally{await act(async()=>root.unmount())}
 })

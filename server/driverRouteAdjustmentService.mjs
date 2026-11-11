@@ -22,7 +22,7 @@ import {driverToday,createStop,invalidateDispatchDay,syncReviewedBranchSchedule,
 const fail=(code,statusCode=409)=>{throw Object.assign(new Error(code),{code:code.replace('routeTrial.','ROUTE_TRIAL_').toUpperCase(),statusCode})}
 const lookup=(db,id)=>db.prepare(`SELECT s.*,t.execution_status,t.id trip_id,t.dispatch_day_id day_id,dd.dispatch_date,dd.status day_status,d.vehicle_id,d.driver_id,b.jodoo_branch_id branch_code,b.branch_name
  FROM dispatch_stops s JOIN dispatch_trips t ON t.id=s.dispatch_trip_id JOIN dispatch_days dd ON dd.id=t.dispatch_day_id JOIN dispatches d ON d.id=s.dispatch_id JOIN branches b ON b.id=s.branch_id WHERE s.id=?`).get(Number(id))
-const hasWork=(db,s)=>s.arrived_at||s.completed_at||['active','completed','cancelled'].includes(s.status)||s.override_note==='driver_deferred'||db.prepare('SELECT 1 FROM purchase_bills WHERE dispatch_stop_id=?').get(s.id)||db.prepare('SELECT 1 FROM stop_documents WHERE dispatch_stop_id=?').get(s.id)||db.prepare('SELECT 1 FROM stop_step_records WHERE dispatch_stop_id=?').get(s.id)
+const hasWork=(db,s,allowDeferred=false)=>s.arrived_at||s.completed_at||['active','completed','cancelled'].includes(s.status)||(!allowDeferred&&s.override_note==='driver_deferred')||db.prepare('SELECT 1 FROM purchase_bills WHERE dispatch_stop_id=?').get(s.id)||db.prepare('SELECT 1 FROM stop_documents WHERE dispatch_stop_id=?').get(s.id)||db.prepare('SELECT 1 FROM stop_step_records WHERE dispatch_stop_id=?').get(s.id)
 const pendingDefer=(db,s)=>db.prepare("SELECT 1 FROM driver_defer_requests WHERE dispatch_stop_id=? AND status='pending'").get(s.id)
 function owned(db,id,context){
  const today=context.today||kuchingDate(),s=lookup(db,id)
@@ -105,7 +105,7 @@ export function listDriverDateRequests(db=defaultDb){
  return db.prepare(`SELECT r.id,r.source_date sourceDate,r.target_date targetDate,r.reason,r.status,e.name employeeName,b.id internalBranchId,b.jodoo_branch_id branchId,b.branch_name branchName,s.route_number routeNumber,v.registration_number plate FROM driver_date_requests r JOIN dispatch_stops s ON s.id=r.dispatch_stop_id JOIN branches b ON b.id=s.branch_id JOIN employees e ON e.id=r.employee_id JOIN dispatches d ON d.id=s.dispatch_id LEFT JOIN vehicles v ON v.id=d.vehicle_id WHERE r.status='pending' OR EXISTS(SELECT 1 FROM driver_date_system_reviews v WHERE v.request_id=r.id AND v.status='pending') ORDER BY r.requested_at,r.id`).all().map(r=>({...r,rescheduleHistory:branchRescheduleHistory(db,r.internalBranchId,{excludeRequestId:r.id}),evidence:dateEvidence(db,r.id),routes:driverDateReviewOptions(r.targetDate,db).routes,schedule:getCollectionScheduleManagement(r.internalBranchId,db)}))
 }
 
-export function decideDriverDate(id,decision,payload,context={},db=defaultDb,{workClose=false}={}){
+export function decideDriverDate(id,decision,payload,context={},db=defaultDb,{workClose=false,allowPriorDeferred=false}={}){
  if(!canManageDispatch(context))fail('routeTrial.supervisorOnly',403)
  if(!['approved','rejected'].includes(decision)||!String(payload.reason||'').trim()||String(payload.reason).length>1000)fail('routeTrial.reviewReason',400)
  return withImmediateTransaction(db,()=>{
@@ -126,7 +126,7 @@ export function decideDriverDate(id,decision,payload,context={},db=defaultDb,{wo
    const today=context.today||kuchingDate(),date=String(payload.targetDate||r.target_date),scope=payload.scope||'once',route=Number(payload.routeNumber)
    if(!planningDate(date)||planningDate(date)!==date||date<today)fail('routeTrial.invalidReviewDate',400)
    if(!['once','permanent'].includes(scope))fail('routeTrial.invalidScope',400)
-   if(!s||s.dispatch_date!==r.source_date||hasWork(db,s)||pendingDefer(db,s))fail('routeTrial.protected')
+   if(!s||s.dispatch_date!==r.source_date||hasWork(db,s,workClose&&allowPriorDeferred&&s.dispatch_date<today)||pendingDefer(db,s))fail('routeTrial.protected')
    if(date===s.dispatch_date&&route===s.route_number)fail('routeTrial.noChange',400)
    const approvedBefore=captureApprovedRoutes(db,[r.source_date,date])
    let options=driverDateReviewOptions(date,db,{today})
@@ -228,7 +228,7 @@ export function changePlannedCustomer(id,payload,context={},db=defaultDb,interna
  if(!canManageDispatch(context))fail('routeTrial.supervisorOnly',403)
  return withImmediateTransaction(db,()=>{
   const s=lookup(db,id)
-  if(!s||hasWork(db,s))fail('routeTrial.protected')
+  if(!s||hasWork(db,s,internalOptions.workClose&&internalOptions.allowPriorDeferred&&s.dispatch_date<(context.today||kuchingDate())))fail('routeTrial.protected')
   assertCustomerDateUnlocked(db,s.id)
   let r=db.prepare("SELECT id FROM driver_date_requests WHERE dispatch_stop_id=? AND status='pending'").get(s.id)
   if(!r){

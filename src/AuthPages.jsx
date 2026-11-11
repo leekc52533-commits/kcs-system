@@ -9,7 +9,7 @@ import {formatDateDisplay} from './dateDisplay.js'
 import CenteredNotice from './CenteredNotice.jsx'
 import {formatWeight,formatUnitPrice} from '../shared/measurePrecision.js'
 import DateSystemReleaseNotices from './DateSystemReleaseNotices.jsx'
-import {WorkCloseRequest} from './WorkClose.jsx'
+import {PreviousTripClose,WorkCloseRequest} from './WorkClose.jsx'
 import './CombineDayRoutes.css'
 import {AttendanceGate} from './Attendance.jsx'
 import IncomeUpdates,{useIncomeUpdates} from './IncomeUpdates.jsx'
@@ -216,6 +216,7 @@ function TodayView({data,preview=false}){
   const goToBlockedStop=id=>{setOpenStopId(id);setTripBlockers(null);requestAnimationFrame(()=>document.querySelector('[data-mobile-stop="'+id+'"]')?.scrollIntoView({block:'start',behavior:'smooth'}))}
   const toggleStop=(id,expanded)=>{setOpenStopId(expanded?null:id);if(!expanded)requestAnimationFrame(()=>document.querySelector('[data-mobile-stop="'+id+'"]')?.scrollIntoView({block:'start',behavior:'auto'}))}
   if(!route)return <section><h1>{t(preview?'mobile.tomorrow':'mobile.today')}</h1>{!preview&&<CashFloatMobileCard/>}<p>{t('mobile.routeLoading')}</p></section>
+  if(!preview&&route.previousTrips?.length)return <PreviousTripClose key={route.previousTrips[0].tripId} trip={route.previousTrips[0]} refresh={refresh}/>
   if(!route.routeAvailable&&route.systemReviewNotices?.length)return <section><h1>{t('mobile.today')}</h1><DateSystemReleaseNotices items={route.systemReviewNotices}/></section>
   if(!route.routeAvailable)return <section><h1>{t(preview?'mobile.tomorrow':'mobile.today')}</h1>{!preview&&<CashFloatMobileCard/>}<p>{t(preview?(route.reason==='NO_VEHICLE_ASSIGNED'?'mobile.tomorrowNoVehicle':'mobile.tomorrowNotApproved'):(route.reason==='NO_VEHICLE_ASSIGNED'?'mobile.noVehicleAssigned':'mobile.notApproved'))}</p></section>
   return <section className="driver-route">
