@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {DatabaseSync} from 'node:sqlite'
+import {ensureV28Schema} from '../server/migrationV28.mjs'
 import {schemaSql} from '../server/schema.mjs'
 import {ensureRollingWeek,assignRouteVehicle,approveRoute,getDispatchDay} from '../server/dispatchService.mjs'
 import {generateDay} from '../server/dispatchService.mjs'
@@ -35,5 +36,45 @@ test('missing days are filled after several days away and existing blank days ar
  assert.equal(next.days.length,7);assert.equal(next.days[6].dispatch_date,'2026-09-16')
  assert.deepEqual(getDispatchDay('2026-09-10',db),blank)
  assert.equal(db.prepare('PRAGMA foreign_key_check').all().length,0)
+ }finally{db.close()}
+})
+
+test('next Monday follows actual collections, not saved dispatch order or vehicle; preserves other routes and drafts',()=>{
+ const db=fixture()
+ ensureV28Schema(db)
+ try{
+  assignRouteVehicle('2026-09-07',1,{vehicleId:1},db)
+  const trip=db.prepare('SELECT dispatch_trip_id id FROM dispatch_stops WHERE branch_id=1').get().id
+  db.prepare("UPDATE dispatch_trips SET execution_status='completed' WHERE id=?").run(trip)
+  const finish=db.prepare("UPDATE dispatch_stops SET status='completed',completion_outcome='completed',completed_at=?,completed_by_employee_id=1 WHERE branch_id=?")
+  finish.run('2026-09-07T09:00:00+08:00',2);finish.run('2026-09-07T10:00:00+08:00',1)
+  const order=date=>db.prepare('SELECT s.branch_id FROM dispatch_stops s JOIN dispatch_trips t ON t.id=s.dispatch_trip_id JOIN dispatch_days d ON d.id=t.dispatch_day_id WHERE d.dispatch_date=? AND s.route_number=1 ORDER BY s.route_stop_sequence').all(date).map(s=>s.branch_id)
+  generateDay({startDate:'2026-09-14'},db)
+  assert.deepEqual(order('2026-09-14'),[2,1])
+  assert.deepEqual(order('2026-09-07'),[1,2])
+  db.prepare("UPDATE dispatch_stops SET completion_outcome='no_goods' WHERE branch_id=2 AND dispatch_trip_id=?").run(trip)
+  generateDay({startDate:'2026-09-21'},db)
+  assert.deepEqual(order('2026-09-21'),[1,2])
+  assert.deepEqual(order('2026-09-14'),[2,1])
+ }finally{db.close()}
+})
+
+test('temporary pickups never become weekly stops; missed recurring branches retain their slot',()=>{
+ const db=fixture();ensureV28Schema(db)
+ try{
+  db.exec("UPDATE weekly_route_plan_stops SET route_number=1,stop_sequence=3 WHERE branch_id=3")
+  assignRouteVehicle('2026-09-07',1,{vehicleId:1},db)
+  const trip=db.prepare('SELECT dispatch_trip_id id FROM dispatch_stops WHERE branch_id=1').get().id
+  const dispatch=db.prepare('SELECT dispatch_id id FROM dispatch_trips WHERE id=?').get(trip).id
+  db.prepare("UPDATE dispatch_trips SET execution_status='completed' WHERE id=?").run(trip)
+  db.prepare("UPDATE dispatch_stops SET dispatch_trip_id=?,dispatch_id=?,route_number=1,stop_sequence=5 WHERE branch_id=3").run(trip,dispatch)
+  db.exec("INSERT INTO branches(jodoo_branch_id,branch_name) VALUES('TEMP','One-off')")
+  db.prepare("INSERT INTO dispatch_stops(dispatch_id,dispatch_trip_id,branch_id,route_number,stop_sequence,status) VALUES(?,?,4,1,6,'completed')").run(dispatch,trip)
+  for(const [id,hour] of [[3,8],[4,9],[1,10]]){
+   db.prepare("UPDATE dispatch_stops SET status='completed',completion_outcome='completed',completed_by_employee_id=1,completed_at=? WHERE branch_id=?").run('2026-09-07T'+String(hour).padStart(2,'0')+':00:00+08:00',id)
+  }
+  generateDay({startDate:'2026-09-14'},db)
+  const rows=db.prepare("SELECT branch_id FROM dispatch_stops WHERE service_date='2026-09-14' ORDER BY route_stop_sequence").all()
+  assert.deepEqual(rows.map(x=>x.branch_id),[3,2,1])
  }finally{db.close()}
 })

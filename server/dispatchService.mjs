@@ -1,3 +1,4 @@
+import {applyActualCollectionOrder} from './actualCollectionOrder.mjs'
 import {routeNumbers,routeExists} from './routeCatalog.mjs'
 import {syncSundayCatchups} from './sundayCatchup.mjs'
 import {customerDatePromise} from './customerDatePromise.mjs'
@@ -247,6 +248,13 @@ export function applyWeeklyRoutePlanToDay(database,day){
   // Persist reviewed date/route choices even if a draft is regenerated.
   for(const choice of database.prepare('SELECT branch_id branchId,route_number routeNumber FROM driver_date_reviews WHERE approved_date=? ORDER BY request_id').all(day.dispatch_date))if(!overrides.has(choice.branchId))overrides.set(choice.branchId,{...choice,tripNumber:1,stopSequence:9999})
   routes=routes.map(r=>({...r,routeNumber:executionRoute(database,r.branchId,day.dispatch_date,r.routeNumber)}))
+  // Learn only recurring stops present on this date, before applying one-day overrides.
+  const recurring=new Set(database.prepare(`SELECT s.branch_id id FROM dispatch_stops s
+    JOIN dispatch_trips t ON t.id=s.dispatch_trip_id
+    JOIN schedule_occurrences o ON o.dispatch_stop_id=s.id AND o.occurrence_source='recurrence'
+    WHERE t.dispatch_day_id=? AND s.status<>'cancelled' AND s.source_special_request_id IS NULL
+      AND COALESCE(s.sequence_locked,0)=0`).all(day.id).map(row=>row.id))
+  applyActualCollectionOrder(database,day.dispatch_date,routes.filter(r=>recurring.has(r.branchId)&&!overrides.has(r.branchId)))
   routes=[...routes.filter(item=>!overrides.has(item.branchId)),...overrides.values()]
 
   routes.sort((a,b)=>a.routeNumber-b.routeNumber||a.tripNumber-b.tripNumber||a.stopSequence-b.stopSequence)
