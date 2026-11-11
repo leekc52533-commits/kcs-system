@@ -188,3 +188,35 @@ test('rollout uses dispatch date: exempt Nov 10, keep its pending request, enfor
   assert.equal(driverClosures({...context,today:'2026-11-12'},db)[0].tripId,f.tripId)
  }finally{db.close()}
 })
+
+import {completePriorCreditBill,getPurchaseBilling} from '../server/purchaseBillingService.mjs'
+test('prior close allows only the assigned driver to confirm a missed Credit bill once, without inventing arrival or notifying dispatch of an uncollected customer',()=>{
+ const f=setup(),{db}=f,ctx={...context,today:'2026-11-17',now:new Date('2026-11-17T01:00:00Z')},[cash,credit]=f.stops
+ const payload={confirmedCollected:true,weightMethod:'on_site',printChoice:'no_print',items:[{productId:f.productId,quantity:20}]}
+ try{
+  assert.throws(()=>completePriorCreditBill(cash,payload,ctx,db),{code:'PRIOR_CREDIT_ONLY'})
+  assert.throws(()=>completePriorCreditBill(credit,payload,{...ctx,employeeId:2},db))
+  assert.throws(()=>completePriorCreditBill(credit,{...payload,confirmedCollected:false},ctx,db))
+  assert.equal(getPurchaseBilling(credit,{...ctx,priorClose:true},db).stop.paymentMethod,'Credit')
+  const bill=completePriorCreditBill(credit,payload,ctx,db)
+  assert.equal(bill.stopId,credit);assert.equal(bill.serviceDate,date);assert.match(bill.issuedAt,/^2026-11-17/)
+  assert.equal(db.prepare('SELECT arrived_at FROM dispatch_stops WHERE id=?').get(credit).arrived_at,null)
+  assert.throws(()=>completePriorCreditBill(credit,payload,ctx,db))
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM purchase_bills WHERE dispatch_stop_id=?').get(credit).n,1)
+  assert.deepEqual(driverClosures(ctx,db)[0].stops.map(s=>s.id),[cash])
+ }finally{db.close()}
+})
+test('prior credit close reuses yesterday’s issued bill and refuses to duplicate a separate backfill',()=>{
+ const f=setup(),{db}=f,ctx={...context,today:'2026-11-17'},[cash,credit]=f.stops
+ try{
+  db.prepare("UPDATE dispatch_stops SET status='completed' WHERE id=?").run(cash)
+  arrive(db,credit)
+  const first=createPurchaseBill(credit,{weightMethod:'on_site',printChoice:'no_print',items:[{productId:f.productId,quantity:12}]},context,db)
+  db.prepare('UPDATE purchase_bills SET dispatch_stop_id=NULL WHERE id=?').run(first.id)
+  assert.throws(()=>completePriorCreditBill(credit,{confirmedCollected:true},ctx,db),{code:'BACKFILL_DUPLICATE'})
+  db.prepare('UPDATE purchase_bills SET dispatch_stop_id=? WHERE id=?').run(credit,first.id)
+  assert.equal(getPurchaseBilling(credit,{...ctx,priorClose:true},db).bill.billNumber,first.billNumber)
+  assert.equal(completePriorCreditBill(credit,{confirmedCollected:true},ctx,db).id,first.id)
+  assert.equal(db.prepare('SELECT count(*) n FROM purchase_bills').get().n,1)
+ }finally{db.close()}
+})

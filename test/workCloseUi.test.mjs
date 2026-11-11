@@ -64,6 +64,7 @@ test('previous-trip screen requires a reason per customer before releasing the d
  const root=createRoot(document.getElementById('root'))
  try{
   await act(async()=>root.render(React.createElement(I18nProvider,{language:'ms'},React.createElement(PreviousTripClose,{trip:{tripId:8,date:'2026-11-10',plate:'QAA',tripNumber:1,stops:[{id:3,name:'A'},{id:7,name:'B',deferred:1}]},refresh:async()=>{refreshed=true}}))))
+  const [sa,sb]=document.querySelectorAll('select');for(const sel of [sa,sb]) await act(async()=>{sel.value='other';sel.dispatchEvent(new Event('change',{bubbles:true}))});
   const [a,b]=document.querySelectorAll('textarea'),button=document.querySelector('form button')
   assert.match(document.body.textContent,/Kembali kemudian/);await change(a,'Closed');assert.equal(button.disabled,true)
   await change(b,'Could not return');assert.equal(button.disabled,false)

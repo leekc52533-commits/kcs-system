@@ -17,8 +17,9 @@ export function outstandingClosures(db,date,employeeId=null){
  const rows=db.prepare(candidates+(employeeId==null?'':' AND d.driver_id=?')+' ORDER BY dd.dispatch_date,t.id').all(firstRequiredServiceDate,date,...(employeeId==null?[]:[employeeId]))
  const result=[]
  for(const {snapshot,requestId,...trip} of rows){
-  const stops=db.prepare(`SELECT s.id,b.jodoo_branch_id branchCode,b.branch_name name,s.override_note='driver_deferred' deferred
-   FROM dispatch_stops s JOIN branches b ON b.id=s.branch_id WHERE s.dispatch_trip_id=? AND s.status NOT IN ('completed','cancelled') ORDER BY s.stop_sequence,s.id`).all(trip.tripId)
+  const stops=db.prepare(`SELECT s.id,b.jodoo_branch_id branchCode,b.branch_name name,s.override_note='driver_deferred' deferred,
+    lower(trim(COALESCE(b.payment_type,c.default_payment_type,c.payment_type,'')))='credit' credit
+   FROM dispatch_stops s JOIN branches b ON b.id=s.branch_id LEFT JOIN customers c ON c.id=b.customer_id WHERE s.dispatch_trip_id=? AND s.status NOT IN ('completed','cancelled') ORDER BY s.stop_sequence,s.id`).all(trip.tripId)
   const reported=new Map(JSON.parse(snapshot||'[]').filter(s=>s.driverReason).map(s=>[s.id,s.driverReason]))
   if(requestId&&reported.size&&stops.every(s=>reported.has(s.id)))continue
   result.push({...trip,stops})

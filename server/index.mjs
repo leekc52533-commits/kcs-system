@@ -1,3 +1,4 @@
+import {completePriorCreditBill} from './purchaseBillingService.mjs'
 import {driverClosures,submitPriorTrip,outstandingClosures} from './previousTripClose.mjs'
 import {writeMemo} from './workMemos.mjs'
 import {canBackfillPurchase,purchaseBackfillOptions,createBackfillPurchase} from './purchaseBackfillService.mjs'
@@ -275,6 +276,11 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && /^\/api\/mobile\/trips\/\d+\/start$/.test(url.pathname)) return sendJson(response,200,startDriverTrip(Number(url.pathname.split('/')[4]),{employeeId:session.employeeId,role:session.role}))
     if (request.method === 'POST' && /^\/api\/mobile\/stops\/\d+\/arrive$/.test(url.pathname)) return sendJson(response,200,arriveAtStop(Number(url.pathname.split('/')[4]),(await readJson(request)).payload,{employeeId:session.employeeId,role:session.role,remoteArrivalTestMode:isArrivalTestMode()}))
     if (request.method === 'POST' && /^\/api\/mobile\/stops\/\d+\/defer$/.test(url.pathname)) return sendJson(response,200,deferDriverStop(Number(url.pathname.split('/')[4]),(await readJson(request)).payload,{employeeId:session.employeeId,role:session.role}))
+    if(/^\/api\/mobile\/stops\/\d+\/previous-credit$/.test(url.pathname)){
+      const id=Number(url.pathname.split('/')[4]),ctx={employeeId:session.employeeId,role:session.role,priorClose:true}
+      if(request.method==='GET')return sendJson(response,200,getPurchaseBilling(id,ctx))
+      if(request.method==='POST')return sendJson(response,200,completePriorCreditBill(id,(await readJson(request)).payload,ctx))
+    }
     if (request.method === 'GET' && /^\/api\/mobile\/stops\/\d+\/billing$/.test(url.pathname)) return sendJson(response,200,getPurchaseBilling(Number(url.pathname.split('/')[4]),{employeeId:session.employeeId,role:session.role}))
     if (request.method === 'POST' && /^\/api\/mobile\/stops\/\d+\/bills$/.test(url.pathname)) return sendJson(response,201,createPurchaseBill(Number(url.pathname.split('/')[4]),(await readJson(request)).payload,{employeeId:session.employeeId,role:session.role}))
     if (request.method === 'POST' && /^\/api\/mobile\/stops\/\d+\/payment-proof$/.test(url.pathname)) return sendJson(response,201,uploadPurchasePaymentProof(Number(url.pathname.split('/')[4]),(await readJson(request)).payload,{employeeId:session.employeeId,role:session.role},db,{uploadsRoot:uploadsDir}))

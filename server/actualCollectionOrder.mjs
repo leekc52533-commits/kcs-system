@@ -20,6 +20,7 @@ export function applyActualCollectionOrder(db,date,routes){
     WHERE d.dispatch_date<? AND strftime('%w',d.dispatch_date)=strftime('%w',?)
       AND t.execution_status='completed' AND s.status='completed' AND s.completion_outcome='completed'
       AND s.completed_at IS NOT NULL AND s.completed_by_employee_id IS NOT NULL
+      AND NOT EXISTS(SELECT 1 FROM dispatch_change_logs l WHERE l.dispatch_day_id=d.id AND l.entity_type='dispatch_stop' AND l.entity_id=CAST(s.id AS TEXT) AND l.change_type='prior_credit_collection_confirmed')
       AND s.source_special_request_id IS NULL AND s.route_number IS NOT NULL
     ORDER BY d.dispatch_date,t.id,s.route_number,julianday(s.completed_at),s.id`).all(date,date)
   let batch=[],last=''

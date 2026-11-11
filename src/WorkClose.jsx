@@ -19,12 +19,24 @@ const priorWords={
  ms:['Tutup perjalanan terdahulu','Isi sebab bagi setiap pelanggan yang belum dikutip. Selepas dihantar, laluan hari ini yang diluluskan boleh dibuka.','Sebab belum dikutip','Kembali kemudian','Hantar sebab dan mohon tamat perjalanan','Tiada hentian tertunggak. Sahkan perjalanan selesai.','Selesaikan perjalanan','Menunggu laporan pemandu','Gagal menghantar. Muat semula dan cuba lagi.'],
  en:['Close previous trip','Give a reason for each uncollected stop. Submit to open today’s approved route.','Reason not collected','Return later','Submit reasons and request closure','No outstanding stops. Confirm trip completion.','Complete trip','Awaiting driver report','Submission not confirmed. Refresh and try again.']
 }
-export function PreviousTripClose({trip,refresh}){
- const {language}=useI18n(),w=priorWords[language]||priorWords.en
- const [reasons,setReasons]=useState({}),[busy,setBusy]=useState(false),[error,setError]=useState('')
- const send=async e=>{e.preventDefault();if(busy||isEmployeePreview())return;setBusy(true);setError('')
-  try{await apiRequest('/api/mobile/trips/'+trip.tripId+'/previous-close',{method:'POST',body:JSON.stringify({reasons:trip.stops.map(s=>({stopId:s.id,reason:reasons[s.id]?.trim()}))})});await refresh()}catch{setError(w[8])}finally{setBusy(false)}}
- return <section className="mobile-card work-close"><h2>{w[0]}</h2><p>{formatDateDisplay(trip.date)} · {trip.plate} · #{trip.tripNumber}</p><p>{trip.stops.length?w[1]:w[5]}</p><form onSubmit={send}>{trip.stops.map(s=><label key={s.id}><b>{s.branchCode} · {s.name}</b> {s.deferred?w[3]:''}<span>{w[2]}</span><textarea required maxLength={500} value={reasons[s.id]||''} onChange={e=>setReasons({...reasons,[s.id]:e.target.value})}/></label>)}{error&&<p role="alert">{error}</p>}<button className="primary-mobile" disabled={busy||isEmployeePreview()||trip.stops.some(s=>!reasons[s.id]?.trim())}>{trip.stops.length?w[4]:w[6]}</button></form></section>
+const closeChoices={
+ zh:['选择实际情况','没有再返回收货','来不及去收货','其他原因','已收货：补开或核对放账单','确认已收货并完成此站'],
+ ms:['Pilih keadaan sebenar','Tidak kembali untuk kutipan','Tidak sempat pergi','Sebab lain','Sudah dikutip: keluarkan atau semak bil kredit','Sahkan kutipan dan selesaikan hentian'],
+ en:['Select what happened','Did not return to collect','Ran out of time','Other reason','Collected: issue or check Credit bill','Confirm collection and finish stop']
+}
+export function PreviousTripClose({trip,refresh,BillingPanel}){
+ const {language}=useI18n(),w=priorWords[language]||priorWords.en,c=closeChoices[language]||closeChoices.en
+ const [choices,setChoices]=useState({}),[notes,setNotes]=useState({}),[busy,setBusy]=useState(false),[error,setError]=useState('')
+ const reason=id=>({returned:c[1],time:c[2],other:notes[id]?.trim()})[choices[id]]||''
+ const send=async e=>{e.preventDefault();if(busy||isEmployeePreview()||trip.stops.some(s=>!reason(s.id)))return;setBusy(true);setError('')
+  try{await apiRequest('/api/mobile/trips/'+trip.tripId+'/previous-close',{method:'POST',body:JSON.stringify({reasons:trip.stops.map(s=>({stopId:s.id,reason:reason(s.id)}))})});await refresh()}catch{setError(w[8])}finally{setBusy(false)}}
+ return <section className="mobile-card work-close"><h2>{w[0]}</h2><p>{formatDateDisplay(trip.date)} · {trip.plate} · #{trip.tripNumber}</p><p>{trip.stops.length?w[1]:w[5]}</p>
+  {trip.stops.map(s=><details key={s.id} className="work-close-row"><summary>{s.branchCode} · {s.name}{s.deferred?' · '+w[3]:''}</summary>
+   <label>{c[0]}<select value={choices[s.id]||''} disabled={busy} onChange={e=>setChoices({...choices,[s.id]:e.target.value})}><option value="">{c[0]}</option><option value="returned">{c[1]}</option><option value="time">{c[2]}</option><option value="other">{c[3]}</option>{!!s.credit&&<option value="bill">{c[4]}</option>}</select></label>
+   {choices[s.id]==='other'&&<label>{w[2]}<textarea required maxLength={500} value={notes[s.id]||''} onChange={e=>setNotes({...notes,[s.id]:e.target.value})}/></label>}
+   {choices[s.id]==='bill'&&!!s.credit&&BillingPanel&&<BillingPanel stop={s} priorClose confirmLabel={c[5]} onChanged={refresh}/>}
+  </details>)}
+  <form onSubmit={send}>{error&&<p role="alert">{error}</p>}<button className="primary-mobile" disabled={busy||isEmployeePreview()||trip.stops.some(s=>!reason(s.id))}>{trip.stops.length?w[4]:w[6]}</button></form></section>
 }
 export function WorkCloseRequest({tripId,onSaved}){
  const readOnly=isEmployeePreview()

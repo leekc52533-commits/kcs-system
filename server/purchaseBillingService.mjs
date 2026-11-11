@@ -1,3 +1,4 @@
+import {driverClosures} from './previousTripClose.mjs'
 import {allocateDocumentNumber} from './documentNumbers.mjs'
 import {canReadCompanyDocuments} from './documentReadAccess.mjs'
 import {temporaryProducts,temporaryPrice,temporaryIntake,notifyIntakeBill,assertNoPendingTripApproval,isAdHocCollection} from './temporaryIntakeBilling.mjs'
@@ -23,7 +24,7 @@ function activeDriver(database,employeeId,role){
   return employee
 }
 
-function stopForDriver(database,stopId,{employeeId,role,today=kuchingDate()}={},requireArrived=true){
+function stopForDriver(database,stopId,{employeeId,role,today=kuchingDate(),priorClose=false}={},requireArrived=true){
   activeDriver(database,employeeId,role)
   const stop=database.prepare(`SELECT ds.id,ds.status,ds.arrived_at arrivedAt,ds.branch_id branchId,ds.dispatch_trip_id tripId,
       dt.dispatch_day_id dayId,dd.dispatch_date serviceDate,d.vehicle_id vehicleId,d.driver_id driverId,
@@ -34,11 +35,30 @@ function stopForDriver(database,stopId,{employeeId,role,today=kuchingDate()}={},
     JOIN dispatches d ON d.id=dt.dispatch_id JOIN branches b ON b.id=ds.branch_id LEFT JOIN customers c ON c.id=b.customer_id
     JOIN employees e ON e.id=d.driver_id JOIN vehicles v ON v.id=d.vehicle_id WHERE ds.id=?`).get(Number(stopId))
   if(!stop)throw fail('Stop not found.','NOT_FOUND',404)
-  if(Number(stop.driverId)!==Number(employeeId)||stop.serviceDate!==kuchingDate(`${today}T00:00:00+08:00`))throw fail('This Stop is not assigned to the active driver today.','PERMISSION_DENIED',403)
-  if(requireArrived&&(!stop.arrivedAt||stop.status!=='active'))throw fail('Arrive at the current Stop before creating a Purchase Bill.','ARRIVAL_REQUIRED',409)
+  if(Number(stop.driverId)!==Number(employeeId)||!priorClose&&stop.serviceDate!==kuchingDate(`${today}T00:00:00+08:00`))throw fail('This Stop is not assigned to the active driver today.','PERMISSION_DENIED',403)
+  if(priorClose){
+    const open=driverClosures({employeeId,role,today},database).some(t=>t.tripId===stop.tripId&&t.stops.some(s=>s.id===stop.id&&s.credit))
+    if(!open)throw fail('Only your outstanding Credit collections can be billed here.','PRIOR_CREDIT_ONLY',403)
+    const conflict=database.prepare(`SELECT 1 FROM purchase_bills WHERE branch_id=? AND service_date=? AND status='issued' AND (dispatch_stop_id IS NULL OR dispatch_stop_id<>? OR lower(payment_method)<>'credit')`).get(stop.branchId,stop.serviceDate,stop.id)
+    if(conflict)throw fail('An existing bill requires office review.','BACKFILL_DUPLICATE')
+    if(['driver_date_requests','driver_defer_requests','driver_arrangement_requests','customer_transfer_requests'].some(table=>database.prepare('SELECT 1 FROM '+table+" WHERE dispatch_stop_id=? AND status='pending'").get(stop.id)))throw fail('Resolve the pending request first.','PENDING_APPROVAL')
+  }
+  if(requireArrived&&!priorClose&&(!stop.arrivedAt||stop.status!=='active'))throw fail('Arrive at the current Stop before creating a Purchase Bill.','ARRIVAL_REQUIRED',409)
   const payment=String(stop.paymentMethod||'').trim().toLowerCase()
   if(!['cash','credit'].includes(payment))throw fail('Customer Payment Method must be set to Cash or Credit before billing.','PAYMENT_METHOD_REQUIRED',409)
   return{...stop,paymentMethod:payment==='cash'?'Cash':'Credit'}
+}
+
+// Confirm the real collection without inventing a GPS arrival or a historical completion time.
+export function completePriorCreditBill(stopId,payload,context,database=defaultDb){
+  if(payload?.confirmedCollected!==true)throw fail('Confirm that the goods were collected.','BACKFILL_REASON',400)
+  return withImmediateTransaction(database,()=>{
+    const ctx={...context,priorClose:true},stop=stopForDriver(database,stopId,ctx,false)
+    const result=createPurchaseBill(stopId,payload,ctx,database),at=nowKuching(context.now)
+    database.prepare("UPDATE dispatch_stops SET status='completed',completion_outcome='completed',completed_at=?,completed_by_employee_id=?,payment_status='credit' WHERE id=?").run(at,context.employeeId,stop.id)
+    database.prepare(`INSERT INTO dispatch_change_logs(dispatch_day_id,actor,change_type,entity_type,entity_id,after_json,requires_reapproval) VALUES(?,?,'prior_credit_collection_confirmed','dispatch_stop',?,?,0)`).run(stop.dayId,String(context.employeeId),String(stop.id),JSON.stringify({serviceDate:stop.serviceDate,confirmedAt:at,billId:result.id}))
+    return result
+  })
 }
 
 function bill(database,stopId,billId=null){
@@ -66,7 +86,7 @@ export function getPurchaseBilling(stopId,context={},database=defaultDb){
 export function createPurchaseBill(stopId,payload={},context={},database=defaultDb){
   const{employeeId,role,today=kuchingDate(),now=new Date()}=context
   return withImmediateTransaction(database,()=>{
-    const stop=context.replacesBillId?replacementStop(database,context.replacesBillId,context):stopForDriver(database,stopId,{employeeId,role,today},true),existing=bill(database,stopId)
+    const stop=context.replacesBillId?replacementStop(database,context.replacesBillId,context):stopForDriver(database,stopId,context,true),existing=bill(database,stopId)
     if(existing)return{...existing,idempotent:true}
     if(isAdHocCollection(database,stop.id))assertNoPendingTripApproval(database,stop.tripId)
     if(!context.replacesBillId&&database.prepare("SELECT id FROM purchase_bills WHERE dispatch_stop_id=? AND status='voided'").get(stop.id))throw fail('Use the void page to reissue.','VOID_USE_REISSUE')
@@ -109,7 +129,7 @@ export function createPurchaseBill(stopId,payload={},context={},database=default
 const image=photo=>{const match=/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(photo?.dataUrl||''));if(!match)throw fail('A valid JPEG, PNG or WebP payment proof is required.','INVALID_PHOTO',400);const bytes=Buffer.from(match[2],'base64'),max=8*1024*1024;if(!bytes.length||bytes.length>max)throw fail('Payment proof must be no larger than 8 MB.','INVALID_PHOTO',400);const type=match[1],valid=type==='image/jpeg'&&bytes[0]===0xff&&bytes[1]===0xd8&&bytes[2]===0xff||type==='image/png'&&bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))||type==='image/webp'&&bytes.subarray(0,4).toString()==='RIFF'&&bytes.subarray(8,12).toString()==='WEBP';if(!valid)throw fail('Payment proof content does not match its file type.','INVALID_PHOTO',400);return{bytes,type,extension:type.split('/')[1].replace('jpeg','jpg')}}
 
 export function uploadPurchasePaymentProof(stopId,payload={},context={},database=defaultDb,{uploadsRoot}={}){
-  const{employeeId,role,today=kuchingDate(),now=new Date()}=context,stop=context.replacesBillId?replacementStop(database,context.replacesBillId,context):stopForDriver(database,stopId,{employeeId,role,today},true),existingBill=bill(database,stopId)
+  const{employeeId,role,today=kuchingDate(),now=new Date()}=context,stop=context.replacesBillId?replacementStop(database,context.replacesBillId,context):stopForDriver(database,stopId,context,true),existingBill=bill(database,stopId)
   if(!existingBill)throw fail('Create the electronic Purchase Bill before uploading payment proof.','BILL_REQUIRED',409)
   if(existingBill.paymentMethod!=='Cash')throw fail('Payment proof is only required for Cash customers.','PAYMENT_PROOF_NOT_REQUIRED',409)
   const existing=database.prepare('SELECT id,created_at FROM purchase_payment_proofs WHERE purchase_bill_id=?').get(existingBill.id)
