@@ -3,16 +3,18 @@ import {activeRouteDriver} from './routeDriverAuthorization.mjs'
 import {withImmediateTransaction} from './branchServiceDateGuard.mjs'
 
 const fail=(code,statusCode=409)=>{throw Object.assign(Error(code),{code,statusCode})}
+// Local dispatch dates: pre-rollout history stays untouched.
+const firstRequiredServiceDate='2026-11-11'
 const candidates=`SELECT t.id tripId,t.trip_number tripNumber,dd.dispatch_date date,d.driver_id driverId,
  e.name driverName,v.registration_number plate,r.id requestId,r.submitted_stops_json snapshot
  FROM dispatch_trips t JOIN dispatch_days dd ON dd.id=t.dispatch_day_id JOIN dispatches d ON d.id=t.dispatch_id
  JOIN employees e ON e.id=d.driver_id LEFT JOIN vehicles v ON v.id=d.vehicle_id
  LEFT JOIN trip_work_close_requests r ON r.trip_id=t.id AND r.employee_id=d.driver_id AND r.status='pending'
- WHERE dd.dispatch_date<? AND (t.execution_status='in_progress' OR
+ WHERE dd.dispatch_date>=? AND dd.dispatch_date<? AND (t.execution_status='in_progress' OR
  (t.execution_status='not_started' AND EXISTS(SELECT 1 FROM dispatch_stops s WHERE s.dispatch_trip_id=t.id AND s.status NOT IN ('completed','cancelled')
  AND (dd.status IN ('approved','published') OR EXISTS(SELECT 1 FROM daily_route_approvals a WHERE a.dispatch_day_id=dd.id AND a.route_number=s.route_number)))))`
 export function outstandingClosures(db,date,employeeId=null){
- const rows=db.prepare(candidates+(employeeId==null?'':' AND d.driver_id=?')+' ORDER BY dd.dispatch_date,t.id').all(date,...(employeeId==null?[]:[employeeId]))
+ const rows=db.prepare(candidates+(employeeId==null?'':' AND d.driver_id=?')+' ORDER BY dd.dispatch_date,t.id').all(firstRequiredServiceDate,date,...(employeeId==null?[]:[employeeId]))
  const result=[]
  for(const {snapshot,requestId,...trip} of rows){
   const stops=db.prepare(`SELECT s.id,b.jodoo_branch_id branchCode,b.branch_name name,s.override_note='driver_deferred' deferred
